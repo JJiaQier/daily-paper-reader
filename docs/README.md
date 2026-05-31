@@ -6,28 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-22 ~ 2026-05-31
-- 运行时间：2026-05-31 11:05:02 UTC
+- 最新运行日期：2026-05-31
+- 运行时间：2026-05-31 22:00:33 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-本期精读1篇城市公交路线设计论文，速读1篇多智能体奖励塑形方法。  
-最值得关注的是《AlphaTransit》提出的基于学习的城市级公交路线规划思路，评分8.0。  
-建议优先精读该文，了解如何用AI辅助大规模公交网络设计。
-- 详情：[/20260522-20260531/README](/20260522-20260531/README)
+今日速读3篇论文，重点聚焦城市交通路线设计与强化学习策略优化。最值得关注的是《AlphaTransit》，其以7.0分居首，探索用机器学习设计城市级公交线路。若时间有限，建议优先精读该文，了解其核心技术框架。
+- 详情：[/202605/31/README](/202605/31/README)
 
 ### 精读区论文标签
-1. [AlphaTransit: Learning to Design City-scale Transit Routes](/20260522-20260531/2605.28730v1-alphatransit-learning-to-design-city-scale-transit-routes)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：使用MCTS和神经策略-价值网络设计公交线路，类比车辆路由问题
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [ARMS: Automatic Reward Shaping for Sparse-Reward Multi-Agent Reinforcement Learning](/20260522-20260531/2605.23562v1-arms-automatic-reward-shaping-for-sparse-reward-multi-agent-reinforcement-learning)  
+1. [AlphaTransit: Learning to Design City-scale Transit Routes](/202605/31/2605.28730v1-alphatransit-learning-to-design-city-scale-transit-routes)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：AlphaTransit使用蒙特卡洛树搜索与神经网络策略-价值网络设计城市公交路线。
+2. [Efficient On-policy Visual-RL via Stochastic Decoupled Policy Gradient](/202605/31/2605.26478v1-efficient-on-policy-visual-rl-via-stochastic-decoupled-policy-gradient)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：在线策略视觉强化学习用于机器人控制
+3. [Ratio-Variance Regularized Policy Optimization](/202605/31/2605.26784v1-ratio-variance-regularized-policy-optimization)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：适用于车辆路径问题的多智能体强化学习奖励塑形方法
+   evidence：通用RL策略优化方法可应用于VRP求解
 
 
 <div class="dpr-home-promo-card">
