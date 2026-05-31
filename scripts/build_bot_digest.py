@@ -17,54 +17,11 @@ def load_json(path: Path) -> Any:
         return json.load(f)
 
 
-def find_latest_recommend_dir() -> Path:
-    candidates = [p for p in ARCHIVE_DIR.glob("*/recommend") if p.is_dir()]
+def find_latest_recommend_file() -> Path:
+    candidates = sorted(ARCHIVE_DIR.glob("*/recommend/*.standard.json"))
     if not candidates:
-        raise FileNotFoundError("No recommend directory found under archive/")
-    candidates.sort(key=lambda p: p.parent.name)
+        raise FileNotFoundError("No *.standard.json found under archive/*/recommend/")
     return candidates[-1]
-
-
-def pick_candidate_list(data: Any) -> list[dict[str, Any]]:
-    if isinstance(data, list):
-        return [x for x in data if isinstance(x, dict)]
-
-    if isinstance(data, dict):
-        for key in ("papers", "items", "results", "recommendations", "data"):
-            value = data.get(key)
-            if isinstance(value, list):
-                return [x for x in value if isinstance(x, dict)]
-
-    return []
-
-
-def find_recommend_items(recommend_dir: Path) -> list[dict[str, Any]]:
-    json_files = sorted(recommend_dir.rglob("*.json"))
-    if not json_files:
-        raise FileNotFoundError(f"No json files found under {recommend_dir}")
-
-    best_items: list[dict[str, Any]] = []
-
-    for path in json_files:
-        try:
-            data = load_json(path)
-        except Exception:
-            continue
-
-        items = pick_candidate_list(data)
-        if not items:
-            continue
-
-        scored_items = [normalize_item(x) for x in items]
-        scored_items = [x for x in scored_items if x.get("title")]
-
-        if len(scored_items) > len(best_items):
-            best_items = scored_items
-
-    if not best_items:
-        raise ValueError(f"Could not parse recommendation items from {recommend_dir}")
-
-    return best_items
 
 
 def first_non_empty(record: dict[str, Any], *keys: str) -> str:
@@ -79,60 +36,60 @@ def first_non_empty(record: dict[str, Any], *keys: str) -> str:
 
 
 def normalize_item(record: dict[str, Any]) -> dict[str, Any]:
-    title = first_non_empty(
-        record,
-        "title",
-        "paper_title",
-        "name",
-    )
-
-    slug = first_non_empty(
-        record,
-        "slug",
-        "paper_slug",
-        "id",
-        "paper_id",
-        "arxiv_id",
-    )
-
-    summary = first_non_empty(
-        record,
-        "summary",
-        "summary_zh",
-        "ai_summary",
-        "reason",
-        "recommend_reason",
-        "abstract",
-    )
-
-    source = first_non_empty(
-        record,
-        "source",
-        "paper_source",
-        "origin",
-    ) or "unknown"
-
-    url = first_non_empty(
-        record,
-        "url",
-        "paper_url",
-        "html_url",
-        "abs_url",
-        "link",
-    )
-
     return {
-        "title": title,
-        "slug": slug,
-        "summary": summary,
-        "source": source,
-        "url": url,
+        "id": first_non_empty(record, "id"),
+        "title": first_non_empty(record, "title"),
+        "summary": first_non_empty(
+            record,
+            "llm_evidence_cn",
+            "llm_evidence",
+            "canonical_evidence",
+            "abstract",
+        ),
+        "abstract": first_non_empty(record, "abstract"),
+        "source": first_non_empty(record, "source"),
+        "link": first_non_empty(record, "link"),
     }
 
 
+def load_recommendation_sets(path: Path) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    data = load_json(path)
+
+    run_window = path.parent.parent.name
+    deep_dive_raw = data.get("deep_dive", []) if isinstance(data, dict) else []
+    quick_skim_raw = data.get("quick_skim", []) if isinstance(data, dict) else []
+
+    deep_dive = [normalize_item(x) for x in deep_dive_raw if isinstance(x, dict)]
+    quick_skim = [normalize_item(x) for x in quick_skim_raw if isinstance(x, dict)]
+
+    return run_window, deep_dive, quick_skim
+
+
+def slug_from_item(item: dict[str, Any]) -> str:
+    paper_id = item.get("id", "").strip()
+    title = item.get("title", "").strip().lower()
+
+    safe = []
+    for ch in title:
+        if ch.isalnum():
+            safe.append(ch)
+        elif ch in (" ", "-", "_"):
+            safe.append("-")
+    title_slug = "".join(safe)
+
+    while "--" in title_slug:
+        title_slug = title_slug.replace("--", "-")
+
+    title_slug = title_slug.strip("-")
+    if paper_id and title_slug:
+        return f"{paper_id}-{title_slug}"
+    return paper_id or title_slug
+
+
 def build_entry_url(run_window: str, featured: dict[str, Any]) -> str:
-    if featured.get("slug"):
-        return f"{PAGES_BASE_URL}{run_window}/{featured['slug']}"
+    slug = slug_from_item(featured)
+    if slug:
+        return f"{PAGES_BASE_URL}{run_window}/{slug}"
     return PAGES_BASE_URL
 
 
@@ -175,20 +132,25 @@ def build_markdown(
 
 
 def main() -> None:
-    recommend_dir = find_latest_recommend_dir()
-    run_window = recommend_dir.parent.name
-    items = find_recommend_items(recommend_dir)
+    latest_file = find_latest_recommend_file()
+    run_window, deep_dive, quick_skim = load_recommendation_sets(latest_file)
 
-    featured = items[0]
-    quick_reads = items[1:4]
+    if deep_dive:
+        featured = deep_dive[0]
+        quick_reads = quick_skim[:3]
+    elif quick_skim:
+        featured = quick_skim[0]
+        quick_reads = quick_skim[1:4]
+    else:
+        raise ValueError(f"No recommended papers found in {latest_file}")
 
-    now = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
     entry_url = build_entry_url(run_window, featured)
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
     markdown = build_markdown(
-        date_str=now,
+        date_str=date_str,
         run_window=run_window,
         entry_url=entry_url,
         featured=featured,
@@ -196,7 +158,7 @@ def main() -> None:
     )
 
     latest_md = REPORTS_DIR / "bot-digest-latest.md"
-    dated_md = REPORTS_DIR / f"bot-digest-{now}.md"
+    dated_md = REPORTS_DIR / f"bot-digest-{date_str}.md"
 
     latest_md.write_text(markdown, encoding="utf-8")
     dated_md.write_text(markdown, encoding="utf-8")
