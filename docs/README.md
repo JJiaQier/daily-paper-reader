@@ -6,30 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-31
-- 运行时间：2026-05-31 22:00:33 UTC
+- 最新运行日期：2026-06-02
+- 运行时间：2026-06-02 00:23:11 UTC
 - 运行状态：成功
 - 本次总论文数：3
 - 精读区：0
 - 速读区：3
 
 ### 今日简报（AI）
-今日速读3篇论文，重点聚焦城市交通路线设计与强化学习策略优化。最值得关注的是《AlphaTransit》，其以7.0分居首，探索用机器学习设计城市级公交线路。若时间有限，建议优先精读该文，了解其核心技术框架。
-- 详情：[/202605/31/README](/202605/31/README)
+今日研读3篇论文，涵盖城市交通路线设计、视觉强化学习和LLM策略优化。最值得关注的是7分的《AlphaTransit》，其学路线设计方法对城市规模规划有重要启发。建议优先精读该文，并思考如何将其实验框架迁移至实际交通场景。
+- 详情：[/202606/02/README](/202606/02/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [AlphaTransit: Learning to Design City-scale Transit Routes](/202605/31/2605.28730v1-alphatransit-learning-to-design-city-scale-transit-routes)  
+1. [AlphaTransit: Learning to Design City-scale Transit Routes](/202606/02/2605.28730v1-alphatransit-learning-to-design-city-scale-transit-routes)  
    标签：评分：7.0/10、query:rl-last-mile
-   evidence：AlphaTransit使用蒙特卡洛树搜索与神经网络策略-价值网络设计城市公交路线。
-2. [Efficient On-policy Visual-RL via Stochastic Decoupled Policy Gradient](/202605/31/2605.26478v1-efficient-on-policy-visual-rl-via-stochastic-decoupled-policy-gradient)  
+   evidence：使用MCTS和神经策略-价值网络设计城市公交路线
+2. [Efficient On-policy Visual-RL via Stochastic Decoupled Policy Gradient](/202606/02/2605.26478v1-efficient-on-policy-visual-rl-via-stochastic-decoupled-policy-gradient)  
    标签：评分：6.0/10、query:rl-path-opt
-   evidence：在线策略视觉强化学习用于机器人控制
-3. [Ratio-Variance Regularized Policy Optimization](/202605/31/2605.26784v1-ratio-variance-regularized-policy-optimization)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：通用RL策略优化方法可应用于VRP求解
+   evidence：高效的视觉强化学习方法用于视觉运动控制，可应用于机器人路径优化与操作
+3. [When are LLMs Sufficient Policy Optimizers for Sequential RL Tasks?](/202606/02/2605.30719v1-when-are-llms-sufficient-policy-optimizers-for-sequential-rl-tasks)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：将LLM作为强化学习策略优化器，涵盖机器人任务，可迁移至机器人路径规划
 
 
 <div class="dpr-home-promo-card">
