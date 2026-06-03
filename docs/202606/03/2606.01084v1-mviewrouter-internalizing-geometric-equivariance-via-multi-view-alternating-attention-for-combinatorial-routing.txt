@@ -1,0 +1,587 @@
+Title: MViewRouter: Internalizing Geometric Equivariance via Multi-view Alternating Attention for Combinatorial Routing
+
+URL Source: https://arxiv.org/pdf/2606.01084v1
+
+Published Time: Tue, 02 Jun 2026 02:07:02 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# MViewRouter: Internalizing Geometric Equivariance via Multi-view Alternating Attention for Combinatorial Routing 
+
+Shiyan Liu 1∗ Bohan Tan 1∗ Yaoxin Wu 2 Yan Jin 11 Huazhong University of Science and Technology  
+
+> 2
+
+Eindhoven University of Technology 
+
+{shyl, bohant, jinyan}@hust.edu.cn y.wu2@tue.nl 
+
+## Abstract 
+
+Combinatorial routing problems such as the Traveling Salesman Problem (TSP) and the Capacitated Vehicle Routing Problem (CVRP) are fundamental NP-hard prob-lems with broad real-world applications. While recent deep reinforcement learning methods have shown promising performance, they typically handle geometric symmetries only through data augmentation, resulting in inconsistent decisions and limited generalization. To address this issue, we propose MViewRouter, a multi-view framework that internalizes geometric equivariance as a structural in-ductive bias to achieve invariant decision-making across routing problem variants. Our approach introduces a Multi-view Alternating Attention (MAA) mechanism that enables parallel processing over the D4 symmetry group, alternating between intra-view relational modeling and inter-view feature alignment. Furthermore, we optimize the policy via Collective Policy Gradient Aggregation (CPGA), leverag-ing consensus gradients from multiple symmetric views to stabilize training and accelerate convergence. Experiments on TSP and CVRP benchmarks, as well as real-world TSPLIB instances, demonstrate that MViewRouter achieves competitive solution quality and strong zero-shot generalization. 
+
+## 1 Introduction 
+
+Combinatorial routing problems are cornerstones of combinatorial optimization, representing a class of NP-hard problems with profound implications across diverse industrial domains. The Traveling Salesman Problem (TSP) and the Capacitated Vehicle Routing Problem (CVRP) are two canonical representatives: TSP models the problem of finding the shortest Hamiltonian tour over a set of nodes, while CVRP additionally requires that deliveries respect vehicle capacity constraints. From optimizing last-mile delivery routes to scheduling pick-and-place operations in robotic manufacturing, the ability to rapidly, accurately solve such problems directly impacts operational costs and resource utilization [ 3 ]. The exponential growth of the solution space renders classical approaches, including the exact solver Concorde [ 1] and the Lin-Kernighan heuristic (LKH) [ 11 ], computationally infeasible for large-scale or real-time applications, driving the development of learned heuristics [5]. In recent years, deep reinforcement learning has emerged as a promising paradigm for solving routing problems by learning heuristics directly from data. Constructive methods, such as the Attention Model (AM) [ 17 ] and Pointerformer [ 14 ], are particularly attractive for real-time deployment as they incrementally build solutions with high inference efficiency. Recent advancements like Policy Optimization with Multiple Optima (POMO) [ 18 ] and its Preference-Optimization (PO)-based extensions [ 23 ] have further narrowed the optimality gap by leveraging multi-start decoding strategies. 
+
+> ∗Equal contribution. Preprint.
+> arXiv:2606.01084v1 [cs.LG] 31 May 2026
+
+Despite advancements, most neural routing solvers treat instances as sequential coordinate sets, failing to internalize the geometric symmetries of the Euclidean plane. Standard Transformer-based [ 32 ] architectures often yield inconsistent embeddings for the same instance under different transformations of the D4 dihedral group, the 8-element group of rotations and reflections that captures the full planar symmetry of Euclidean routing instances. This lack of geometric grounding forces a reliance on test-time augmentation (TTA) [ 18 ], an unprincipled post-hoc patch that attempts to recover symmetry during inference rather than embedding it as a core inductive bias. Furthermore, single-view training overlooks rich supervisory signals from symmetric perspectives, leading to brittle policies sensitive to coordinate perturbations. To address these challenges, we propose MViewRouter, a problem-agnostic framework establishing unified training and inference symmetry through two innovations. First, the Multi-view Alternating Attention (MAA) mechanism enables explicit feature-level communication between symmetric views [ 34 ]. By alternating between intra-view modeling and inter-view alignment, the encoder learns a consensus representation naturally invariant to transformations. Second, we introduce Collective Policy Gradient Aggregation (CPGA), a symmetry-constrained policy gradient that enforces orbit-consistent (i.e., consistent across all 8 symmetric copies of the same instance) parameter updates by aggregating consensus gradients across all D4 views in a single step [ 39 ]. An orbit-conditioned view-specific baseline filters non-equivariant noise and prevents gradient domination by geometrically easier views. Consequently, MViewRouter ensures geometric invariance is an intrinsic policy property rather than a fragmented heuristic [6]. The main contributions of this work are summarized as follows: • We develop a Multi-view Alternating Attention mechanism that enables parallel processing of the D4 symmetry group. By alternating between intra-view topology and inter-view alignment, the encoder learns equivariant representations grounded in geometric symmetry. • We introduce Collective Policy Gradient Aggregation, a training paradigm treating symmet-ric views as concurrent objectives. By aggregating consensus gradients, CPGA accelerates convergence through denser supervision and enforces consistent, optimal decision-making orbits in the entire group. • We validate MViewRouter on both TSP and CVRP benchmarks, as well as real-world TSPLIB instances, demonstrating its competitive performance, strong zero-shot generaliza-tion, and broad applicability beyond a single problem type. 
+
+## 2 Related Work 
+
+2.1 Neural Constructive Solvers 
+
+Neural constructive solvers have gained significant traction for solving the TSP. Early pioneers like Pointer Network [ 33 ], Neural CO [ 4], and AM [ 17 ] utilized sequence-to-sequence and Transformer-based [ 32 ] architectures to construct solutions autoregressively, with subsequent work extending RL-based construction to heterogeneous vehicle routing problem variants [ 22 ]. To further enhance performance and reduce gradient variance, POMO [ 18 ] introduced a multiple-greedy rollout strategy, which has since become a cornerstone baseline in the field. Building on this, several works have focused on improving representation or search strategies. For instance, Pointerformer [ 14 ] refines the attention mechanism for more expressive node features, Multi-Decoder AM [ 37 ] and Poppy [ 10 ] foster solution diversity through multi-policy ensembles, and search-based refinement [ 7, 13 ] improves quality through guided exploration. Improvement-based approaches [ 36 , 20 , 12 , 21 ] complement these by iteratively refining existing solutions. To address the challenges of large-scale instances, DIFUSCO [ 31 ] and H-TSP [ 24 ] advance this frontier by leveraging diffusion models and hierarchical reinforcement learning, respectively, while NeuroLKH [ 38 , 40 ] integrates neural guidance into classical LKH search. Transitioning from architecture to learning paradigms, POMO has recently been treated as a versatile framework. Prominent examples include preference optimization [ 23 ], which transforms quantitative rewards into qualitative preference signals through statistical comparison and integrates local search during fine-tuning to help the policy escape local optima, and BOPO [19], a complementary preference-based variant. While constructive methods focus on policy refinement or single-view architectures, our work explores a holistic multi-view framework. Unlike conventional approaches, our method enforces inter-view 2interactions during the encoding stage to achieve unified training and inference. By grounding diverse spatial perspectives into a consistent representation, MViewRouter ensures that geometric invariance is maintained as a fundamental structural property throughout the entire model lifecycle. 
+
+2.2 Geometric Invariance 
+
+Euclidean routing problems possess inherent geometric symmetries, which are vital for robust neural combinatorial optimization. Existing approaches address these symmetries at different levels of the model. Sym-NCO [ 15 ] enforces symmetry as an output-level constraint via symmetry-aware regularization that penalizes solution discrepancies across transformed views. While effective, this leaves the feature space unconstrained: the encoder can still produce divergent embeddings for geometrically equivalent instances. At the architectural level, INVIT [ 9] mitigates embedding aliasing by designing an invariant encoder, but its invariance operates within a single view and does not exploit complementary information across multiple symmetric views. BQ-NCO [ 8] takes a complementary MDP-level approach, reducing the state space via bisimulation quotienting to leverage problem symmetries, though without explicit feature-level alignment across views. In contrast, MViewRouter internalizes geometric symmetry as a structural inductive bias [ 6 , 29 ] rather than a post-hoc constraint. Unlike Sym-NCO’s output-level regularization and INVIT’s single-view invariance, MAA enforces feature-level consistency via inter-view fiber attention before decoding. Unlike BQ-NCO’s MDP-level state reduction, MViewRouter explicitly aligns latent representations across all K symmetric views, achieving D4-invariance as an intrinsic property of the encoder. 
+
+## 3 Problem Formulation 
+
+We consider two canonical combinatorial routing problems that serve as testbeds for our framework. 
+
+Traveling Salesman Problem (TSP). The TSP is defined on a complete undirected graph G =(V, E ), where V = {v1, . . . , v n} denotes the set of n nodes. Each node vi is represented by its 2D Euclidean coordinates, normalized to [0 , 1] 2. The edge cost c(vi, v j ) = ∥vi −vj ∥2. A feasible solution is a Hamiltonian cycle τ that visits each node exactly once. Given a tour (vσ1 vσ2 ...v σn ), v σi ∈ V ,the objective is to minimize the total tour length: 
+
+LTSP (τ ) = 
+
+> n−1
+
+X
+
+> i=1
+
+c(vσi , v σi+1 ) + c(vσn , v σ1 ). (1) 
+
+Capacitated Vehicle Routing Problem (CVRP). CVRP extends TSP by introducing a depot v0
+
+and capacity constraints. The node set is V = {v0, v 1, . . . , v n}, where v0 is the depot and v1, . . . , v n
+
+are customers, each with a demand di ∈ Z>0. A fleet of homogeneous vehicles, each with capacity 
+
+Q, must serve all customers. A feasible solution is a set of routes R = {r1, . . . , r m}, where each route starts and ends at v0, covers a disjoint subset of customers, and satisfies P 
+
+> vi∈rj
+
+di ≤ Q. Let 
+
+E(r) denote the ordered edge set of route r (including the depot-to-first and last-to-depot legs). The objective is to minimize the total routing cost: 
+
+LCVRP (R) = X
+
+> r∈R
+
+X
+
+> (u, v )∈E(r)
+
+c(u, v ). (2) Both problems share the same D4 geometric symmetry structure: any rotation or reflection applied to all node coordinates yields an equivalent instance with identical optimal cost. This shared symmetry makes them natural testbeds for our geometric equivariance framework. 
+
+## 4 The Proposed MViewRouter Method 
+
+We propose a multi-view geometric equivariance framework, MViewRouter, that internalizes spatial symmetry as a structural inductive bias. MViewRouter enables cross-view information flow via Multi-view Alternating Attention (MAA) and optimizes the policy through Collective Policy Gradient Aggregation (CPGA), as illustrated in Figure 1. Operating at the encoder and training-objective levels, MViewRouter is problem-agnostic: the same MAA and CPGA components apply to any routing problem with Euclidean node coordinates, including both TSP and CVRP. This unified multi-view, problem-agnostic design ensures that the geometric invariance used for TTA is explicitly grounded during both encoding and training. 3Figure 1: Overview of the MViewRouter architecture. 
+
+4.1 Multi-View Alternating Attention 
+
+Given a routing instance X ∈ Rn×2, we generate K = 8 augmented views {X(k) = gk(X)}Kk=1 
+
+by applying each element of the D4 dihedral group pointwise (see Appendix A for the explicit list of transformations), then embed them via a shared linear projection fϕ into a unified tensor 
+
+H0 ∈ RK×n×d. To enforce latent consistency across these views, we introduce a MAA encoder [ 34 ]consisting of L blocks, each alternating between local (intra-view) and global (inter-view) reasoning. 
+
+Local Attention (Intra-view Topology). The local attention layer captures node-to-node spatial dependencies within each view independently. For a given block l, the input is the multi-view embed-ding tensor Hl−1 ∈ RK×n×d. The intra-view relational structure for each view k ∈ { 1, . . . , K } is modeled as: ˆH(k) 
+
+> l
+
+= MHA local (H(k)
+
+> l−1
+
+), (3) where MHA (·) denotes the Multi-Head Attention [ 32 ] mechanism with M parallel heads. Given the attention weight matrices WQ, WK , and WV , each head m takes H as input to compute: Head m(H) = softmax 
+
+ (HW Qm)( HW Km )⊤
+
+√dh
+
+
+
+(HW Vm), (4) where dh = d/M is the dimension of each attention head. The local attention operation preserves the relative spatial topology of nodes under the specific geometric transformation gk, ensuring that intra-view features remain locally consistent. 
+
+Global Attention (Inter-view Alignment). To enforce equivariance across the symmetry group G,we introduce interaction across the view dimension. Since the geometric transformations gk ∈ D4
+
+are applied pointwise to coordinates, the node indexing remains invariant across views. Leveraging this correspondence, for each node i ∈ { 1, . . . , n }, we define a cross-view fiber Fi,l ∈ RK×d by collecting the embeddings of the same physical node i from all K views: 
+
+Fi,l =
+
+h ˆH(1)  
+
+> l,i
+
+, ˆH(2)  
+
+> l,i
+
+, . . . , ˆH(K)
+
+> l,i
+
+i⊤
+
+. (5) The inter-view alignment is then achieved by applying a shared MHA across the fiber dimension to update the node embeddings: 
+
+F′ 
+
+> i,l
+
+= MHA global (Fi,l ), where F′ 
+
+> i,l
+
+=
+
+h
+
+H(1)  
+
+> l,i
+
+, . . . , H(K)
+
+> l,i
+
+i⊤
+
+. (6) By applying attention across the view dimension, the encoder facilitates communication between different orientations of the same node. This regularizes the latent representations to be consistent under spatial transformations, bridging the gap between training and inference by ensuring that geometric equivariant features are explicitly aligned [2]. 4Proposition 4.1 (MAA Invariance at the Uniform Fixed Point) . Let fϕ be the shared linear projection and let MHA local have fixed weights. If the inter-view global attention weights are uniform, i.e., 
+
+α(k) 
+
+> j→i
+
+= 1 /K for all i, j, k , then for any group element g ∈ D4 inducing a permutation σg on the K
+
+views, the output fiber embedding satisfies 
+
+H(k) 
+
+> l,i
+
+= H(σg (k))  
+
+> l,i
+
+∀ i, k, (7) 
+
+yielding a D4-invariant node representation. Proof. Applying g to the input instance permutes the views as X(k) 7 → X(σg (k)) . Since fϕ is a shared linear projection, the initial embeddings are correspondingly permuted: H(k)0 7 → H(σg (k)) 0 . Because 
+
+MHA local operates independently per view with fixed weights, this permutation propagates through the local attention, yielding ˆH(k) 
+
+> l,i
+
+7 → ˆH(σg (k))  
+
+> l,i
+
+for all layers l. Consequently, applying g permutes the fiber Fi,l by σg . Under uniform attention weights α(k) 
+
+> j→i
+
+= 1 /K , the global MHA reduces to 
+
+F′ 
+
+> i,l
+
+= 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+WV ˆH(k) 
+
+> l,i
+
+. (8) This sum is invariant to any permutation of its terms, so F′ 
+
+> i,l
+
+is identical regardless of which group element g was applied. Consequently, all views share the same fiber output, establishing 
+
+D4-invariance. 
+
+Practical implications. In practice, the global attention weights are learned rather than fixed at 
+
+1/K . CPGA provides the training signal that drives the encoder toward this invariant fixed point: by enforcing orbit-consistent gradient updates, it encourages the global attention weights to converge to a near-uniform distribution, as corroborated empirically by the 53.6% reduction in standard deviation under D4 perturbations (Table 4) and the representation-level alignment metrics reported in Section 5.6. 
+
+4.2 Collective Policy Gradient Aggregation 
+
+To explicitly enforce geometric grounding during optimization, we introduce Collective Policy Gradi-ent Aggregation (CPGA). Rather than treating the K symmetric views as independent augmented samples, CPGA is a symmetry-constrained policy gradient that processes the full D4 orbit syn-chronously and enforces orbit-consistent parameter updates, drawing on consensus gradient methods from multi-task learning [ 39 , 30 ]. The eight views are isometric transformations with equivalent optimal solutions; they induce different gradient directions due to representational asymmetry, and CPGA regularizes these toward a consensus, driving the encoder toward D4-invariant representations. Each geometric transformation gk ∈ G defines a sub-objective over its induced trajectory space: 
+
+J (k)(θ) = Eπ∼pθ (·| gk (X)) [R(π)] , (9) where R(π) = −L(π) represents the reward function, defined as the negative total route cost of solution π (i.e., negative tour length for TSP and negative total route length for CVRP). Distinct from standard stochastic data augmentation, where transformed samples are treated as independent instances (often introducing variance), CPGA processes the full group orbit synchronously to enforce geometric consistency. We define the global objective JG (θ) as the joint expectation over the uniform distribution of the symmetry group (specifically the D4 dihedral group): 
+
+JG (θ) = EX∼D 
+
+ 1
+
+|G| 
+
+X
+
+> g∈G
+
+Z
+
+πθ (τ |g(X)) R(τ )dτ 
+
+ . (10) By processing K = 8 symmetric views within a unified batch, the model constructs N parallel trajectories {π(k,i )}Ni=1 for each gk ∈ G . This architecture provides a dense supervisory signal, where the parameter update is driven by the Collective Policy Gradient [35, 39]: 
+
+∇θ JG (θ) ≈ 1
+
+K · N
+
+> K
+
+X
+
+> k=1
+> N
+
+X
+
+> i=1
+
+
+
+R(π(k,i )) − b(k)
+
+· ∇ θ log pθ (π(k,i )|gk(X)) , (11) 5Figure 2: Training curves on TSP-100: POMO and MViewRouter under original view and ×8 aug. where b(k) = 1
+
+> N
+
+PNi=1 R(π(k,i )) serves as a view-specific baseline. Crucially, this view-specific baseline differentiates CPGA from naive augmentation with a global baseline. By normalizing rewards within each orientation, b(k) prevents the gradient from being dominated by “easier” geometric views (which naturally yield higher rewards), ensuring that the optimization focuses on relative improvement across the entire symmetry group. The complete training protocol is formalized in Algorithm 1 (Appendix C). A formal complexity analysis is provided in Appendix B. In brief, the MAA encoder matches the 
+
+O(n2d) asymptotic complexity of the standard single-view Transformer in POMO, and the empirical training overhead is 6% (5.3 vs. 5.0 min per epoch). 
+
+## 5 Experimental Results 
+
+5.1 Experimental Setting Datasets MViewRouter is evaluated across synthetic and real-world TSP and CVRP instances. 
+
+TSP Instances Node coordinates are uniformly sampled from [0 , 1] 2. We train on TSP-50 and TSP-100 and evaluate zero-shot generalization on TSP-200 and TSP-500. Each test set contains 10,000 instances. For out-of-distribution generalization, we additionally evaluate on 29 TSPLIB instances [28] (50–200 nodes) using the TSP-100 model without retraining or fine-tuning. 
+
+CVRP Instances Following standard practice [ 18 , 26 ], node coordinates are uniformly sampled from [0 , 1] 2, customer demands are drawn uniformly from {1, . . . , 9}, and vehicle capacity is set to Q = 40 for CVRP-50 and Q = 50 for CVRP-100. We train separate models on CVRP-50 and CVRP-100 and generate 10,000 instances for each test set. 
+
+Baselines For TSP, we compare against exact solvers (Concorde [ 1], Gurobi [ 25 ]), traditional heuristics (OR-Tools, LKH3 [ 11 ]), and recent state-of-the-art (SOTA) neural solvers: POMO [ 18 ], Sym-NCO [ 15 ], Pointerformer [ 14 ], POMO+PO [ 23 ], and DIFUSCO [ 31 ]. For CVRP, we compare against LKH3 as the heuristic reference and Sym-NCO, POMO, and POMO+PO as neural baselines. 
+
+Implementation Details Full hyperparameters are provided in Appendix D. To ensure a fair compar-ison with POMO, the per-view batch size is 8 instances, giving a total of 8 views × 8 instances = 64 ,identical to POMO’s batch size. The ×8 views therefore constitute a reallocation of the same training budget, not an increase in data volume. 
+
+5.2 Training Dynamics 
+
+We analyze training dynamics under two evaluation protocols: (1) Original View (decoding from the original, untransformed problem instance), and (2) ×8 Augmentations , selecting the best tour across all 8 D4 views. As shown in Figure 2, MViewRouter’s original-view performance already matches augmented POMO, while its ×8 augmentation curve maintains a consistent lead throughout training. This acceleration is attributed to CPGA: aggregating consensus gradients over the full D4 orbit provides a denser supervisory signal that forces the policy to internalize geometric invariants early, yielding a more robust optimization landscape. An analogous pattern holds on CVRP-100 (Appendix E). 6Table 1: Results on TSP-50 and TSP-100. Gap relative to Concorde. Type: Reinforcement Learning (RL) / Supervised Learning (SL) / Preference Optimization (PO) = training paradigm; Greedy (G) / Sampling (S) = decoding mode. Bold: best neural solver.                                                                                                      
+
+> Method Type TSP-50 TSP-100
+> Len. Gap Time Len. Gap Time Traditional Concorde Exact 5.69 0.00% (13m) 7.76 0.00% (1h) Gurobi Exact 5.69 0.00% (2m) 7.76 0.00% (17m) LKH3 Heuristic 5.69 0.00% (6m) 7.76 0.00% (25m) OR Tools Heuristic 5.85 2.87% (5m) 8.06 3.86% (23m) Neural POMO, no aug. RL+S 5.70 0.12% (1s) 7.80 0.58% (6s) POMO, ×8 aug. RL+S 5.69 0.03% (9s) 7.77 0.17% (44s) Sym-NCO RL+S 5.70 0.16% (9s) 7.79 0.39% (44s) Pointerformer RL 5.69 0.02% (12s) 7.77 0.15% (1m) DIFUSCO SL+G 5.71 0.45% (9m) 7.85 1.21% (9m) DIFUSCO SL+S 5.70 0.09% —7.78 0.23% —POMO+PO PO+S 5.69 0.02% (9s) 7.76 0.07% (44s)
+> MViewRouter, ori. RL+S 5.70 0.08% (2s) 7.78 0.25% (8s)
+> MViewRouter, ×8 aug. RL+S 5.69 0.01% (12s) 7.76 0.07% (1m)
+
+Table 2: Results on CVRP-50 and CVRP-100. Gap relative to LKH3. 
+
+Method CVRP-50 CVRP-100 
+
+Len. Gap Time Len. Gap Time Traditional LKH3 10.38 0.00% (7h) 15.68 0.00% (12h) Neural POMO, no aug. 10.49 1.14% (1s) 15.83 0.98% (5s) POMO, ×8 aug. 10.46 0.76% (8s) 15.73 0.32% (40s) Sym-NCO 10.50 1.13% (8s) 15.92 1.51% (40s) POMO+PO 10.43 0.50% (8s) 15.81 0.82% (40s) 
+
+MViewRouter, ori. 10.45 0.67% (2s) 15.81 0.82% (7s) 
+
+MViewRouter, ×8 aug. 10.40 0.19% (12s) 15.71 0.19% (55s) 
+
+5.3 Comparative Results on Generated Instances 
+
+Figure 3: Zero-shot generalization gap relative to POMO. 
+
+TSP. As shown in Table 1, MViewRouter achieves SOTA performance among RL-based neural solvers on both TSP-50 and TSP-100. In the original view, it achieves a 0.25% gap on TSP-100, rivaling augmented POMO (0.17%) while running 5.5× faster. With full ×8 augmenta-tion, the gap drops to 0.07%, matching near-exact solver performance. To demonstrate generalization, as shown in Fig-ure 3, this advantage grows with problem scale, outperforming POMO by 0.89% at n=500 under 
+
+×8 augmentation, while the original-view model already surpasses augmented POMO at n=200 .
+
+CVRP. As shown in Table 2, MViewRouter consistently outperforms all neural baselines on both problem sizes under both evaluation protocols, demonstrating that MAA and CPGA transfer naturally to CVRP without architectural modification. With ×8 augmentation, it achieves 0.19% on both CVRP-50 and CVRP-100, outperforming POMO+PO by 0.31% and 0.63% respectively. In the original-view setting, it matches POMO+PO on CVRP-100 at 0.82% while running 5.7× faster, confirming the favorable accuracy–efficiency trade-off of internalized equivariance. 
+
+5.4 Comparative Results on Real-world Instances 
+
+As shown in Table 3, MViewRouter achieves a 25.5% relative reduction in the average optimality gap over POMO on 29 TSPLIB instances, with full per-instance results in Appendix F. 7Table 3: Mean results on 29 TSPLIB instances (×8 aug.). Full per-instance results in Ap-pendix F.          
+
+> Method Mean Len. Mean Gap (%) Time (s)
+> POMO 6.683 2.373 0.043
+> MViewRouter 6.650 1.769 0.052
+
+Table 4: Inference stability under D4 perturba-tions on 10,000 TSP-100 instances. Gaps relative to best view; σ = std. dev. of tour lengths.          
+
+> Method Mean Gap (%) Max Gap (%) Std. Dev. ( σ)
+> POMO 0.41 1.00 0.028
+> MViewRouter 0.17 0.42 0.012
+
+5.5 Geometric Invariance and Inference Stability 
+
+Figure 4: Per-view tour lengths across the D4
+
+symmetry group on TSP-100. We apply all 8 D4 transformations to 10,000 un-seen TSP-100 instances and measure variance across orientations as a proxy for internalized geometric invariance. As shown in Table 4 and Figure 4, MViewRouter reduces σ by 53.6% over POMO. While POMO’s performance fluctuates with coordi-nate orientation, MViewRouter shows a nearly flat trajectory. The 53.6% σ reduction is the inference-time manifestation of the representation-level align-ment that MAA achieves during training (Section 6), converging toward the D4-invariant fixed point of Proposition 4.1. 
+
+5.6 Impact of Training View Quantity 
+
+We investigate the influence of the training view quantity K ∈ { 1, 2, 4, 8} on the convergence of MViewRouter, examining both solution quality and encoder-level geometric consistency. 
+
+Figure 5: Impact of view quantity K ∈ { 1, 2, 4, 8} on TSP-100. Left: solution quality; center: alignment gap A; right: cosine similarity C.
+
+Solution quality (Figure 5, left). The solution quality follows a non-monotonic pattern in K:
+
+K = 8 achieves the best final gap via full D4 orbit coverage, while K = 1 outperforms intermediate 
+
+K = 2 , 4 at convergence since it incurs no alignment overhead. Early in training, K = 2 temporarily leads K = 4 : the latter introduces 6× more cross-view pairs without the stabilizing effect of full group closure, creating an alignment overhead that resolves once the encoder catches up. The K = 8 
+
+configuration avoids this slow-start entirely, confirming that group completeness is the key structural property for rapid, stable convergence. 
+
+Representation alignment (Figure 5, center and right). To directly measure whether the encoder has learned geometrically consistent representations, we track two metrics on the final encoder layer. Let H(k) 
+
+> i
+
+denote the output embedding for node i under view k. The cross-view alignment gap 
+
+A measures the mean intra-node representation variance (lower is better); the cross-view cosine similarity C [27] measures their angular agreement (higher is better): 
+
+A = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+1
+
+K
+
+> K
+
+X
+
+> k=1
+
+H(k) 
+
+> i
+
+− ¯Hi
+
+> 2
+
+, ¯Hi = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+H(k) 
+
+> i
+
+, (12) 
+
+C = 2
+
+nK (K − 1) 
+
+> n
+
+X
+
+> i=1
+
+X
+
+> j<k
+
+H(j) 
+
+> i
+
+· H(k)
+
+> i
+
+∥H(j) 
+
+> i
+
+∥ ∥ H(k) 
+
+> i
+
+∥ (K > 1) . (13) 8For POMO ( K = 1 ), both metrics are evaluated by encoding 8 augmentations independently through its encoder. Both metrics tell a consistent story. In early training, K = 4 lags K = 2 in both A
+
+and C, confirming that the slower convergence is caused by unresolved alignment complexity rather than model capacity. Once this alignment difficulty is overcome, K = 4 surpasses K = 2 in both metrics. K = 8 dominates monotonically throughout, as full D4 closure provides a coherent gradient consensus from epoch one. Together, the curves establish a causal chain: complete group coverage, faster alignment, better optimization. 
+
+## 6 Ablation Study 
+
+To evaluate the contribution of each architectural component in MViewRouter, we conduct a sys-tematic ablation study on the TSP-100 benchmark. We analyze training convergence against two degraded variants: (1) w/o CPGA , which uses MAA but updates parameters with only the original-view gradient; and (2) w/o MAA , which processes eight views independently, skipping the global cross-view fiber attention. 
+
+Figure 6: Ablation on TSP-100. Left: solution quality; center: alignment gap A; right: cosine similarity C.
+
+Solution quality (Figure 6, left). CPGA mainly improves optimization efficiency: aggregating gradients over the D4 orbit provides denser and more stable supervision, allowing the full model to exceed the “w/o CPGA” variant’s final performance in less than half the training time. MAA, conversely, is critical for final optimality: the “w/o MAA” variant stagnates at a much higher optimality gap despite retaining full multi-view training, confirming that inter-view fiber attention (not merely multi-view gradient aggregation) is the essential mechanism for geometric grounding. 
+
+Representation alignment (Figure 6, center and right). POMO [ 18 ] and w/o MAA remain nearly indistinguishable in both A and C throughout training, confirming that gradient aggregation alone cannot drive the encoder toward D4-invariant representations. The full MViewRouter achieves substantially lower A (0.920 → 0.664 ) and higher C (0.206 → 0.314 ), respectively, confirming that MAA’s inter-view fiber attention is the essential mechanism for geometric invariance. 
+
+## 7 Conclusion 
+
+We introduced MViewRouter, a problem-agnostic framework that internalizes geometric equivariance for combinatorial routing. By integrating Multi-view Alternating Attention and Collective Policy Gradient Aggregation, our model transforms geometric symmetry from a post-hoc augmentation trick into a core structural inductive bias. Experiments on TSP, CVRP, and real-world TSPLIB benchmarks confirm that MViewRouter achieves superior solution quality, robust zero-shot generalization, and strong inference stability. Crucially, by rivaling augmented-baseline performance in the original view and generalizing naturally to CVRP without architectural modification, MViewRouter demonstrates the effectiveness of internalizing geometric equivariance as a universal structural prior for Euclidean routing problems. 
+
+Limitations. Scaling to instances with 1k–10 k nodes remains an open challenge shared by all autoregressive constructive solvers [ 18 , 15 , 14 , 23 ], and is orthogonal to our focus on geometric equivariance. Extending MViewRouter to further routing variants (e.g., VRPTW, orienteering) and combining it with fine-tuning [23] or active search [13, 7] are natural directions for future work. 9References 
+
+[1] David Applegate, Ribert Bixby, Vasek Chvatal, and William Cook. Concorde tsp solver, 2006. [2] Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Luˇ ci´ c, and Cordelia Schmid. Vivit: A video vision transformer. In Proceedings of the IEEE/CVF international conference on computer vision , pages 6836–6846, 2021. [3] Roberto Baldacci, Enrico Bartolini, and Gilbert Laporte. Some applications of the generalized vehicle routing problem. Journal of the operational research society , 61(7):1072–1077, 2010. [4] Irwan Bello, Hieu Pham, Quoc V Le, Mohammad Norouzi, and Samy Bengio. Neural combina-torial optimization with reinforcement learning. arXiv preprint arXiv:1611.09940 , 2016. [5] Yoshua Bengio, Andrea Lodi, and Antoine Prouvost. Machine learning for combinatorial optimization: a methodological tour d’horizon. European Journal of Operational Research ,290(2):405–421, 2021. [6] Michael M Bronstein, Joan Bruna, Taco Cohen, and Petar Veliˇ ckovi´ c. Geometric deep learning: Grids, groups, graphs, geodesics, and gauges. arXiv preprint arXiv:2104.13478 , 2021. [7] Jinho Choo, Yeong-Dae Kwon, Jihoon Kim, Jeongwoo Jae, André Hottung, Kevin Tierney, and Youngjune Gwon. Simulation-guided beam search for neural combinatorial optimization. 
+
+Advances in Neural Information Processing Systems , 35:8760–8772, 2022. [8] Darko Drakulic, Sofia Michel, Florian Mai, Arnaud Sors, and Jean-Marc Andreoli. Bq-nco: Bisimulation quotienting for efficient neural combinatorial optimization. Advances in Neural Information Processing Systems , 36:77416–77429, 2023. [9] Han Fang, Zhihao Song, Paul Weng, and Yutong Ban. Invit: A generalizable routing problem solver with invariant nested view transformer. In International Conference on Machine Learning ,pages 12973–12992. PMLR, 2024. [10] Nathan Grinsztajn, Daniel Furelos-Blanco, Shikha Surana, Clément Bonnet, and Tom Barrett. Winner takes it all: Training performant rl populations for combinatorial optimization. Advances in Neural Information Processing Systems , 36:48485–48509, 2023. [11] Keld Helsgaun. An extension of the lin-kernighan-helsgaun tsp solver for constrained traveling salesman and vehicle routing problems. Roskilde: Roskilde University , 12:966–980, 2017. [12] André Hottung and Kevin Tierney. Neural large neighborhood search for the capacitated vehicle routing problem. arXiv preprint arXiv:1911.09539 , 2019. [13] André Hottung, Yeong-Dae Kwon, and Kevin Tierney. Efficient active search for combinatorial optimization problems. arXiv preprint arXiv:2106.05126 , 2021. [14] Yan Jin, Yuandong Ding, Xuanhao Pan, Kun He, Li Zhao, Tao Qin, Lei Song, and Jiang Bian. Pointerformer: Deep reinforced multi-pointer transformer for the traveling salesman problem. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 8132–8140, 2023. [15] Minsu Kim, Junyoung Park, and Jinkyoo Park. Sym-nco: Leveraging symmetricity for neural combinatorial optimization. Advances in Neural Information Processing Systems , 35:1936– 1949, 2022. [16] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. [17] Wouter Kool, Herke Van Hoof, and Max Welling. Attention, learn to solve routing problems! 
+
+arXiv preprint arXiv:1803.08475 , 2018. [18] Yeong-Dae Kwon, Jinho Choo, Byoungjip Kim, Iljoo Yoon, Youngjune Gwon, and Seungjai Min. Pomo: Policy optimization with multiple optima for reinforcement learning. Advances in Neural Information Processing Systems , 33:21188–21198, 2020. 10 [19] Zijun Liao, Jinbiao Chen, Debing Wang, Zizhen Zhang, and Jiahai Wang. Bopo: Neural combinatorial optimization via best-anchored and objective-guided preference optimization. 
+
+arXiv preprint arXiv:2503.07580 , 2025. [20] Hao Lu, Xingwen Zhang, and Shuang Yang. A learning-based iterative method for solving vehicle routing problems. In International conference on learning representations , 2019. [21] Yining Ma, Zhiguang Cao, and Yeow Meng Chee. Learning to search feasible and infeasible regions of routing problems with flexible neural k-opt. Advances in Neural Information Processing Systems , 36:49555–49578, 2023. [22] Mohammadreza Nazari, Afshin Oroojlooy, Lawrence Snyder, and Martin Takác. Reinforcement learning for solving the vehicle routing problem. Advances in neural information processing systems , 31, 2018. [23] Mingjun Pan, Guanquan Lin, You-Wei Luo, Bin Zhu, Zhien Dai, Lijun Sun, and Chun Yuan. Preference optimization for combinatorial optimization problems. In Forty-second International Conference on Machine Learning , 2025. [24] Xuanhao Pan, Yan Jin, Yuandong Ding, Mingxiao Feng, Li Zhao, Lei Song, and Jiang Bian. H-tsp: Hierarchically solving the large-scale traveling salesman problem. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 9345–9353, 2023. [25] Joo Pedro Pedroso. Optimization with gurobi and python. INESC Porto and Universidade do Porto„ Porto, Portugal , 1, 2011. [26] Eduardo Queiroga, Ruslan Sadykov, Eduardo Uchoa, and Thibaut Vidal. 10,000 optimal cvrp solutions for testing machine learning based heuristics. In AAAI-22 workshop on machine learning for operations research (ML4OR) , 2021. [27] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning ,pages 8748–8763. PmLR, 2021. [28] Gerhard Reinelt. Tsplib—a traveling salesman problem library. ORSA journal on computing , 3 (4):376–384, 1991. [29] Vıctor Garcia Satorras, Emiel Hoogeboom, and Max Welling. E (n) equivariant graph neural networks. In International conference on machine learning , pages 9323–9332. PMLR, 2021. [30] Ozan Sener and Vladlen Koltun. Multi-task learning as multi-objective optimization. Advances in neural information processing systems , 31, 2018. [31] Zhiqing Sun and Yiming Yang. Difusco: Graph-based diffusion solvers for combinatorial optimization. Advances in neural information processing systems , 36:3706–3731, 2023. [32] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. [33] Oriol Vinyals, Meire Fortunato, and Navdeep Jaitly. Pointer networks. Advances in neural information processing systems , 28, 2015. [34] Jianyuan Wang, Minghao Chen, Nikita Karaev, Andrea Vedaldi, Christian Rupprecht, and David Novotny. Vggt: Visual geometry grounded transformer. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 5294–5306, 2025. [35] Ronald J Williams. Simple statistical gradient-following algorithms for connectionist reinforce-ment learning. Machine learning , 8(3):229–256, 1992. [36] Yaoxin Wu, Wen Song, Zhiguang Cao, Jie Zhang, and Andrew Lim. Learning improvement heuristics for solving routing problems. IEEE transactions on neural networks and learning systems , 33(9):5057–5069, 2021. 11 [37] Liang Xin, Wen Song, Zhiguang Cao, and Jie Zhang. Multi-decoder attention model with embedding glimpse for solving vehicle routing problems. In Proceedings of the AAAI conference on artificial intelligence , volume 35, pages 12042–12049, 2021. [38] Liang Xin, Wen Song, Zhiguang Cao, and Jie Zhang. Neurolkh: Combining deep learning model with lin-kernighan-helsgaun heuristic for solving the traveling salesman problem. Advances in Neural Information Processing Systems , 34:7472–7483, 2021. [39] Tianhe Yu, Saurabh Kumar, Abhishek Gupta, Sergey Levine, Karol Hausman, and Chelsea Finn. Gradient surgery for multi-task learning. Advances in neural information processing systems ,33:5824–5836, 2020. [40] Jiongzhi Zheng, Kun He, Jianrong Zhou, Yan Jin, and Chu-Min Li. Combining reinforcement learning with lin-kernighan-helsgaun algorithm for the traveling salesman problem. In Pro-ceedings of the AAAI conference on artificial intelligence , volume 35, pages 12445–12452, 2021. 12 A D4 Symmetry Group Transformations 
+
+The D4 dihedral group consists of 8 isometric transformations of the plane, applied pointwise to node coordinates (x, y ) ∈ [0 , 1] 2: four rotations ( 0◦, 90 ◦, 180 ◦, 270 ◦ clockwise) and four reflections (horizontal, vertical, and the two diagonals). Concretely, the 8 transformations {gk}8 
+
+> k=1
+
+are listed in Table 5. All transformations preserve pairwise Euclidean distances, ensuring that the optimal tour length is invariant across all 8 views. Table 5: The 8 elements of the D4 dihedral group applied pointwise to node coordinates (x, y ) ∈
+
+[0 , 1] 2.
+
+k Transformation (x, y ) 7 →
+
+1 Identity (x, y )
+
+2 90 ◦ rotation (y, 1 − x)
+
+3 180 ◦ rotation (1 − x, 1 − y)
+
+4 270 ◦ rotation (1 − y, x )
+
+5 Horizontal flip (1 − x, y )
+
+6 Vertical flip (x, 1 − y)
+
+7 Diagonal flip (y, x )
+
+8 Anti-diagonal flip (1 − y, 1 − x)
+
+## B Complexity Analysis 
+
+MAA encoder. Each encoder block performs two attention passes. The local pass applies MHA local 
+
+to each of the K views independently over n nodes, costing O(Kn 2d) per layer. The global pass applies MHA global to each of the n node fibers over K views, costing O(nK 2d) per layer. The total per-layer complexity is therefore 
+
+O(Kn 2d + nK 2d) = O(Knd (n + K)) . (14) Since K = 8 is a small fixed constant, this simplifies to O(n2d), identical asymptotic complexity to the standard single-view Transformer [ 32 ] in POMO [ 18 ]. Over L layers, the encoder runs in 
+
+O(Ln 2d).
+
+CPGA training. All K views are packed into a single unified batch of size K × B (where B is the view-specific batch size), so no additional forward passes are required beyond what the batch accommodates in parallel. The view-specific baseline and gradient aggregation add O(KN ) scalar operations per step, which is negligible. Empirically, the total training overhead is 6% over POMO (5.3 vs. 5.0 min per epoch), confirming that the theoretical O(n2d) parity translates to near-identical wall-clock cost in practice. 
+
+## C Training Algorithm 
+
+Each training iteration processes a mini-batch of instances X by generating all K=8 symmetric views in parallel. For each view gk(X), the policy samples N trajectories and computes a view-specific baseline b(k) as their mean reward. The view-specific baseline is the key design choice that prevents geometrically easier orientations from dominating the gradient signal: by normalizing rewards within each view independently, CPGA ensures that every group element contributes equally to the parameter update regardless of its intrinsic difficulty. The K view-specific gradients are then averaged into a single consensus update, which backpropagates orbit-consistent supervision through both the MAA encoder and the decoder in one step. This is strictly more efficient than running K sequential updates, and produces a lower-variance gradient estimate than treating the views as independent augmented samples with a shared baseline. 
+
+## D Implementation Details 
+
+We adopt an encoder-decoder architecture [ 17 ] with L = 6 layers, embedding dimension d = 256 ,feed-forward dimension dff = 512 , and M = 8 attention heads [ 32 ]. The decoder follows the 13 Algorithm 1 Training of MViewRouter with CPGA  
+
+> 1:
+
+Input: Dataset D, Symmetry Group G, Learning rate η 
+
+> 2:
+
+Initialize: Policy parameters θ 
+
+> 3:
+
+for each training iteration do  
+
+> 4:
+
+Sample mini-batch of instances X ∼ D  
+
+> 5:
+
+for each group element gk ∈ G in parallel do  
+
+> 6:
+
+X(k) ← gk(X) 
+
+> 7:
+
+Sample N trajectories: {π(k,i )}Ni=1 ∼ pθ (·| X(k)) 
+
+> 8:
+
+Compute view-specific baseline: b(k) ← 1
+
+> N
+
+PNi=1 R(π(k,i )) 
+
+> 9:
+
+end for  
+
+> 10:
+
+Collect all trajectories {π(k,i )}Kk=1 Ni=1 and view-specific baselines {b(k)}Kk=1  
+
+> 11:
+
+Compute joint gradient ∇θ JG (θ) via Eq. (11)  
+
+> 12:
+
+Update parameters: θ ← θ + η∇θ JG (θ) 
+
+> 13:
+
+end for  
+
+> 14:
+
+Output: Optimized invariant policy θ∗
+
+context-based attention mechanism of POMO [ 18 ]. All training is performed on a single NVIDIA RTX 4090 GPU using the Adam optimizer [ 16 ] with learning rate η = 10 −4 and weight decay 
+
+10 −6. The model is trained for 2,000 epochs, each covering 100,000 randomly generated instances. MViewRouter takes 5.3 min per epoch on TSP (vs. 5.0 min for POMO and 9.0 min for POMO+PO [23]). 
+
+## E CVRP-100 Training Dynamics 
+
+Figure 7 shows the training curves on CVRP-100 under the same two evaluation protocols as Section 5.2: original view and ×8 augmentation. MViewRouter converges faster and to a lower tour length than POMO [ 18 ] under both protocols, mirroring the TSP-100 behavior. In the original-view setting, MViewRouter reaches the performance level of augmented POMO well before training converges, demonstrating that the geometric invariance learned by MAA and CPGA transfers directly to a structurally different problem without any architectural modification. The consistent advantage across both TSP and CVRP confirms that the convergence benefit stems from the MAA and CPGA mechanisms rather than TSP-specific properties. 
+
+Figure 7: Training curves on CVRP-100: POMO and MViewRouter under original view and ×8 aug. 
+
+## F Full TSPLIB Benchmark Results 
+
+Table 6 reports per-instance results on all 29 TSPLIB instances (50–200 nodes) [ 28 ]. Both POMO [ 18 ] and MViewRouter use ×8 augmentation with a model trained on TSP-100, evaluated zero-shot without retraining or fine-tuning. 
+
+Overall and per-instance analysis. MViewRouter improves over POMO on 22 of 29 instances, with a 25.5% relative reduction in mean optimality gap (2.373% → 1.769%). The gains are most pronounced on instances where POMO’s gap is large, suggesting that MViewRouter’s internalized 14 geometric equivariance is especially beneficial when the coordinate orientation of a real-world instance happens to be unfavorable for the base policy. Notable examples include bier127 (6.66% 
+
+→ 0.77%), rat99 (3.93% → 1.81%), and krA100 (0.96% → 0.016%). The kr* family (Krolak instances with clustered structure) shows consistent improvement across all sizes from 100 to 200 nodes. 
+
+Scaling behavior. Performance on instances near n=200 reflects the well-known distribution shift challenge: the model is trained on n=100 , and both methods see their gaps widen at double the scale. Nevertheless, MViewRouter maintains an advantage on the majority of larger instances ( d198 :23.49% → 18.23%; krB200 : 3.93% → 3.49%), consistent with the zero-shot generalization trend in Figure 3 showing that MViewRouter’s geometric inductive bias continues to help even under significant scale shift. Table 6: Per-instance results on real-world TSPLIB instances (50–200 nodes). Both POMO and MViewRouter utilize ×8 augmentations. 
+
+Inst. Size Opt. POMO MViewRouter Inst. Size Opt. POMO MViewRouter 
+
+Len. Gap T. (s) Len. Gap T. (s) Len. Gap T. (s) Len. Gap T. (s) eil51 51 6.762 6.818 0.827 0.224 6.809 0.698 0.265 pr124 124 6.263 6.269 0.101 0.038 6.263 0.003 0.043 berlin52 52 4.398 4.399 0.028 0.017 4.399 0.024 0.026 bier127 127 6.937 7.399 6.660 0.034 6.991 0.774 0.046 st70 70 6.818 6.839 0.315 0.020 6.840 0.328 0.028 ch130 130 8.831 8.868 0.417 0.040 8.835 0.040 0.050 eil76 76 7.472 7.561 1.187 0.022 7.561 1.187 0.028 pr136 136 8.545 8.631 1.006 0.045 8.602 0.666 0.047 pr76 76 5.518 5.520 0.028 0.022 5.521 0.046 0.028 pr144 144 5.358 5.407 0.919 0.056 5.370 0.232 0.049 rat99 99 5.685 5.909 3.931 0.027 5.788 1.809 0.036 ch150 150 9.337 9.398 0.651 0.058 9.383 0.492 0.052 krA100 100 5.407 5.459 0.960 0.027 5.408 0.016 0.035 krA150 150 6.710 6.803 1.380 0.058 6.771 0.908 0.054 krB100 100 5.627 5.674 0.840 0.031 5.643 0.287 0.035 krB150 150 6.657 6.765 1.616 0.044 6.764 1.607 0.053 krC100 100 5.286 5.292 0.115 0.028 5.287 0.015 0.035 pr152 152 5.368 5.450 1.536 0.039 5.419 0.953 0.052 krD100 100 5.461 5.504 0.793 0.028 5.479 0.323 0.035 u159 159 8.092 8.186 1.165 0.041 8.173 1.002 0.055 krE100 100 5.624 5.704 1.426 0.028 5.662 0.679 0.035 rat195 195 8.038 8.746 8.814 0.050 8.815 9.663 0.066 rd100 100 8.065 8.073 0.103 0.028 8.065 0.003 0.035 d198 198 3.917 4.837 23.487 0.049 4.631 18.226 0.069 eil101 101 8.500 8.666 1.949 0.033 8.660 1.877 0.038 krA200 200 7.452 7.667 2.879 0.059 7.742 3.885 0.068 lin105 105 4.755 4.789 0.709 0.029 4.802 0.996 0.037 krB200 200 7.466 7.760 3.932 0.049 7.726 3.487 0.068 pr107 107 5.370 5.427 1.055 0.030 5.428 1.083 0.038 Mean - - 6.683 2.373 0.043 6.650 1.769 0.052 
+
+15
