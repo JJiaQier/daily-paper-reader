@@ -1,0 +1,626 @@
+Title: Dynamic Multi-Agent Pickup and Delivery in Robotic Cellular Warehousing Systems
+
+URL Source: https://arxiv.org/pdf/2606.05669v1
+
+Published Time: Fri, 05 Jun 2026 00:35:17 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+> 1
+
+# Dynamic Multi-Agent Pickup and Delivery in Robotic Cellular Warehousing Systems 
+
+Cheng Ren, Member, IEEE , Ming Li, Member, IEEE ,Xinping Guan, Fellow, IEEE , and George Q. Huang, Fellow, IEEE 
+
+Abstract —Robotic Cellular Warehousing Systems (RCWS) give rise to multi-agent pickup and delivery (MAPD) processes in which robots sequentially collect multiple stock-keeping units (SKUs) for each order. Unlike classical MAPD formulations that assume static tasks, real warehouse operations often involve dynamic order evolution, where new SKUs may be appended to an order while it is being executed. Motivated by this practical requirement, this letter formulates the Dynamic Multi-Agent Pickup and Delivery problem considering internal order evo-lution for the first time. Building on the token passing paradigm, we propose two event-triggered online replanning algorithms. The first, Dynamic Token Passing, performs localized replanning upon order updates through add-order decomposition and priority-based token scheduling while preserving collision-free execution. The second, Cooperative Token Passing, further enables idle robots to opportunistically assist newly added pickups, improving system-level efficiency. Simulation results in RCWS environments demonstrate that the proposed methods significantly reduce order flowtime compared with static and non-cooperative baselines. 
+
+Index Terms —Multi-agent pickup and delivery, Robotic cellu-lar warehousing system, Task planning 
+
+I. I NTRODUCTION 
+
+Robotic warehouse systems have revolutionized modern logistics by enabling automated order fulfillment through coordinated fleets of mobile robots. Recently, robotic cellular warehousing systems (RCWS) have emerged as a promising architecture, consisting of multiple modular units known as 
+
+RubikCells [1]. As shown in Fig. 1, when a robot receives an order containing multiple stock-keeping units (SKUs), it navigates to the corresponding storage modules, collects all required products, and delivers them to the assigned packing station [2]. This type of order-fulfillment process in the RCWS can be naturally formulated as a multi-agent pickup and delivery (MAPD) problem, which is an extension of the well-known multi-agent path finding (MAPF) problem [3]. In classical MAPF settings, each agent is typically assigned a single start location and a single goal location, and the objective is to compute collision-free paths for all agents [4]. MAPD further integrates task assignment with path planning, requiring agents to pick up items from source locations and deliver them to designated destinations [5]. The RCWS con-sidered in this work corresponds to a more complex form of 
+
+Cheng Ren, Ming Li, and George Q. Huang are with the Department of Industrial and Systems Engineering, The Hong Kong Polytechnic University, Hong Kong, China, (e-mail: cheng.ren@polyu.edu.hk, ming.li@polyu.edu.hk, gq.huang@polyu.edu.hk) Xinping Guan is with the School of Automation and Intelligent Sensing, Shanghai Jiao Tong University, Shanghai, China, (e-mail: xpguan@sjtu.edu.cn;). 
+
+Fig. 1: Overview of order fulfillment process in one RCWS. MAPD. In contrast to standard MAPD, each order in RCWS consists of multiple SKUs distributed across different storage locations within the same RubikCell. As a result, a single robot must sequentially visit multiple pickup locations before completing the delivery, which naturally leads to a multi-goal MAPD problem [6]. Most existing research on MAPD assumes that all tasks are predefined and remain fixed throughout execution [7], [8]. However, unlike the static assumptions commonly made in previous work, real-world on-demand orders are inherently 
+
+dynamic . For example, Fig. 1 illustrates a typical user in-terface that allows customers to modify their orders before finalization. [9]. When orders dynamically evolve, robots must promptly replan their routes and coordinate task assignments while preserving feasibility and avoiding collisions. These dynamic updates alter both the number and spatial distribution of SKUs to be retrieved, thereby reshaping the ongoing task set of robots. This raises a fundamental question: how can the warehouse control system coordinate multiple robots in real time when orders dynamically change without disrupting active opera-tions? In this letter, the term dynamic specifically refers to internal order evolution, i.e., the addition of new SKUs to already released orders during execution, rather than the arrival of entirely new tasks from outside the system. Main contributions of this letter are summarized as follows. 1) This letter first formalizes the Dynamic Multi-Agent Pickup and Delivery (Dynamic-MAPD) problem, where orders may dynamically evolve during execution through the addition of new products. This formulation extends the classical MAPD setting to dynamic task structures that more accurately reflect real warehouse operations. 2) This letter proposes a Dynamic Token Passing (Dynamic-TP) algorithm that extends the TP framework 
+
+> arXiv:2606.05669v1 [cs.RO] 4 Jun 2026 2
+
+to handle event-driven order updates. When additional SKUs are appended to an order during execution, the robot bound to that order replans its route from its current position once it obtains the token. 3) This letter further develops a cooperative token passing (Coop-TP) algorithm that allows idle robots to tem-porarily assist ongoing orders with newly added SKUs, enabling cooperative assistance from idle robots for newly added SKUs. The remainder of this letter is organized as follows. Sec-tion II reviews related work. Section III formulates the Dynamic-MAPD problem. Section IV presents the proposed two algorithms. Section V provides simulation results and performance analysis. Finally, Section VI concludes the letter. II. R ELATED WORK 
+
+Most follow-up research on MAPD has been motivated by robotic mobile fulfillment systems (RMFS), where robots operate under a goods-to-person (G2P) paradigm [10]. Variants studied in this setting include capacitated MAPD, where robots can handle multiple orders simultaneously [11], and double-deck MAPD, where robots are able to move beneath or relo-cate shelves [12]. Chen et al. jointly optimize order assignment and path planning via a cost-based integrated approach [11]. Li et al. extend MAPD to the double-deck RMFS architecture, coupling shelf relocation and robot navigation [12]. Zhao et al. propose a novel human–robot collaborative order-picking optimization problem in RMFS with multiple picking stations. They present a learning-enhanced local search algorithm tai-lored for the problem [13]. Unlike the G2P picking mode in RMFS, researchers have generalized MAPD to robot-to-goods (R2G) like operations, which are naturally aligned with RCWS scenarios. Ma et al. 
+
+first formalize the MAPD problem and proposed the Token Passing and Token Passing with Task Swaps algorithms, which establish a benchmark for MAPD in R2G settings [5]. Several MAPD variants further incorporate realistic con-straints such as energy awareness, recharging, and distributed coordination. Bavaro et al. integrate recharging decisions into the token-passing framework [14], and Camisa et al. introduce a distributed MAPD formulation that achieves scalability via primal decomposition [15]. More recent formulations intro-duce practical considerations such as task deadlines [16], ex-ternal agents sharing the same environment [17], and execution delays [18]. Makino et al. introduce the MAPD with task deadlines, where each order is associated with a deadline. They propose deadline-aware token passing and its task-swapping variant Dynamic-TPTS to reduce tardiness in online environments [16]. Bonalumi et al. study MAPD with external agents, where a team of robots must accomplish delivery tasks while sharing the environment with independent external agents whose behaviors are unknown, and proposed modeling-based approaches to anticipate conflicts and plan collision-free paths [17]. Lodigiani et al. address MAPD with delays, where robots may not perfectly follow their planned paths due to runtime disturbances [18]. Furthermore, multi-goal MAPD [19], [20] extends each task to a sequence of destinations, representing multi-SKU orders TABLE I: Comparison of MAPD Variants and This Work                         
+
+> Reference Order dynamics Research focus [11] Static Capacitated task allocation with cost-based optimization [12] Static Double-deck MAPD with shelf relocation [14] Static Battery-aware MAPD with recharge scheduling [15] Static Distributed MAPD with scalable decomposition [16] Static Task deadline-aware MAPD [17] Static MAPD with external agents [18] Static MAPD with execution delays [19] Static Multi-goal MAPD with large neighborhood search [20] Static Theoretical analysis of multi-goal MAPD [21] Static Multi-order planning with TSP-based routing
+> Ours Dynamic Dynamic orders and event-driven token passing
+
+that must be picked before delivery. Xu et al. design a large neighborhood search strategy to scale multi-goal MAPD to large warehouses [19], and Zhong et al. analyze its theoretical complexity and provided optimality bounds [20]. Kudo et al. extend the conventional single-task MAPD formulation to a multi-task setting, where each agent can be assigned multiple tasks simultaneously under payload constraints [21]. Their TSP-based online algorithm integrates task ordering and collision-free path planning to improve throughput in large-scale warehouse environments. Dynamic pickup and delivery have been widely studied in the vehicle routing problem (VRP) literature [22].While both VRP and MAPD are defined on graphs, they differ in key aspects. VRP typically assumes independent vehicles on road networks without explicit collision avoidance, whereas MAPD involves tightly coupled multi-robot coordination in a shared workspace with spatial–temporal conflicts. Moreover, VRP is defined on sparse road networks, while warehouse environ-ments are dense grid-like graphs with frequent interactions. Therefore, VRP-based methods cannot be directly applied without incorporating collision-aware multi-agent planning. To the best of our knowledge, no prior MAPD study has systematically addressed the dynamic addition of SKUs to orders that are already under execution. This work fills this gap by defining the Dynamic-MAPD problem and proposing two event-driven token-passing algorithms that adapt to dynamic order evolution in real time. III. D YNAMIC MAPD P ROBLEM FORMULATION 
+
+Fig. 2 displays a schematic diagram of the RCWS and RubikCell. Each RubikCell stores a set of SKUs in a grid layout and is equipped with an edge controller that manages autonomous robots, dispensers, and picking stations. Multiple robots operate beneath modular storage dispensers to ful-fill multi-product orders. Each RubikCell is represented by an undirected grid graph G = (V, E ), where each vertex 
+
+v = (x, y ) ∈ V corresponds to a storage cabinets, and each edge e ∈ E connects two adjacent vertices satisfying 
+
+|x − x′| + |y − y′| = 1 , enforcing four-directional (north, east, south, west) movement while excluding diagonal connections. The storage area of a RubikCell is modeled as a rectangular grid of size N = Lx × Ly , where Lx and Ly denote the numbers of storage cabinets along the horizontal and vertical directions, respectively. Let M = {m1, . . . , m J } denote the set of storage modules, where module mj is located at vertex 3
+
+Fig. 2: RubikCell and an order with dynamic additions. 
+
+vmj ∈ V and stores one product type. A set of I packing stations S = {S1, . . . , S I } are placed along the boundaries for order delivery. The robot set is A = {a1, . . . , a n}, where robot ai has payload capacity ci and initial position pi(0) ∈ V . Since each robot completes its assigned order by delivering the picked items to a packing station, we assume that every robot is ini-tially located at a packing station, i.e., pi(0) ∈ S , ∀ai ∈ A .
+
+At discrete time t, the position of robot ai is pi(t), and its executed path is denoted by Pi(t) = {pi(0) , p i(1) , . . . , p i(t)}.
+
+A. Dynamic Task Model 
+
+Let O = {O1, . . . , O K } denote the set of underground equipment supply tasks released to the surface RCWS. Each task corresponds to one logistics request triggered by an un-derground operational event, such as equipment maintenance, failure recovery, or safety handling. Throughout this paper, we assume that each active task is assigned to exactly one robot in the surface RCWS. Thus, at any time t, only a subset of tasks are actively being processed by robots. Let Oact (t) ⊆ O 
+
+denote the set of active tasks, where |O act (t)| ≤ n. 
+
+Each task Ok ∈ O is represented as a collection of required item locations: 
+
+Ok = {pk, 1, p k, 2, . . . , p k,n k }, (1) where nk is the number of required equipment items initially included in task Ok. To capture the event-driven nature of coal mining logistics, a task may evolve during execution when additional equipment items are required due to changing underground conditions. Let γk(t) ∼ Bernoulli( padd ,k ) be the indicator of whether task Ok receives newly requested items at time t, where padd ,k ∈ (0 , 1) denotes the probability that task Ok is augmented at a given time step. Conditional on 
+
+γk(t) = 1 , the number of newly added items is N add  
+
+> k
+
+, and their storage locations {uk, 1, . . . , u k,N add  
+
+> k
+
+} are sampled i.i.d. from a spatial distribution πk(·) defined on V .The newly added items at update time t are denoted by 
+
+∆Ok(t) = {uk, 1, . . . , u k,N add  
+
+> k
+
+}, (2) and the updated task becomes 
+
+Onew  
+
+> k
+
+(t) = Orem  
+
+> k
+
+∪ ∆Ok(t), (3) where Orem  
+
+> k
+
+denotes the remaining uncollected items before the update. In practical warehouse operations, different orders may have distinct delivery deadlines according to their service types. For instance, some customer orders correspond to instant delivery, requiring immediate fulfillment, while others represent scheduled deliveries that can be dispatched later. To resolve contention when multiple orders are updated simultaneously, we incorporate delivery deadlines into the token arbitration process. We denote the delivery deadline of order Ok by dk. An order is considered successfully fulfilled if its completion time satisfies Tk ≤ dk. To further model the urgency of dynamic updates, the remaining time to deadline 
+
+is defined as 
+
+∆dk(t) = dk − t, (4) which acts as a time-varying urgency indicator. When an order Ok receives additional SKUs ∆Ok(t) at update time 
+
+t, a smaller ∆dk(t) implies higher priority for immediate rescheduling. This metric is later incorporated into two pro-posed token passing strategies to prioritize different orders. 
+
+Assumption 1 (Perfect synchronization). The system con-troller is instantly notified of dynamic order updates and syn-chronizes the corresponding order information to the shared token without communication delay or data loss. 
+
+Assumption 2 (Single Update per Order). Each order is allowed to receive at most one dynamic SKU addition during its execution. Once the order update is processed, no further modifications are permitted until the order is completed. Although Assumption 2 considers at most one update per order for clarity, the proposed framework can be naturally extended to multiple updates. Each new SKU addition can be treated as an independent dynamic event, and the event-triggered coordination mechanism can be applied iteratively. 
+
+B. Problem Formulation 
+
+Definition 1 (Dynamic-MAPD Problem). The Dynamic Multi-Agent Pickup and Delivery problem is defined on a graph-based multi-agent system where each order Ok consists of a set of goal locations to be visited before delivery. During execution, the goal set of Ok may dynamically change, e.g., through the addition of new goals. The objective is to minimize the total order flowtime while ensuring motion feasibility, collision avoidance, and delivery deadlines. 
+
+In the RCWS, these goal locations correspond to SKU storage locations within a RubikCell, and ∆Ok(t) represents newly added SKUs during order execution. Let π denote a coordination policy that determines task assignment and path replanning decisions. Let Tk denote the completion time of order Ok, defined as the time when all SKUs associated with 
+
+Ok, including any dynamically added ones, have been picked 4
+
+and delivered to the designated packing station. The Dynamic-MAPD problem aims to minimize the total order flowtime, which is equivalently the sum of order completion times: 
+
+min 
+
+> πK
+
+X
+
+> k=1
+
+Tk, (5) subject to the following constraints. (C1) pi(t+1) ∈ N (pi(t)) , ∀i, t, 
+
+(C2) pi(t)̸ = pj (t), ∀i̸ = j, ∀t, 
+
+(C3) (pi(t), p i(t+1)) ̸ = ( pj (t+1) , p j (t)) , ∀i̸ = j, ∀t, 
+
+(C4) Tk ≤ dk, ∀k. 
+
+Constraints (C1)-(C3) ensure discrete motion feasibility and collision avoidance, including both vertex conflicts and edge swap conflicts, while (C4) enforces order deadline constraints. IV. E VENT -T RIGGERED TOKEN PASSING 
+
+Token Passing (TP) is a decoupled online MAPD scheme where agents sequentially acquire a global token that stores current paths, task set, and assignments. The token is initially assigned to the first robot in the system and is subsequently passed among robots according to the token passing protocol. Each token holder plans a collision-free path w.r.t. already reserved paths, which guarantees progress on well-formed instances [5]. In this section, we extend the classical TP scheme to address the proposed Dynamic MAPD problem by introducing an event-triggered mechanism. A single shared token is still used to coordinate all agents, but token transmission is triggered by order update events rather than being circulated sequentially. Specifically, two execution modes are considered for handling dynamic order updates as follows. 
+
+Definition 1 (Binding Mode) . Each order Ok is permanently bound to one robot ai once execution begins. Any newly added items ∆Ok(t) must be collected by the same robot. 
+
+Definition 2 (Cooperative Mode) . When new pickups ∆Ok(t)
+
+appear, other idle robots may assist if they can reach certain pickup points earlier than the bound robot. All collected items are delivered to the same packing station, ensuring order consistency while improving system throughput. 
+
+Both Dynamic-TP and Cooperative-TP are built upon the classical TP framework, which guarantees deadlock-free ex-ecution and completeness under standard MAPD assump-tions [5]. In our methods, the underlying TP mechanism is preserved, and the token continues to circulate among agents independently of the event-triggered replanning conditions. Tasks remain in the system until completion, and robots re-enter the TP process after executing partial plans. Therefore, although the triggering conditions for replanning are modified, the completeness and deadlock-free properties are preserved. 
+
+A. Dynamic Token Passing 
+
+Dynamic-TP handles dynamically evolving orders under a binding policy through an event-triggered replanning mech-anism. The system operates over an unbounded execution 
+
+Algorithm 1: Dynamic Token Passing 
+
+Input: G = ( V, E ); robots A; stations S; token T ;deadlines {dk}
+
+Output: Updated reserved paths {P res  
+
+> i
+
+} stored in T 
+
+> 1
+
+Initialize token T with initial assignments and routes;  
+
+> 2
+
+while there exists unfinished orders do  
+
+> 3
+
+Monitor order update indicators {γk(t)} for all orders {Ok}; 
+
+> 4
+
+if ∃k such that γk(t) = 1 then  
+
+> 5
+
+Construct the updated-order index set 
+
+Kupd (t) ≜ {k | γk(t) = 1 }; 
+
+> 6
+
+Identify the affected robots 
+
+Aupd (t) ≜ {a(k) | k ∈ K upd (t)}; 
+
+> 7
+
+foreach k ∈ K upd (t) do  
+
+> 8
+
+Merge order items: 
+
+Onew  
+
+> k
+
+(t) ← Orem  
+
+> k
+
+∪ ∆Ok(t); 
+
+> 9
+
+Compute remaining time to deadline: 
+
+∆dk(t) ← dk − t; 
+
+> 10
+
+end  
+
+> 11
+
+Build a priority queue Q of updated orders sorted by ascending ∆dk(t); 
+
+> 12
+
+while Q̸ = ∅ do  
+
+> 13
+
+Pop the most urgent order index 
+
+k⋆ ← arg min k∈Q ∆dk(t); 
+
+> 14
+
+Let ai⋆ ← a(k⋆) be its bound robot;  
+
+> 15
+
+Robot ai⋆ acquires token T ; 
+
+> 16
+
+Attempt to replan from current position to complete Onew  
+
+> k⋆
+
+(t) w.r.t. reserved paths in 
+
+T using P ATH 1;  
+
+> 17
+
+if PATH 1 succeeds then  
+
+> 18
+
+Commit the resulting complete reserved path Pres  
+
+> i⋆
+
+into T ; 
+
+> 19
+
+end  
+
+> 20
+
+else  
+
+> 21
+
+Apply P ATH 2 to generate a feasible partial path to a safe endpoint;  
+
+> 22
+
+Commit the partial reserved path Pres 
+
+> i⋆
+
+into T ; 
+
+> 23
+
+Keep Onew  
+
+> k⋆
+
+(t) in the unfinished task set for future replanning;  
+
+> 24
+
+end  
+
+> 25
+
+Release token T ; 
+
+> 26
+
+Remove k⋆ from the current priority queue 
+
+Q; 
+
+> 27
+
+end  
+
+> 28
+
+end  
+
+> 29
+
+Robots advance along their reserved paths and re-enter the TP process if their assigned orders remain unfinished;  
+
+> 30
+
+end 
+
+horizon starting from t = 0 until all orders are completed. Initially, the shared token T is constructed to store the initial task assignments and reserved paths of all robots (Line 1). Robots then execute their reserved paths synchronously, ad-vancing step by step according to the paths recorded in the token. 5
+
+When an order update occurs, the robot selected to acquire the token immediately performs local replanning from its current execution state. The remaining products of its original order are merged with the newly added products, and a new shortest collision-free path to a packing station is computed with respect to the paths stored in the token. The updated path is then written back to the token, ensuring global consistency. At each time step, the warehouse control system monitors the order update indicators γk(t) defined in Section III. If no update occurs, robots continue executing their current paths without replanning. Once at least one order update is detected, i.e., γk(t) = 1 for some order Ok, the Dynamic-TP mechanism is immediately activated (Line 2-4). Upon an update event, the set of updated orders Kupd (t)
+
+is first constructed, and the corresponding set of affected robots Aupd (t) is identified (Lines 5-6). For each updated order, the newly added products ∆Ok(t) are merged with the remaining uncollected items Orem  
+
+> k
+
+to form the updated order 
+
+Onew  
+
+> k
+
+(t). Meanwhile, ∆dk(t) is computed to quantify the urgency of rescheduling (Lines 7-10). To resolve contention when multiple orders are updated simultaneously, a deadline-aware token arbitration process is performed. All updated orders are inserted into a priority queue Q sorted in ascending order of ∆dk(t), so that orders closer to their deadlines are served first (Line 11). Dynamic-TP then processes the queue sequentially. At each iteration, the most urgent order k⋆ is selected (Line 12-14), and its bound robot ai⋆ is identified and acquires the token (Lines 14-15). The robot then attempts to replan from its current position to complete the updated order Onew  
+
+> k⋆
+
+(t)
+
+with respect to the reserved paths stored in the token using PATH 1 (Line 16). Function Path1 (·) computes a collision-free path in a time-expanded graph using an A* search. The path starts from the current location, sequentially visits all pickup locations associated with the assigned order, and finally proceeds to the delivery location, while treating all spatio-temporal reservations stored in the token as dynamic obstacles. If P ATH 1 succeeds, the resulting complete reserved path Pres 
+
+> i⋆
+
+is committed into the token (Lines 17–19). Otherwise, P ATH 2is applied to generate a feasible partial path to a safe endpoint, and the corresponding partial reserved path is committed (Lines 20–23). Function Path2 (·) similarly employs an A* search on the time-expanded graph to compute a collision-free relocation path from the robot’s current position to a designated endpoint that does not conflict with active or poten-tial task locations. In this case, the updated order Onew  
+
+> k⋆
+
+(t) is explicitly kept in the unfinished task set for future replanning. The token is then released (Line 25), and the processed update is removed from the current priority queue Q (Line 26). Finally, robots advance along their reserved paths and re-enter the Token Passing process if their assigned orders remain unfinished (Line 29), so that the remaining goals are handled through subsequent replanning cycles. 
+
+B. Cooperative Token Passing 
+
+While Dynamic-TP enforces a strict binding mode where each order is permanently served by a single robot, additional 
+
+Algorithm 2: Cooperative Token Passing 
+
+Input: G = ( V, E ); robots A; stations S; token T
+
+Output: Updated reserved paths {P res  
+
+> i
+
+} stored in T 
+
+> 1
+
+foreach updated order Ok at time tupd do  
+
+> 2
+
+Identify bound robot ai and idle robot set Aidle ; 
+
+> 3
+
+Compute tentative baseline path P base  
+
+> i
+
+to complete 
+
+Orem  
+
+> k
+
+∪ ∆Ok(tupd ); 
+
+> 4
+
+Compute ETA base  
+
+> i
+
+; 
+
+> 5
+
+Compute tentative remaining-task path P rem  
+
+> i
+
+to complete Orem  
+
+> k
+
+; 
+
+> 6
+
+Compute ETA rem  
+
+> i
+
+; 
+
+> 7
+
+foreach aj ∈ A idle do  
+
+> 8
+
+Compute tentative add-pickup path P add  
+
+> j
+
+for 
+
+∆Ok(tupd ) to station Sk; 
+
+> 9
+
+Compute ETA add  
+
+> j
+
+; 
+
+> 10
+
+end  
+
+> 11
+
+if ∃aj⋆ ∈ A idle satisfying 
+
+max 
+
+
+
+ETA add  
+
+> j⋆
+
+, ETA rem 
+
+> i
+
+
+
+< ETA base  
+
+> i
+
+then  
+
+> 12
+
+Assign ∆Ok(tupd ) to aj⋆ ; 
+
+> 13
+
+Remove added SKUs from the pickup points of 
+
+ai in token T ; 
+
+> 14
+
+Insert aj⋆ into the replanning set and plan paths for the assisted robot aj⋆ using P ATH 1;  
+
+> 15
+
+end  
+
+> 16
+
+end 
+
+efficiency can be achieved when idle robots temporarily assist ongoing orders. To support this cooperative behavior, we ex-tend Dynamic-TP into a cooperative mode named Cooperative Token Passing, which opportunistically reassigns newly added SKUs to idle robots while preserving order level consistency. The key principle of Cooperative-TP is that cooperation is enabled if and only if it leads to a strictly better flowtime than the baseline Dynamic-TP execution. The cooperation criterion in Cooperative-TP is inspired by the task-swap mechanism in [5], which compares the arrival times of different robots at the pickup location. Instead of relying on a single pickup-time comparison, Cooperative-TP evaluates the overall completion time under cooperation versus non-cooperation, which is more suitable for dynamic order augmentation scenarios. The complete procedure of Cooperative-TP is summarized in Algorithm 2. When an order update ∆Ok(tupd ) occurs, Cooperative-TP first identifies the bound robot ai executing order Ok, as well as the set of idle robots Aidle that are currently waiting at packing stations (Line 1-2). The delivery station of the order remains fixed to the original station Sk.For the bound robot ai, Cooperative-TP constructs a base-line estimate assuming no cooperation. A tentative collision-free path P base  
+
+> i
+
+is computed using the underlying grid-based planner (e.g., A*) to complete both the remaining items Orem 
+
+> k
+
+and the newly added items ∆Ok(tupd ). The corresponding estimated remaining time is ETA base  
+
+> i
+
+= |P base   
+
+> i|
+> v
+
+, where v is the robot speed. In parallel, a tentative path P rem  
+
+> i
+
+is computed assuming that ai only serves the remaining items Orem  
+
+> k
+
+, with the corresponding estimated remaining time ETA rem  
+
+> i
+
+= |P rem  
+
+> i|
+> v
+
+(Lines 5–6). For each idle robot aj ∈ Aidle , Cooperative-6
+
+TP constructs an additional pickup route P add  
+
+> j
+
+that starts from the current packing station of aj , visits all pickup locations in ∆Ok(t), and delivers them to Sk, while avoiding reserved paths in the token. The corresponding estimated time is ETA add  
+
+> j
+
+= |P add   
+
+> j|
+> v
+
+(Lines 7–10). Cooperation is activated if there exists an idle robot aj⋆
+
+such that the estimated completion time under cooperation 
+
+max 
+
+
+
+ETA add  
+
+> j⋆
+
+, ETA rem 
+
+> i
+
+
+
+< ETA base  
+
+> i
+
+(6) where the left-hand side represents the completion time under parallel execution of the two robots, determined by the slower one. When this condition is satisfied, the newly added SKUs 
+
+∆Ok(tupd ) are reassigned to aj⋆ and removed from the task sequence of the bound robot ai in the token. The selected cooperative robot is then inserted into the replanning set (Lines 11–15). After all cooperative assignments are determined, Cooperative-TP constructs a unified replanning queue that includes both (i) primary robots with updated remaining tasks and (ii) selected cooperative robots assigned with additional pickups. Robots acquire the token according to the same deadline-aware priority rule as in Dynamic-TP and update their paths using the standard PATH 1 and PATH 2 procedures. All accepted path updates are committed atomically to the token, ensuring global consistency. 
+
+C. Computational Complexity Analysis 
+
+Let Cplan denote the computational cost of one single-robot path planning call in the underlying MAPF planner. If A* is used as the underlying planner on a grid graph with N = Lx × Ly nodes, one planning call has complexity 
+
+O(N log N ). For Dynamic-TP, each order update only trig-gers one replanning operation for the robot originally bound to the order. Therefore, its computational complexity per update event is O(Cplan ). If an order receives U successive updates, the total complexity becomes O(U C plan ).For Cooperative-TP, besides evaluating the updated route of the bound robot, the algorithm also evaluates candidate pickup paths for idle robots. If nidle is the number of idle robots at the update moment, the complexity per update event becomes O((2 + nidle )Cplan ). For U successive updates, the total complexity becomes O(U (2 + nidle )Cplan ).V. S IMULATION RESULTS 
+
+We evaluate the proposed methods in a grid-based RCWS environment that follows the RubikCell structure. Simulations are conducted on two cell sizes ( 60 × 60 and 40 × 80 ) to study the influence of spatial scale. For each parameter setting, we generate 500 random instances and run all four strategies on the same instances for fair comparison. Reported values are averages over all trials. Dynamic parameters (padd , n add ), and system size N are varied across experiments to study dynamic intensity, scalability, and the effect of cooperative behavior. The simulation is executed on a labtop with an AMD Ryzen 7 5800H processor (3.20 GHz) and 16 GB RAM. All initial SKUs are randomly placed at storage locations. The initial number of each order is 3. Robots begin at any packing station and are assigned to their initial orders by a static token-passing initialization. During execution, each order may receive a dynamic SKU update at most once. For each experimental setting, we vary padd or nadd while keeping other parameters fixed. Unless otherwise stated, robots and orders are initialized in a one-to-one manner. The average flowtime per order is used as the performance metric. We evaluate four task planning strategies in the simulation study. Among them, Dynamic-TP (D-TP) and Cooperative-TP (C-TP) are proposed in Section IV, while Token Passing (TP) and TP-Append (TP-A) are included as baseline methods for comparison.  
+
+> •
+
+Token Passing: The standard TP algorithm without any dynamic-handling mechanism. When new SKUs appear, they are treated as a new order that is permanently assigned to the same robot. After completing its original order and returning to the station, the robot starts a new TP cycle to serve the appended SKUs.  
+
+> •
+
+TP-Append: A naive dynamic-handling strategy. When new SKUs are added to an order, they are appended to the end of the robot’s current pickup sequence. The robot first follows its original route to collect all initially assigned SKUs. After completing these pickups, it replans a new route from the location of the last originally assigned SKU to retrieve the appended SKUs. 
+
+A. Representative Case Study 
+
+We first provide a representative execution case to illustrate how Dynamic-TP and Cooperative-TP handle a dynamic order update differently. We consider a 60 × 60 RubikCell instance, as shown in Fig. 3, where a robot ’A’ is executing an order 
+
+Ok consisting of multiple SKUs. At time tupd , marked by a triangular flag in the figure, a set of new SKUs ∆Ok(tupd ) is appended to the ongoing order. The original SKUs are located along the planned route of robot ’A’, whereas the newly added SKUs are spatially distributed in the cell. In the baseline TP strategy, the robot continues to follow its original reserved path without reacting to the update event. The newly added SKUs are therefore deferred and cannot be integrated into the current execution, leading to an incomplete handling of the updated order within this execution window. This results in a long detour, since the robot must revisit distant regions of the cell after already approaching the target packing station. Under TP-Append, the robot ’A’ completes all originally assigned SKUs first and then serves the newly appended SKUs as a suffix. As illustrated by the red dashed path segment, replanning is only triggered after the last orig-inal SKU is collected. In contrast, Dynamic-TP allows immediate replanning upon detecting the update at tupd . Robot ’A’ reorders the remaining original SKUs together with the newly added ones, enabling it to visit a nearby added SKU immediately after the update. As shown in the figure, this early insertion avoids unnecessary backtracking and shortens the overall route compared with TP-A. Finally, Cooperative-TP exploits spatial and temporal heterogeneity among robots. While Robot ’A’ continues to serve the remaining original SKUs, an idle robot Robot ’B’, 7
+
+Fig. 3: Representative case illustrating how different strategies handle a dynamic order update. TABLE II: Average order flowtime under different update probabilities and appended SKU numbers.                                       
+
+> padd nadd
+> 60 ×60 40 ×80
+> TP TP-A D-TP C-TP TP TP-A D-TP C-TP 0.1 1152.65 147.53 145.17 142.36 151.66 145.78 142.98 140.53 2156.91 152.06 149.14 146.02 150.81 145.87 143.54 140.16 3162.13 154.91 151.73 146.78 156.31 149.54 146.97 142.25 4162.34 156.61 153.24 148.24 156.94 151.73 148.75 144.75 5164.93 158.88 154.52 149.10 159.29 153.51 149.34 144.15 0.3 1172.24 156.69 151.88 143.33 166.91 152.20 147.34 140.91 2184.73 167.48 158.45 146.56 181.40 163.69 156.11 145.38 3189.13 174.02 164.47 151.91 188.10 170.50 160.91 148.07 4198.88 181.07 170.29 156.26 193.43 175.78 166.14 153.74 5196.84 181.71 172.00 160.00 197.52 181.30 169.12 156.18 0.5 1193.64 169.31 160.22 147.27 190.46 165.20 154.52 141.82 2208.16 181.87 168.47 149.19 206.60 180.19 165.54 148.56 3223.80 194.04 178.22 156.17 221.34 190.13 175.09 154.72 4231.73 204.24 187.44 165.43 230.29 201.20 183.64 162.68 5239.11 211.07 193.44 172.41 234.23 206.76 187.81 168.97 0.7 1214.05 179.68 165.49 145.41 207.93 172.53 159.80 143.05 2237.17 198.28 179.11 152.47 234.33 194.32 176.17 150.67 3254.38 214.41 192.88 163.97 251.92 210.77 189.61 160.39 4267.13 227.46 203.24 174.50 263.92 222.74 197.60 169.46 5284.93 243.98 217.82 188.22 276.16 236.93 211.08 181.06 0.9 1232.98 187.40 171.50 148.19 224.06 180.98 164.59 141.64 2268.27 215.74 192.48 157.61 260.71 210.07 185.89 153.91 3284.72 233.05 206.79 169.22 285.55 232.19 204.94 167.63 4306.70 256.61 225.06 184.34 300.98 250.21 217.33 177.79 5321.25 271.15 237.33 200.31 315.26 264.04 230.66 192.66
+
+initially waiting at a packing station on the left boundary, is assigned to collect all newly added SKUs and deliver them directly to the target packing station. The cooperative route of Robot B is shown as a red dashed path. By parallelizing the workload, C-TP significantly reduces the completion time of the updated order compared with single-robot strategies. 
+
+B. General Performance Evaluation 
+
+Table II reports the average order flowtime under different update probabilities padd and appended SKU numbers [] nadd .Several consistent quantitative trends can be observed from Table II. First, for all strategies and both layouts, the average order flowtime increases monotonically with respect to both 
+
+padd and nadd . For example, under the TP baseline on the 
+
+60 × 60 layout, the average flowtime increases from 152 .65 
+
+at (padd , n add ) = (0 .1, 1) to 321 .25 at (0 .9, 5) , corresponding to an increase of more than 110% . This confirms that higher update frequency and larger update magnitude jointly impose substantially heavier replanning and travel burdens. Second, TP-A consistently outperforms the baseline TP across all configurations. For example, in padd = 0 .5 and 
+
+nadd = 3 in the layout of 40 × 80 , TP-A achieves a reduction from 221 .34 to 190 .13 , resulting in a relative improvement of approximately 14 .1% . This indicates that directly appending newly arrived SKUs to the ongoing task list effectively avoids the costly restart of a full token cycle. Third, D-TP further reduces the flowtime by dynamically inserting newly added SKUs into the remaining route and replanning from the robot’s current position. Compared with TP-A, D-TP achieves additional reductions ranging from 6% 
+
+to 12% in most settings. For example, under (padd , n add ) = (0 .7, 4) on the 60 × 60 layout, the average flowtime decreases from 227 .46 (TP-A) to 203 .24 (D-TP). Most notably, Coop-TP consistently achieves the lowest flowtime across all tested configurations and layouts. The performance gap between Coop-TP and the non-cooperative strategies becomes increasingly pronounced as either padd 
+
+or nadd grows. Under high dynamic intensity, the rela-tive improvement is particularly significant. For instance, at 
+
+(padd , n add ) = (0 .9, 5) on the 60 ×60 layout, Coop-TP reduces the average flowtime to 200 .31 , compared with 237 .33 for D-TP and 321 .25 for TP. Similar trends are observed on the 
+
+40 × 80 layout, demonstrating that Coop-TP of idle robots effectively mitigates long detours caused by late order updates, especially in larger and more dynamic warehouses. Table II offers a fine-grained quantitative comparison under each parameter combination. These numerical results are con-sistent with the trends illustrated in Fig. 4. Fig. 4 (a) reports the average flowtime when the probability of triggering a dynamic update event, padd , varies from 0 to 0.9, while the number of appended SKUs per event is fixed to 3. Fig. 4 (b) evaluates the effect of the number of appended SKUs per update event, nadd , while fixing the update probability. While the figures provide an overview of how the flowtime scales with the update probability and appended SKU number. Together, they demonstrate that cooperative handling of dynamic order updates significantly improves robustness and scalability in 8
+
+(a) Impact of padd (b) Impact of nadd 
+
+Fig. 4: Overview of dynamic order fulfillment performance. TABLE III: Average online runtime per update event (ms). 
+
+Robots Dynamic-TP (ms) Cooperative-TP (ms) 
+
+45 21.74 92.06 50 20.53 170.34 55 26.81 326.05 60 25.46 430.43 65 25.86 525.45 70 24.28 639.58 
+
+robotic cellular warehousing systems. 
+
+C. Runtime Analysis 
+
+In addition to solution quality, we analyze the online com-putational overhead of the proposed mechanisms when order updates occur. Table III reports the average runtime required to handle an order update. For Dynamic-TP and Cooperative-TP, this runtime includes the A*-based replanning or cooperative evaluation triggered immediately after the update arrives. The experiment is conducted on a 60 ×60 grid map with 40 
+
+active orders, where each order initially contains three SKUs. Order updates occur with probability padd = 0 .5, and each update introduces Nadd = 3 additional SKUs. The number of robots varies from 45 to 70 , ensuring that dedicated idle robots are available for cooperative handling. Dynamic-TP performs immediate replanning for the af-fected robot by merging the remaining and newly added SKUs and computing updated routes using A*. As a result, the runtime remains relatively stable at approximately 20 –27 ms across different robot numbers. This is because the replanning process is localized to the robot that receives the update and does not depend on the number of idle robots in the system. In contrast, the runtime of Cooperative-TP increases sig-nificantly as the number of robots grows. This behavior arises because the algorithm evaluates multiple idle robots as potential helpers for handling the newly added SKUs. As the robot population increases, the number of candidate idle robots also grows, leading to more A*-based path evaluations during the cooperative decision process. Consequently, the average runtime increases from approximately 92 ms at 45 robots to about 640 ms at 70 robots. These results reveal a clear trade-off between computational overhead and coordination flexibility. Dynamic-TP achieves fast online response by restricting replanning to the bound robot, while Cooperative-TP incurs higher computational cost due to the additional evaluation of idle robots for cooperative task handling. Nevertheless, even in the largest configuration considered in our experiments, the average update-handling runtime remains below one second. This sub-second response time indicates that both mechanisms can operate within the real-time requirements of practical robotic warehouse systems. VI. C ONCLUSION 
+
+This paper introduces the Dynamic-MAPD problem to ex-plicitly model online task replanning under dynamically evolv-ing orders in RCWS, extending classical MAPD to capture execution-time order augmentation. To address this problem, we develop an event-triggered token passing framework that enables timely and consistent replanning upon order updates. Within this framework, Dynamic-TP allows robots to update their routes directly from current positions, while a coopera-tive extension further leverages idle robots to handle newly added items. Future work will investigate richer dynamic order patterns, heterogeneous robot systems, and real-world implementations. REFERENCES [1] B. J. Ma, Y.-H. Kuo, Y. Jiang, and G. Q. Huang, “Rubikcell: Toward robotic cellular warehousing systems for e-commerce logistics,” IEEE Transactions on Engineering Management , 2023. [2] B. J. Ma, S. Pan, B. Zou, Y.-H. Kuo, and G. Q. Huang, “Operating poli-cies for robotic cellular warehousing systems,” Transportation Research Part E: Logistics and Transportation Review , vol. 194, p. 103875, 2025. [3] R. Stern, N. Sturtevant, A. Felner, S. Koenig, H. Ma, T. Walker, J. Li, D. Atzmon, L. Cohen, T. Kumar et al. , “Multi-agent pathfinding: Defi-nitions, variants, and benchmarks,” in Proceedings of the International Symposium on Combinatorial Search , vol. 10, no. 1, 2019, pp. 151–158. [4] Z. Zhao, S. Li, S. Liu, M. Zhou, X. Li, and X. Yang, “Lexicographic dual-objective path finding in multi-agent systems,” IEEE Transactions on Automation Science and Engineering , vol. 22, pp. 6223–6233, 2024. [5] H. Ma, J. Li, T. Kumar, and S. Koenig, “Lifelong multi-agent path finding for online pickup and delivery tasks,” arXiv preprint arXiv:1705.10868 , 2017. [6] J. Gao, Y. Li, X. Li, K. Yan, K. Lin, and X. Wu, “A review of graph-based multi-agent pathfinding solvers: From classical to beyond classical,” Knowledge-Based Systems , vol. 283, p. 111121, 2024. [7] A. Di Pietro, “State of the art on: Multi-agent pickup and delivery.” [8] O. Salzman and R. Stern, “Research challenges and opportunities in multi-agent path finding and multi-agent pickup and delivery problems,” in Proceedings of the 19th International Conference on Autonomous Agents and MultiAgent Systems , 2020, pp. 1711–1715. [9] N. Boysen, R. De Koster, and F. Weidinger, “Warehousing in the e-commerce era: A survey,” European Journal of Operational Research ,vol. 277, no. 2, pp. 396–411, 2019. [10] Z. Zhao, J. Cheng, J. Liang, S. Liu, M. Zhou, and Y. Al-Turki, “Order picking optimization in smart warehouses with human-robot collaboration,” IEEE Internet of Things Journal , 2024. [11] Z. Chen, J. Alonso-Mora, X. Bai, D. D. Harabor, and P. J. Stuckey, “Integrated task assignment and path planning for capacitated multi-agent pickup and delivery,” IEEE Robotics and Automation Letters ,vol. 6, no. 3, pp. 5816–5823, 2021. [12] B. Li and H. Ma, “Double-deck multi-agent pickup and delivery: Multi-robot rearrangement in large-scale warehouses,” IEEE Robotics and Automation Letters , vol. 8, no. 6, pp. 3701–3708, 2023. [13] Z. Zhao, B. Cao, J. Liang, S. Liu, and M. Zhou, “Learning-based ap-proach to integrated operational optimization problems in robot-assisted multistation warehouse systems,” IEEE Transactions on Systems, Man, and Cybernetics: Systems , 2025. [14] M. Bavaro and F. Amigoni, “Multi-agent pickup and delivery with batteries,” in 2025 European Conference on Mobile Robots (ECMR) .IEEE, 2025, pp. 1–8. [15] A. Camisa, A. Testa, and G. Notarstefano, “Multi-robot pickup and delivery via distributed resource allocation,” IEEE Transactions on Robotics , vol. 39, no. 2, pp. 1106–1118, 2022. 9
+
+[16] H. Makino and S. Ito, “Online multi-agent pickup and delivery with task deadlines,” in 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2024, pp. 8428–8434. [17] L. Bonalumi, B. Flammini, D. Azzalini, and F. Amigoni, “Multi-agent pickup and delivery with external agents,” Robotics and Autonomous Systems , vol. 191, p. 105000, 2025. [18] G. Lodigiani, N. Basilico, and F. Amigoni, “Robust multi-agent pickup and delivery with delays,” in 2023 European Conference on Mobile Robots (ECMR) . IEEE, 2023, pp. 1–8. [19] Q. Xu, J. Li, S. Koenig, and H. Ma, “Multi-goal multi-agent pickup and delivery,” in 2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2022, pp. 9964–9971. [20] X. Zhong, J. Li, S. Koenig, and H. Ma, “Optimal and bounded-suboptimal multi-goal task assignment and path finding,” in 2022 International Conference on Robotics and Automation (ICRA) . IEEE, 2022, pp. 10 731–10 737. [21] F. Kudo and K. Cai, “A tsp-based online algorithm for multi-task multi-agent pickup and delivery,” IEEE Robotics and Automation Letters ,2023. [22] J. Cai, Q. Zhu, Q. Lin, L. Ma, J. Li, and Z. Ming, “A survey of dynamic pickup and delivery problems,” Neurocomputing , vol. 554, p. 126631, 2023.

@@ -1,0 +1,563 @@
+Title: COP-Q: Safety-First Reinforcement Learning for Robot Control via Cholesky-Ordered Projection
+
+URL Source: https://arxiv.org/pdf/2606.04749v1
+
+Published Time: Thu, 04 Jun 2026 00:57:54 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+# COP-Q: Safety-First Reinforcement Learning for Robot Control via Cholesky-Ordered Projection 
+
+Guopeng Li 1,3, Moritz A. Zanger 2, Matthijs T. J. Spaan 2, Julian F. P. Kooij 1
+
+Abstract — Safe robot control requires maximizing return while satisfying safety constraints. In off-policy safe reinforce-ment learning, reward and safety Q-values are commonly learned by separate critic ensembles, with uncertainty handled independently for each objective. This objective-wise treatment neglects inter-objective correlation and can lead to overly con-servative value estimates, thereby reducing sample efficiency. To address this issue, we propose Cholesky-Ordered Projection Q-learning (COP-Q), a safety-first method that incorporates inter-objective covariance into vector-valued Q-value estima-tion. COP-Q constructs a generalized confidence bound in the joint Q-value space and uses Cholesky factorization to encode objective priority in a sequential form. This preserves conservatism on safety while adaptively reducing excessive conservatism on the reward objective. The resulting estimate is used in both temporal-difference target computation and actor optimization. COP-Q incurs minimal computational overhead and is readily compatible with most existing deep Q-learning frameworks. Experiments on robot locomotion in Brax and safe navigation in Safety-Gymnasium, covering both hard- and soft-safety settings, demonstrate that COP-Q achieves strong safety performance together with competitive or improved sample efficiency relative to representative baselines. 
+
+I. I NTRODUCTION 
+
+Many robot control tasks require optimizing reward while maintaining safety. For example, legged robot locomotion aims to move faster without falls or hazardous contacts [1], while autonomous vehicles must reach destinations without collisions [2]. Such requirements motivate safe reinforce-ment learning (RL), which aims to maximize cumulative reward while satisfying safety constraints. As RL-based robot control moves closer to deployment, safe RL has received increasing attention [3]. Deep Q-learning is attractive for safety-critical robot con-trol because its off-policy design and experience replay provide high sample efficiency. However, its effectiveness depends critically on accurate estimation of action-value (Q-value), which is the expectation of discounted cumulative reward or penalty. A central challenge is overestimation bias caused by the maximization step in Bellman updates, which can yield overly optimistic targets and unstable learning [4]. One common solution is to estimate uncertainty using mul-tiple independent Q-networks and derive conservative value estimates from the ensemble [5]. Such uncertainty-aware methods have been extensively studied in single-objective Q-learning [6].     
+
+> 1Department of Cognitive Robotics, Delft University of Technology;
+> 2Department of Intelligent Systems, Delft University of Technology, the Netherlands; 3School of Transportation, Southeast University, China Emails: guopengli5@seu.edu.cn
+> {m.a.zanger, m.t.j.spaan, j.f.p.kooij }@tudeflt.nl
+
+In safe RL, however, the agent must estimate both reward and safety Q-values to learn a policy that is both effective and safe. These objectives are typically correlated, so their estimation uncertainties are entangled. Existing methods usu-ally adopt one of two strategies: they either learn reward and safety Q-values independently, as in constrained RL (CRL) [7], or handle uncertainty only after scalarizing the objectives, as in multi-objective RL (MORL) [8]. Although straightforward, both approaches ignore inter-objective cor-relations and have consequences for safe robot control. Independent modelling combines marginal lower bounds for each objective. When reward and safety Q-values are negatively correlated, this produces an overly conservative estimate and thus causes low sample efficiency , as illustrated in Fig. 1(a). Scalarization-based uncertainty handling has the opposite weakness: conservatism in the scalarized objective does not guarantee conservatism on safety. Consequently, for negatively correlated objectives, it may still overestimate safety and induce unsafe behaviours , as shown in Fig. 1(b).          
+
+> Fig. 1. Obtaining a pair of Qπc(safety cost) and Qπr(reward) estimates without overestimation from multiple Q-value predictions by a set of critics.
+> (a) Treating two objectives independently may give an over-conservative es-timate and reduce sample efficiency, causing a safe policy with a low return;
+> (b) Scalarization-based approaches may overestimate safety and lead to an unsafe policy; (c) The proposed Cholesky Ordered Projection Q-learning (COP-Q) guides safety-first value-learning by Cholesky factorization, which prioritizes keeping conservatism on safety and uses covariance to adaptively correct over-conservatism of reward.
+
+The limitations above highlight a key knowledge gap: 
+
+How can multi-objective uncertainty in vector-valued Q-value estimates be exploited to guide safe yet sample-efficient Q-learning for safety-critical robot control? 
+
+To address this issue, we propose Cholesky-Ordered Pro-jection Q-learning (COP-Q). The central idea is to in-corporate inter-objective covariance into conservative value estimation while expressing the priority of safety over re-ward. COP-Q introduces a generalized confidence bound for vector-valued Q-functions and uses Cholesky factorization to adaptively reduce excessive conservatism, as shown in Fig. 1(c). This yields a simple and computationally efficient 
+
+> arXiv:2606.04749v1 [cs.RO] 3 Jun 2026
+
+extension of deep Q-learning for safe and sample-efficient robot control. II. R ELATED WORK 
+
+This section gives a concise overview of the most relevant work to our study, namely safe and constrained RL for robot control, conservative value estimation in deep Q-learning, and vector-valued Q-learning. Safe robot control is commonly formulated as a con-strained Markov decision process (CMDP), where the policy maximizes return subject to safety-cost constraints [9]. Most safe RL methods are on-policy. For example, CPO [10] pro-vides safety-aware updates with theoretical guarantees, while later methods such as PID-Lagrangian [11] and CVPO [12] improve the practicality and stability of constrained pol-icy learning. More recent off-policy safe RL methods fur-ther highlight the importance of accurate critic estimation: CAL [13] addresses cost underestimation through conser-vative cost learning, and ORAC [14] combines optimistic reward exploration with pessimistic cost estimation. These studies show that safe and sample-efficient control depends critically on reliable reward-cost value estimation. However, they typically learn reward and safety critics separately, or apply uncertainty handling to the cost objective only. This concern is closely related to the conservative value estimation issue in off-policy deep RL [4]. Double Q-learning [15] and clipped double critics [16] reduce over-estimation by constructing more conservative targets, while ensemble methods such as REDQ [17] improve sample efficiency through multiple critics. These methods provide the main algorithmic foundation for conservative TD target construction, but they are developed for single-objective, scalar value functions and therefore do not capture the joint uncertainty structure between reward and safety estimates. Related issues also arise in multi-objective and vector-valued reinforcement learning [18]. MORL methods such as CAPQL [19] typically learn vector-valued or preference-conditioned Q-functions, together with scalarization mecha-nisms to handle multiple objectives. While these methods are relevant, their primary goal is preference adaptation or Pareto-oriented learning rather than conservative safety estimation with explicit objective priority. In safety-critical control, however, the safety objective often needs to be mon-itored explicitly even when a fixed scalarization weight is used, and unsafe events terminate the episode. For example, autonomous driving requires monitoring collision risk [20] to obtain a safe policy [21]. In such settings, mitigating estimation bias in the safety objective is critical. In summary, existing safe RL and MORL methods either treat reward and safety objectives independently or handle uncertainty only after scalarization. To the best of our knowledge, few deep RL methods explicitly model the joint covariance of reward and safety Q-values. We propose COP-Q to fill this gap. III. P ROBLEM FORMULATION 
+
+We consider a bi-objective Markov decision process de-fined by (S, A, R, C, p, p 0, γ ). The state space is S ⊆ Rm.For a state st ∈ S, a robot controlled by a policy π(·| s)
+
+takes action at ∼ π(·| st) in A ⊆ Rd, the next state follows a distribution p(st+1 |st, a t). The agent receives a reward rt
+
+in R ⊆ R and a safety signal ct in C ⊆ R. The initial state distribution is p0(s0). The reward and safety action-value functions (Q-functions) are defined as: 
+
+Qπr (s, a ) = Eπ
+
+> ∞
+
+X
+
+> t=0
+
+γtrt(st, a t) | s0 = s, a 0 = a
+
+!
+
+,Qπc (s, a ) = Eπ
+
+> ∞
+
+X
+
+> t=0
+
+γtct(st, a t) | s0 = s, a 0 = a
+
+!
+
+,
+
+(1) where γ ∈ (0 , 1] is the shared discounting factor. In this study, we consider two types of safe control tasks: 
+
+a) Hard-safety constraint: Unsafe events terminate the episode immediately. The safety signal is a survival reward, and the policy objective is defined as: 
+
+Qπ
+
+> policy
+
+(s, a ) = Qπr (s, a ) + Qπc (s, a ), (2) which gives the aggregate objective. The priority of safety is not imposed by the additive form itself, but is introduced later through the ordered vector-valued Q-function and the safety-first conservative value estimation. 
+
+b) Soft-safety constraint: Unsafe events do not termi-nate the episode. The agent aims to maximize return under a safety cost constraint, forming a constrained RL (CRL) problem: 
+
+max  
+
+> π
+
+Es∼ρπ ,a ∼π(·| s)[Qπr (s, a )] 
+
+s.t. Es∼ρπ ,a ∼π(·| s)[Qπc (s, a )] ≤ d, (3) where ρπ denotes the state-visitation distribution induced by 
+
+π. d is the cost threshold. The primal-dual approach converts the problem into a dual form: 
+
+max Es∼ρπ ,a ∼π(·| s)[Qπr (s, a ) − λ(Qπc (s, a ) − d)] , (4) 
+
+arg min  
+
+> λ> 0
+
+λ × (d − Es∼ρπ ,a ∼π(·| s)[Qπc (s, a )]) . (5) The policy π and the Lagrangian multiplier λ are updated iteratively. λ depends on the cumulative safety cost Qπc (s, a )
+
+alone, thus inducing priority between objectives. Note that the safety signal here is a cost penalty, so deep Q-learning needs to mitigate the underestimation bias to ensure conser-vatism, as explained by Wu et al. [13]. For both tasks, we denote zt = [ ct, r t]⊺ as the vector of safety and reward signals, and Qπ = [ Qπc , Q πr ]⊺. The safety objective appears before reward in Qπ to indicate its higher priority in value estimation and policy optimization. A corresponding scalarization vector u = [ uc, u r ]⊺ can be constant (for hard-safety) or changing (for soft-safety) during training [13]. IV. C HOLESKY ORDERED PROJECTION Q-LEARNING 
+
+We propose the Cholesky ordered projection method, which leverages multi-objective uncertainty estimation to compute a safety-first Q-vector Q′ from an ensemble of critics (Q-networks). To this end, we first extend scalar confidence bounds to vector-valued Q-functions, then pro-pose using Cholesky factorization to impose safety priority without being over-conservative on reward learning. 
+
+A. Generalized multi-objective confidence bound 
+
+In single-objective Q-learning, the Q-value estimates given by an ensemble of critics are commonly assumed to be Gaus-sian distributed [22], denoted as p(Qπ ) = N (Qπ |μQ, σ 2
+
+> Q
+
+).After estimating μQ and σ2 
+
+> Q
+
+from the critics’ estimates, a 
+
+confidence level p ∈ [0 , 1) then determines a confidence region on Q′ bounded by two endpoints: 
+
+μQ ±
+
+q
+
+χ21(p)σQ, (6) enclosing probability p. Here χ21(p) is the quantile of the Chi-squared distribution. The lower endpoint gives a conservative estimate Q′ = μQ − pχ21(p)σQ to mitigate overestima-tion [15]. We now generalize this concept to multiple objectives, such as reward and cost, following the same Gaussian assumption. We assume that the Q-vector estimates of crit-ics follow a multivariate Gaussian, denoted as p(Qπ ) = 
+
+N (Qπ |μQ, ΣQ). Now a confidence level p determines an 
+
+ellipsoid contour centred at the mean: 
+
+(Qπ − μQ)⊺ΣQ−1(Qπ − μQ) = χ2 
+
+> N
+
+(p), (7) where χ2 
+
+> N
+
+(p) is the quantile of a multi-dimensional Chi-squared distribution, also known as the squared Mahalanobis distance. To seek a point on the ellipsoid, a possible choice is to apply a linear transformation on the scalarization vector 
+
+u with unit norm: 
+
+Q′ = μQ + Au . (8) Inserting Q′ into Eq. (7) gives the general equation of A,which has infinite solutions. ΣQ admits matrix square-root factorization (we choose positive entries by default): 
+
+ΣQ = BB ⊺ ⇒ (Au )⊺(B⊺)−1B−1(Au ) = χ2 
+
+> N
+
+(p)
+
+⇒ || B−1Au || =
+
+q
+
+χ2 
+
+> N
+
+(p).
+
+(9) Then the solution has the form: 
+
+B−1A = ±
+
+q
+
+χ2 
+
+> N
+
+(p)R ⇒ A = ±
+
+q
+
+χ2 
+
+> N
+
+(p) × BR 
+
+s.t. R⊺R = I,
+
+(10) where R is an isometry. To preserve the original alignment of the units of objectives, we set R = I. Then, the conservative projected point on the ellipsoid using the “-” sign is: 
+
+Q′ = μQ −
+
+q
+
+χ2 
+
+> N
+
+(p) × Bu . (11) This family of solutions is informative because the transfor-mation B−1(Qπ − μQ) whitens the Gaussian to a standard form N (0, I). Conversely, B re-injects full inter-objective covariances into confidence bounds. Eq. (11) is the general-ized lower confidence bound for Q-vectors. 
+
+B. Cholesky factorization for safety-first Q-learning 
+
+Note that the factorization of ΣQ is not unique. Every fac-torization represents a specific way of injecting covariance. As the safety objective has clear priority over reward, we propose using Cholesky factorization to reflect this priority. The joint distribution p(Qπ ) can be decomposed by the chain rule, and we choose the ordering such that safety appears before reward: 
+
+p(Qπ ) = p(Qπc )p(Qπr |Qπc ). (12) This motivates an ordered factorization of the covariance structure. Accordingly, we use the Cholesky factorization 
+
+ΣQ = LL T , where L is the unique lower-triangular factor with positive diagonal entries. The solution becomes: 
+
+Q′ = μQ −
+
+q
+
+χ2 
+
+> N
+
+(p) × Lu . (13) 
+
+L induces an ordered correlation structure across objectives. The prioritized safety objective is estimated from its marginal uncertainty only, while the reward objective additionally depends on its covariance with safety. In this way, Eq. (13) preserves conservatism on safety while using inter-objective correlation to correct excessive conservatism in reward, as illustrated in Fig. 1(c). We refer to this method as Cholesky-Ordered Projection (COP). COP can be used in both critic and actor updates in deep Q-learning methods. This study implements COP into the Soft Actor-Critic framework [23]. When updating critic networks, the mean ˆμQ and biased covariance matrix ˆΣQ
+
+of the next Q-vector are estimated from the target-critic ensemble. Then we perform Cholesky factorization to get 
+
+ˆL(st+1 , a t+1 ). If we denote β ≡ pχ2 
+
+> N
+
+(p), the TD target is: 
+
+yt = zt + γ[ˆμQ(st+1 , a t+1 ) − β ˆL(st+1 , a t+1 )u
+
+− αH(at+1 |st+1 )] ,
+
+where H(at+1 |st+1 ) = [0 , H(at+1 |st+1 )] ⊺.
+
+(14) 
+
+H(at+1 |st+1 ) is the maximum entropy term added to the reward objective. In actor updates, the objective function to maximize follows a similar form: 
+
+Jπ 
+
+> total
+
+= Eat∼π(·| st)[u⊺(ˆμQ(st, a t) − β ˆL(st, a t)u)
+
+− αH(at|st)] . (15) The implementation of COP Q-learning (COP-Q) follows a minimal ensemble principle. Estimating the covariance of an N -dimensional Q-vector requires at least N + 1 critics. The biased covariance estimator (dividing by N + 1 ) is used due to its smaller mean squared error than the unbiased estimator. This minimal ensemble choice incurs only mini-mal computational overhead. Also, Cholesky factorization is computationally efficient. The only hyperparameter in COP is the Mahalanobis distance β, overcoming the difficulty of tuning two hyperparameters for correlated objectives. Notably, when N = 1 , COP-Q reduces to the standard scalar conservative target construction, and in the two-critic case, it recovers classical clipped double-Q learning [16]. This reduction shows that COP-Q is a reasonable general-ization. C. Sensitivity to condition numbers 
+
+COP-Q computes L from an estimated covariance ma-trix Σ. So, its numerical stability depends on the conditioning of Σ. Following perturbation analysis for Cholesky factor-ization [24], the relative error in L is bounded by a term proportional to the condition number pκ(Σ), i.e., the ratio between its largest and smallest eigenvalues: 
+
+|| ∆L|| || L|| ≤ pκ(Σ) || ∆Σ|| || Σ|| . (16) When Σ is ill-conditioned or nearly singular, the Cholesky factor becomes highly sensitive to perturbations in the co-variance estimate. This issue is particularly pronounced in two cases: (1) the correlation between objectives is close to 
+
+±1, so that the ensemble Q-vectors are nearly collinear in the bi-objective space; (2) the marginal standard deviation ratio 
+
+σc/σ r is extreme, e.g., when the uncertainty in safety Q-values is much smaller than that in reward Q-values. In such cases, small estimation errors in Σ can be amplified in L,making the Cholesky-based correction unstable and thereby weakening the practical advantage of COP-Q. V. E XPERIMENTS 
+
+A. Tasks and environments 
+
+We evaluate COP-Q in two environments: robot locomo-tion in Brax [25] and Safe Navigation in Safety-Gymnasium [26], as shown in Fig. 2. The benchmarks include one hard-safety locomotion task (T.1) and two soft-safety constrained RL tasks (T.2 and T.3). They are described as follows.  
+
+> Fig. 2. Illustration of the two experimental environments. (a) Locomotion: 4 selected robot configurations; (b) Safe Navigation: top two panels show the mobile robots used. The bottom two panels show the layout of goals and hazards. For Goal-2, the green object is the only goal position. Blue circles and white cubes are static hazards. For Button-2, there are 3 fake goals and one correct goal position. Besides blue static hazards, the purple cubes are moving gremlins.
+
+a) T.1 Hard-safety robot locomotion: Four robot con-figurations in Brax are chosen, as shown in Fig. 2(a). Unsafe events terminate the episode immediately. The original robot locomotion task is single-objective. We hereby construct our customized safety and reward signals as follows: 
+
+ct = rhealthy + rforward , rt = −rcontrol . (17) The healthy reward is +1 if the robot keeps upright, otherwise 0, and terminates the episode. The forward reward is the instantaneous velocity toward a given direction. The control term is the non-negative actuator power, meaning the control effort or energy consumption. We put the healthy and forward rewards together in the safety objective for two reasons. First, they are strongly aligned. Falling prevents the robot from getting either healthy or forward rewards. Second, the healthy reward alone is binary, and the failure (0) is sparse. This homogeneous signal reduces the dispersion of the estimated safety Q-values, thus causing the stability issue described in Section IV-C. 
+
+b) T.2 Safe Velocity: Using the same robot configura-tions, Safe Velocity [26] maximizes return while constraining 
+
+expected velocity below a predefined threshold. The signals are defined as: 
+
+ct = rvelocity , rt = rhealthy + rforward − rcontrol . (18) 
+
+c) T.3 Safe Navigation: We consider Goal2 and But-ton2 (“2” indicating the highest level of difficulty) with Point and Car robots on the Safety-Gymnasium [26]. The robot must reach goals while avoiding static and moving hazards from 2D lidar observations, as illustrated in Fig. 2(b). Because Safe Navigation combines sparse safety costs with sparse goal-reaching rewards, it is particularly sensitive to Q-value estimation bias [27]. Either overly conservative reward or safety Q-values will significantly suppress the return maximization. The maximum episode length is 400 steps, and the cost limit is 10 per episode. COP-Q and baselines are bench-marked on the OmniSafe platform [27]. The environment settings are the same as in CVPO [12]. 
+
+B. COP-Q implementation and baselines 
+
+In our experiments, each critic network in COP-Q uses a shared trunk with two output heads, corresponding to the reward and safety Q-values. For the hard-safety setting, the raw scalarization vector is fixed as (1 , 1) . In soft-safety CRL, it is updated during training with the Lagrangian multiplier, i.e., u = ( −λ, 1) . Note that these scalarization vectors must be normalized in COP-Q. To mitigate safety-cost underestimation in CRL, we additionally implement the Augmented Lagrangian Method (ALM) used in CAL [13]. For the hard-safety locomotion task (T.1), we compare COP-Q with three SAC-based baselines. (1) Independent 
+
+double-Q uses separate critic pairs for the reward and safety objectives. (2) Scalarization double-Q uses two critics that jointly predict both Q-values, but selects the critic with the lower scalarized total value for both TD target computation and actor optimization. (3) Conservative double-Q uses the same joint critics, but applies the objective-wise lower Q-value in the critic and actor updates. For the soft-safety CRL tasks (T.2 and T.3), COP-Q is compared against representative off-policy and on-policy baselines. The off-policy baselines are (1) SACLag 
+
+or SACLag-UCB [11], which use primal-dual safe RL with single or conservative cost critics, respectively; (2) CAL [13], which combines conservative cost estimation with ALM [28]. For the most challenging safe navigation benchmark, we further include (3) ORAC [14], a recent off-policy baseline that combines quantile-based distributional cost critics with uncertainty-driven exploration. The on-policy baselines are 
+
+RCPO [29], CUP [30], PPOSaute [31], and TRPOPID [11]. COP-Q and all off-policy baselines use the same training hyperparameters as in OmniSafe [27], differing only in the TD target and actor objective computation. We set the update-to-data ratio to 1, without using REDQ [17]. The only COP-Q-specific hyperparameter is Mahalanobis distance β,which is set to 1 for locomotion (T.1 and T.2) and 0.5 for safe navigation (T.3). Each locomotion experiment is repeated with 10 random seeds. Safe navigation uses 6 seeds due to the longer training time, which is the same as in CAL [13]. Additional implementation details are provided in the released code https://github.com/RomainLITUD/COPQ. VI. R ESULTS AND DISCUSSION 
+
+A. Hard-safety task (T.1) 
+
+The training curves of all methods on T.1 are shown in Fig. 3, and the number of falls of the final policy across 1000 test episodes is reported in Table I. COP-Q achieves competitive safety returns and high sample efficiency across the four robot configurations, particularly for the humanoid. In terms of test-time safety, COP-Q yields comparable or fewer falls than the baselines, with its advantage most evident for the humanoid (substantially fewer falls). For the ant, the differences in the number of falls are smaller, which is attributable to the robot’s inherently safer dynamics due to its four-legged design. 0.0 0.5 1.0                            
+
+> 0
+> 2
+> Safety (k)  hopper
+> 0.0 0.5 1.0 1.5 2.0
+> 0.0
+> 2.5
+> 5.0
+> walker2d
+> 0.0 0.5 1.0 1.5 2.0
+> 0
+> 5
+> ant
+> 0123
+> 0
+> 2
+> 4
+> humanoid
+> 0.0 0.5 1.0
+> env_step (M)
+> 0.00
+> 0.25
+> 0.50
+> Control (k)
+> 0.0 0.5 1.0 1.5 2.0
+> env_step (M)
+> 0
+> 1
+> 2
+> 0.0 0.5 1.0 1.5 2.0
+> env_step (M)
+> 0
+> 1
+> 2
+> 0123
+> env_step (M)
+> 0
+> 1
+> Conservative Independent Scalarization COP-Q (ours)
+
+Fig. 3. Benchmark on hard-safety robot locomotion tasks. The shaded areas indicate the standard deviation around the mean curve. Same for the following figures. TABLE I THE NUMBER OF FALLS IN 1000 TEST EPISODES , M EAN (S TD .). Method Hopper Walker2d Ant Humanoid Conservative 19( ±14) 88( ±31) 21 (±12) 970( ±11) Independent 16( ±9) 19( ±10) 22( ±7) 912( ±83) Scalarization 253( ±227) 62( ±19) 31( ±16) 968( ±25) 
+
+COP-Q (ours) 7(±6) 13 (±6) 23( ±13) 31 (±22) 
+
+Among the baselines, conservative and independent double-Q learning exhibit low sample efficiency (lower curves on the top row of Fig. 3) because their objective-wise lower bound is overly conservative. In contrast, scalar-ized double-Q shows high sample efficiency for hopper and walker2d, but its resulting policy leads to more falls than COP-Q, especially for the humanoid and hopper. This indicates that conservatism on the scalarized objective alone is insufficient to guarantee conservatism on safety. Taken together, these results support the claim that, in hard-safety tasks, COP-Q preserves safety while improving sample effi-ciency through adaptive correction of over-conservatism. 
+
+B. Soft-safety tasks (T.2 and T.3) 
+
+The main results on the soft-safety constrained RL tasks are shown in Fig. 4 (Safe Velocity) and Fig. 5 (Safe Navigation). Overall, COP-Q maintains the high sample efficiency of off-policy methods while achieving satisfactory safety performance comparable to on-policy methods. In both benchmarks, the cost curve of COP-Q converges below or close to the prescribed thresholds. 0.0 0.5 1.0                                          
+
+> 0
+> 2
+> 4
+> EpReturn (k)  hopper
+> 0.0 0.5 1.0
+> 0.0
+> 2.5
+> 5.0
+> walker2d
+> 0.0 0.5 1.0
+> 0
+> 5
+> ant
+> 0123
+> 0
+> 2
+> 4
+> humanoid
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 2
+> EpCost (k)
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 2
+> 4
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 5
+> 0123
+> env_step (M)
+> 0
+> 1
+> 2
+> SACLag SACLag-UCB CAL COP-Q (ours) 0.0 0.5 1.0
+> 0
+> 1
+> 2
+> EpReturn (k)  hopper
+> 0.0 0.5 1.0
+> 0
+> 2
+> walker2d
+> 0.0 0.5 1.0
+> 0
+> 2
+> 4
+> ant
+> 0123
+> 0
+> 2
+> humanoid
+> 0.0 0.5 1.0
+> env_step (M)
+> 0.0
+> 0.5
+> 1.0
+> EpCost (k)
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 2
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 2
+> 0123
+> env_step (M)
+> 0
+> 1
+> RCPO CUP PPOSaute TRPOPID COP-Q (ours)
+
+Fig. 4. Benchmark on Safe Velocity CRL tasks. COP-Q is compared with off-policy baselines on the top figure and with on-policy baselines on the bottom figure. The black lines mark the upper bound of velocity. 
+
+Safe Velocity: As shown in Fig. 4, SACLag violates the cost constraint (horizontal black dotted lines) on hopper, walker2d, and ant, suggesting that a single cost critic is insufficient to control the underestimation bias of the safety objective. By contrast, SACLag-UCB and CAL produce safer policies, but at the cost of lower sample efficiency (see the lower EpReturn curves), especially on hopper and humanoid. COP-Q alleviates this trade-off by incorporating inter-objective covariance into safety-first value estimation, thereby improving return while avoiding any sacrifice in safety performance. 
+
+Safe Navigation: The same tendency becomes even more pronounced in Fig. 5, as this benchmark is more sensitive to Q-value estimation bias. SACLag-UCB and CAL converge to overly conservative policies with nearly zero cost but substantially lower return than COP-Q. This indicates that independent conservative estimation can suppress efficient reward learning in challenging safe RL tasks. By contrast, COP-Q preserves conservatism on the safety objective while adaptively reducing excessive conservatism on the reward objective, leading to safe policies (the EpCost curves con-strained below the threshold in Fig. 5) that reach goals more effectively than the baselines (the higher EpReturn in Fig. 5). Moreover, the return of COP-Q is comparable to that of the state-of-the-art method ORAC in PointButton2, CarGoal2, and CarButton2, even though ORAC relies on ad-ditional advanced techniques such as optimistic exploration and quantile-based distributional cost estimation. 0.0 0.5 1.0                                      
+
+> 20
+> 0
+> 20
+> EpReturn  PointGoal2
+> 0.0 0.5 1.0
+> 25
+> 0
+> 25
+> PointButton2
+> 0.0 0.5 1.0
+> 0
+> 20
+> CarGoal2
+> 0.0 0.5 1.0
+> 0
+> 20
+> CarButton2
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> EpCost
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> SACLag-UCB CAL ORAC COP-Q (ours) 0.0 0.5 1.0
+> 0
+> 10
+> EpReturn  PointGoal2
+> 0.0 0.5 1.0
+> 0
+> 20
+> PointButton2
+> 0.0 0.5 1.0
+> 0
+> 10
+> CarGoal2
+> 0.0 0.5 1.0
+> 0
+> 10
+> 20
+> CarButton2
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> EpCost
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 20
+> 40
+> RCPO CUP PPOSaute TRPOPID COP-Q (ours)
+
+Fig. 5. Benchmark on Safe Navigation CRL tasks. COP-Q is compared with off-policy baselines on the top figure and with on-policy baselines on the bottom figure. The black lines mark the upper bound of safety cost. 
+
+In summary, the results on Safe Velocity and Safe Nav-igation highlight the central advantage of COP-Q for soft-safety constrained RL: by modeling inter-objective covari-ance, COP-Q improves sample-efficient policy learning with-out sacrificing safety. This benefit is especially pronounced in tasks where independent conservative estimation—used by methods like SACLag-UCB and CAL—becomes overly pessimistic, suppressing reward-efficient exploration. Thus, COP-Q offers a principled balance between safety and reward optimization where prior approaches either violate constraints or converge to overly conservative solutions. 
+
+C. Analysis on correlation between objectives 
+
+The benefit of COP-Q is expected to be greater when the reward and safety objectives are more negatively correlated, since independent conservative estimation becomes more likely to produce overly pessimistic targets in this regime. To examine this effect, we compute the average Pearson correlation coefficient ρ ∈ [−1, 1] during training before COP-Q reaches 80% of its highest episode return. The results for the three tasks are summarized in Table II. For the locomotion tasks, humanoid has the most negative correlation among the four robots in both T.1 and T.2, while walker2d and ant are close to zero. This is consistent with the empirical results in Fig. 3 and 4, where the advantage of COP-Q is more significant for humanoid and relatively marginal for walker2d and ant. A similar pattern is observed in Safe Navigation T.3, where the correlation coefficients are mostly near zero or negative. This is again consistent with the gains of COP-Q over independently conservative baselines such as SACLag-UCB and CAL. 
+
+TABLE II AVERAGE PEARSON CORRELATION COEFFICIENT ρ, P- AND C- ARE ABBREVIATIONS FOR POINT AND CAR .Hard-Safety T.1 Hopper Walker2d Ant Humanoid 
+
+ρ -0.13 -0.07 -0.05 -0.41 Safe Vel. T.2 Hopper Walker2d Ant Humanoid 
+
+ρ -0.27 0.11 0.04 -0.39 Safe Nav. T.3 P-Goal2 P-Button2 C-Goal2 C-Button2 
+
+ρ -0.09 -0.15 -0.17 -0.25 
+
+The correlation analysis supports the central intuition of COP-Q: incorporating inter-objective covariance is partic-ularly useful when the reward and safety objectives are negatively correlated, because it can reduce unnecessary conservatism while preserving safety. 
+
+D. Ablations on binary sparse signals for T.1 
+
+To examine a challenging failure mode of COP-Q, we conduct an ablation experiment for the hard-safety task T.1 by defining a binary sparse safety signal with continuous dense reward: 
+
+ct = rhealthy , rt = rforward − rcontrol . (19) This definition significantly reduces the dispersion of the estimated safety Q-values across critics. As a result, the covariance matrix of the vector-valued Q-estimates is more likely to be ill-conditioned, which is the challenging case discussed in Section IV-C. 0.0 0.5 1.0                          
+
+> 0.0
+> 0.5
+> 1.0
+> Safety (k)  hopper
+> 0.0 0.5 1.0 1.5 2.0
+> 0.0
+> 0.5
+> 1.0
+> walker2d
+> 0.0 0.5 1.0 1.5 2.0
+> 0.0
+> 0.5
+> 1.0
+> ant
+> 0123
+> 0.0
+> 0.5
+> 1.0
+> humanoid
+> 0.0 0.5 1.0
+> env_step (M)
+> 0
+> 1
+> 2
+> Return (k)
+> 0.0 0.5 1.0 1.5 2.0
+> env_step (M)
+> 0
+> 2
+> 4
+> 0.0 0.5 1.0 1.5 2.0
+> env_step (M)
+> 0
+> 5
+> 0123
+> env_step (M)
+> 0.0
+> 2.5
+> 5.0
+> Independent COP-Q (ours)
+
+Fig. 6. Comparison between the independent double-Q baseline and COP-Q for binary sparse survival rewards. The black lines mark the maximum possible episode safety return, corresponding to 1000 steps without falls. 
+
+The experimental results are presented in Fig. 6. Under this setting, COP-Q does not demonstrate an advantage over the independent double-Q baseline with respect to safety performance. The training curves of COP-Q are particularly unstable for hopper and humanoid, as indicated by the wide shaded area representing standard deviation. This ablation highlights an important limitation of COP-Q: when the safety signal is binary, sparse, and nearly homogeneous, the covariance matrix can be ill-conditioned, and thus degrade learning stability. VII. C ONCLUSIONS 
+
+This paper presented Cholesky-Ordered Projection Q-learning (COP-Q), a safety-first RL method for conservative value estimation in safe robot control. COP-Q incorporates inter-objective covariance into vector-valued Q-learning and uses Cholesky factorization to encode the priority of safety over reward. This yields a simple extension of deep Q-learning that preserves conservatism on the safety objective while adaptively reducing excessive conservatism on the reward objective. Experiments on robot locomotion and safe navigation benchmarks showed that COP-Q achieves a favourable balance between safety and sample efficiency across both hard- and soft-safety settings. 
+
+Limitations: COP-Q relies on stable covariance estima-tion and can become unreliable when the covariance matrix is ill-conditioned, especially under binary and sparse safety signals. In addition, the current formulation captures total estimation uncertainty without distinguishing epistemic and aleatoric components, and its applicability to broader multi-objective settings remains to be studied. These limitations motivate future work on more robust covariance estimation, richer uncertainty modelling, and extensions to more general multi-objective reinforcement learning problems. REFERENCES [1] T.-Y. Yang, T. Zhang, L. Luu, S. Ha, J. Tan, and W. Yu, “Safe reinforcement learning for legged locomotion,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , 2022, pp. 2454–2461. [2] S. Feng, H. Sun, X. Yan, H. Zhu, Z. Zou, S. Shen, and H. X. Liu, “Dense reinforcement learning for safety validation of autonomous vehicles,” Nature , vol. 615, no. 7953, pp. 620–627, 2023. [3] L. Brunke, M. Greeff, A. W. Hall, Z. Yuan, S. Zhou, J. Panerati, and A. P. Schoellig, “Safe learning in robotics: From learning-based control to safe reinforcement learning,” Annu. Rev. Control Robot. Auton. Syst. , vol. 5, no. 1, pp. 411–444, 2022. [4] S. Thrun and A. Schwartz, “Issues in using function approximation for reinforcement learning,” in Proc. 4th Connectionist Models Summer School , 1993, pp. 255–263. [5] H. van Hasselt, A. Guez, and D. Silver, “Deep reinforcement learning with double Q-learning,” in Proc. AAAI Conf. Artif. Intell. , vol. 30, 2016, pp. 2094–2100. [6] O. Lockwood and M. Si, “A review of uncertainty for deep rein-forcement learning,” in Proc. AAAI Conf. Artif. Intell. Interact. Digit. Entertainment , vol. 18, 2022, pp. 155–162. [7] H. Xu, X. Zhan, and X. Zhu, “Constraints penalized Q-learning for safe offline reinforcement learning,” in Proc. AAAI Conf. Artif. Intell. ,vol. 36, 2022, pp. 8753–8760. [8] K. van Moffaert, M. M. Drugan, and A. Nowe, “Scalarized multi-objective reinforcement learning: Novel design techniques,” in Proc. IEEE Symp. Adapt. Dyn. Program. Reinf. Learn. (ADPRL) , 2013, pp. 191–199. [9] A. Wachi and Y. Sui, “Safe reinforcement learning in constrained Markov decision processes,” in Proc. 37th Int. Conf. Mach. Learn. (ICML) , vol. 119, 2020, pp. 9797–9806. [10] J. Achiam, D. Held, A. Tamar, and P. Abbeel, “Constrained policy optimization,” in Proc. 34th Int. Conf. Mach. Learn. (ICML) , vol. 70, 2017, pp. 22–31. [11] A. Stooke, J. Achiam, and P. Abbeel, “Responsive safety in reinforce-ment learning by PID Lagrangian methods,” in Proc. 37th Int. Conf. Mach. Learn. (ICML) , vol. 119, 2020, pp. 9133–9143. [12] Z. Liu, Z. Cen, V. Isenbaev, W. Liu, Z. S. Wu, B. Li, and D. Zhao, “Constrained variational policy optimization for safe reinforcement learning,” in Proc. 39th Int. Conf. Mach. Learn. (ICML) , vol. 162, 2022, pp. 13 644–13 668. [13] Z. Wu, B. Tang, Q. Lin, C. Yu, S. Mao, Q. Xie, X. Wang, and D. Wang, “Off-policy primal-dual safe reinforcement learning,” in Int. Conf. Learn. Represent. (ICLR) , 2024. [14] J. McCarthy, R. Marinescu, E. Daly, and I. Dusparic, “Optimistic exploration for risk-averse constrained reinforcement learning,” in 
+
+Proc. 28th Eur. Conf. Artif. Intell. (ECAI) , 2025, pp. 1977–1984. [15] H. van Hasselt, “Double Q-learning,” in Adv. Neural Inf. Process. Syst. ,vol. 23, 2010. [16] S. Fujimoto, H. van Hoof, and D. Meger, “Addressing function approximation error in actor-critic methods,” in Proc. 35th Int. Conf. Mach. Learn. (ICML) , vol. 80, 2018, pp. 1587–1596. [17] X. Chen, C. Wang, Z. Zhou, and K. W. Ross, “Randomized ensembled double Q-learning: Learning fast without a model,” in Int. Conf. Learn. Represent. (ICLR) , 2021. [18] C. F. Hayes, R. Radulescu, E. Bargiacchi, J. Kallstrom, M. Macfarlane, M. Reymond, T. Verstraeten, L. M. Zintgraf, R. Dazeley, F. Heintz, E. Howley, A. A. Irissappane, P. Mannion, A. Nowe, G. Ramos, M. Restelli, P. Vamplew, and D. M. Roijers, “A practical guide to multi-objective reinforcement learning and planning,” Auton. Agents Multi-Agent Syst. , vol. 36, no. 1, pp. 1–59, 2022. [19] H. Lu, D. Herman, and Y. Yu, “Multi-objective reinforcement learning: Convexity, stationarity and Pareto optimality,” in Int. Conf. Learn. Represent. (ICLR) , 2023. [20] G. Li, M. T. J. Spaan, and J. F. P. Kooij, “Off-policy safe reinforcement learning with cost-constrained optimistic exploration,” in Int. Conf. Learn. Represent. (ICLR) , 2026. [21] W. Huang, J. Ji, C. Xia, B. Zhang, and Y. Yang, “SafeDreamer: Safe reinforcement learning with world models,” in Int. Conf. Learn. Represent. (ICLR) , 2024. [22] C. D’Eramo, A. Cini, A. Nuara, M. Pirotta, C. Alippi, J. Peters, and M. Restelli, “Gaussian approximation for bias reduction in Q-learning,” J. Mach. Learn. Res. , vol. 22, no. 277, pp. 1–51, 2021. [23] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor,” in Proc. 35th Int. Conf. Mach. Learn. (ICML) , vol. 80, 2018, pp. 1861–1870. [24] X.-W. Chang, C. C. Paige, and G. W. Stewart, “New perturbation analyses for the Cholesky factorization,” IMA J. Numer. Anal. , vol. 16, no. 4, pp. 457–484, 1996. [25] C. D. Freeman, E. Frey, A. Raichuk, S. Girgin, I. Mordatch, and O. Bachem, “Brax: A differentiable physics engine for large scale rigid body simulation,” arXiv preprint arXiv:2106.13281 , 2021. [26] J. Ji, B. Zhang, J. Zhou, X. Pan, W. Huang, R. Sun, Y. Geng, Y. Zhong, J. Dai, and Y. Yang, “Safety Gymnasium: A unified safe reinforcement learning benchmark,” in Adv. Neural Inf. Process. Syst. , vol. 36, 2023, pp. 18 964–18 993. [27] J. Ji, J. Zhou, B. Zhang, J. Dai, X. Pan, R. Sun, W. Huang, Y. Geng, M. Liu, and Y. Yang, “OmniSafe: An infrastructure for accelerating safe reinforcement learning research,” J. Mach. Learn. Res. , vol. 25, no. 285, pp. 1–6, 2024. [28] D. G. Luenberger and Y. Ye, Linear and Nonlinear Programming ,4th ed. Springer, 2016. [29] C. Tessler, D. J. Mankowitz, and S. Mannor, “Reward constrained policy optimization,” in Int. Conf. Learn. Represent. (ICLR) , 2019. [30] L. Yang, J. Ji, J. Dai, L. Zhang, B. Zhou, P. Li, Y. Yang, and G. Pan, “Constrained update projection approach to safe policy optimization,” in Adv. Neural Inf. Process. Syst. , vol. 35, 2022, pp. 9111–9124. [31] A. Sootla, A. I. Cowen-Rivers, T. Jafferjee, Z. Wang, D. H. Mguni, J. Wang, and H. Bou-Ammar, “Saute RL: Almost surely safe rein-forcement learning using state augmentation,” in Proc. 39th Int. Conf. Mach. Learn. (ICML) , vol. 162, 2022, pp. 20 423–20 443.
