@@ -6,41 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-28 ~ 2026-06-06
-- 运行时间：2026-06-06 10:35:11 UTC
+- 最新运行日期：2026-06-06
+- 运行时间：2026-06-06 23:22:33 UTC
 - 运行状态：成功
 - 本次总论文数：7
-- 精读区：4
-- 速读区：3
+- 精读区：1
+- 速读区：6
 
 ### 今日简报（AI）
-今日精选7篇研究，精读两篇高分工作：智能体Transformer通过强化学习学会搜索，以及参数化扩散策略实现从噪声到控制的转化。最值得关注的方向是强化学习中的搜索理论证明与扩散策略的参数化控制。建议普通读者重点跟进安全优先的机器人控制与视觉导航中的自优化强化学习应用。
-- 详情：[/20260528-20260606/README](/20260528-20260606/README)
+今日共阅读7篇，精读1篇，速读6篇，重点推荐正则化大邻域搜索算法研究。最值得关注的是《Regularized Large Neighborhood Search》（9.0/10），其正则化策略显著改进大规模组合优化；此外《Policy Gradient for Continuous-Time Robust Markov Decision Processes》（7.0/10）也值得一看。建议深入探索正则化大邻域搜索的实际应用场景，并尝试将其与多智能体协调方法结合。
+- 详情：[/202606/06/README](/202606/06/README)
 
 ### 精读区论文标签
-1. [Agentic Transformers Provably Learn to Search via Reinforcement Learning](/20260528-20260606/2606.00183v1-agentic-transformers-provably-learn-to-search-via-reinforcement-learning)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：强化学习训练transformer学习树搜索可迁移至路径规划
-2. [From Noise to Control: Parameterized Diffusion Policies](/20260528-20260606/2606.00336v1-from-noise-to-control-parameterized-diffusion-policies)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：用于机器人路径生成的扩散策略
-3. [Generative Multi-Robot Motion Planning via Diffusion Modeling with Multi-Agent Reinforcement Learning Guidance](/20260528-20260606/2606.00933v1-generative-multi-robot-motion-planning-via-diffusion-modeling-with-multi-agent-reinforcement-learning-guidance)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：使用扩散模型和多智能体强化学习的多机器人运动规划
-4. [Self-Refining Agentic Reinforcement Learning for Vision-Conditioned UAV Navigation](/20260528-20260606/2606.03963v1-self-refining-agentic-reinforcement-learning-for-vision-conditioned-uav-navigation)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：深度强化学习用于无人机导航（机器人路径规划）
+1. [Regularized Large Neighborhood Search](/202606/06/2606.02294v1-regularized-large-neighborhood-search)  
+   标签：评分：9.0/10、query:rl-last-mile
+   evidence：正则化大邻域搜索用于组合优化，直接适用于车辆路径问题
 
 ### 速读区论文标签
-1. [COP-Q: Safety-First Reinforcement Learning for Robot Control via Cholesky-Ordered Projection](/20260528-20260606/2606.04749v1-cop-q-safety-first-reinforcement-learning-for-robot-control-via-cholesky-ordered-projection)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：用于机器人控制的安全强化学习
-2. [Topology-Aware State Abstraction with Tangle Cores for Markov Decision Processes](/20260528-20260606/2606.00427v1-topology-aware-state-abstraction-with-tangle-cores-for-markov-decision-processes)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：基于图纠结的重叠状态抽象方法用于区域划分
-3. [AgenticRL: Self-Refining Agentic Reinforcement Learning for Vision-Conditioned UAV Navigation](/20260528-20260606/2606.03963v2-agenticrl-self-refining-agentic-reinforcement-learning-for-vision-conditioned-uav-navigation)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：深度强化学习用于无人机导航，属于机器人路径规划
+1. [Policy Gradient for Continuous-Time Robust Markov Decision Processes](/202606/06/2606.04335v1-policy-gradient-for-continuous-time-robust-markov-decision-processes)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：连续时间鲁棒MDP的策略梯度方法，可应用于带不确定性的路径优化
+2. [Learning Multi-Agent Coordination via Sheaf-ADMM](/202606/06/2605.31005v1-learning-multi-agent-coordination-via-sheaf-admm)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：使用ADMM和细胞束约束的多智能体协调可微优化，可应用于多车路线协调
+3. [Topology-Aware State Abstraction with Tangle Cores for Markov Decision Processes](/202606/06/2606.00427v1-topology-aware-state-abstraction-with-tangle-cores-for-markov-decision-processes)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：基于拓扑感知的状态抽象方法，适用于导航和图MDP
+4. [Coordination Graphs for Constrained Multi-Agent Reinforcement Learning](/202606/06/2606.02337v1-coordination-graphs-for-constrained-multi-agent-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：使用协调图的多智能体约束强化学习，可应用于多车辆路径规划
+5. [Self-Refining Agentic Reinforcement Learning for Vision-Conditioned UAV Navigation](/202606/06/2606.03963v1-self-refining-agentic-reinforcement-learning-for-vision-conditioned-uav-navigation)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：深度强化学习用于无人机导航，可应用于物流路线规划
+6. [Learning Implicit Feasibility Constraints for Real-World Routing and Scheduling: Application to Log Transportation](/202606/06/2606.05353v1-learning-implicit-feasibility-constraints-for-real-world-routing-and-scheduling-application-to-log-transportation)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：针对车辆路径调度的数据驱动约束学习
 
 
 <div class="dpr-home-promo-card">

@@ -1,28 +1,28 @@
 # 今日论文推荐
 
 阅读入口：
-https://jjiaqier.github.io/daily-paper-reader/#/20260605/2606.00427v1-topology-aware-state-abstraction-with-tangle-cores-for-markov-decision-processes
+https://jjiaqier.github.io/daily-paper-reader/#/20260606/2606.02294v1-regularized-large-neighborhood-search
 
 时间窗口：
-20260605
+20260606
 
 精读文章：
-Topology-Aware State Abstraction with Tangle Cores for Markov Decision Processes
+Regularized Large Neighborhood Search
 
 精读文章摘要：
-重叠状态抽象用于导航和分层决策问题，可用于区域划分
+正则化大邻域搜索用于组合优化，直接适用于车辆路径问题
 
 速读文章1：
-Scalable Constrained Multi-Agent Reinforcement Learning via State Augmentation and Consensus for Separable Dynamics
-一句话摘要：多智能体强化学习用于协调约束，可应用于车辆路径问题
+Policy Gradient for Continuous-Time Robust Markov Decision Processes
+一句话摘要：连续时间鲁棒MDP的策略梯度方法，可应用于带不确定性的路径优化
 
 速读文章2：
-COP-Q: Safety-First Reinforcement Learning for Robot Control via Cholesky-Ordered Projection
-一句话摘要：安全强化学习用于机器人控制，考虑目标间相关性，可应用于机器人末端路径优化
+Learning Multi-Agent Coordination via Sheaf-ADMM
+一句话摘要：使用ADMM和细胞束约束的多智能体协调可微优化，可应用于多车路线协调
 
 速读文章3：
-Coordination Graphs for Constrained Multi-Agent Reinforcement Learning
-一句话摘要：约束多智能体强化学习的协调图，可应用于物流路径规划和区域划分
+Topology-Aware State Abstraction with Tangle Cores for Markov Decision Processes
+一句话摘要：基于拓扑感知的状态抽象方法，适用于导航和图MDP
 
 生成日期：
 2026-06-06
