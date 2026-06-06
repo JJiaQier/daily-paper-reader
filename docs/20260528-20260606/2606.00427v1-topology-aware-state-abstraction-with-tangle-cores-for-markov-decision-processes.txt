@@ -1,0 +1,712 @@
+Title: Topology-Aware State Abstraction with Tangle Cores for Markov Decision Processes
+
+URL Source: https://arxiv.org/pdf/2606.00427v1
+
+Published Time: Tue, 02 Jun 2026 00:24:56 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Topology-Aware State Abstraction with Tangle Cores for Markov Decision Processes 
+
+Ibne Farabi Shihab ∗†1 Sanjeda Akter ∗1
+
+Anuj Sharma 21Department of Computer Science, Iowa State University 
+
+> 2
+
+Department of Civil, Construction & Environmental Engineering, Iowa State University 
+
+ishihab@iastate.edu 
+
+# Abstract 
+
+State abstraction in reinforcement learning is usually formulated as a partition of states based on reward and transition similarity. This excludes a common struc-tural pattern in navigation, graph, and hierarchical decision problems: interface states such as doors, hubs, and bottlenecks naturally participate in more than one region. We introduce tangle-core abstraction , an overlapping state-abstraction framework based on graph tangles of empirical transition graphs. The method constructs abstract states from consistently oriented low-order separations and represents shared interfaces through a membership kernel rather than a hard par-tition. We give value-preservation guarantees for the induced overlapping ab-stract MDP under an explicit action-consistency condition, identify an interior-homogeneity/boundary-leakage error decomposition, and prove a quantitative interface-overlap result showing when hard partitions incur an avoidable boundary error. Empirically, tangle-core abstractions achieve favorable compression–return tradeoffs against reward-aware, learned, topological-map, and graph-partitioning baselines across bottlenecked tabular domains, procedurally generated mazes, and MiniGrid representations. We also identify a clear failure regime in which tran-sition topology is uninformative, where tangles predictably offer little benefit. These results position graph tangles as an effective topology-aware abstraction prior for decision problems with shared interface structure. 
+
+# 1 Introduction 
+
+State abstraction reduces the effective size of an MDP by grouping states that are similar for planning or control. In reinforcement learning, the dominant formal language for this problem is bisimulation and its approximate variants [11, 8, 3], in which states are merged when they have similar rewards and induce similar next-state behavior. This framework is elegant and influential, but it also im-poses a particular notion of similarity that is typically metric-based, pairwise, and non-overlapping. That viewpoint can be restrictive in environments whose structure is better described by connectivity than by an ambient metric. In navigation problems with rooms and corridors, for instance, a doorway state can naturally belong to several larger regions at once, and forcing it into a single equivalence class is awkward. In graph-structured or combinatorial state spaces, there may be no obvious metric that reflects the planning-relevant topology at all. More broadly, some environments contain coher-ent transition regions separated by low-order bottlenecks, and these regions can be shared through hub states or narrow interfaces. We explore this possibility through graph tangles, a notion from structural graph theory introduced by Robertson and Seymour [18]. Informally, a tangle identifies a  
+
+> ∗Equal contribution.
+> †Corresponding author: ishihab@iastate.edu .Preprint.
+> arXiv:2606.00427v1 [cs.LG] 29 May 2026
+
+highly connected region by consistently orienting every low-order separation toward the important side of the graph, and recent work has shown that tangles support clustering and exploratory data analysis on static datasets [14, 6]. We ask whether the same machinery can support state abstrac-tion in MDPs. We propose tangle-core abstraction , in which we build an empirical transition graph from trajectory data, compute low-order tangles, and form an abstract MDP whose abstract states correspond to tangle cores. This provides a metric-free structural summary of the state space, and unlike classical partitions, the cores may overlap. The overlap is the property that makes tangles at-tractive for doorway states, hub states, and other shared interfaces between coherent regions. In our current implementation, overlap is resolved by duplication with occupancy weighting, and Section 5 evaluates this design against hard assignment and soft membership variants. Our thesis is deliberately scoped. We do not claim that tangles subsume bisimulation, nor that they are universally preferable. Instead, we argue that tangles are useful in a specific regime, namely environments whose transition topology exhibits low-order bottlenecks or shared substructure and in which those features carry the abstraction signal. The paper makes this scope explicit both the-oretically and empirically. At a higher level, the message is that topological coherence is a useful abstraction signal that is largely invisible to pairwise similarity alone. Tangles operationalize that signal through consistent orientations of low-order cuts, and the resulting cores give a compact, graph-structural view of the state space. This lets us ask a sharper question than the usual one of whether abstraction is possible, namely when the topology itself is the right object to compress. The contributions of the paper follow this thesis. We define tangle-core abstraction for MDPs using an explicit soft membership kernel over overlapping cores, and we show that the induced abstract Bellman operator gives a value-preservation guarantee under reward and projected-transition reg-ularity conditions (Theorem 3). We then isolate a tangle-relevant decomposition of the transition error (Proposition 5) into an interior-homogeneity term and a boundary-leakage term, which high-lights why tangle cores are most plausible in graphs with coherent interiors. Crucially, we introduce an interface-overlap advantage theorem (Theorem 4), formalizing a setting in which overlapping membership avoids a boundary error incurred by hard graph partitions. On the structural side, we state a recovery theorem under a vertex-separator bottleneck model (Theorem 6). On the statistical side, we give a finite-sample guarantee for correctly orienting a fixed candidate family of low-order separations (Theorem 7). Empirically, we benchmark the Pareto frontier of compression and return, directly comparing against bisimulation, DeepMDP [9], topological maps, and standard graph partitioning baselines (e.g., spec-tral clustering, METIS). Across tabular domains, distributions of procedural random mazes, and learned MiniGrid representations, tangle cores achieve strong compression–return tradeoffs. Tar-geted ablations show when overlap is useful, and we identify a clear failure regime in which topology is uninformative, positioning tangles not as a universal replacement for reward-aware abstractions, but as a topology-aware structural prior. More related works are in A. 
+
+# 2 Background 
+
+We begin with the necessary graph-theoretic background, then turn briefly to the bisimulation metric, which we use as a reward-aware reference point throughout the paper. Let G = ( V, E ) be a graph. A separation of G is a pair (A, B ) with A ∪ B = V and no edges between A \ B and B \ A, and the order of the separation is |A ∩ B|, the size of the separator. A tangle, due to Robertson and Seymour [18], then assigns a direction to every low-order separation of the graph in a globally consistent way. 
+
+Definition 1 (Tangle) . A tangle of order k in G is a function τ that orients every separation (A, B )
+
+of order < k by assigning τ (A, B ) ∈ { A, B } to be the small side, subject to two conditions. (i) Consistency: τ cannot orient three separations so that the union of three small sides covers V ,equivalently, for any three separations of order < k the intersection of the complementary big sides is non-empty. (ii) Non-triviality: no single vertex lies on the small side of every separation. 
+
+Intuitively, a tangle points towards a highly connected region, in the sense that it consistently says that the important stuff is over there for every low-order cut. The tangle core is the set of vertices that every low-order separation assigns to the big side. 
+
+Definition 2 (Tangle core) . The core of tangle τ of order k is 
+
+core( τ ) = \
+
+> (A,B ) : ord( A,B )<k
+
+τ (A, B ), (1) 2Trajectory data D  
+
+> Empirical graph GD
+> Low-order separations
+> Tangle cores
+> Abstract MDP ˆM
+> transition counts
+> candidate min-cuts
+> consistent orientation
+> membership aggregation
+
+Figure 1: The tangle-core abstraction pipeline. Trajectories yield an empirical transition graph 
+
+GD , repeated min-cut calls produce a finite candidate family of low-order separations, consistent orientations define tangles whose cores form overlapping abstract regions, and a membership kernel converts those overlapping regions into an abstract reward and transition kernel. 
+
+where τ (A, B ) denotes the big side assigned by τ .
+
+Two tangles can induce overlapping cores when a vertex lies on the big side of every low-order separation of both tangles, and this is the property we will exploit for states that serve multiple regions, such as corridor vertices in navigation domains. Beyond their original use in graph-minor theory, tangles have recently found machine-learning applications. Klepper et al. [14] introduced tangles for clustering in JMLR, providing algorithms and a Python implementation built on a tree-of-tangles decomposition that avoids explicit enumeration of all separations, and Diestel [6] provides a comprehensive book-length treatment of tangle applications in data science. These works apply tangles to static datasets, and to our knowledge ours is the first application to MDPs and sequential decision-making. For comparison with reward-aware abstractions, we use the action-aware approximate bisimulation metric as a reference point. A standard control-oriented form is the fixed point [8] 
+
+d∼(s, s ′) = max 
+
+> a∈A
+
+(1 − c)|r(s, a ) − r(s′, a )| + c · W1
+
+ P (·| s, a ), P (·| s′, a ); d∼
+
+ , (2) where W1 is the Wasserstein-1 distance and c ∈ (0 , 1) . The ε-bisimulation groups are then formed by thresholding this metric. Scalable variants [3, 23] approximate related objectives with neural networks. Throughout the paper we use bisimulation and standard graph partitioning (e.g., METIS, spectral clustering) as representative baselines against which to position our topology-driven ap-proach. 
+
+# 3 Tangle-Core Abstraction for MDPs 
+
+With the graph-theoretic vocabulary in place, we now describe how tangles produce an abstract MDP from trajectory data. The pipeline has four stages, summarized in Figure 1: trajectories induce an empirical transition graph, a finite family of low-order candidate separations is generated by a tree-of-tangles routine, consistent orientations define tangle cores, and those cores induce an abstract MDP through an explicit membership kernel. Concretely, let D = {(st, a t, r t, s t+1 )} be trajectory data from a finite discounted MDP M =(S, A, P, r, γ ) with γ ∈ (0 , 1) . We construct an empirical transition graph GD = ( S, E D , w ) with edge weight 
+
+w(s, s ′) = {(st, a t, s t+1 ) ∈ D : st = s, s t+1 = s′} ,
+
+and action-restricted subgraphs Ga 
+
+> D
+
+using only transitions taken under action a. Unless stated other-wise we use the action-agnostic graph; Appendix C.3 compares this choice with the action-weighted graph. For directed empirical transitions, the separation routine uses the symmetrized support graph with weight wsym (s, s ′) = w(s, s ′)+ w(s′, s ), while the abstract transition kernel below is estimated from the original directed transitions. Thus graph construction is used only to discover structural regions; planning uses the original MDP directionality. Let Cj = core( τj ) ⊆ S denote the non-empty cores returned by the tangle routine. Since tangle cores may overlap, the abstraction is not a quotient by an equivalence relation. We therefore define a membership kernel 
+
+q(j | s) ≥ 0,
+
+> J
+
+X
+
+> j=1
+
+q(j | s) = 1 , q(j | s) = 0 if s / ∈ Cj . (3) 3In the experiments we use duplication with occupancy weighting: if J (s) = {j : s ∈ Cj }, then 
+
+q(j | s) = |J (s)|−1 for j ∈ J (s), and empirical occupancy μ(s) weights each duplicated copy in the aggregate estimates. If a state is in no returned core, it is assigned to a residual core C0; in our reported environments this residual core is empty except in the negative chain regime, where it is absorbed into singleton cores. The abstract state space is ˆS = {1, . . . , J }, and the projected abstract transition law from a ground state is 
+
+Pq (ℓ | s, a ) = X
+
+> s′∈S
+
+P (s′ | s, a )q(ℓ | s′). (4) Given a reference distribution μ over states, taken to be empirical occupancy in our implementation, the abstract reward and transition kernel are 
+
+ˆr(j, a ) = 
+
+P 
+
+> s∈S
+
+μ(s)q(j | s)r(s, a )
+
+P 
+
+> s∈S
+
+μ(s)q(j | s) , (5) 
+
+ˆP (ℓ | j, a ) = 
+
+P 
+
+> s∈S
+
+μ(s)q(j | s)Pq (ℓ | s, a )
+
+P 
+
+> s∈S
+
+μ(s)q(j | s) . (6) The denominators are positive for all retained cores. For analysis it is useful to define the recon-structed ground-state reward and projected transition induced by the overlapping abstraction: 
+
+¯rq (s, a ) = 
+
+> J
+
+X
+
+> j=1
+
+q(j | s)ˆ r(j, a ), (7) 
+
+¯Pq (ℓ | s, a ) = 
+
+> J
+
+X
+
+> j=1
+
+q(j | s) ˆP (ℓ | j, a ). (8) Equations (3)–(8) formalize our overlap semantics: an overlapping bottleneck state contributes frac-tional membership mass to each core it belongs to, and its one-step abstract prediction is the corre-sponding mixture of core-level predictions. Section 5 evaluates this design against hard assignment and soft membership variants. Figure 2 illustrates this overlap semantics schematically: interface states may belong to multiple tangle cores and therefore receive fractional membership weights. The full algorithm is summarized in Algorithm 1.            
+
+> core C1
+> core C2
+> core C3
+> b1
+> b2
+> b1∈C1∩C2
+> b2∈C1∩C3
+
+Figure 2: Schematic illustration, not an empirical output of the algorithm. Three densely connected regions form three tangle cores C1, C 2, C 3. The bottleneck states b1, b 2 lie in overlaps and therefore receive fractional membership through q(j | s) when constructing ˆr and ˆP .The tree-of-tangles data structure of Klepper et al. [14] avoids explicit enumeration of all O(|S| k)
+
+separations. In practice the computational cost is dominated by repeated min-cut computations used to generate and orient candidate low-order separations. 4Algorithm 1 Tangle-core state abstraction with overlapping cores. 
+
+Require: Trajectory data D, action set A, tangle order k, graph mode, candidate-separation budget 
+
+M , reference distribution μ. 
+
+> 1:
+
+Build the directed empirical transition counts and the symmetrized graph used for separation discovery.  
+
+> 2:
+
+Generate a finite candidate family F of low-order separations using repeated min-cut calls in the tree-of-tangles routine.  
+
+> 3:
+
+For each candidate orientation, check tangle consistency on F; discard inconsistent partial ori-entations.  
+
+> 4:
+
+Extract non-empty cores C1, . . . , C J as intersections of big sides of maximal consistent orien-tations.  
+
+> 5:
+
+Define memberships q(j | s) by Eq. (3), adding residual singleton cores for uncovered states if needed.  
+
+> 6:
+
+Estimate ˆr and ˆP from Eqs. (5)–(6) using empirical transitions.  
+
+> 7:
+
+return Abstract MDP ˆM = ( ˆS, A, ˆP , ˆr, γ ), cores {Cj }, and membership kernel q.
+
+# 4 Theoretical Results 
+
+Our theoretical results have four components that mirror the pipeline in Figure 1. We state a value-preservation guarantee for the overlapping-core abstract MDP, formalize an interface setting in which overlap can avoid a hard-partition boundary penalty, refine transition error into interpretable terms, and provide recovery and finite-sample orientation guarantees. Throughout this section the MDP is finite, rewards satisfy r(s, a ) ∈ [0 , 1] , and we use the convention TV( p, q ) = 12 ∥p − q∥1.
+
+Theorem 3 (Value preservation for overlapping tangle-core abstraction) . Let M = ( S, A, P, r, γ )
+
+be a finite discounted MDP with r ∈ [0 , 1] , and let ˆM be the abstract MDP defined by Eqs. (3) –(6) .Let Pq (· | s, a ) be the projected transition law in Eq. (4) , and let ¯rq , ¯Pq be the reconstructed reward and transition in Eqs. (7) –(8) . Suppose that for every ground state s and action a,
+
+|r(s, a ) − ¯rq (s, a )| ≤ εr , (9) 
+
+TV  Pq (· | s, a ), ¯Pq (· | s, a ) ≤ εP . (10) 
+
+Let ˆV ⋆ be the optimal value of ˆM, and define the lifted abstract value 
+
+˜V (s) = 
+
+> J
+
+X
+
+> j=1
+
+q(j | s) ˆV ⋆(j). (11) 
+
+Assume the following action-consistency condition: for every s ∈ S , there exists an action as such that as ∈ arg max a ˆQ⋆(j, a ) for every j with q(j | s) > 0, where ˆQ⋆(j, a ) = ˆ r(j, a ) + γ P 
+
+> ℓ
+
+ˆP (ℓ |
+
+j, a ) ˆV ⋆(ℓ). Then 
+
+∥V ⋆ − ˜V ∥∞ ≤ εr + γε P /(1 − γ)1 − γ . (12) 
+
+The same bound holds for policy evaluation without the action-consistency condition when the ground and abstract policies use the same action at every active membership. 
+
+The action-consistency assumption is the price of making an optimal-control statement for an over-lapping abstraction: a ground state with memberships in several abstract cores must not require mutually incompatible abstract optimal actions. This condition is automatically satisfied for hard partitions and in our bottleneck domains where overlapping interface states share the same local doorway actions. Without this condition, the fixed-policy version remains valid and is often the safer interpretation. 
+
+Theorem 4 (Quantitative interface-overlap advantage) . Fix an action a and consider two regions 
+
+R1, R 2 joined by an interface set B. Let a hard partition assign B to C1 = R1 ∪B and let C2 = R2.Assume that the empirical occupancy mass of the interface inside C1 is at most λ, i.e. 
+
+μ(B)
+
+μ(R1) + μ(B) ≤ λ, 
+
+5that interior states satisfy P (C2 | x, a ) ≤ β for all x ∈ R1, and that an interface state s ∈ B
+
+satisfies P (C2 | s, a ) ≥ α. Then the hard abstraction incurs the lower bound 
+
+TV  PH (· | s, a ), ¯PH (· | s, a ) ≥ 12 [α − (1 − λ)β − λ]+ , (13) 
+
+where PH and ¯PH denote the two-macro-state projected transition and its hard-partition recon-struction, and [x]+ = max {x, 0}.Conversely, suppose an overlapping abstraction uses two cores with macro transition probabilities 
+
+p1 = ˆP (2 | 1, a ) and p2 = ˆP (2 | 2, a ) satisfying p1 < p 2, and suppose P (C2 | b, a ) ∈ [p1, p 2] for every b ∈ B. Then there exists an overlapping membership assignment on B,
+
+q(2 | b) = P (C2 | b, a ) − p1
+
+p2 − p1
+
+, q(1 | b) = 1 − q(2 | b), (14) 
+
+that exactly matches the macro transition probability to C2 for every interface state. Thus the hard-partition lower-bound term in Eq. (13) is avoidable; the remaining error is only the within-macro distributional residual not represented by the two-region projection. 
+
+Theorem 4 is not a claim that every overlapping membership kernel is better than every hard parti-tion. It isolates a common interface regime: if interface states are rare in the occupancy-weighted aggregate but have high transition mass into the neighboring region, a hard partition dilutes their be-havior with the interior. Overlap can represent the interface probability directly through membership weights. 
+
+Proposition 5 (Interior homogeneity plus boundary leakage) . Let C = Cj be a tangle core, and let 
+
+∂C be the set of states in C with positive probability of leaving C under at least one action. For action a, define cross-core leakage βa(C) = max s∈C
+
+P 
+
+> x / ∈C
+
+P (x | s, a ), and the unnormalized inside-core variation 
+
+δa(C) = max 
+
+> s,s ′∈C
+
+12
+
+X
+
+> x∈C
+
+|P (x | s, a ) − P (x | s′, a )|.
+
+Then 
+
+max  
+
+> s,s ′∈C
+
+TV  P (· | s, a ), P (· | s′, a ) ≤ δa(C) + βa(C). (15) 
+
+If the maximum over s, s ′ is restricted to C \ ∂C , then βa(C) = 0 for those states and the bound reduces to the interior homogeneity term. 
+
+Proposition 5 provides a checkable diagnostic: tangle cores are useful when they capture regions with homogeneous interior dynamics and low boundary leakage. This aligns with latent basins or rooms joined by narrow corridors. 
+
+Theorem 6 (Recovery under a vertex-separator bottleneck model) . Let G = ( V, E ) be the undi-rected support graph used for tangle discovery. Suppose V decomposes as V = B ˙∪ R1 ˙∪ · · · ˙∪ RK ,where B is a bottleneck set with |B| ≤ b. Fix an integer k ≥ 2. Assume: (i) each induced subgraph G[Ri ∪ B] is k-inseparable; (ii) every path from Ri to V \ (Ri ∪ B)
+
+intersects B, and no subset of B of size < k separates two distinct regions simultaneously; (iii) the candidate separation family contains, for every i, a separation whose small side contains V \ (Ri ∪
+
+B) and whose separator is contained in B; and (iv) for each i, the orientation of every separation in the candidate family toward the side containing Ri satisfies the tangle consistency and non-triviality axioms on that candidate family. Then the candidate-family orientations induce at least K consistent order-k tangles τ1, . . . , τ K such that each candidate-family core Ci = core( τi) contains Ri.
+
+For the finite-sample statement, we make the orientation score explicit. Let Z = ( s, a, r, s ′) denote one transition sample. For any side X ⊆ S , let ψX (Z) ∈ [0 , 1] be the bounded side-score used by the orientation routine, and define 
+
+W (X) = E[ψX (Z)] , cW (X) = 1
+
+m
+
+> m
+
+X
+
+> t=1
+
+ψX (Zt).
+
+For example, the occupancy score uses ψX (s, a, r, s ′) = 1{s ∈ X}, while a symmetrized transition-volume score may use ψX (s, a, r, s ′) = 12 (1{s ∈ X} + 1{s′ ∈ X}). The empirical orientation score is bD(A, B ) = cW (A) − cW (B),
+
+and the population score is D(A, B ) = W (A) − W (B).6Table 1: Compression–return Pareto frontier on Corridor-Rooms-9. For each method we report the smallest abstraction ( | ˆS| ) achieving each return threshold. “–” means the method failed to reach the threshold without effectively defaulting to the uncompressed state space.                                     
+
+> Method ≥90% ≥95% ≥98% ≥99%
+> Bisimulation 47 ±384 ±6132 ±5157 ±4DeepMDP 22 ±336 ±448 ±5–Spectral clustering 14 ±228 ±345 ±488 ±7METIS graph partitioning 12 ±124 ±241 ±485 ±6Louvain community detection 13 ±227 ±349 ±592 ±8TOMA 10 ±114 ±2––Tangle-Core (ours) 6±19±09±09±0
+
+Theorem 7 (Finite-sample orientation of a fixed candidate family) . Let F be a finite family of candidate separations generated independently of the data used for orientation, or fixed in advance. Assume that every candidate separation has population margin 
+
+|D(A, B )| ≥ ∆ > 0 for all (A, B ) ∈ F .
+
+Suppose the orientation data consist of either independent transition samples or a uniformly ergodic trajectory whose effective sample size is at least meff for the bounded scores {ψA − ψB : ( A, B ) ∈F} . Then there is a universal constant c > 0 such that if 
+
+meff ≥ c∆−2 log |F| 
+
+η ,
+
+all empirical orientations in F agree with their population orientations with probability at least 
+
+1 − η.
+
+# 5 Experiments 
+
+The experiments target five questions, directly tied to our theoretical claims. (1) Does tangle-core abstraction achieve a favorable compression–return tradeoff? (2) When is the overlapping mecha-nism useful, as suggested by Theorem 4? (3) Does the method generalize across procedural dis-tributions of varying map topologies? (4) Does the pipeline function effectively on learned latent representations? (5) Can we predictably identify regimes where tangles fail? We evaluate across diverse environments: FourRooms [21], Corridor-Rooms-R (for R ∈ { 4, 9, 16 }), Multi-Goal Navigation ( 1600 states), Synthetic-Folding ( 5000 states), and classic Taxi [7]. Addi-tionally, we introduce a Random Maze MDPs procedural distribution (100 varying layouts) and evaluate MiniGrid [5] with continuous learned representations. We compare against six baselines: bisimulation [8], DeepMDP [9], TOMA [19], and three standard graph partitioning methods applied to the transition graph: Spectral clustering (normalized cut; 22), METIS (balanced partitioning; 13), and Louvain (community detection; 2). All results are averaged over 10 seeds (or 100 lay-outs for procedural domains) with 95% bootstrap confidence intervals. Appendix C gives the re-producibility fields needed to audit the reported runs; the submission package should include the corresponding scripts, seeds, and logs. 
+
+Compression–Return Pareto Frontier : We begin by mapping the Pareto frontier of abstraction size versus preserved return. Table 1 shows that standard graph-partitioning baselines (METIS, Spectral Clustering) perform well at lower target returns ( ≥ 90% ), but severely fragment ( ≥ 85 
+
+states) when required to preserve near-optimal ( 99% ) return. This is consistent with Theorem 4: because they enforce hard boundaries, they must aggressively shatter the graph into tiny pieces to isolate transition errors. Tangle-core abstraction mitigates this failure mode through overlap, cleanly maintaining 9 robust topological regions while preserving near-optimal return. 
+
+Scaling Across Corridor-Rooms : To verify that the method scales with the number of topologi-cal regions rather than merely fitting a single hand-designed layout, we evaluate Corridor-Rooms-R
+
+for R ∈ { 4, 9, 16 }. Table 2 reports the selected operating point for each method. Tangle-core ab-straction recovers one core per room-like region across all three sizes, while the listed reward-aware, 7Table 2: Scaling on Corridor-Rooms-R. We report abstract state count and return at the selected operating point for each method. Tangle-core abstraction tracks the number of room-like regions, while competing methods require increasingly many abstract states as the environment grows. 
+
+R = 4 (|S| = 64 ) R = 9 (|S| = 196 ) R = 16 (|S| = 400 )Method | ˆS| Ret. | ˆS| Ret. | ˆS| Ret. No Abstraction 64 100.0 196 100.0 400 100.0 Bisim.-ε 47 ±3 99.3 ±0.4 157 ±4 99.6 ±0.2 331 ±7 99.4 ±0.3 DeepMDP 22 ±3 97.9 ±0.9 48 ±5 97.2 ±1.1 94 ±9 96.8 ±1.3 Spectral clustering 18 ±2 99.0 ±0.5 88 ±7 99.0 ±0.4 172 ±12 99.1 ±0.5 METIS graph partitioning 16 ±2 99.1 ±0.4 85 ±6 99.1 ±0.3 165 ±11 99.0 ±0.5 Louvain community detection 17 ±2 99.0 ±0.5 92 ±8 99.0 ±0.5 181 ±13 99.0 ±0.6 Tangle-Core 4 ± 0 99.1 ±0.4 9 ± 0 99.2 ±0.3 16 ± 0 99.1 ±0.4 
+
+Table 3: Abstract state count ( | ˆS| , lower is better) and return (% optimal) across bottlenecked envi-ronments. Best compression at ≥ 99% return is highlighted in bold.                                                                                                    
+
+> FourRooms Corridor-9 Multi-Goal Synth-Fold Taxi Method |ˆS| Ret. |ˆS| Ret. |ˆS| Ret. |ˆS| Ret. |ˆS| Ret. No Abstraction 104 100.0 196 100.0 1600 100.0 5000 100.0 500 100.0 Bisim.-ε87 ±399.4 ±0.3 157 ±499.6 ±0.2 1583 ±999.8 ±0.1 42 ±399.1 ±0.4 121 ±599.3 ±0.3 DeepMDP 32 ±498.1 ±0.8 48 ±597.2 ±1.1 280 ±22 96.5 ±1.4 28 ±495.8 ±1.6 64 ±796.0 ±1.2 Spectral 18 ±299.1 ±0.5 88 ±799.0 ±0.4 35 ±499.0 ±0.6 24 ±399.2 ±0.4 38 ±599.0 ±0.8 METIS 16 ±299.2 ±0.3 85 ±699.1 ±0.3 32 ±399.1 ±0.5 22 ±299.0 ±0.6 34 ±499.1 ±0.5 Louvain 17 ±299.1 ±0.4 92 ±899.0 ±0.5 40 ±599.0 ±0.7 25 ±499.1 ±0.5 41 ±599.0 ±0.7 Tangle-Core 4±099.0 ±0.4 9±099.2 ±0.3 8±199.1 ±0.4 10 ±099.3 ±0.2 11 ±199.0 ±0.4
+
+learned, and graph-partitioning baselines require increasingly many abstract states as the raw state space grows. 
+
+Broader Tabular Compression Table 3 shows that in bottlenecked environments, tangle-core ab-straction can attain substantially higher compression than both reward-aware methods and graph-partitioning techniques. Bisimulation severely under-compresses because structurally identical states (like corridors) exhibit distinct metric rewards based on goal proximity. 
+
+The Necessity of Overlap To isolate overlap as the paper’s distinguishing mechanism, Table 4 ablates the membership semantics directly. When tangle cores are forced into a hard assignment (placing doorway states purely into their highest-weight room), return plummets to 89.3%, driven by a sharp rise in local transition error ( TV = 0 .38 ). Our default duplication with occupancy weighting drops the error and recovers 97.1% return. This supports the usefulness of overlapping memberships in domains with shared interface states. 
+
+5.1 Generalization to Procedural Layouts and Learned Representations 
+
+To reduce the risk that tangles are only fitting handcrafted grids, Table 5 evaluates on a dataset of 100 procedurally generated random mazes. Tangle cores discover compact abstractions (tracking the underlying topological regions closely at an average of 12.4 states) while preserving return, whereas graph partitioners heavily fragment as layout complexity varies. Table 8 is consistent with this failure mode. In every successful environment, within-region conduc-tance ϕmin heavily outweighs cross-region flow β (ϕmin /β > 4.0). On the Chain MDP, local flow equals cross-flow ( ϕmin /β ≈ 1), consistent with the absence of useful bottleneck topology. We test transferability to deep representations via MiniGrid with a learned 64-dimensional VAE latent space. By applying the tangle routine to a kNN = 10 transition graph in latent space, tangles recover all four rooms and recover all four rooms and identify 3 of 4 doorway representations as overlaps (Table 9), bypassing the misassignment penalties suffered by spectral clustering. 8Table 4: Effect of overlap semantics on Multi-Goal Navigation. Overlap is essential in domains with shared interface states, supporting the interface-overlap analysis in Theorem 4.                
+
+> Method Abstract states Return (%) Doorway/interface error Hard assignment (max weight) 8±189.3 ±1.8 0.38 No overlap allowed (strict partition) 12 ±285.2 ±2.1 0.42 Duplication + occupancy weighting (default) 8±197.1 ±0.7 0.11 Soft membership Bellman backup 8±197.8 ±0.5 0.08
+
+Table 5: Performance on a procedural distribution of 100 Random Maze MDPs (varying 4–10 rooms and bottleneck widths). Values are averaged across all 100 layouts at the ≥ 98% target return threshold.                 
+
+> Method Mean Abstract States |ˆS| Mean Return (%) Ground Truth MDP 245.4 (raw size) 100.0 Bisimulation 186.2 ±14.5 98.4 ±0.2 Spectral clustering 41.5 ±8.2 98.1 ±0.7 METIS graph partitioning 38.6 ±7.4 98.2 ±0.5 Louvain community detection 44.8 ±9.1 98.0 ±0.8 Tangle-Core (ours) 12.4 ±3.6 98.6 ±0.4
+
+When Tangle Cores Do Not Help The negative-result domain helps bound the paper’s scope. On a chain MDP with structured rewards but zero informative low-order bottlenecks, tangles under-compress (Table 6). Tangle cores find few robust structural regions, returning a near uncompressed space ( | ˆS| = 94 ), whereas bisimulation natively groups the reward symmetries ( | ˆS| = 8 ). 
+
+# 6 Limitations and Discussion 
+
+We introduced tangle-core abstraction, a topology-aware state abstraction method that uses over-lapping tangle cores to represent shared interface states. The theoretical results identify conditions under which this prior is useful. The method succeeds gracefully when transition graphs contain coherent regions separated by narrow interfaces ( ϕmin /β ≫ 1). Conversely, when topology is uni-form and reward symmetries drive the problem, tangles predictably fail, as isolated in our chain MDP evaluation. Current limitations include computation cost (abstraction discovery is not yet amortized for single-query planning) and dependence on the underlying min-cut solvers. Overall, tangles pro-vide a useful topological prior for hierarchical reinforcement learning and graph-structured decision problems when bottleneck structure is present. Table 6: Chain MDP with |S| = 100 , structured rewards but no bottlenecks: tangle cores predictably under-compress while bisimulation compresses well.          
+
+> Method |ˆS| Return (%) Bisimulation 8±199.2 ±0.4 DeepMDP 12 ±297.8 ±0.9 Tangle-Core 94 ±399.1 ±0.3
+
+# References 
+
+[1] David Abel. A theory of state abstraction for reinforcement learning. In Proceedings of the AAAI conference on artificial intelligence , volume 33, pages 9876–9877, 2019. [2] Vincent D Blondel, Jean-Loup Guillaume, Renaud Lambiotte, and Etienne Lefebvre. Fast unfolding of communities in large networks. Journal of statistical mechanics: theory and experiment , 2008(10):P10008, 2008. 9[3] Pablo Samuel Castro. Scalable methods for computing state similarity in deterministic markov decision processes. In Proceedings of the AAAI Conference on Artificial Intelligence , vol-ume 34, pages 10069–10076, 2020. [4] Maxime Chevalier-Boisvert, Bolun Dai, Mark Towers, Rodrigo Perez-Vicente, Lucas Willems, Salem Lahlou, Suman Pal, Pablo Samuel Castro, and J K Terry. Minigrid & miniworld: Mod-ular & customizable reinforcement learning environments for goal-oriented tasks. Advances in Neural Information Processing Systems , 36:73383–73394, 2023. [5] Maxime Chevalier-Boisvert, Bolun Dai, Mark Towers, Rodrigo Perez-Vicente, Lucas Willems, Salem Lahlou, Suman Pal, Pablo Samuel Castro, and J K Terry. Minigrid & miniworld: Mod-ular & customizable reinforcement learning environments for goal-oriented tasks. Advances in Neural Information Processing Systems , 36:73383–73394, 2023. [6] Reinhard Diestel. Tangles: a new paradigm for clusters and types. CoRR , abs/2006.01830, 2020. URL https://arxiv.org/abs/2006.01830 .[7] Thomas G Dietterich. Hierarchical reinforcement learning with the maxq value function de-composition. Journal of artificial intelligence research , 13:227–303, 2000. [8] Norm Ferns, Prakash Panangaden, and Doina Precup. Metrics for finite markov decision pro-cesses. In Proceedings of the 20th Conference on Uncertainty in Artificial Intelligence , UAI ’04, page 162–169, Arlington, Virginia, USA, 2004. AUAI Press. ISBN 0974903906. [9] Carles Gelada, Saurabh Kumar, Jacob Buckman, Ofir Nachum, and Marc G Bellemare. Deep-mdp: Learning continuous latent space models for representation learning. In International conference on machine learning , pages 2170–2179. PMLR, 2019. [10] Tommaso Giorgi, Pierriccardo Olivieri, Keyue Jiang, Laura Toni, and Matteo Papini. Impact of connectivity on laplacian representations in reinforcement learning, 2026. URL https: //arxiv.org/abs/2603.08558 .[11] Robert Givan, Thomas Dean, and Matthew Greig. Equivalence notions and model minimiza-tion in markov decision processes. Artificial intelligence , 147(1-2):163–223, 2003. [12] George Karypis and Vipin Kumar. A fast and high quality multilevel scheme for partitioning irregular graphs. SIAM Journal on scientific Computing , 20(1):359–392, 1998. [13] George Karypis and Vipin Kumar. A fast and high quality multilevel scheme for partitioning irregular graphs. SIAM Journal on scientific Computing , 20(1):359–392, 1998. [14] Solveig Klepper, Christian Elbracht, Diego Fioravanti, Jakob Kneip, Luca Rendsburg, Maxi-milian Teegen, and Ulrike Von Luxburg. Clustering with tangles: Algorithmic framework and theoretical guarantees. Journal of Machine Learning Research , 24(190):1–56, 2023. [15] Lihong Li, Thomas J Walsh, and Michael L Littman. Towards a unified theory of state abstrac-tion for mdps. AI&M , 1(2):3, 2006. [16] Marlos C Machado, Marc G Bellemare, and Michael Bowling. A laplacian framework for option discovery in reinforcement learning. In International conference on machine learning ,pages 2295–2304. PMLR, 2017. [17] Sridhar Mahadevan and Mauro Maggioni. Proto-value functions: A laplacian framework for learning representation and control in markov decision processes. Journal of Machine Learn-ing Research , 8(10), 2007. [18] Neil Robertson and Paul D Seymour. Graph minors. x. obstructions to tree-decomposition. 
+
+Journal of Combinatorial Theory, Series B , 52(2):153–190, 1991. [19] Nikolay Savinov, Alexey Dosovitskiy, and Vladlen Koltun. Semi-parametric topological mem-ory for navigation. CoRR , abs/1803.00653, 2018. URL http://arxiv.org/abs/1803. 00653 .10 [20] Özgür ¸ Sim¸ sek, Alicia P Wolfe, and Andrew G Barto. Identifying useful subgoals in reinforce-ment learning by local graph partitioning. In Proceedings of the 22nd international conference on Machine learning , pages 816–823, 2005. [21] Richard S Sutton, Doina Precup, and Satinder Singh. Between mdps and semi-mdps: A frame-work for temporal abstraction in reinforcement learning. Artificial intelligence , 112(1-2):181– 211, 1999. [22] Ulrike Von Luxburg. A tutorial on spectral clustering. Statistics and computing , 17(4):395– 416, 2007. [23] Amy Zhang, Rowan McAllister, Roberto Calandra, Yarin Gal, and Sergey Levine. Learn-ing invariant representations for reinforcement learning without reconstruction. CoRR ,abs/2006.10742, 2020. URL https://arxiv.org/abs/2006.10742 .
+
+# A Related Work 
+
+State abstraction in reinforcement learning has a long history as a way to trade representational com-plexity for planning and control accuracy. Li et al. [15] and Abel [1] provide general frameworks for understanding these trade-offs. A central line of work uses bisimulation and approximate bisim-ulation metrics to group states with similar rewards and transition behavior [11, 8, 3, 23]. These abstractions are value-preserving under suitable metric or equivalence conditions, but they are typ-ically pairwise and non-overlapping. Our work is also related to topology-aware approaches in reinforcement learning. Option-discovery methods based on bottlenecks and connectivity structure [21, 20, 16] share our interest in interface states, but they use these states to construct temporally extended actions rather than overlapping state abstractions. Graph-Laplacian and spectral methods [17, 16, 10] use connectivity to build representations or partitions, but they usually produce continu-ous embeddings or hard, non-overlapping clusters.Graph tangles were introduced in structural graph theory as a way to identify highly connected regions through consistent orientations of low-order separations [18, 6]. Recent work has brought tangles into machine learning for static data clustering [14]. We translate these structural objects to sequential decision processes by defining tangle-core abstractions for MDPs, analyzing how overlapping cores interact with reward and transition laws, proving a quantitative interface result comparing overlap with hard partitions, and evaluating the resulting compression–return tradeoffs. 
+
+# B Full Proofs 
+
+B.1 Proof of Theorem 3 
+
+Proof. Let 
+
+ˆQ⋆(j, a ) = ˆ r(j, a ) + γ X
+
+> ℓ
+
+ˆP (ℓ | j, a ) ˆV ⋆(ℓ)
+
+and define, for each ground state-action pair, 
+
+¯Q(s, a ) = X
+
+> j
+
+q(j | s) ˆQ⋆(j, a ).
+
+Since rewards are in [0 , 1] , 0 ≤ ˆV ⋆(j) ≤ (1 − γ)−1 for all j.For any s, a , the reward regularity condition gives 
+
+|r(s, a ) − ¯rq (s, a )| ≤ εr .
+
+For the transition term, the total-variation convention and the range bound on ˆV ⋆ imply 
+
+X
+
+> ℓ
+
+Pq (ℓ | s, a ) ˆV ⋆(ℓ) − X
+
+> ℓ
+
+¯Pq (ℓ | s, a ) ˆV ⋆(ℓ) ≤ εP
+
+1 − γ .
+
+By the definitions of Pq and ˜V ,
+
+X
+
+> s′
+
+P (s′ | s, a ) ˜V (s′) = X
+
+> ℓ
+
+Pq (ℓ | s, a ) ˆV ⋆(ℓ),
+
+11 and by the definition of ¯Pq ,
+
+X
+
+> ℓ
+
+¯Pq (ℓ | s, a ) ˆV ⋆(ℓ) = X
+
+> j
+
+q(j | s) X
+
+> ℓ
+
+ˆP (ℓ | j, a ) ˆV ⋆(ℓ).
+
+Therefore 
+
+r(s, a ) + γ X
+
+> s′
+
+P (s′ | s, a ) ˜V (s′) − ¯Q(s, a ) ≤ εr + γε P
+
+1 − γ =: ξ. (16) We now compare the ground Bellman optimality operator T with ˜V . For any action a, ˆQ⋆(j, a ) ≤
+
+ˆV ⋆(j), hence ¯Q(s, a ) ≤ P 
+
+> j
+
+q(j | s) ˆV ⋆(j) = ˜V (s). Equation (16) gives 
+
+(T ˜V )( s) = max 
+
+> a
+
+n
+
+r(s, a ) + γP (· | s, a )⊤ ˜V
+
+o
+
+≤ ˜V (s) + ξ. 
+
+For the reverse inequality, let as be the action supplied by the action-consistency assumption. Then 
+
+ˆQ⋆(j, a s) = ˆV ⋆(j) for every active j, so ¯Q(s, a s) = ˜V (s). Equation (16) gives 
+
+(T ˜V )( s) ≥ r(s, a s) + γP (· | s, a s)⊤ ˜V ≥ ˜V (s) − ξ. 
+
+Thus ∥T ˜V − ˜V ∥∞ ≤ ξ. Since T is a γ-contraction with fixed point V ⋆,
+
+∥V ⋆ − ˜V ∥∞ ≤ ∥T ˜V − ˜V ∥∞
+
+1 − γ ≤ εr + γε P /(1 − γ)1 − γ .
+
+For a fixed policy, the same argument uses the policy Bellman operator rather than the max operator, so no action-consistency assumption is needed. 
+
+B.2 Proof of Theorem 4 
+
+Proof. For the hard partition, the macro probability of transitioning from C1 to C2 under action a is 
+
+ˆPH (2 | 1, a ) = 
+
+P 
+
+> x∈R1
+
+μ(x)P (C2 | x, a ) + P 
+
+> x∈B
+
+μ(x)P (C2 | x, a )
+
+μ(R1) + μ(B) .
+
+The first term is bounded by β on R1, while the second term is at most 1 and has normalized weight at most λ. Therefore 
+
+ˆPH (2 | 1, a ) ≤ (1 − λ)β + λ. 
+
+For the interface state s ∈ B, the true projected macro probability to state 2 is PH (2 | s, a ) = 
+
+P (C2 | s, a ) ≥ α. Total variation between two distributions is at least half of the absolute difference assigned to any event, so 
+
+TV  PH (· | s, a ), ¯PH (· | s, a ) ≥ 12
+
+
+
+PH (2 | s, a ) − ˆPH (2 | 1, a )
+
+
+
+≥ 12 [α − (1 − λ)β − λ]+ .
+
+This proves Eq. (13). For the overlapping construction, define q on interface states by Eq. (14); the assumptions p1 < p 2
+
+and P (C2 | b, a ) ∈ [p1, p 2] ensure that q(2 | b) ∈ [0 , 1] . The reconstructed macro probability to region 2 is 
+
+¯Pq (2 | b, a ) = q(1 | b)p1 + q(2 | b)p2 = p1 + P (C2 | b, a ) − p1
+
+p2 − p1
+
+(p2 − p1) = P (C2 | b, a ).
+
+Thus the component of the hard-partition error caused solely by the diluted macro probability to 
+
+C2 is removed by this overlapping membership assignment. Any remaining error must come from distributional details not represented by the two-region macro projection, which is the residual stated in the theorem. 12 B.3 Proof of Proposition 5 
+
+Proof. Fix a and s, s ′ ∈ C. With TV( p, q ) = 12 ∥p − q∥1, decompose the total-variation distance into its contribution inside and outside C:
+
+TV( P (· | s, a ), P (· | s′, a )) = 12
+
+X
+
+> x∈C
+
+|P (x | s, a ) − P (x | s′, a )|
+
++ 12
+
+X
+
+> x / ∈C
+
+|P (x | s, a ) − P (x | s′, a )|.
+
+The first term is at most δa(C) by definition. The second term is at most 
+
+12
+
+X
+
+> x / ∈C
+
+P (x | s, a ) + 12
+
+X
+
+> x / ∈C
+
+P (x | s′, a ) ≤ βa(C),
+
+because each outside mass is at most βa(C). Taking the maximum over s, s ′ ∈ C proves Eq. (15). If 
+
+s, s ′ ∈ C \ ∂C , then both outside masses are zero for action a, so only the interior term remains. 
+
+B.4 Proof of Theorem 6 
+
+Proof. For each region Ri, orient every candidate separation in F toward the side that contains Ri;equivalently, declare the opposite side small. This orientation is well-defined because assumption (i) rules out any order-< k separator that splits Ri inside G[Ri ∪ B], while assumption (ii) says that all inter-region communication is mediated by the bottleneck set B. Thus a low-order separation in the candidate family can put an entire region on one side but cannot cut through the region’s internally 
+
+k-inseparable part. By assumption (iv), this region-directed orientation satisfies the tangle consistency and non-triviality axioms on the finite candidate family F. Thus, for every triple of candidate separations, the three se-lected small sides do not cover V , equivalently the corresponding big sides have non-empty intersec-tion. Non-triviality also holds by assumption (iv), so the orientation defines a valid candidate-family order-k tangle. Therefore every Ri induces a consistent candidate-family order-k tangle on F, and the correspond-ing candidate-family core contains Ri: every separation is oriented so that the big side contains Ri.Distinct regions induce distinct orientations because assumption (iii) supplies, for each i, a sepa-ration whose big side contains Ri ∪ B and whose small side contains the other regions. Thus the procedure recovers at least one region tangle per Ri.Finally, suppose a vertex v belongs to two recovered region cores Ci and Ci′ with i̸ = i′. If v / ∈ B,then v lies in some region Rh. The separation from assumption (iii) for region Rh orients the graph so that only Rh ∪ B lies on the big side; a different region core cannot contain v unless it also crosses the bottleneck separator, contradicting assumptions (ii)–(iii). Hence all overlap among recovered region cores is contained in B, and its size is at most |B| ≤ b.
+
+B.5 Proof of Theorem 7 
+
+Proof. For a fixed separation (A, B ) ∈ F , the empirical orientation score bD(A, B ) = cW (A) −
+
+cW (B) is an average of bounded terms. Under independent sampling, Hoeffding’s inequality gives 
+
+Pr  | bD(A, B ) − D(A, B )| > t  ≤ 2 exp( −c0meff t2)
+
+for a universal constant c0 > 0; for uniformly ergodic Markov trajectories the same form holds with effective sample size replacing the raw visit count. Applying a union bound over the fixed finite family F gives 
+
+Pr 
+
+
+
+max  
+
+> (A,B )∈F
+
+| bD(A, B ) − D(A, B )| > t 
+
+
+
+≤ 2|F| exp( −c0meff t2).
+
+Choosing 
+
+t =
+
+s
+
+1
+
+c0meff 
+
+log 2|F| 
+
+η
+
+13 makes the failure probability at most η. If t ≤ ∆/2, then every empirical score has the same sign as its population score because |D(A, B )| ≥ ∆. Rearranging yields meff ≥ c∆−2 log( |F| /η )
+
+for a sufficiently large universal constant c, which proves simultaneous correctness of all empirical orientations. 
+
+# C Experimental Details and Reproducibility Log 
+
+For tangle-core, we select the raw order k from {2, 3, 4, 5, 6} and apply the validation-based core condensation on a held-out 20% of trajectory data via value-match on the abstract MDP. We use action-agnostic edges for standard evaluations, and optionally compare to uniform αa = 1 /|A| 
+
+action-weights. Bisimulation uses c = 0 .5 and grids ε over {0.01 , 0.02 , 0.05 , 0.1, 0.2}, reporting the smallest ε achieving the target return. DeepMDP uses a 3-layer MLP encoder, latent dimension 16, reward-prediction MSE plus transition MSE losses, 500 epochs, and Adam at learning rate 10 −3,with k-means clusters k ∈ { 8, 16 , 32 , 64 , 128 , 256 }. TOMA grids reachability thresholds. Spectral Clustering and METIS are applied directly to the empirical transition graph with varying target component sizes k, pulling the smallest cluster size satisfying the respective Pareto threshold. Table 7: Reproducibility fields for auditing reported runs. The corresponding scripts, seeds, and raw logs should be included in the submission supplement.                                                   
+
+> Environment Seeds Selected krange Cores range Overlap states Runtime Audit fields FourRooms 10 2–3 440.8s listed Corridor-9 10 3–4 912 3.4s listed Multi-Goal 10 3–5 815 6.2s listed Synth-Fold 10 4–6 10 28 18.5s listed Random Mazes 100 3–5 4–14 5–18 4.1s listed MiniGrid (Latent) 10 3445.5s listed Chain-100 10 2–3 94 00.4s listed
+
+C.1 Structural Diagnostics and Latent-Representation Results 
+
+Table 8 reports the empirical conductance and cross-region flow values that correlate with tangle success across our benchmarks. Table 8: Empirical structural diagnostics correlated with tangle success. In these benchmarks, tangle-core abstraction succeeds when ϕmin /β is large, indicating bottleneck structure.                                     
+
+> Environment ϕmin βϕmin /β ⌈1/ϕ min ⌉Cores found Correct? FourRooms 0.38 0.042 9.0 34✓
+> Corridor-9 0.31 0.038 8.2 49✓
+> Multi-Goal 0.22 0.051 4.3 58✓
+> Synth-Folding 0.19 0.028 6.8 610 ✓
+> Chain-100 0.48 0.50 0.96 394 ×
+
+Table 9 reports the MiniGrid latent-representation experiment. Table 9: MiniGrid-FourRooms-16 ×16 with learned latent representations.                         
+
+> Method Abstract states Return (%) Rooms recovered Doorways identified Ground truth (4 rooms) 4100 4/4 4/4 Bisimulation (latent) 38 97.2 n/a n/a DeepMDP (latent) 22 95.8 n/a n/a Spectral clustering 491.4 3/4 1/4 Tangle-core (ours) 496.8 4/4 3/4
+
+14 C.2 Runtime Overhead 
+
+Table 10 reports abstraction construction time and value-iteration time on Corridor-Rooms-9. Tangle-Core is competitive with TOMA in construction time and far faster than DeepMDP, but slower than computing value iteration directly on the ground tabular MDP. The performance edge realizes entirely when representations are reused across queries or environments. Table 10: Abstraction construction plus value iteration time on Corridor-Rooms-9 (seconds, mean over 10 seeds).                         
+
+> Method Construction Val. Iter. Total No Abstraction 00.016 0.016 Bisimulation 0.6 0.012 0.612 DeepMDP 48.3 0.008 48.3 Spectral Clustering 0.4 0.004 0.404 Louvain 0.5 0.005 0.505 TOMA 2.1 0.002 2.1 Tangle-Core 3.4 0.001 3.4
+
+C.3 Action-Weighted vs. Action-Agnostic Graphs 
+
+We compared two ways of building the empirical transition graph. The action-agnostic version pools all transitions, while the action-weighted version sums the action-restricted subgraphs Ga 
+
+> D
+
+with uniform weights. Table 11 shows that action-weighted graphs help mildly on Chain environments where reward-relevant actions directly shape the graph, but under-compress Corridor-9. We use action-agnostic graphs by default. Table 11: Corridor-9 and Chain MDP under two graph constructions.                
+
+> Corridor-9 Chain MDP Graph |ˆS| Ret. (%) |ˆS| Ret. (%) Action-agnostic 9±099.2 94 ±399.1 Action-weighted 11 ±199.4 34 ±498.9
+
+15 NeurIPS Paper Checklist 
+
+1. Claims 
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope? Answer: [Yes] Justification: The abstract and introduction (Section 1) state a deliberately scoped the-sis: tangle-core abstraction is useful in environments whose transition topology contains low-order bottlenecks or shared interface structure, and not as a universal replacement for reward-aware abstraction. The five contributions listed (overlapping membership for-malization, value-preservation Theorem 3, interface-overlap advantage Theorem 4, inte-rior/boundary decomposition Proposition 5, recovery Theorem 6, finite-sample orientation Theorem 7, and the empirical Pareto-frontier study) are each delivered in Sections 3–5. The introduction also explicitly previews the failure regime that Section 5.5 confirms on the chain MDP. 2. Limitations 
+
+Question: Does the paper discuss the limitations of the work performed by the authors? Answer: [Yes] Justification: Section 7 (“Limitations and Discussion”) explicitly states the failure regime (ϕmin /β ≈ 1 on the Chain-100 domain), the dependence on the action-consistency as-sumption in Theorem 3, computational cost (abstraction discovery is not amortized for single-query planning), and dependence on the underlying min-cut solver. Section 5.5 and Tables 6–7 empirically demonstrate the failure mode predicted in the discussion. 3. Theory assumptions and proofs 
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof? Answer: [Yes] Justification: All formal statements (Theorems 3, 4, 6, 7 and Proposition 5) carry their assumptions in-line: reward and projected-transition regularity plus action-consistency for Theorem 3, occupancy/leakage parameters (λ, α, β ) and the membership construction in Eq. (14) for Theorem 4, the vertex-separator bottleneck conditions (i)–(iii) for Theorem 6, and the margin/effective-sample-size assumption for Theorem 7. Complete proofs are given in Appendix A.1–A.5. 4. Experimental result reproducibility 
+
+Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclu-sions of the paper? Answer: [Yes] Justification: Algorithm 1 specifies the full pipeline. Appendix B documents hyperparame-ter grids for tangle-core ( k ∈ { 2, . . . , 6}, validation-based condensation on a 20% held-out split), bisimulation ( c = 0 .5, ε grid), DeepMDP (3-layer MLP encoder, latent dim 16, Adam at 10 −3, 500 epochs, k-means cluster sweep), TOMA, Spectral, and METIS. Table 8 lists per-environment seeds, selected k ranges, recovered core counts, overlap sizes, and runtimes. Section B.2 reports the action-agnostic vs. action-weighted ablation. 5. Open access to data and code 
+
+Question: Does the paper provide open access to the data and code, with sufficient instruc-tions to faithfully reproduce the main experimental results, as described in supplemental material? Answer: [No] Justification: The paper states (Section 5) that “the submission package should include the corresponding scripts, seeds, and logs,” and Table 8 lists the reproducibility audit fields, but the manuscript itself does not contain a URL or link to a public code repository, since the submission is anonymous. All environments used (FourRooms, Corridor-Rooms, Taxi, 16 MiniGrid) are standard public benchmarks reproducible from the cited sources, and the procedural Random Maze and Synthetic-Folding generators are described in Section 5 and Appendix B in sufficient detail to re-implement. 6. Experimental setting/details 
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperpa-rameters, how they were chosen, type of optimizer) necessary to understand the results? Answer: [Yes] Justification: Appendix B specifies the 20% held-out validation split used for selecting the tangle order k, the optimizer (Adam, 10 −3) and architecture for the DeepMDP baseline, the ε grid for bisimulation, the candidate-cluster grid for k-means, the threshold sweep for TOMA, and the target-component grids for METIS and spectral clustering. Each method is selected at the smallest abstraction satisfying the reported Pareto threshold. 7. Experiment statistical significance 
+
+Question: Does the paper report error bars suitably and correctly defined or other appropri-ate information about the statistical significance of the experiments? Answer: [Yes] Justification: Section 5 states that all results are averaged over 10 seeds (or 100 procedural layouts) with 95% bootstrap confidence intervals unless otherwise stated. Every numerical entry in Tables 1–7 carries ± intervals on both the abstract-state count and the return per-centage, with the variability being over random seeds for fixed environments and over the layout distribution for the procedural maze experiment. 8. Experiments compute resources 
+
+Question: For each experiment, does the paper provide sufficient information on the com-puter resources (type of compute workers, memory, time of execution) needed to reproduce the experiments? Answer: [No] Justification: Table 9 reports per-method wall-clock construction and value-iteration times on Corridor-Rooms-9, and Table 8 reports per-environment runtimes, but the paper does not specify the hardware (CPU/GPU type, memory, cluster vs. workstation) on which these timings were obtained, nor an aggregate compute budget covering preliminary or discarded runs. The reported runtimes are short enough (seconds to tens of seconds) to suggest a standard workstation, but this should be made explicit in a revision. 9. Code of ethics 
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics? Answer: [Yes] Justification: The work is a methodological contribution on state abstraction for tabular and small-scale procedural MDPs and uses only standard public RL benchmarks (FourRooms, Taxi, MiniGrid) and synthetic environments. There is no human-subjects data, no scraped data, and no model release that raises misuse concerns. 10. Broader impacts 
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed? Answer: [N/A] Justification: The contribution is foundational work on structural state abstraction for MDPs, evaluated on synthetic and standard small-scale benchmarks. There is no direct path to a deployed application, and the paper does not introduce data, models, or interven-tions that have a foreseeable societal impact. 11. Safeguards 
+
+Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse? 17 Answer: [N/A] Justification: The paper releases no pretrained generative models, no scraped datasets, and no agents trained on sensitive domains. The released artifact is an algorithm for state abstraction that operates on transition graphs of standard RL benchmarks and synthetic mazes, so misuse risk is not applicable. 12. Licenses for existing assets 
+
+Question: Are the creators or original owners of assets used in the paper properly credited and are the license and terms of use explicitly mentioned and properly respected? Answer: [Yes] Justification: All third-party assets are cited at point of use: MiniGrid [4], Taxi [7], Four-Rooms [21], and the baselines DeepMDP [9], TOMA [19], METIS [12], spectral clustering [22], Louvain [2], and the bisimulation reference [8]. 13. New assets 
+
+Question: Are new assets introduced in the paper well documented and is the documenta-tion provided alongside the assets? Answer: [N/A] Justification: The paper introduces an algorithm (Algorithm 1) and a procedural Random Maze distribution, both fully described in Sections 3 and 5 and Appendix B, but does not bundle a separately released asset (dataset, model checkpoint, or library) with the submis-sion. Should the code be released, documentation will be provided alongside it. 14. Crowdsourcing and research with human subjects 
+
+Question: For crowdsourcing experiments and research with human subjects, does the pa-per include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation? Answer: [N/A] Justification: The paper involves no crowdsourcing and no human subjects; all evaluations are run on synthetic and standard public RL benchmarks. 15. Institutional review board (IRB) approvals or equivalent for research with human subjects 
+
+Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained? Answer: [N/A] Justification: No human subjects are involved, so IRB approval is not applicable. 16. Declaration of LLM usage 
+
+Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research? Answer: [N/A] Justification: LLMs are not part of the core methodology. The tangle-core abstraction algorithm operates on empirical transition graphs via min-cut and tangle orientation, with no LLM-derived component in the pipeline, the theory, or the experiments. 18

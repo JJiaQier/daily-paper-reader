@@ -1,0 +1,502 @@
+Title: Preference-Calibrated Human-in-the-Loop Reinforcement Learning for Robotic Manipulation
+
+URL Source: https://arxiv.org/pdf/2606.03949v1
+
+Published Time: Wed, 03 Jun 2026 01:37:59 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Preference-Calibrated Human-in-the-Loop Reinforcement Learning for Robotic Manipulation 
+
+Zeyi Liu 1,2, Guangyao Liu 3,2, Yinuo Qu 2, Yuquan Xue 2, Bofang Jia 2,Chunhua Yang 1, Weihua Gui 1, Keke Huang 1,†, Ziwei Wang 2,†
+
+> 1
+
+Central South University, 2Nanyang Technological University, 3Zhejiang University 
+
+liuzeyi@csu.edu.cn, huangkeke@csu.edu.cn, ziwei.wang@ntu.edu.sg 
+
+Abstract: Human-in-the-loop reinforcement learning (HIL-RL) improves sample efficiency in real-robot manipulation through online human intervention. How-ever, successful trajectories may include suboptimal actions that deviate from the desired task-execution path and force human intervention. Existing HIL-RL methods typically apply the consistent credit assignment principle to all tran-sitions, uniformly propagating discounted terminal rewards through suboptimal segments, ignoring the actual contribution of each transition to task success. This overestimates Q-values for critic learning and indirectly misguides actor updates toward suboptimal behavior patterns. To this end, we propose PACT, a Preference-calibrated Actor-Critic Training framework that leverages the implicit preference signals induced by intervention to perform credit reassignment on identified sub-optimal segments while directly guiding policy training for unbiased critic-actor learning. Specifically, we first design a progress model that learns from human demonstration and identifies suboptimal segments for credit correction. Then, from the human action and resampled policy action at the intervention state, we build preference pairs to define a counterfactual advantage that penalizes Bellman targets of the identified suboptimal segment, enabling directional credit calibra-tion. Moreover, we directly align the policy with human corrective actions in the bounded mean space, providing an additional signal beyond critic-guided updates. Across five real-robot manipulation tasks, PACT improves the average success rate by 24.5% and achieves 1.3 × faster convergence, improving both RL sample efficiency and performance. Code is available at Code Link .
+
+Keywords: Robotic Manipulation, Reinforcement Learning 
+
+1 Introduction 
+
+Deep reinforcement learning (DRL) has made substantial progress in robotic manipulation by en-abling agents to acquire complex behaviors through trial-and-error interaction [1, 2]. However, simulation-trained policies often suffer from domain-transfer failures [3], while real-world explo-ration is constrained by high interaction cost and safety risks [4]. Human-in-the-loop RL (HIL-RL) addresses these challenges by incorporating real-time operator intervention, achieving effective pol-icy learning under limited interaction budgets and substantially improving the sample efficiency of real-robot RL [5, 6, 7, 8]. Despite recent progress, existing HIL-RL methods remain sample-inefficient and require substantial human intervention during training. We argue that this limitation partly stems from their neglect of the intrinsic heterogeneity of intervention-containing successful trajectories, where normal explo-ration, suboptimal segments, and human recovery coexist. In such trajectories, task success does not imply that all actions are beneficial, since some policy actions may deviate from the desired task-execution path and force human intervention. However, current methods typically apply the same credit assignment principle to all transitions, treating them as homogeneous learning samples. Un-
+
+> †
+
+Corresponding author.                                   
+
+> arXiv:2606.03949v1 [cs.RO] 2 Jun 2026 Real -world Tasks Evaluation
+> Success Rate
+> Intervention Rate
+> HIL -SERL Ours
+> 25
+> 50
+> 75
+> 100 82.5%
+> 58.0%
+> 24.5%
+> 20
+> 30
+> 40
+> 50 47.1%
+> 32.3%
+> 14.8%
+> Normal Exploration Suboptimal Segment Human Intervention
+> Start Forward Offset Wrong Pick Retry Success
+> Q-Value
+> 0.42
+> Q-Value
+> 0.50
+> Q-Value
+> 0.55
+> Q-Value
+> 0.63
+> Q-Value
+> 0.77
+> Q-Value
+> 0.90
+> Consistent credit assignment principle for all transitions by Standard Bellman Target :
+> Q-Value
+> 0.35
+> Q-Value
+> 0.50
+> Q-Value
+> 0.37
+> Q-Value
+> 0.1
+> Q-Value
+> 0.75
+> Q-Value
+> 0.88
+> Discounted Reward Propagates Calibration for Bellman Target Intervention Point
+> Credit Mis -assignment Caused by Trajectory Heterogeneity in HIL -RL
+> Implicit Preference Signal
+> ①
+> ②
+> ①HIL -SERL ②Ours
+> Critic
+> Critic
+> Actor
+> Actor Update Signal
+
+Figure 1: PACT calibrates credit assignment in intervention trajectories by localizing suboptimal segments and correcting inflated Q-values. der sparse terminal rewards, this uniformly propagates the final success signal through suboptimal segments, overestimating their actual contribution to task success. The resulting inflated Q-values can further misguide actor updates, since the policy is optimized to maximize the critic estimate, thereby reinforcing similar suboptimal behavior patterns and slowing convergence. To address this issue, we propose PACT, a Preference-calibrated Actor-Critic Training framework for HIL-RL. Different from existing HIL-RL methods, PACT treats intervention-containing suc-cessful trajectories as heterogeneous learning samples, performs fine-grained credit calibration by identifying suboptimal action segments according to their contribution to task success, and guides policy and preference alignment. As shown in Figure 1, PACT constructs zero-cost preference pairs from human corrective actions and policy actions at the intervention state. These preferences are used to directionally penalize the Bellman targets of identified suboptimal segments, suppressing Q-value overestimation on the critic side, while directly guiding the actor toward human-preferred corrective actions beyond conventional critic-guided updates. Across five real-robot manipulation tasks, PACT improves the average success rate from 58.0% to 82.5%, reduces the intervention rate from 47.1% to 32.3%, and achieves 1.3 × faster training than HIL-SERL, with no inference-time overhead. Our main contributions are summarized as follows: • We propose PACT, a plug-and-play preference-calibrated actor-critic training framework that ad-dresses credit misassignment in HIL-RL caused by trajectory heterogeneity. • We design a progress model trained from human demonstrations to locate suboptimal segments for critic correction, and further build preference pairs to perform both critic and actor sides cali-bration, including credit reassignment and policy optimization guidance. • We conduct extensive experiments on five real-robot manipulation tasks, demonstrating improved success rate, reduced human intervention, and faster convergence. 
+
+2 Related Work 
+
+2.1 Human in the loop RL for Robotic Manipulation 
+
+Real-robot RL learns policies through direct interaction with physical environments, but its sample efficiency is severely constrained by costly data collection and safety risks, especially compared with large-scale parallel simulation [9, 10, 11]. Prior work improves real-world efficiency through model-based RL [12, 13], hybrid approaches [9, 14], and priors from pretrained foundation models [15, 16], but these methods often introduce additional modeling, training, or deployment overhead. Human-in-the-loop RL offers a practical alternative by allowing operators to intervene during online explo-ration. Early human-robot collaborative learning builds on interactive imitation learning [17, 18], but purely imitative objectives cannot continuously improve through trial-and-error interaction. Recent methods therefore combine offline demonstrations with online RL [19, 20]. Among them, SERL [8] provides a complete real-robot RL framework, and HIL-SERL [5] further incorporates real-time intervention trajectories into replay-based training, achieving strong performance on dexterous ma-nipulation tasks. Nevertheless, existing HIL-RL methods still optimize all transitions uniformly, 2overlooking the heterogeneity in intervention-containing successful trajectories and thus inducing credit misassignment. In this paper, we address this by exploiting intervention-induced preferences for credit reassignment on identified suboptimal segments. 
+
+2.2 Q-value Correction and Preference Learning 
+
+Q-value overestimation is a long-standing challenge in reinforcement learning. Existing meth-ods mainly address it by improving critic estimation, such as Double DQN [21], TD3 [22], and CQL [23], or by reshaping Bellman learning with additional supervisory signals. The latter in-cludes reward shaping with dense rewards [24, 25, 26], inverse RL from expert demonstrations [27], and preference-based learning from human comparisons [28, 29]. However, these methods typi-cally rely on global trajectory-level correction, external reward models, or costly human annotation, and thus do not address segment-level credit errors inside intervention-containing trajectories. In contrast, HIL-RL naturally provides a zero-cost preference signal: at each intervention point, the human corrective action is preferred to the policy action. Based on this signal, our method per-forms preference-calibrated segment-level credit correction to reshape Bellman targets and further constrains actor learning for more sample-efficient policy optimization. 
+
+3 Methodology 
+
+In this section, we first introduce the problem of credit misassignment in HIL-RL (3.1). Then, we present a lightweight progress model used to localize suboptimal segments (3.2). Building on this, we propose a preference-aware counterfactual Q-value correction method to suppress overestimation (3.3). Finally, we introduce a preference auxiliary policy optimization that directly guides policy learning at intervention points (3.4). Our overall pipeline can be seen in Figure 2. 
+
+3.1 Preliminaries and Problem Statement 
+
+Real-robot manipulation can be formulated as a Markov Decision Process M = ( S, A, P, r, γ ),where S is the state space, A is the action space, P(st+1 |st, a t) is the transition dynamics, r(st, a t)
+
+is the reward function, and γ ∈ [0 , 1) is the discount factor. The objective is to learn a policy 
+
+πθ (at|st) that maximizes the expected cumulative discounted return Eπθ
+
+hPTt=0 γtr(st, a t)
+
+i
+
+.Recent HIL-RL methods improve the sample efficiency by incorporating human intervention and optimizing the policy with RLPD [20]. The critic is trained with the standard Bellman target: 
+
+ˆystd t = rt + γQ ¯ϕ(st+1 , π θ (st+1 )) , Lcritic = E(st,a t,r t,s t+1 )∼B 
+
+h Qϕ(st, a t) − ˆystd t
+
+2i
+
+, (1) where B is the replay buffer, and Q ¯ϕ ≜ min i=1 ,2 Q ¯ϕi denotes the clipped target Q-value. The actor is updated by maximizing the critic estimate with entropy regularization: 
+
+Lactor = −Est∼B [Qϕ(st, π θ (st)) + αH(πθ (·| st))] , (2) where α is the temperature coefficient and H(·) is the entropy loss. However, this objective applies the same backup to all transitions. An intervention-containing successful trajectory is heterogeneous and can be written as τ = τ norm ◦ τ sub ◦ τ hum , where 
+
+τ norm = {st, a t}ta−1 
+
+> t=0
+
+, τ sub = {st, a t}th−1 
+
+> t=ta
+
+, and τ hum = {st, a t}T −1 
+
+> t=th
+
+denotes the normal, sub-optimal, and human intervention segments, respectively. Under sparse terminal rewards, Eq. (1) propagates the success signal through the entire trajectory, assigning undeserved credit to actions in 
+
+τ sub and resulting in Q-values overestimation. In light of this, we aim to address this issue by rep-resenting such trajectories as structured heterogeneous data and handling them at a finer granularity during training, enabling more accurate credit assignment and more efficient policy optimization. 3Normal                  
+
+> Exploration
+> Suboptimal
+> Segment
+> Human
+> Intervention
+> Wrist
+> Image
+> Side
+> Image
+> State
+> (a) Progress Model -based Suboptimal Segment Localization
+> (I) Suboptimal Segment Localization
+> (II) Preference Calibration
+> Action Space
+> Policy
+> action
+> Policy Human
+> action
+> (c) Preference Auxiliary Policy Optimization
+> (III) Real -World Online RL
+> Learner Process
+> Selected
+> Samples Critic
+> Actor
+> RLPD
+> PACT
+> Actor
+> Actor Process
+> Env
+> a
+> s, r
+> Policy
+> Suboptimal Segment
+> Progress
+> Model
+> Multi -modal Input Replay
+> Buffer
+> Demo
+> Buffer
+> Preference
+> Buffer
+> Preference Pair
+> resample action at
+> (b) Preference -Aware Counterfactual Correction
+> Before After
+> Same State
+> (Intervention)
+> Policy
+> Action
+> Human
+> Action
+> Preference Buffer Suboptimal Segment
+
+Figure 2: PACT converts intervention-containing trajectories into preference-calibrated critic and actor updates for sample-efficient real-world HIL-RL. 
+
+3.2 Lightweight Progress Model-based Suboptimal Segment Localization 
+
+To localize the suboptimal segments, we design a lightweight task progress estimator fψ : O → 
+
+[0 , 1] that maps observations to a scalar progress value. It is trained in a fully self-supervised manner using only the demonstration data Ddemo , with zero additional data collection or annotation cost. 
+
+Input Representation. We employ an encoder gimg : gres · h to encode image data and a learnable MLP gprop : R7 → Rdp to encode robot proprioceptive data, where gres : RH×W ×3 → Rdv is a frozen pretrained ResNet encoder, and h : Rdv → Rdz is a learnable projection. Let Iw
+
+t , I s
+
+t denote wrist and side camera images. The observation is constructed from residuals relative to the initial frame and proprioceptive displacement: 
+
+ot = [ gimg (Iw
+
+t − Iw
+
+0 ), g img (Is
+
+t − Is
+
+0), g prop (qt − q0)] , ˆpt = fψ (ot). (3) The progress model fψ then predicts a scalar value ˆpt = fψ (ot) ∈ [0 , 1] .
+
+Self-Supervised Training. Building on the assumption that successful demonstration trajectories are near-optimal and exhibit smooth, monotonic task progress, we use uniform progress p∗
+
+t = t/T as pseudo-labels for a trajectory of T steps. Furthermore, the regression loss with a discounted Monte Carlo return is introduced to strengthen the terminal supervision over the final segment Tend :
+
+Lprogress = 1
+
+T
+
+T −1X
+
+t=0 
+
+
+
+fψ (ot) − tT
+
+2
+
++ λmc 
+
+|T end |
+
+X
+
+t∈T end 
+
+fψ (ot) −
+
+T −t−1X
+
+k=0 
+
+γkrt+k
+
+!2
+
+. (4) 
+
+Suboptimal Segment Localization. We perform progress inference on intervention-containing suc-cessful trajectories to localize suboptimal segments by localizing abnormal progress patterns before interventions. Let ˆpt = fψ (ot) and ∆w(t) = ˆ pt+w − ˆpt, we identify a regression anchor when the predicted progress within a short future window drops below the current progress by a margin: 
+
+ta = min {t < t h | ∃ w ∈ { 1, . . . , min( W, t h − t)}, ˆpt+w < ˆpt − δreg } , (5) where the recovery point is defined as the first timestep after ta with K consecutive progress in-creases: 
+
+tr = min {t > t a | ˆpt+k − ˆpt+k−1 > 0, ∀k = 1 , . . . , K } . (6) If no recovery is found before intervention, we set tr = th − 1. The resulting interval [ta, t r ] is treated as a candidate suboptimal segment for subsequent critic correction. 
+
+3.3 Preference-Aware Counterfactual Correction 
+
+Given the identified suboptimal segments, PACT calibrates critic learning by converting preferences into target-level corrections. The key idea is to measure how much the current critic violates the preference that human corrective actions should be favored over suboptimal policy actions. 
+
+Counterfactual Advantage . Human intervention induces a local preference: at the interven-tion state, the corrective action ahuman 
+
+th should be valued above the policy action aπth , i.e., 4Q(sth , a human  
+
+> th
+
+) > Q (sth , a πth ) under the desired value function. To operationalize this preference, we introduce a counterfactual advantage that measures the preference-violating value gap under the current target critic. This term provides a directional calibration signal for critic learning and deter-mines how much over-credited value should be removed from the preceding suboptimal segment: 
+
+Acf = sg max  Q ¯ϕ(sth , a πth ) − Q ¯ϕ(sth , a human  
+
+> th
+
+), 0 , (7) where sg[ ·] denotes the stop-gradient operator, and the non-negative clipping ensures directional suppression of preference-violating critic estimates. 
+
+Corrected Bellman Target. Although Acf is computed from a single intervention point, the de-tected interval [ta, t r ] corresponds to the policy-executed segment leading to the intervention. There-fore, we use Acf as a segment-level correction signal to calibrate its Bellman targets. Considering early actions near ta may still reflect exploratory behavior and have weaker causal evidence for intervention, whereas later actions are more strongly associated with the detected sub-optimal execution. We introduce a position-aware exponential weight ω(t) = exp 
+
+
+
+−β · tr −ttr −ta
+
+
+
+,
+
+where β controls how sharply the correction increases along the segment. The exponential form provides conservative correction for early uncertain actions while concentrating stronger calibration on later high-confidence suboptimal actions. Let ˆystd  
+
+> t
+
+= rt + γQ ¯ϕ(st+1 , π θ (st+1 )) denote the standard Bellman target. PACT penalize the Bellman target by subtracting the position-weighted counterfactual correction: 
+
+ˆycorr  
+
+> t
+
+=
+
+ˆystd  
+
+> t
+
+− ω(t) · Acf , if t ∈ [ta, t r ],
+
+ˆystd  
+
+> t
+
+, otherwise . (8) The critic is then trained by minimizing the temporal-difference error to the corrected target: 
+
+Lcritic = 12
+
+> 2
+
+X
+
+> i=1
+
+E(st,a t,r t,s t+1 )∼B 
+
+h
+
+(Qϕi (st, a t) − ˆycorr  
+
+> t
+
+)2i
+
+. (9) 
+
+3.4 Preference Auxiliary Policy Optimization 
+
+While the corrected critic suppresses value inflation on suboptimal segments, the intervention signal can also directly guide the policy distribution learning. For each intervention state sth , we obtain a zero-cost preference pair (ahuman , a π ). A direct log-probability preference objective, as in discrete-action preference optimization [30], is ill-conditioned for continuous tanh-squashed Gaussian actors. As training converges and the policy variance shrinks, log-probability gaps become dominated by the 1/σ 2 
+
+> d
+
+term, leading to unstable gradients. We therefore impose the preference in the bounded mean-action space and backpropagate only through the squashed mean ¯aθ (s) = tanh( μθ (s)) :
+
+Lpref = E(s,a human ,a π )∼B pref 
+
+"
+
+tanh( μθ (s)) − ahuman 2 + 1
+
+∥tanh( μθ (s)) − aπ ∥2 + ϵ
+
+#
+
+, (10) where the first term aligns the actor with the corrective action, the second repels it from the intervention-triggering policy action, and ϵ prevents numerical singularity. The final actor objec-tive combines the standard RLPD actor loss with the preference-calibration term: 
+
+Lactor = LRLPD + λpref Lpref , (11) where λpref controls the strength of actor-side preference calibration. 
+
+4 Experimental Results 
+
+We evaluate PACT on real-robot manipulation tasks through four questions. (1) . Does PACT im-prove sample efficiency and performance (Section 4.2)? (2) . Can the progress model reliably iden-tify suboptimal segments before human interventions (Section 4.3)? (3) . Can preference-aware counterfactual correction mitigate Q-value overestimation during training (Section 4.4)? (4) . How does each component contribute to the policy performance improvement (Section 4.5)? 5Table 1: Real-world Results. Comparison of the success rate, intervention rate, and training time between PACT and HIL-SERL across five real-world tasks                                                             
+
+> Metric Method Press Insertion Pick Pick & Place Assembly Average Success Rate (%) ↑HIL-SERL 85.0 73.0 67.0 55.0 10.0 58.0
+> PACT 95.0 90.0 95.0 70.0 62.5 82.5 Intervention Rate (%) ↓HIL-SERL 43.6 45.3 35.8 54.9 56.0 47.1
+> PACT 19.1 32.5 26.1 36.6 47.2 32.3 Run Time (Minutes) ↓HIL-SERL 23.2 51.8 75.0 110.8 142.6 80.7
+> PACT 21.4 30.3 46.6 94.5 122.1 63.0 Press Insertion Pick Pick &Place Assembly
+> Ours HIL -SERL
+> Intervention Rate Success Rate
+> Training Steps (K) Training Steps (K) Training Steps (K) Training Steps (K) Training Steps (K)
+
+Figure 3: Real-robot training dynamics of PACT and HIL-SERL across five manipulation tasks. 
+
+4.1 Experiment Setup Real Robot Task. We evaluate PACT on five real-world manipulation tasks with increasing diffi-culty: Press , Insertion , Pick , Pick & Place , and Assembly . For each task, we collect 20 demonstra-tion trajectories and store them in Ddemo for progress model training and early-stage RL stabiliza-tion. All experiments are conducted on a Galaxea A1X 6-DoF arm. 
+
+Baseline and Evaluation Metrics. We adopt HIL-SERL [5] as the primary baseline. It incorporates human intervention trajectories into replay-based off-policy training with the entropy-regularized RLPD objective and represents the state-of-the-art HIL-RL framework for real-world manipulation. We evaluate each method using three metrics: the final success rate (SR), the training time, and the average human intervention rate (IR). The human intervention rate is defined as the ratio between the number of intervention steps and the total robot interaction steps. 
+
+4.2 Comparisons with the State-of-the-Art 
+
+Table 1 reports final quantitative results for PACT and HIL-SERL, while Fig. 3 shows their train-ing dynamics in intervention and success rates across five tasks. PACT consistently improves final performance and sample efficiency, increasing the average success rate from 58 .0% to 82 .5% and reducing the average intervention rate from 47 .1% to 32 .3% . The improvement is especially pro-nounced on Assembly , the most complex task, where PACT reaches a 62 .5% success rate in 122 minutes, compared with only 10 .0% for HIL-SERL over 140 minutes. PACT also shortens average training time from 80 .7 to 63 .0 minutes, indicating faster convergence under the same real-robot training pipeline. The learning curves in Fig. 3 further show that PACT reduces human intervention more rapidly while achieving faster success-rate growth, suggesting that preference-aware segment-level correction improves policy learning rather than merely relying on additional human recovery. 
+
+4.3 Progress Model Analysis Qualitative Results. We first examine whether the progress model localizes behaviorally meaning-ful suboptimal segments for subsequent credit correction. Fig. 4 visualizes representative real-robot 6rollouts, where the end-effector trajectories are plotted in 3D space and the segments detected by the progress model are highlighted in red. These segments align with typical failure patterns, such as hesitation in Insertion , wrong grasp in Pick , and directional deviation in Pick & Place , suggest-ing that the identified results are closely associated with degraded execution, providing a basis for targeting segment-level credit correction at the detected suboptimal parts of intervention-containing successful trajectories. ① Step 25 ② Step 50 ③ Step 75 ④ Step 108                                                     
+
+> ①Step 25
+> ②Step 50
+> ③Step 75
+> ④Step 108
+> ①Step 60 ②Step 120 ③Step 180 ④Step 220
+> ①Step 60
+> ②Step 120
+> ③Step 180
+> ④Step 220
+> ①Step 30 ②Step 60 ③Step 90 ④Step 132
+> Hesitation Wrong Grasp Path Offset
+> ①Step 30
+> ②Step 60
+> ③Step 90
+> ④Step 132
+> Insertion Pick Pick &Place
+
+Figure 4: Progress-based suboptimal segment localization. The red segments denote identified sub-optimal portions, which correspond to wrong behavior in RL rollouts. 
+
+Quantitative Evaluation. Since the progress model is trained without external supervised labels, we assess its localization results using two post-hoc, model-independent kinematic metrics: path efficiency η and direction deviation ∆θ. For a trajectory segment [tstart , t end ], they are defined as: 
+
+η = ∥pos( tend ) − pos( tstart )∥
+
+Ptend −1 
+
+> t=tstart
+
+∥pos( t + 1) − pos( t)∥ , ∆θ = arccos  ⃗ dseg ·⃗ ddemo 
+
+∥⃗dseg ∥∥ ⃗ddemo ∥
+
+!
+
+, (12) where ⃗ dseg = pos( tend ) − pos( tstart ),⃗ ddemo = pos demo (tmatch + N ) − pos demo (tmatch ), and 
+
+N = tend − tstart . Here, tmatch is the timestep in Ddemo whose end-effector position is nearest to pos( tstart ). These metrics capture complementary and task-agnostic aspects of motion quality, where η measures motion redundancy by comparing net displacement with accumulated path length and ∆θ measures execution drift as the angular mismatch between the segment direction and the nearest matched demonstration direction. As shown in Table 2, identified suboptimal segments consistently exhibit lower path efficiency and larger direction deviation, confirming that the progress model can effectively identify low-quality segments for subsequent Q-value correction. Table 2: Trajectory quality comparison between normal and identified suboptimal segments. η de-notes path efficiency, and ∆θ denotes the direction deviation to the nearest demonstration segment. 
+
+Metric Segment Press Button Insertion Pick Pick & Place Assembly Path Efficiency η ↑ Normal .530 .577 .551 .537 .495 Suboptimal .521 .471 .490 .432 .473 
+
+Direction Deviation ∆θ ↓ Normal 47.1 ◦ 41.7 ◦ 40.4 ◦ 54.8 ◦ 38.8 ◦
+
+Suboptimal 67.4 ◦ 67.4 ◦ 68.3 ◦ 83.1 ◦ 63.7 ◦
+
+4.4 Q-value Correction Analysis 
+
+We further evaluate whether preference-aware counterfactual correction suppresses Q-value over-estimation during training. Since true action values are unavailable in real-robot experiments, we use the Monte Carlo return Gt only as a diagnostic reference and compare the learned critics of HIL-SERL and PACT on intervention-containing successful episodes. 7Table 3: Average critic bias Q(s, a ) − Gt on detected suboptimal segments. Positive values indicate overestimation relative to the Monte Carlo return. 
+
+Method Press Insertion Pick Pick & Place Assembly 
+
+HIL-SERL +0 .029 +0 .114 +0 .019 +0 .054 +0 .060 
+
+PACT −0.042 −0.061 −0.107 −0.146 −0.152 
+
+Fig. 5(a) compares the target Q-value evolution during training on the Insertion task. HIL-SERL produces rapidly increasing target values, suggesting that uniform TD backup propagates terminal rewards to suboptimal pre-intervention segments and leads to value inflation. In contrast, PACT keeps the value estimates more conservative through preference-aware correction. Fig. 5(b) shows a representative case. Within the detected correction segment, HIL-SERL assigns values higher than the MC reference, whereas PACT substantially lowers the estimated values. Fig. 5(c) further aggregates the normalized critic bias Q(s, a ) − Gt over 20 episodes, where HIL-SERL exhibits consistently positive bias while PACT largely suppresses this overestimation. Table 3 confirms this trend across all five tasks. 0 3 6 9 12                  
+
+> Training Steps (K)
+> 1
+> 0
+> 1
+> Target Q-value
+> PACT end
+> (a)
+> 20 30 40
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> HIL-SERL tail
+> 025 50 75 100 125
+> Timestep
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+> 1.00
+> Predicted Q-Value
+> (b) Correction Segment
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Normalized Timestep
+> -0.40
+> -0.20
+> 0.00
+> 0.20
+> 0.40
+> Q(s, a) Gt
+> (c)
+> HIL-SERL PACT MC Return GtCorrection Segment
+
+Figure 5: Q-value correction analysis. (a) Training stage Q-value evolution. (b) Single-trajectory value profile. (c) Normalized critic bias over intervention-containing successful episodes. 
+
+4.5 Ablation Study 
+
+Table 4: Ablation study on Insertion .
+
+Setting SR@30min ↑ IR@30min ↓
+
+w/o. C1 60% 41.3% w/o. C2 80% 45.0% 
+
+PACT 90% 32.5% 
+
+We conduct ablations on the Insertion task. Here, C1 denotes the critic-side correction module, including progress-based segment localization with Q-value cor-rection, and C2 denotes the actor-side preference loss. As shown in Table 4, removing C1 causes the largest success-rate drop, while removing C2 mainly increases the intervention rate. The full PACT achieves the best result, suggesting that critic-side correction and actor-side preference learning are complementary. 
+
+5 Conclusion 
+
+In this paper, we propose a Preference-Calibrated HIL-RL method that treats intervention trajec-tories as structured heterogeneous data. By localizing suboptimal segments, correcting inflated Bellman targets with intervention-induced preferences, and aligning the actor toward human pref-erence actions, PACT improves success rates, reduces human intervention, and accelerates training across five real-robot manipulation tasks. Further analyses show that the progress model, critic cor-rection, and actor-side preference objective contribute complementary benefits for sample-efficient real-world robot learning. 
+
+6 Limitation 
+
+While PACT substantially improves sample efficiency in real-world HIL-RL, it does not fully re-solve credit assignment under all manipulation conditions. To keep the method lightweight and 8annotation-free for real-robot training, the progress model relies on limited demonstration-based self-supervision and may be affected by non-monotonic trajectories or repetitive execution pat-terns. Since the subsequent critic correction depends on the localized suboptimal segments, such localization errors may further propagate to critic learning. Moreover, the proposed counterfactual advantage provides a directional preference-based correction rather than a precise per-step value tar-get, making it more suitable for suppressing systematic overestimation than for fine-grained value calibration. Future work could incorporate semantic-rich progress models, VLM-assisted progress reasoning, and pretrained progress representations to improve robustness and enable more accurate credit reassignment in complex long-horizon real-robot tasks. 
+
+Acknowledgments 
+
+This work was supported by the Singapore National Robotics Programme Research Project DS-RFM M25N4N2009, the National Natural Science Foundation of China 92467107, and the Scientific Research Innovation Capability Support Project for Young Faculty ZYGXQNJSKYCXNLZCXM-I27. 
+
+References 
+
+[1] H. Deng, Z. Wu, H. Liu, W. Guo, Y. Xue, Z. Shan, C. Zhang, B. Jia, Y. Ling, G. Lu, et al. A survey on reinforcement learning of vision-language-action models for robotic manipulation. 
+
+Authorea Preprints , 2025. [2] J. Cui and J. Trinkle. Toward next-generation learned robot manipulation. Science robotics , 6 (54):eabd9461, 2021. [3] M. Yang, Y. Lin, A. Church, J. Lloyd, D. Zhang, D. A. Barton, and N. F. Lepora. Sim-to-real model-based and model-free deep reinforcement learning for tactile pushing. IEEE Robotics and Automation Letters , 8(9):5480–5487, 2023. [4] L. Chen, Y. Lei, S. Jin, Y. Zhang, and L. Zhang. Rlingua: Improving reinforcement learning sample efficiency in robotic manipulations with large language models. IEEE Robotics and Automation Letters , 9(7):6075–6082, 2024. [5] J. Luo, C. Xu, J. Wu, and S. Levine. Precise and dexterous robotic manipulation via human-in-the-loop reinforcement learning. Science Robotics , 10(105):eads5033, 2025. [6] Y. Chen, S. Tian, S. Liu, Y. Zhou, H. Li, and D. Zhao. Conrft: A reinforced fine-tuning method for vla models via consistency policy. arXiv preprint arXiv:2502.05450 , 2025. [7] H. Deng, Y. Lin, Y. Xue, H. Du, Q. Wang, B. Zhou, Z. Wu, and Z. Wang. E2hil: Entropy-guided sample selection for efficient real-world human-in-the-loop reinforcement learning. 
+
+IEEE Robotics and Automation Letters , 2026. [8] J. Luo, Z. Hu, C. Xu, Y. L. Tan, J. Berg, A. Sharma, S. Schaal, C. Finn, A. Gupta, and S. Levine. Serl: A software suite for sample-efficient robotic reinforcement learning. In 2024 IEEE Inter-national Conference on Robotics and Automation (ICRA) , pages 16961–16969. IEEE, 2024. [9] T. Zhang and H. Mo. Reinforcement learning for robot research: A comprehensive review and open issues. International Journal of Advanced Robotic Systems , 18(3):17298814211007305, 2021. [10] M. Torne, A. Simeonov, Z. Li, A. Chan, T. Chen, A. Gupta, and P. Agrawal. Reconciling reality through simulation: A real-to-sim-to-real approach for robust manipulation. arXiv preprint arXiv:2403.03949 , 2024. [11] H. Ju, R. Juan, R. Gomez, K. Nakamura, and G. Li. Transferring policy of deep reinforcement learning from simulation to reality for robotics. Nature Machine Intelligence , 4(12):1077– 1087, 2022. 9[12] I. Clavera, J. Rothfuss, J. Schulman, Y. Fujita, T. Asfour, and P. Abbeel. Model-based re-inforcement learning via meta-policy optimization. In Conference on robot learning , pages 617–629. PMLR, 2018. [13] M. A. Lee, C. Florensa, J. Tremblay, N. Ratliff, A. Garg, F. Ramos, and D. Fox. Guided uncertainty-aware policy optimization: Combining learning and model-based strategies for sample-efficient policy learning. In 2020 IEEE international conference on robotics and au-tomation (ICRA) , pages 7505–7512. IEEE, 2020. [14] K. Lei, H. Li, D. Yu, Z. Wei, L. Guo, Z. Jiang, Z. Wang, S. Liang, and H. Xu. Rl-100: Performant robotic manipulation with real-world reinforcement learning. arXiv preprint arXiv:2510.14830 , 2025. [15] F. Zhong, K. Wu, H. Ci, C. Wang, and H. Chen. Empowering embodied visual tracking with visual foundation models and offline rl. In European Conference on Computer Vision , pages 139–155. Springer, 2024. [16] K. Kawaharazuka, T. Matsushima, A. Gambardella, J. Guo, C. Paxton, and A. Zeng. Real-world robot applications of foundation models: A review. Advanced Robotics , 38(18):1232– 1254, 2024. [17] M. Kelly, C. Sidrane, K. Driggs-Campbell, and M. J. Kochenderfer. Hg-dagger: Interactive imitation learning with human experts. In 2019 International Conference on Robotics and Automation (ICRA) , pages 8077–8083. IEEE, 2019. [18] S. Ross, G. Gordon, and D. Bagnell. A reduction of imitation learning and structured predic-tion to no-regret online learning. In Proceedings of the fourteenth international conference on artificial intelligence and statistics , pages 627–635. JMLR Workshop and Conference Pro-ceedings, 2011. [19] M. Vecerik, T. Hester, J. Scholz, F. Wang, O. Pietquin, B. Piot, N. Heess, T. Roth¨ orl, T. Lampe, and M. Riedmiller. Leveraging demonstrations for deep reinforcement learning on robotics problems with sparse rewards. arXiv preprint arXiv:1707.08817 , 2017. [20] P. J. Ball, L. Smith, I. Kostrikov, and S. Levine. Efficient online reinforcement learning with offline data. In International Conference on Machine Learning , pages 1577–1594. PMLR, 2023. [21] H. Van Hasselt, A. Guez, and D. Silver. Deep reinforcement learning with double q-learning. In Proceedings of the AAAI conference on artificial intelligence , volume 30, 2016. [22] S. Fujimoto, H. Hoof, and D. Meger. Addressing function approximation error in actor-critic methods. In International conference on machine learning , pages 1587–1596. PMLR, 2018. [23] A. Kumar, A. Zhou, G. Tucker, and S. Levine. Conservative q-learning for offline reinforce-ment learning. Advances in neural information processing systems , 33:1179–1191, 2020. [24] Y. Cao, H. Zhao, Y. Cheng, T. Shu, Y. Chen, G. Liu, G. Liang, J. Zhao, J. Yan, and Y. Li. Survey on large language model-enhanced reinforcement learning: Concept, taxonomy, and methods. IEEE Transactions on Neural Networks and Learning Systems , 36(6):9737–9757, 2024. [25] F. Memarian, W. Goo, R. Lioutikov, S. Niekum, and U. Topcu. Self-supervised online re-ward shaping in sparse-reward environments. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 2369–2375. IEEE, 2021. [26] R. Devidze, P. Kamalaruban, and A. Singla. Exploration-guided reward shaping for reinforce-ment learning under sparse rewards. Advances in Neural Information Processing Systems , 35: 5829–5842, 2022. 10 [27] T. Phan-Minh, F. Howington, T.-S. Chu, M. S. Tomov, R. E. Beaudoin, S. U. Lee, N. Li, C. Dicle, S. Findler, F. Suarez-Ruiz, et al. Driveirl: Drive in real life with inverse reinforcement learning. In 2023 IEEE International Conference on Robotics and Automation (ICRA) , pages 1544–1550. IEEE, 2023. [28] P. F. Christiano, J. Leike, T. Brown, M. Martic, S. Legg, and D. Amodei. Deep reinforcement learning from human preferences. Advances in neural information processing systems , 30, 2017. [29] R. Rafailov, A. Sharma, E. Mitchell, C. D. Manning, S. Ermon, and C. Finn. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741, 2023. [30] J. Hong, N. Lee, and J. Thorne. Orpo: Monolithic preference optimization without reference model. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , pages 11170–11189, 2024. 11

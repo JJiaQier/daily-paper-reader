@@ -1,0 +1,421 @@
+Title: Uncertainty-Aware and Temporally Regulated Expert Advice in Reinforcement Learning for Autonomous Driving
+
+URL Source: https://arxiv.org/pdf/2605.30576v1
+
+Published Time: Mon, 01 Jun 2026 00:14:48 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+> © 2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works. The IEEE International Conference on Intelligent Transportation Systems (ITSC 2026) - 15-18 September, 2026.
+
+# Uncertainty-Aware and Temporally Regulated Expert Advice in Reinforcement Learning for Autonomous Driving 
+
+Ahmed Abouelazm 1,2, Felix Klingebiel 2, Philip Schoerner 1,2, and J. Marius Z¨ ollner 1,2
+
+Abstract — Exploration in reinforcement learning for au-tonomous driving is inherently unsafe: agents must experience novel behaviors to learn, yet exploration can lead to collisions or off-road driving. We propose an uncertainty-aware framework that leverages expert advice to guide exploration while avoiding long-term dependence. Advice is triggered when epistemic or aleatoric uncertainty exceeds adaptive thresholds derived from rolling buffers, ensuring advice evolves with the agent’s confidence. A commitment–cooldown strategy with a stochastic early-stop heuristic regulates the duration and frequency of guidance, exposing the agent to coherent maneuvers without exhausting the advice budget. Expert and agent experiences are combined in a shared replay buffer within an off-policy implicit quantile network (IQN) backbone, enabling efficient reuse of expert trajectories. Experiments in CARLA show that our method outperforms the IQN baseline, improving success by 5–7% and reducing failures, demonstrating that risk-sensitive uncertainty coupled with regulated expert integration enables safer and more efficient exploration for sensor-based RL policy learning in unsignalized intersection navigation. 
+
+I. I NTRODUCTION 
+
+End-to-end (E2E) has emerged as a promising paradigm for autonomous driving (AD), mapping raw sensory in-puts directly to control actions and reducing reliance on handcrafted modular pipelines [1]. Among E2E approaches, reinforcement learning (RL) is particularly appealing: unlike Imitation learning (IL), which depends on expert demonstra-tions, RL enables agents to adapt through direct interaction with the environment [2]. By exploring different behaviors and receiving feedback via rewards, RL agents can handle complex conditions such as occlusions, erratic drivers, and rare events that are underrepresented in datasets. However, RL also poses fundamental challenges in sample efficiency and safety [3]. The learning process is driven by the interplay between exploration, where the agent deliber-ately samples novel actions to acquire new knowledge about the environment, and exploitation, where it applies its current policy to maximize expected rewards [2]. Exploration is in-dispensable for avoiding suboptimal policies and uncovering effective driving strategies, yet it inherently involves unsafe or undesirable behaviors [4]. At the same time, extensive exploration leads to poor sam-ple efficiency, as agents require a vast number of interactions before converging to a reliable policy [5]. These limitations underscore the need for mechanisms that constrain or prune exploration, directing the agent toward informative regions of the state space while preventing unnecessary behaviors.  
+
+> 1Authors are with the FZI Research Center for Information Technology, Germany
+
+name@fzi.de 
+
+> 2Authors are with the Karlsruhe Institute of Technology, Germany
+
+Research Gap. Existing work on safe exploration in RL for AD has followed several directions. Formal approaches such as Constrained Markov Decision Process (CMDP) [6], and Lyapunov functions [7] encode safety explicitly, but they require handcrafted risk definitions, involve complex opti-mization, and provide no mechanism to guide policies toward safer actions. To address these limitations, expert knowledge has been introduced through demonstrations. Demonstration-based pre-training [8] accelerates convergence yet leaves agents vulnerable to unsafe exploration and provides no corrective feedback, while human-in-the-loop systems [9] allow targeted interventions but are not scalable and remain detached from the agent’s internal decision process. More scalable alternatives replace humans with rule-based [10] or learned [11] expert policies, which intervene automatically based on predefined heuristics. Although ef-fective at preventing unsafe rollouts, rule-based triggers are overly conservative and context-dependent, while learned experts assume strong generalization and may overwrite valid actions with poor ones when this assumption fails. Recent advances shift control to the agent, allowing it to query expert advice when needed via triggers such as state uncer-tainty [12] and state novelty [13]. However, these approaches remain largely state-centric, neglect the risk induced by the agent’s exploratory actions, and lack mechanisms to regulate the frequency and impact of advice. To address these shortcomings, methods are needed that extend uncertainty estimation to capture action-related risk, combined with adaptive mechanisms that regulate advice and embed safety into the learned policy. 
+
+Contribution. This work proposes an RL framework for AD that improves exploration safety by extending un-certainty estimation to account for action-related risk and integrating expert input through adaptive mechanisms. The key contributions are:  
+
+> •
+
+Uncertainty-aware expert guidance: the agent re-quests advice in states with high epistemic or aleatoric uncertainty, storing both expert and agent transitions in a shared buffer for training.  
+
+> •
+
+Uncertainty estimation: aleatoric uncertainty (envi-ronmental risk) is derived from return variance, while epistemic uncertainty (limited knowledge) is measured via bootstrapped ensembles, enabling detection of risky and underexplored states.  
+
+> •
+
+Commitment–cooldown strategy: regulates advice use by applying expert actions over short horizons and en-forcing cooldowns, ensuring effective guidance without overreliance. 
+
+> arXiv:2605.30576v1 [cs.AI] 28 May 2026
+
+II. RELATED WORK 
+
+Safe RL in AD is challenging due to the need to balance efficiency with safety requirements. A common approach is to regulate exploration through constraints or learned objectives. CMDP formulations constrain cumulative risk below predefined thresholds [6], [14], while Lyapunov-based methods enforce stability by requiring a Lyapunov function to decrease along trajectories [7], [15]. Control Barrier Func-tions (CBFs) define forward-invariant safe sets and enforce constraints to keep trajectories within these sets [16], [17], and distributional RL optimizes risk-sensitive returns such as Conditional Value at Risk (CVaR) [18], [19]. Despite their differences, these approaches share key lim-itations: they solve complex optimization problems, depend on manually defined costs or stability conditions, or rely on learned objectives that are especially noisy at the start of training, and crucially, they lack mechanisms to actively guide the policy toward safer actions. This prompted the use of expert knowledge and demonstrations, which provide more direct and effective signals during exploration. Several works utilize demonstrations to pre-train policies, which accelerates convergence but leaves the agent vulnera-ble to unsafe exploration and provides no corrective feedback during training [8], [20]. Early integration strategies alternate between collecting episodes from the expert and from the agent’s policy [21], [22], which improves robustness but still limits expert input to entire episodes rather than targeted interventions. As these episodes predominantly capture nom-inal driving and seldom illustrate recovery from unsafe states, these methods fail to teach agents how to act in the situations where guidance is most needed. This limitation has driven interest in more active systems, where experts can intervene, or the agent selectively queries advice. A common form of active expert intervention is human-in-the-loop training [9], [23], where a supervisor monitors the environment and provides corrective actions to guide the agent out of unsafe states. While effective, this approach is not scalable for long training, introduces bias in when and how interventions occur, and remains detached from the agent’s decision process, as humans cannot fully observe the agent’s intentions and may override potential recovery actions prematurely. These challenges have shifted attention toward alternative expert policies that can offer more scalable and consistent intervention during training. For such alternative policies, explicit intervention signals are needed to decide when to prune unsafe exploration. One direction relies on rule-based definitions of risk, where interventions occur if the risk associated with the agent’s behavior exceeds a threshold [19], [24] or if the behavior is identified as unsafe through safety analysis [10], [25]. While effective at avoiding unsafe rollouts, these definitions are of-ten complex, context-dependent, and can restrict exploration and hinder policy improvement. To overcome the rigidity of rule-based experts, recent works employ learned expert policies. These experts inter-vene if the agent’s action has a low likelihood under the expert policy [26], or the expert’s value function deems it unsafe [27], or it deviates significantly from the expert’s optimal action [11]. Although more flexible, these methods assume that the expert policy generalizes reliably across the state space. When this assumption fails, interventions may overwrite reasonable agent actions with poor ones, leading to suboptimal behavior. This has opened the way for approaches where the agent selectively queries expert advice instead of being forced into intervention. Expert advice gives the agent more control by allow-ing it to decide when to query the expert. Several works trigger advice based on signals derived from the agent’s learning process, such as state uncertainty [12], [28], state novelty [13], [29], or similarity to unsafe states [30]. While these methods provide a more active framework, they focus primarily on state-based measures, neglect the risk induced by the agent’s actions, lack mechanisms to regulate the impact or frequency of advice, and often rely on fixed thresholds to decide when to intervene. These gaps motivate our framework for selective expert advice, which expands uncertainty estimation to explicitly account for action-related risks and employs adaptive triggering to deliver targeted guidance that is internalized by the policy during training. III. M ETHODOLOGY 
+
+Our framework, illustrated in Fig. 1, introduces an advice mechanism in which the agent requests guidance when its policy is uncertain about the state (epistemic uncertainty) or potentially unsafe due to its actions (aleatoric uncertainty). An adaptive triggering strategy regulates when and for how long advice is applied, ensuring that interventions accelerate learning without fostering long-term dependence. 
+
+A. Problem Formulation 
+
+We formalize policy learning for AD as a Partially Ob-servable Markov Decision Process (POMDP), defined by the tuple M = ⟨S , A, P, r, O, γ ⟩ where S and A denote the state and action spaces, and P(s′ | s, a ) the transition model describing the probability of reaching state s′ from state s
+
+under action a. The reward r(s, a ) specifies the immediate feedback for taking action a in state s, while γ ∈ [0 , 1) is the discount factor that balances short- and long-term returns. In contrast to an MDP, the agent cannot directly access the underlying state st. Instead, after executing an action 
+
+at, it receives an observation ot+1 ∼ O (st+1 , a t) which is generated from the hidden state st+1 via a sensor model. Beyond its own policy πθ , the agent has access to an expert policy πE that can be queried for advice, subject to a global budget B that limits the total number of requests and reflects practical constraints such as limited availability of human supervision or computationally expensive expert controllers. We treat the expert as a black-box oracle and make no assumptions about its optimality or consistency; we only require that it can provide an action for a given observation or state. To regulate when advice is requested, we introduce an advice decision policy ϕ : O × A → { 0, 1}.For convenience, we denote ϕt = ϕ(ot, a t), where ϕt = 1 Fig. 1: Overview of the proposed uncertainty-aware expert guidance framework. An ensemble distributional architecture provides epistemic and aleatoric uncertainty estimates. The agent queries the expert whenever either uncertainty exceeds adaptive thresholds derived from rolling buffers. A commitment–cooldown mechanism regulates the frequency and duration of advice. 
+
+indicates that the expert policy πE is queried at time t, and 
+
+ϕt = 0 denotes that the agent follows its own policy πθ .
+
+B. Policy Learning Algorithm 
+
+Our framework requires a learning algorithm that can integrate expert advice with agent experiences. This moti-vates an off-policy approach, where experiences are collected under a behavior policy πb and used to optimize the target policy πθ . This decoupling allows expert actions to be inserted into a shared replay buffer alongside agent rollouts, ensuring that advice can be reused across multiple updates. In contrast, on-policy methods couple data collection and optimization, so expert overrides produce biased gradient estimates. Additionally, these methods discard rollouts after each update; expert corrections cannot be reused, and their effect remains short-lived. Partial observability further complicates AD, as decisions must be made under both epistemic (limited knowledge) and aleatoric (sensor noise and occlusions) uncertainty. Conven-tional value-based methods optimize only expected returns, which do not capture these uncertainties. To address this, we adopt a distributional RL formulation that models the entire return distribution. Specifically, we employ the Implicit quantile network (IQN) [31], which uniformly samples quantile fractions 
+
+τ ∼ U [0 , 1] . Each τ is first embedded as cosine features and combined with the observation latent representation. The network then uses this joint representation to output 
+
+Zτ (ot, a ), which approximates the τ -quantile of the return distribution, i.e., the inverse cumulative distribution function 
+
+F −1
+
+> Z(ot,a )
+
+(τ ), as shown in Eq. 1. Furthermore, IQN supports risk-sensitive decision-making by conditioning on specific regions of the distribution, for instance, focusing on lower quantiles to prioritize safer driving. 
+
+Zτ (ot, a ) ≈ F −1
+
+> Z(ot,a )
+
+(τ ), τ ∼ U [0 , 1] (1) 
+
+C. Uncertainty Estimation 
+
+Uncertainty is central to our proposed approach, as it dic-tates when the agent should request expert advice, enabling dynamic adaptation in high-risk or ambiguous scenarios. To efficiently estimate uncertainty, we adopt an ensemble framework with multiple heads sharing a latent encoder, as illustrated in Fig. 1. Each head is trained on a different subset of the replay buffer [32], ensuring that variability in underexplored or ambiguous regions of the state space is reflected in the ensemble’s estimates. The model output is structured as NH × Nτ × NA, where 
+
+NH denotes the number of ensemble heads, Nτ the sampled quantiles, and NA the available actions. This output cap-tures variability across ensemble predictions, distributional samples, and actions, and serves as the foundation for the advice mechanism that determines when expert intervention is desired. To ensure reliable decision-making, the agent must account for both epistemic and aleatoric uncertainty, the two principal sources of uncertainty in RL [33]. 
+
+1) Epistemic Uncertainty: arises from the agent’s limited knowledge about the environment and is most pronounced in regions of the state space that have not been sufficiently explored [34]. During training, this uncertainty gradually decreases as the agent collects more diverse experiences, enabling it to form more confident estimates in previously unfamiliar situations. For AD, this is particularly relevant when the vehicle encounters uncommon road layouts or atypical maneuvers from other drivers. In such cases, high epistemic uncertainty reflects limited prior exposure but also indicates that the agent has the potential to improve its understanding if similar scenarios are encountered again. In this work, we propose a state-based formulation that jointly considers the return distributions of all actions. This choice provides a more stable estimate and aligns with the definition of epistemic uncertainty as a lack of knowledge about the full state dynamics, rather than about individual actions in isolation. Concretely, we measure the epistemic uncertainty as the variability of the quantile function across ensemble heads, aggregated over all actions. To better leverage the expressive power of distributional RL, we investigate two plausible formulations of epistemic uncertainty, each highlighting different aspects of the return distribution. Our objective is to assess which provides a more reliable signal in practice. The first formulation adopts a distributional perspective by comparing entire return distri-butions across ensemble heads using the Wasserstein distance 
+
+W1. For two heads h and h′, the distance is computed by averaging absolute differences across quantile samples, as shown in Eq. 2, where Z(h) 
+
+> τi
+
+(ot, a ) denotes the τi-quantile predicted by head h.
+
+W (h,h ′)1 (ot, a ) = 1
+
+Nτ
+
+X
+
+> τi∈τ
+
+Z(h) 
+
+> τi
+
+(ot, a ) − Z(h′) 
+
+> τi
+
+(ot, a ) (2) Epistemic uncertainty U epi W is computed as the mean pairwise Wasserstein distance across ensemble head pairs, capturing variability, and aggregated over actions into a state-based measure, as illustrated in Eq. 3. 
+
+U epi W (ot) = 1
+
+NA
+
+X
+
+> a∈A
+
+1
+
+ NH
+
+> 2
+
+
+
+> NH
+
+X
+
+> h,h ′=1
+> h<h ′
+
+W (h,h ′)1 (ot, a ) (3) The second formulation emphasizes a risk-sensitive perspec-tive. Rather than comparing full distributions, we approxi-mate the expected return using the CVaR [31], which focuses on the lower quantiles eτ determined by the risk parameter 
+
+α. For head h, the CVaR estimate is defined in Eq. 4, where 
+
+Z(h) 
+
+> eτi
+
+(ot, a ) denotes the predicted return at quantile eτi.
+
+CVaR (h) 
+
+> α
+
+(ot, a ) = 1
+
+Nτ
+
+X
+
+> τi∈τ
+
+Z(h) 
+
+> eτi
+
+(ot, a ), eτi = α τ i (4) Epistemic uncertainty U epi CVaR is then computed as the variance of these CVaR estimates across ensemble heads, aggregated over actions, as given in Eq. 5. 
+
+U epi CVaR (ot) = 1
+
+NA
+
+X
+
+> a∈A
+
+Var H
+
+  CVaR (h) 
+
+> α
+
+(ot, a ) (5) 
+
+2) Aleatoric Uncertainty: reflects the inherent random-ness in the environment and cannot be eliminated through training. It arises from factors such as sensor noise or partial observability [33]. For instance, when a vehicle approaches an occluded intersection, the presence, speed, or intention of unseen vehicles is fundamentally uncertain from the agent’s perspective, regardless of the agent’s prior experience. In this work, we follow the distributional interpretation used in [35], where aleatoric uncertainty is derived from the spread of the predicted return distribution. To align this with our advice mechanism, uncertainty is evaluated only for the action the agent intends to execute, since this action determines whether intervention is required. Accordingly, aleatoric uncertainty is defined as the lower-tail return-distribution variance of the selected risk-sensitive action a∗,chosen by the greedy CVaR-based policy in Eq. 6. 
+
+a∗ = arg max 
+
+> a∈A
+
+1
+
+NHNHX
+
+> h=1
+
+CVaR (h) 
+
+> α
+
+(ot, a ) (6) To quantify uncertainty for a∗, we focus on the lower-tail quantiles eτ , which are determined by the risk parameter 
+
+α. For each quantile eτi, we average the corresponding predictions across ensemble heads, yielding the ensemble-mean quantile estimate μeτi , as shown in Eq. 7. Aleatoric un-certainty is then computed as the variance of these ensemble-mean estimates over the lower-tail quantiles eτ (Eq. 8). 
+
+μeτi (ot, a ∗) = 1
+
+NHNHX
+
+> h=1
+
+Z(h) 
+
+> eτi
+
+(ot, a ∗) (7) 
+
+U ale  
+
+> α
+
+(ot, a ∗) = Var eτi∈eτ [μeτi (ot, a ∗)] (8) 
+
+D. Expert Advice Integration 
+
+In this work, we argue that expert advice is most beneficial when the agent is uncertain about the state or the risk of its actions. Leveraging the uncertainty measures introduced in Section III-C, we design a query mechanism that triggers advice under uncertainty, employs a commitment–cooldown strategy to prevent over-reliance, and integrates expert guid-ance into training to accelerate policy improvement. 
+
+1) Adaptive Query Mechanism: A central challenge in leveraging uncertainty for advice queries is determining when uncertainty is high enough. Fixed thresholds are im-practical because uncertainty magnitudes are not known in advance and evolve with the agent’s policy: thresholds set too high suppress valuable guidance during early training, while thresholds set too low risk over-reliance on the expert. To ad-dress this, we introduce an adaptive thresholding mechanism that evolves with training dynamics. Unlike heuristic or static thresholds used in prior work [12], [36], our approach adapts to recent uncertainty statistics, enabling consistent triggering of advice across different training phases. Epistemic and aleatoric uncertainties are stored in separate buffers that maintain a moving window of past values. At each step t, we derive an adaptive threshold by comparing the current uncertainty to the empirical β-percentile of its buffer distribution. Formally, the thresholds T epi  
+
+> t
+
+and T ale 
+
+> t
+
+are defined in Eq. 9, where prc β (·) denotes the β-percentile operator applied to the corresponding buffer of past values. 
+
+T epi  
+
+> t
+
+= prc β
+
+
+
+{U epi  
+
+> t′
+
+}t′<t 
+
+
+
+, T ale  
+
+> t
+
+= prc β
+
+ {U ale  
+
+> t′
+
+}t′<t 
+
+ (9) If either epistemic or aleatoric uncertainty exceeds its respec-tive threshold, the state is classified as high-uncertainty and triggers an advice request as defined in Eq. (10), where 1[·]
+
+denotes the indicator function. 
+
+ϕt = 1
+
+h
+
+U epi (ot) > T epi  
+
+> t
+
+∨ U ale (ot, a ∗) > T ale 
+
+> t
+
+i
+
+(10) This dynamic mechanism reflects the demands of AD: even if the agent has experienced similar situations, high aleatoric uncertainty (e.g., an occluded intersection) still warrants caution, while high epistemic uncertainty in a less familiar road layout justifies consulting the expert. 
+
+2) Commitment–Cooldown Strategy: Most prior work [12], [35] neglects the temporal regulation of expert advice, typically restricting advice to a single step. This has two drawbacks: (i) sparse corrections provide little opportunity to internalize the expert’s policy (e.g., a one-step lane-change correction does not expose the full maneuver), and (ii) unrestricted queries risk over-reliance and rapid exhaustion of the advice budget. We address these issues with a commitment–cooldown strategy. During commitment, once triggered, the agent fol-lows the expert for several consecutive steps, providing richer temporal context and exposure to coherent expert behavior. The subsequent cooldown blocks new advice requests, en-forcing independent operation. In addition to fixed commitment and cooldown periods, we propose a stochastic risk-sensitive heuristic for early termination of the commitment phase, inspired by the policy switching mechanism in [37]. The agent disengages from the expert once there is sufficient statistical evidence ( Pimp )that its own policy achieves higher safety-adjusted returns. We quantify this evidence as the probability that the agent’s optimal action a∗ outperforms the expert’s action aE , as defined in Eq. (11), where Xa denotes a random variable approximating the safety-adjusted return of action a.
+
+Pimp = P (Xa∗ > X aE ) (11) For each action a, every ensemble head h produces aCVaR estimate CVaR (h) 
+
+> α
+
+(ot, a ). We treat the resulting set 
+
+{CVaR (h) 
+
+> α
+
+(ot, a )}NH 
+
+> h=1
+
+as samples from the random variable 
+
+Xa and approximate it by a Gaussian distribution with empirical mean μXa and variance σ2 
+
+> Xa
+
+. To compare the optimal action a∗ with the expert’s action aE , we define the difference ∆ = Xa∗ − XaE . Under the Gaussian approximation of Xa∗ and XaE , the difference ∆ is also Gaussian, as given in Eq. (12). 
+
+∆ ∼ N  μXa∗ − μXaE , σ 2 
+
+> Xa∗
+
++ σ2
+
+> XaE
+
+ (12) Accordingly, Pimp = P (∆ > 0) is evaluated using the Gaussian cumulative distribution function. Early stopping of the commitment phase is triggered whenever Pimp > λ · ρtc ,where λ is a base confidence, ρ ∈ (0 , 1) is a decay factor, and 
+
+tc is the number of elapsed commitment steps. Since λ · ρtc
+
+decreases monotonically with tc, the confidence threshold lowers over time, making disengagement increasingly likely the longer advice is followed. 
+
+3) Integration in Policy Learning: We integrate expert advice directly into the learning process by maintaining a shared replay buffer that stores both agent experiences and expert advice, leveraging the off-policy nature of IQN. This contrasts with approaches that separate expert and agent buffers [23], which may keep expert samples dis-proportionately long and risk anchoring the policy to the expert’s behavior. In our design, the frequency of expert-generated transitions in the replay buffer decreases naturally as the agent becomes more confident and requests advice less frequently in similar states, better reflecting the agent’s evolving competence. Furthermore, since advice queries are triggered by uncer-tainty, the ratio of expert to agent samples adjusts automati-cally: when the agent is frequently uncertain, expert actions fill the buffer; when the agent is confident, its own experience dominates. This dynamic balance emerges naturally without imposing artificial ratios. Finally, the commitment-cooldown strategy further enriches the replay buffer with coherent trajectories rather than isolated corrections. By committing to short horizons of consecutive expert actions, the agent is exposed to complete maneuvers that provide more mean-ingful training signals. The subsequent cooldown enforces independence and prevents over-reliance on the expert. We also avoid reward forcing [22], [23], where expert actions are artificially assigned high rewards. Such strategies implicitly assume that the expert is optimal, which is unreal-istic in practice. Our expert may be suboptimal, and we want the learner to retain the ability to surpass it. By evaluating expert actions under the same reward function as the agent, the framework benefits from guidance without biasing the policy toward potentially flawed behavior. Together, these choices ensure that expert knowledge is integrated in a balanced and principled way: leveraged when uncertainty is high, gradually fading as the agent becomes more competent, and always evaluated under the same re-ward function. This makes advice an accelerator for learning rather than a lasting dependency, embedding safety within the policy without limiting long-term autonomy. IV. EXPERIMENTAL SETUP 
+
+This section details the experimental setup, including the RL agent design, traffic scenarios, and the utilized expert. We also outline baselines, ablations, and evaluation metrics to enable a fair comparison of performance. 
+
+A. RL Agent Description 
+
+The RL agent operates on a multimodal observation space that integrates complementary sensors and state information. The primary perception inputs consist of a frontal RGB camera image with a resolution of 128 × 128 pixels and a LiDAR point cloud projected into a 128 × 128 bird’s-eye-view grid. To support goal-directed navigation, the LiDAR grid map is augmented with a reference route toward the tar-get destination. The observation space also includes vehicle states, namely longitudinal and lateral velocities and their respective accelerations. To encode the observation, we employ modality-specific encoders: a CNN for RGB images, a CNN for LiDAR grid maps, and an MLP for vehicle kinematics. Their outputs are fused into a shared latent representation that captures spatial and state information. Based on this representation, the policy head selects a cruise-control acceleration command from a finite action set uniformly spaced between maximum braking and maximum throttle. Expert actions are projected onto the same action space by selecting the closest command, while steering is handled by a route-following controller. 
+
+B. Traffic Scenarios 
+
+In this work, we focus on urban driving tasks where an autonomous agent must safely approach and traverse unsignalized intersections. These intersections are among the most safety-critical components of road networks, as they lack explicit right-of-way rules and require implicit negotia-tion with surrounding traffic [38]. Although our framework is applicable to a wide range of driving scenarios, this work evaluates it in unsignalized intersections, a particularly chal-lenging setting for evaluating our expert-guided RL agents. Traffic scenarios are generated using CARLA [39] across randomized configurations of traffic vehicles placed in mul-tiple T-junctions and four-way intersections. To encourage generalization, we randomize traffic attributes such as vehi-cle geometry, speed, and lateral offset. For evaluation, we construct a hold-out set of one unseen T-junction and two unseen four-way intersections, ensuring that performance is assessed on layouts not encountered during training. As an expert policy, we employ CARLA’s Traffic Manager (TM), a rule-based system for controlling vehicle behavior. While the TM has privileged access to the environment state, including road topology, and the state of all traffic vehicles, the framework itself is not restricted to this expert and only requires an action proposal from an external policy. Furthermore, the expert is required only during training and is neither required nor accessible during evaluation. 
+
+C. Baselines and Evaluation Metrics 
+
+We benchmark our proposed RL algorithm against IQN [31], a well-established and widely used distributional RL baseline. In addition, we conduct a series of ablation studies to isolate the contribution of individual compo-nents of our approach, specifically evaluating the impact of the commitment–cooldown mechanism, the expert advice budget, and the stochastic early stopping strategy for the commitment mechanism. These analyses provide a clearer understanding of how each design choice influences the overall learning performance. To ensure fair comparison, all agents are trained for an identical number of steps using the same network architec-tures and hyperparameter configurations. Each training run is repeated with three independent random seeds, and every trained policy is evaluated over three runs to account for the stochasticity inherent in CARLA. This setup follows the evaluation methodology outlined in [40]. Evaluation is performed on a hold-out set of intersection scenarios with varying traffic densities. Traffic density is the ratio of the number of active traffic vehicles to the environment’s maximum capacity. Results are reported as mean and standard deviation over all training seeds and evaluation runs. Performance is measured using cumulative episode reward ( ER ) as well as driving-specific metrics: success rate ( SR ), failure rate ( F R ), the sum of off-road, collision, and timeout rates, and route progress ( RP ). To ensure robust evaluation, we use RLiable [41] to report aggregate metrics such as interquartile mean (IQM) and optimality gap, which better capture performance variability. V. E VALUATION 
+
+Table I reports ablation studies evaluating our method-ology across traffic densities. Introducing commitment and cooldown periods proves essential, as they ensure more consistent expert guidance. The baselines [12], [29] without 
+
+> Fig. 2: Probability of improvement [41], quantifying the likelihood that algorithm X outperforms algorithm Y.
+
+this mechanism correspond to (1 , 1) , where success reaches 
+
+0.67 at density 0.75 and 0.53 at density 1.0. A suitable period of (5 , 5) raises success to 0.74 and 0.61 , respectively, while reducing failures from 0.33 to 0.26 at density 0.75 and from 
+
+0.47 to 0.39 at density 1.0. This demonstrates that temporal consistency during training stabilizes policy learning. The expert budget plays a central role, as it represents the fraction of training during which the agent can receive advice. A limited budget of 25% already enhances perfor-mance, while 50% yields the best balance between advice and independent learning. In contrast, allocating 75% induces excessive reliance on the expert and degrades generalization. At the balanced 50% , success improves from 0.67 for IQN to 0.74 at density 0.75 and from 0.55 to 0.61 at density 1.0.When comparing epistemic uncertainty formulations, both Wasserstein and CVaR follow similar trends across com-mitment settings and budgets. However, CVaR consistently achieves higher success (e.g., 0.61 vs. 0.58 at density 
+
+1.0) by emphasizing risk-sensitive quantiles and filtering distributional noise. The stochastic early-stop mechanism shows a nuanced effect. At the optimal 50% budget, early stopping causes minor degradation, whereas at larger budgets it mitigates overreliance. At density 0.75 with 75% budget, success increases from 0.64 to 0.72 , indicating that stochastic early-stop can reduce overreliance during longer training schedules and expert budgets. Overall, our best configuration, CVaR-based uncertainty with (5 , 5) commitment-cooldown and a 50% expert bud-get, delivers consistent improvements across all densities. Compared to IQN, it yields 5–7% gains in success rate, while lowering failures in challenging dense traffic. These results confirm the effectiveness of combining structured expert advice with risk-sensitive uncertainty estimation for the evaluated intersection-navigation setting. Furthermore, RLiable analysis confirms these findings. Fig. 3 shows that our best variants raise IQM from 0.66 
+
+(IQN) to 0.72 (CVaR) and reduce the optimality gap from 
+
+0.33 to 0.27 . Pairwise improvement probabilities (Fig. 2) further highlight consistency: CVaR outperforms IQN with probability > 0.75 , while Wasserstein remains above 0.6.Thus, our best configurations deliver not only higher mean performance but also more reliable learning outcomes. Having established the effectiveness of our best config-urations through both direct metrics and RLiable analysis, we finally evaluate aleatoric uncertainty as a runtime safety guard. At inference time, the agent triggers a deceleration-to-stop maneuver whenever the current uncertainty exceeds Fig. 3: Interquartile mean (IQM) and optimality gap [41], quanti-fying the statistical stability of a policy. 
+
+the 90 th percentile threshold of uncertainty values faced on a validation set. Under density 0.75 , this mechanism achieves the highest success rates of 0.76 with CVaR-based epistemic uncertainty and 0.71 with the Wasserstein variant, surpass-ing all previous configurations. These findings suggest that runtime uncertainty monitoring complements expert advice regulation, providing an additional layer of robustness when the agent encounters rare failure cases. VI. C ONCLUSION 
+
+This work addressed the gap in safe exploration by introducing an uncertainty-aware framework that triggers advice when epistemic or aleatoric uncertainty exceeds adaptive thresholds and regulates its use with a commit-ment–cooldown strategy, exposing the agent to coherent expert trajectories without inducing long-term dependence. Experiments in CARLA traffic scenarios demonstrated con-sistent gains over IQN, with the best configuration (CVaR-based uncertainty, and a 50% advice budget with (5 , 5) 
+
+periods) achieving 5–7% higher success and lower failures across all traffic densities. In addition, we showed that aleatoric uncertainty can serve as an inference-time safety guard, further improving success under dense traffic and providing robustness against rare failure cases. Future work will explore noisy, partially observable, and multi-expert settings, where specialized experts can be queried selectively, enhancing flexibility and broadening applicability to diverse and safety-critical driving contexts. ACKNOWLEDGMENT The research leading to these results is funded by the German Federal Ministry for Economic Affairs and Energy within the project “Safe AI Engineering – Sicherheitsargu-mentation bef¨ ahigendes AI Engineering ¨ uber den gesamten Lebenszyklus einer KI-Funktion”. The authors would like to thank the consortium for the successful cooperation. REFERENCES [1] L. Chen, P. Wu, K. Chitta, B. Jaeger, A. Geiger, and H. Li, “End-to-end autonomous driving: Challenges and frontiers,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024. [2] R. S. Sutton, A. G. Barto et al. , Reinforcement learning: An introduc-tion . MIT press Cambridge, 1998. [3] S. Gu, L. Yang, Y. Du, G. Chen et al. , “A review of safe reinforcement learning: Methods, theories and applications,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024. [4] A. Wachi, W. Hashimoto, X. Shen, and K. Hashimoto, “Safe ex-ploration in reinforcement learning: A generalized formulation and algorithms,” Advances in Neural Information Processing Systems ,2023. [5] G. Dulac-Arnold, N. Levine, D. J. Mankowitz, J. Li et al. , “Challenges of real-world reinforcement learning: definitions, benchmarks and analysis,” Machine Learning , 2021. [6] X. Hu, P. Chen, Y. Wen, B. Tang, and L. Chen, “Long-and short-term constraint-driven safe reinforcement learning for autonomous driving,” 
+
+IEEE Transactions on Systems, Man, and Cybernetics: Systems , 2026. [7] Y. Liu and S. Diao, “An automatic driving trajectory planning approach in complex traffic scenarios based on integrated driver style inference and deep reinforcement learning,” PLoS one , 2024. [8] J.-H. Choi, D.-h. Kim, J.-S. Yoo, B.-J. Kim, and J.-T. Hwang, “Enhancing autonomous driving with pre-trained imitation and rein-forcement learning,” in 2025 International Conference on Electronics, Information, and Communication (ICEIC) , 2025. [9] Z. Huang, Z. Sheng, C. Ma, and S. Chen, “Human as ai mentor: En-hanced human-in-the-loop reinforcement learning for safe and efficient autonomous driving,” Communications in Transportation Research ,2024. [10] X. Wang and M. Althoff, “Safe reinforcement learning for automated vehicles via online reachability analysis,” IEEE Transactions on Intel-ligent Vehicles , 2023. [11] Z. Xue, Z. Peng, Q. Li, Z. Liu, and B. Zhou, “Guarded policy optimization with imperfect online demonstrations,” International Conference on Learning Representations , 2023. [Online]. Available: https://openreview.net/forum?id=O5rKg7IRQIO [12] F. L. Da Silva, P. Hernandez-Leal, B. Kartal, and M. E. Taylor, “Uncertainty-aware action advising for deep reinforcement learning agents,” in Proceedings of the AAAI conference on artificial intelli-gence , 2020. [13] E. Ilhan, J. Gow, and D. Perez, “Student-initiated action advising via advice novelty,” IEEE Transactions on Games , 2021. [14] X. Wang, J. Zhang, D. Hou, and Y. Cheng, “Autonomous driving based on approximate safe action,” IEEE Transactions on Intelligent Transportation Systems , 2023. [15] D. Du, S. Han, N. Qi, H. B. Ammar, J. Wang, and W. Pan, “Reinforce-ment learning for safe robot control using control lyapunov barrier functions,” in 2023 IEEE International Conference on Robotics and Automation (ICRA) , 2023. [16] D. C. Tan, F. Acero, R. McCarthy, D. Kanoulas, and Z. Li, “Value functions are control barrier functions: Verification of safe policies using control theory,” arXiv preprint arXiv:2306.04026 , 2023. [17] D. C. Tan, R. McCarthy, F. Acero, A. M. Delfaki, Z. Li, and D. Kanoulas, “Safe value functions: Learned critics as hard safety constraints,” in 2024 IEEE 20th International Conference on Automa-tion Science and Engineering (CASE) , 2024. [18] J. Bernhard, S. Pollok, and A. Knoll, “Addressing inherent uncertainty: Risk-sensitive behavior generation for automated driving using distri-butional reinforcement learning,” in 2019 IEEE Intelligent Vehicles Symposium (IV) , 2019. [19] D. Kamran, T. Engelgeh, M. Busch, J. Fischer, and C. Stiller, “Minimizing safety interference for safe and comfortable automated driving with distributional reinforcement learning,” in 2021 IEEE/RSJ international conference on intelligent robots and systems (IROS) ,2021. [20] M. Pfeiffer, S. Shukla, M. Turchetta, C. Cadena et al. , “Reinforced imitation: Sample efficient deep reinforcement learning for mapless navigation by leveraging prior demonstrations,” IEEE Robotics and Automation Letters , 2018. [21] D. Gao, H. Wang, H. Zhou, N. Ammar et al. , “In-ril: Interleaved reinforcement and imitation learning for policy fine-tuning,” arXiv preprint arXiv:2505.10442 , 2025. [22] R. Chekroun, M. Toromanoff, S. Hornauer, and F. Moutarde, “Gri: General reinforced imitation and its application to vision-based au-tonomous driving,” Robotics , 2023. [23] Z. M. Peng, W. Mo, C. Duan, Q. Li, and B. Zhou, “Learning from active human involvement through proxy value propagation,” Advances in neural information processing systems , 2023. [24] S. Mo, X. Pei, and C. Wu, “Safe reinforcement learning for au-tonomous vehicle using monte carlo tree search,” IEEE Transactions on Intelligent Transportation Systems , 2021. [25] J. Thumm, G. Pelat, and M. Althoff, “Reducing safety interventions in provably safe reinforcement learning,” in 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2023. [26] Z. Peng, Q. Li, C. Liu, and B. Zhou, “Safe driving via expert guided policy optimization,” in Conference on Robot Learning , 2022. [27] H. Wang, X. Yuan, and Q. Ren, “Learning to recover for safe reinforcement learning,” arXiv preprint arXiv:2309.11907 , 2023. [28] M. Kelly, C. Sidrane, K. Driggs-Campbell, and M. J. Kochenderfer, “Hg-dagger: Interactive imitation learning with human experts,” in TABLE I: Ablation results in CARLA traffic scenarios across traffic densities. Results compare IQN with our method under different commitment–cooldown periods, expert budgets, and uncertainty formulations. 
+
+Traffic Density 0.75 Traffic Density 1.0 
+
+Setup SR ↑ FR ↓ RP ↑ ER ↑ SR ↑ FR ↓ RP ↑ ER ↑
+
+IQN 0.670 ± 0.054 0.330 ± 0.058 0.666 ± 0.025 0.549 ± 0.025 0.553 ± 0.065 0.440 ± 0.133 0.608 ± 0.065 0.327 ± 0.085 
+
+Ablation of commitment and cooldown periods with U epi CVaR and expert budget = 50% of training steps 
+
+(1, 1) 0.673 ± 0.043 0.327 ± 0.048 0.662 ± 0.026 0.536 ± 0.033 0.527 ± 0.056 0.472 ± 0.063 0.558 ± 0.026 0.297 ± 0.038 
+
+(5, 5) 0.735 ± 0.048 0.264 ± 0.052 0.695 ± 0.022 0.590 ± 0.032 0.607 ± 0.027 0.392 ± 0.036 0.607 ± 0.026 0.362 ± 0.051 
+
+(10, 10) 0.696 ± 0.088 0.303 ± 0.088 0.681 ± 0.034 0.572 ± 0.056 0.593 ± 0.097 0.407 ± 0.111 0.602 ± 0.050 0.326 ± 0.067 
+
+(20, 10) 0.712 ± 0.054 0.288 ± 0.054 0.694 ± 0.018 0.581 ± 0.030 0.600 ± 0.033 0.400 ± 0.048 0.617 ± 0.019 0.358 ± 0.030 
+
+(10, 20) 0.659 ± 0.073 0.341 ± 0.080 0.644 ± 0.034 0.520 ± 0.045 0.534 ± 0.075 0.466 ± 0.081 0.554 ± 0.043 0.275 ± 0.056 
+
+Ablation of expert budget with U epi CVaR and best commitment and cooldown periods = (5, 5) 
+
+25% 0.694 ± 0.053 0.306 ± 0.058 0.671 ± 0.032 0.511 ± 0.027 0.577 ± 0.086 0.423 ± 0.097 0.578 ± 0.049 0.308 ± 0.042 
+
+75% 0.642 ± 0.038 0.358 ± 0.043 0.644 ± 0.025 0.510 ± 0.035 0.471 ± 0.038 0.529 ± 0.053 0.522 ± 0.029 0.236 ± 0.020 
+
+Ablation of commitment and cooldown periods with U epi W and expert budget = 50% of training steps 
+
+(1, 1) 0.643 ± 0.074 0.357 ± 0.085 0.646 ± 0.038 0.498 ± 0.055 0.476 ± 0.131 0.524 ± 0.141 0.546 ± 0.083 0.228 ± 0.143 
+
+(5, 5) 0.726 ± 0.040 0.274 ± 0.048 0.687 ± 0.027 0.569 ± 0.024 0.578 ± 0.049 0.422 ± 0.053 0.575 ± 0.026 0.317 ± 0.033 
+
+(10, 10) 0.679 ± 0.036 0.321 ± 0.045 0.668 ± 0.022 0.516 ± 0.031 0.606 ± 0.052 0.394 ± 0.069 0.606 ± 0.033 0.339 ± 0.029 
+
+Ablation of expert budget with U epi W and best commitment and cooldown periods = (10, 10) 
+
+25% 0.647 ± 0.080 0.353 ± 0.086 0.654 ± 0.037 0.511 ± 0.050 0.509 ± 0.103 0.491 ± 0.114 0.563 ± 0.049 0.260 ± 0.085 
+
+75% 0.622 ± 0.074 0.378 ± 0.077 0.643 ± 0.037 0.520 ± 0.064 0.440 ± 0.085 0.560 ± 0.097 0.531 ± 0.046 0.222 ± 0.089 
+
+Impact of stochastic commitment early stop with U epi CVaR and best commitment and cooldown periods = (5, 5) 
+
+50% 0.714 ± 0.060 0.286 ± 0.065 0.691 ± 0.034 0.554 ± 0.024 0.604 ± 0.078 0.396 ± 0.093 0.611 ± 0.052 0.333 ± 0.054 
+
+75% 0.721 ± 0.041 0.279 ± 0.045 0.688 ± 0.024 0.580 ± 0.048 0.593 ± 0.069 0.407 ± 0.082 0.599 ± 0.046 0.335 ± 0.086 
+
+Impact of stochastic commitment early stop with U epi W and best commitment and cooldown periods = (10, 10) 
+
+50% 0.671 ± 0.052 0.329 ± 0.064 0.668 ± 0.034 0.542 ± 0.044 0.528 ± 0.085 0.472 ± 0.098 0.575 ± 0.048 0.295 ± 0.068 
+
+75% 0.647 ± 0.041 0.353 ± 0.056 0.652 ± 0.028 0.530 ± 0.045 0.481 ± 0.074 0.519 ± 0.080 0.533 ± 0.042 0.235 ± 0.058 
+
+Impact of using aleatoric uncertainty as an inference safety guard 
+
+U epi CVaR 0.761 ± 0.049 0.239 ± 0.043 0.714 ± 0.019 0.571 ± 0.025 0.672 ± 0.047 0.328 ± 0.053 0.645 ± 0.030 0.399 ± 0.033 
+
+U epi W 0.714 ± 0.030 0.286 ± 0.033 0.688 ± 0.014 0.499 ± 0.021 0.678 ± 0.049 0.322 ± 0.051 0.650 ± 0.028 0.378 ± 0.031 
+
+2019 International Conference on Robotics and Automation (ICRA) ,2019. [29] Y. Wei, S. Liu, J. Song, T. Zheng, K. Chen, and M. Song, “Agent-aware training for agent-agnostic action advising in deep reinforce-ment learning,” in Proceedings of the AAAI Conference on Artificial Intelligence , 2025. [30] D. Bethell, S. Gerasimou, R. Calinescu, and C. Imrie, “Safe rein-forcement learning in black-box environments via adaptive shielding,” 
+
+arXiv preprint arXiv:2405.18180 , 2024. [31] W. Dabney, G. Ostrovski, D. Silver, and R. Munos, “Implicit quantile networks for distributional reinforcement learning,” in International conference on machine learning , 2018. [32] I. Osband, C. Blundell, A. Pritzel, and B. Van Roy, “Deep exploration via bootstrapped dqn,” Advances in neural information processing systems , vol. 29, 2016. [33] O. Lockwood and M. Si, “A review of uncertainty for deep reinforce-ment learning,” in Proceedings of the AAAI Conference on Artificial Intelligence and Interactive Digital Entertainment , 2022. [34] B. Lakshminarayanan, A. Pritzel, and C. Blundell, “Simple and scalable predictive uncertainty estimation using deep ensembles,” 
+
+Advances in neural information processing systems , vol. 30, 2017. [35] C.-J. Hoel, K. Wolff, and L. Laine, “Ensemble quantile networks: Uncertainty-aware reinforcement learning with applications in au-tonomous driving,” IEEE Transactions on Intelligent Transportation Systems , 2023. [36] T. Hester, M. Vecerik, O. Pietquin, M. Lanctot et al. , “Deep q-learning from demonstrations,” in Proceedings of the AAAI conference on artificial intelligence , 2018. [37] A. Kurenkov, A. Mandlekar, R. Martin-Martin, S. Savarese, and A. Garg, “Ac-teach: A bayesian actor-critic method for policy learning with an ensemble of suboptimal teachers,” arXiv preprint arXiv:1909.04121 , 2019. [38] M. Al-Sharman, L. Edes, B. Sun, V. Jayakumar et al. , “Autonomous driving at unsignalized intersections: A review of decision-making challenges and reinforcement learning-based solutions,” IEEE Trans-actions on Automation Science and Engineering , 2026. [39] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun, “Carla: An open urban driving simulator,” in Conference on robot learning ,2017. [40] B. Jaeger, D. Dauner, J. Beißwenger, S. Gerstenecker, K. Chitta, and A. Geiger, “Carl: Learning scalable planning policies with simple rewards,” in Proc. of the Conf. on Robot Learning (CoRL) , 2025. [41] R. Agarwal, M. Schwarzer, P. S. Castro, A. Courville, and M. G. Bellemare, “Deep reinforcement learning at the edge of the statistical precipice,” NeurIPS , 2021.
