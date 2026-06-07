@@ -1,0 +1,1218 @@
+Title: GPU-Parallel Multi-Task Reinforcement Learning with Demonstration Guided Policy Optimization
+
+URL Source: https://arxiv.org/pdf/2606.03335v1
+
+Published Time: Wed, 03 Jun 2026 01:01:26 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# GPU-Parallel Multi-Task Reinforcement Learning with Demonstration Guided Policy Optimization 
+
+Rui Zhang 1∗ Qiwei Wu 1,2∗ Zhengyu Zhang 1 Tao Li 1
+
+Yunrong Guo 1 Junjie Lai 1 Renjing Xu 2† Weihua Zhang 1†
+
+> 1
+
+NVIDIA 
+
+> 2
+
+The Hong Kong University of Science and Technology (Guangzhou) 
+
+Abstract: Large scale GPU-parallel reinforcement learning has changed what can be trained in robot simulation, yet most systems still optimize one specialist policy per task. We propose a construction methodology for turning structured manipu-lation task families into GPU-parallel multi-task RL benchmarks, and instantiate it as MT-Libero using LIBERO assets and task predicates in Isaac Lab. The re-sulting benchmark supports simultaneous reinforcement learning over heteroge-neous task suites with parallel rendering, physics randomization, and state-input or visual-input policies. To make such training practical under sparse success signals and limited prior data, we further propose DGPO, an on-policy demon-stration guided method that combines importance weighted PPO with adaptive behavior cloning on matched demonstration actions. DGPO enables a tunable preference toward demonstrated task distributions, outperforming both prior-free RL and existing demonstration-based methods while preserving the stability and online improvement benefits of on-policy PPO. 
+
+Keywords: Multi-Task Reinforcement Learning, Robot Manipulation, RL from Demonstration, GPU-Parallel Simulation 
+
+# 1 Introduction 
+
+GPU-parallel reinforcement learning has made robot simulation a high throughput training substrate, but much of this throughput is still spent on specialist policies: one objective, one policy, and one training run at a time. The next scaling question is whether this infrastructure can support capability breadth , where a single policy acquires many structured manipulation skills in one training process. Multi-task reinforcement learning (MTRL) offers a natural path because shared task structure can improve representation learning, exploration, and data efficiency [1, 2]. In massively parallel robot RL, however, sample collection is no longer the only bottleneck; value stability, task imbalance, and the use of prior data become central algorithmic challenges [3, 4, 5]. A benchmark for this question should preserve meaningful structure across tasks rather than aggre-gate unrelated environments. LIBERO is a useful source distribution because it organizes manipula-tion around object, spatial, goal, and long horizon variations [6]; at the same time, its original CPU simulation implementation was designed mainly for imitation and lifelong learning. It therefore lacks the heterogeneous, GPU-parallel execution substrate needed to train one RL policy across the full task family. We address this gap with MT-Libero, an Isaac Lab [7] instantiation of a scalable construction methodology that separates task semantics from simulator execution. Task descriptors, reusable assets, rewards and curricula, physical randomization, and heterogeneous task assignment are compiled into one vectorized training loop, allowing heterogeneous manipulation suites to share a simulator, renderer, rollout buffer, and policy update. 
+
+> ∗
+
+Equal contribution; order decided by coin flip. 
+
+> †
+
+Corresponding authors. 
+
+> arXiv:2606.03335v1 [cs.RO] 2 Jun 2026
+
+Figure 1: Overview of MT-Libero and DGPO. Left: MT-Libero executes heterogeneous LIBERO manipulation tasks as parallel Isaac Lab task groups within one vectorized training loop. Right: DGPO trains a shared multi-task policy by combining importance-weighted PPO with adaptive be-havior cloning on matched demonstration actions. Benchmark scale alone does not solve sparse exploration or multi-task optimization. Demonstra-tions provide task phase, contact sequence, and object interaction priors, but treating them only as prior data for value learning or as fixed imitation targets can either dilute their effect or prevent improvement beyond the data. We therefore introduce DGPO, a demonstration-guided PPO method that enables a tunable preference toward demonstrated task distributions. In the experiments, this policy remains a relatively compact RL network, yet already exhibits VLA-like capability breadth in multi-task manipulation. Its importance-weighted PPO component reallocates on-policy gradi-ent budget toward underperforming tasks, while adaptive BC regularizes the actor toward matched demonstration actions with task-dependent strength. The policy can still improve through online RL, but it is also allowed to specialize toward demonstrated task distributions when that improves data efficiency and success. Figure 1 provides an overview of how MT-Libero and DGPO fit together in one GPU-parallel multi-task RL pipeline. Our contributions are: 1. We propose a GPU-parallel construction methodology for structured multi-task robot RL bench-marks and instantiate it as MT-Libero on LIBERO, supporting generalist policy training for het-erogeneous task suites in a single loop, with both state and visual inputs, varied rewards, and curricula. 2. We introduce DGPO, a demonstration-guided PPO method that combines cross-task importance weighting with adaptive BC on matched demonstration actions, allowing prior data to guide specialization while preserving the stability and online improvement benefits of on-policy PPO. 
+
+# 2 Related Work 
+
+2.1 Massively Parallel Multi-Task Robot Learning Benchmarks 
+
+Robot learning benchmarks increasingly serve two roles: they define task distributions and they de-termine what training regimes are computationally feasible. Meta-World established a widely used testbed for multi-task and meta RL manipulation [8], with later standardization work highlight-ing how benchmark versioning and reward scale consistency affect reproducibility [9]. LIBERO extended benchmark design toward structured lifelong manipulation with knowledge transfer suites [6]. These benchmarks are valuable because they expose systematic task variation, but their 2original execution models were not designed for thousands of heterogeneous GPU environments in a single RL run. Recent systems address this scalability bottleneck from different angles. ManiSkill3 provides GPU-parallel physics and rendering, heterogeneous simulation, broad robot/task coverage, and demon-stration generation tools [3]. RoboVerse aims to unify simulation infrastructure, synthetic data, and benchmark protocols across robot learning settings [10]. MTBench specifically studies massively parallel multi-task RL for robotics, showing that in high throughput settings the algorithmic bottle-neck often shifts from sample collection to value learning, task balancing, and curriculum design [4]. MO-Playground studies massively parallel multi objective RL, emphasizing that GPU vectorization can make Pareto front learning practical [5]. MMBench and Newt push a related idea at a larger con-tinuous control scale, combining a 200 task benchmark with a task conditioned world model [11]. MT-Libero is complementary to these systems: instead of broadening task coverage, it studies how a structured manipulation distribution can be compiled into a heterogeneous GPU-parallel RL sub-strate. Instantiating this recipe with LIBERO preserves object, spatial, goal, and long horizon struc-ture while enabling simultaneous multi-task RL, tiled rendering, physical randomization, and online improvement guided by demonstrations. 
+
+2.2 Multi Task Reinforcement Learning from Prior Data 
+
+Multi task RL has long promised better sample efficiency through shared structure. One family of work studies why sharing can help: shared representations reduce approximation error when tasks have common latent factors, while diverse task sets can make otherwise myopic exploration effec-tive [1, 2]. A second family focuses on optimization and data imbalance, including gradient group-ing or estimation for conflicting objectives and pessimistic sharing of offline data under distribution shift [12, 13, 14, 15, 16, 17]. Prior data is the other major route to data efficient robot RL. Some methods regularize policy learn-ing with demonstrations or offline data, such as DAPG, RLPD, Rainbow-DemoRL, and multitask DAgger [18, 19, 20, 21]. Others use demonstrations to shape the state distribution or task curricu-lum, with RFCL as a representative reverse to forward curriculum baseline [22]. A related line learns better reward signals from demonstrations, preferences, stages, or world models, including reusable dense rewards, demonstration augmented world model training, residual reward models, transparent reward models, and rewards derived from objects or world models [23, 24, 25, 26, 27, 28, 29, 30]. DGPO focuses on a different point in this design space: on-policy multi-task RL with task adaptive demonstration pressure. Rather than using demonstrations to define reset curricula, learned rewards, or fixed log-likelihood imitation targets, DGPO pairs rollout states with matched demonstration actions and modulates their influence by per-task success. This separates DGPO from fixed log-likelihood imitation baselines and lets the policy exploit prior data where it improves specialization while continuing to optimize task success through online RL. 
+
+# 3 Method 
+
+Our method has two components: MT-Libero, a GPU-parallel benchmark construction for struc-tured multi-task manipulation, and DGPO, an on-policy optimizer that uses demonstrations without reducing training to pure imitation. 
+
+3.1 MT-Libero: Constructing a GPU-Parallel Multi-Task Benchmark 
+
+The construction separates task semantics from the execution substrate . Given a structured manipu-lation family, we compile scene and task definitions, reusable assets, reset rules, success predicates, and reward interfaces into one GPU vectorized training loop instead of launching one simulator per task. As illustrated in fig. 2, the construction converts task definitions into runtime descriptors, of-fline assets into USD, and supports heterogeneous environment simulation given task groups, variant 3Figure 2: Core elements for GPU-parallel multi-task RL environments. The figure summarizes how scene and task definitions, offline asset conversion to USD, heterogeneous GPU vectorized task groups, and task-specific rewards and resets are converted into reusable MT-RL environment components. The examples also illustrate that the same construction can organize parallel RL envi-ronments across different embodiments. rewards, and reset curricula. MT-Libero instantiates this recipe with LIBERO by converting its task specifications and MuJoCo assets into Isaac Lab task groups as MT-Libero-Goal, MT-Libero-Object, MT-Libero-Spatial, and MT-Libero-Long. Each of the 40 tasks inherits the 50 expert demonstrations released with LIBERO, which serve as the source command stream for reset states and matched ref-erence actions throughout this paper. The same interface can readily compile other structured task sources with compatible scene definitions, assets, resets, and success predicates; implementation details are in section A.1. 
+
+Action space. Following LIBERO, the policy emits a 7D task space end effector action: 6D arm motion plus one binary gripper command. During training, we optionally use a gripper curriculum that temporarily follows the demonstration gripper command during early phases with low success. Controller gains, action scaling, and the curriculum threshold are listed in section A.2. 
+
+State obs. State input policies use deployable task state (task embedding, object and target pose buffer, etc.) together with proprioceptive observations for the actor, while the critic can additionally use privileged tracking and contact terms for asymmetric value estimation. Full dimensions and observation definitions are listed in section A.3. 
+
+Visual obs. For visual variants, the actor’s object and target pose buffer is replaced by patch token features from a frozen ViT encoder applied to third person and wrist camera images, while task conditioning and proprioception are retained. The two camera token sequences are combined and compressed by a trainable single query attention pool before entering the actor and critic MLPs. The critic may still receive privileged object goal and tracking error terms through the same asymmetric actor critic interface. The visual architecture and loss interface are detailed in section A.7. 
+
+Rewards and curricula. All methods are evaluated by sparse task success, while training uses one of two dense reward configurations: a demonstration-guided dense reward for DGPO or MT-DeepMimic and MT-DAPG baselines, or a MetaWorld-style curated dense reward for the MT-PPO, MT-RLPD, and MT-RFCL baselines. The demonstration-guided dense reward adds tracking ker-nels and a success-gated accumulated payout, and the MetaWorld-style reward shapes geometric progress toward the task predicates without using demonstrations. We pair the MetaWorld-style reward with the SAC-based MT-RLPD and MT-RFCL baselines because demonstration tracking kernels concentrate the reward landscape onto a narrow action manifold near the demonstration, conflicting with SAC’s maximum-entropy objective and collapsing exploration noise; we empiri-cally verify this incompatibility in section C.2. Both rewards share the same smoothness and safety penalty. Episodes can reset from a random demonstration state with small joint noise, giving broad coverage of feasible task phases compared with the RFCL reverse curriculum. Numerical reward coefficients, termination rules, and reset implementation are provided in sections A.4 and A.5. 43.2 DGPO: Demonstration-Guided Policy Optimization 
+
+For each task k, demonstrations Dk = {τ ki }nk 
+
+> i=1
+
+provide reset states and reference actions a⋆t . DGPO keeps PPO [31] as the on-policy optimizer and adds two mechanisms. IW-PPO reallocates per-task PPO gradient budget using a success-rate EMA, which is invariant to reward scale and critic fit, instead of FAMO’s loss-based statistics [16], which may lead to local minima (section B.1). 
+
+Adaptive BC adds demonstration pressure to the actor, using the same rollout observation ot visited by the current policy and the demonstration action a⋆t at the matching cursor. Thus demonstrations guide optimization without replacing the on-policy state distribution. This is why DGPO does not use demonstrations as direct replay data, pure imitation targets, or warm-start supervision. We do not load demonstration observations for this actor regularizer, which avoids mixing offline and online observation distributions. 
+
+Unified objective. For rollout sample (ot, at, ˆAt, ˆRt, k t), where ˆAt is the GAE advantage and ˆRt
+
+is the return target, kt is the task index used to look up the per-sample IW weight wt and adaptive BC weight βkt . Define the PPO ratio qt(θ) = πθ (at|ot)/π θold (at|ot) and the standard clipped loss in eq. (1). 
+
+Lclip  
+
+> t
+
+= − min 
+
+
+
+qt ˆAt, clip( qt, 1 − ϵ, 1 + ϵ) ˆAt
+
+
+
+. (1) Here ϵ is the PPO clip range. IW-PPO assigns each sample a task balancing weight wt. In the SR-derived mode, eq. (2) computes wt from relative task performance: tasks below the current multi-task mean receive larger PPO weights, while easier tasks receive smaller weights. 
+
+¯τ = 1
+
+|K| 
+
+X
+
+> j∈K
+
+τj , pIW  
+
+> k
+
+= σ(sIW (τk − ¯τ )) , wt = wmax (1 − pIW 
+
+> k(t)
+
+) + wmin pIW 
+
+> k(t)
+
+. (2) Here τk is the per-task success-rate EMA and K is the set of initialized tasks. Weights are normalized per minibatch, ˜wt = wt/EB[w], so they change gradient allocation across tasks without changing the overall PPO loss scale. The complete DGPO loss in eq. (3) combines the weighted PPO objective with adaptive behavior cloning. 
+
+LDGPO = Et
+
+h
+
+˜wtLclip  
+
+> t
+
++ cv ˜wt(Vθ − ˆRt)2 − cH ˜wtHt
+
+i| {z }
+
+> (A) IW-PPO
+
++ cBC Et
+
+βkt ∥μθ (ot) − a⋆t ∥2| {z }
+
+> (B) Adaptive BC
+
+. (3) Here Vθ is the value function, Ht is policy entropy, μθ is the Gaussian policy mean, cv , c H , c BC 
+
+are loss coefficients, and βk is the task-wise demonstration guidance weight. Additional update details, including success rate EMA tracking, minibatch weight normalization, and the full training procedure, are in section A.6 and algorithm 1. 
+
+Adaptive BC. ABC is an MSE actor regularizer on the rollout state and the matched demonstration action. Its task weight is determined by the student’s per-task success-rate EMA τk through the absolute schedule in eq. (4). 
+
+pk = clip 
+
+ τk − τlow 
+
+τhigh − τlow 
+
+, 0, 1
+
+
+
+, βk = βmax (1 − pk) + βmin pk. (4) Here pk is the absolute success progress of task k, [τlow , τ high ] is the decay interval, and βmax , β min 
+
+bound the imitation weight. Thus weak students imitate more, while mastered tasks imitate less. This absolute schedule differs from IW in eq. (2): ABC measures whether a task needs demonstra-tion guidance, whereas IW measures relative task underperformance for PPO gradient balancing. 
+
+# 4 Experiments 
+
+The experiments evaluate four questions: (Q0) whether the proposed construction recipe can turn a structured manipulation family into a usable GPU-parallel multi-task RL benchmark, with LIBERO as one instantiation; (Q1) whether DGPO can use prior data more effectively than other multi-task and demonstration-based baselines; (Q2) whether the core components of DGPO each contribute to success and learning efficiency; and (Q3) how demonstration pressure trades task performance against generalization within the demonstration range. 5Table 1: Multi task parallel simulation and RL training throughput: with 1,600 parallel envs on a single L20, MT-Libero sustains 3,825 SPS in 8.2 GB GPU memory , exceeding the MuJoCo baseline while using far less memory. End to end PPO scales to ∼26.8k SPS on 8 ×L20, with MT50-rand from MTBench [4] included as a contextual GPU RL throughput reference.                          
+
+> Benchmark Engine (Hardware) Tasks Envs Throughput Memory
+> Multi task manipulation (simulation only)
+> LIBERO-All-40 IsaacLab/PhysX (1 ×L20) 40 1600 3825 8.2 GB VRAM LIBERO-All-40 MuJoCo (192-core Xeon 8468V) 40 1600 2274 2.3 TB RAM
+> End to end PPO training (rollout + training)
+> LIBERO-All-40 IsaacLab/PhysX 40 25600 ∼26800 198.4 GB VRAM MT50-rand IsaacGym/PhysX 50 24576 ∼11000 N/A
+
+4.1 Experimental Setup Tasks. We evaluate MT-Libero-Goal, MT-Libero-Object, MT-Libero-Spatial, and MT-Libero-Long. The first three suites test short horizon semantic and geometric variation; MT-Libero-Long tests longer sequential manipulation. 
+
+Baselines. We compare DGPO with multi-task(MT-) versions of PPO, DeepMimic [32], RLPD [19], RFCL [22], and DAPG [18]. This comparison separates how prior data enters learning: MT-PPO is prior-free RL, MT-RLPD uses demonstrations as prior knowledge for value learning, MT-RFCL uses demonstrations both as curriculum reset states and as an offline replay buffer, MT-DAPG uses matched actions through a log-likelihood actor loss, and DGPO uses adaptive BC as on-policy actor regularization. For a fair comparison , all baselines use gripper curriculum, and all demonstration-based methods receive the same prior data with privileged critic. Detailed base-line mechanisms are summarized in section B.2. Evaluation uses sparse task success rate. Because the source demonstrations come from MuJoCo while training runs in PhysX, direct replay is only partially successful; detailed replay rates are reported in section C.2. 
+
+Metrics. Table 1 reports only throughput and memory for benchmark construction validation. Method comparison uses success rate on each task suite. For DGPO ablations, we additionally report three metric groups: success based performance, learning efficiency, and robustness inside the demonstration range. 
+
+4.2 Benchmark Construction Validation 
+
+To answer Q0, we first check whether the scalable construction recipe yields the intended execution substrate: heterogeneous task groups sharing one GPU simulator, rollout buffer, and policy update. The throughput and memory results in table 1 verify that the LIBERO instantiation can be trained as a joint multi-task benchmark rather than as isolated task runs. At the same 1,600-environment simulation-only setting, MT-Libero exceeds the MuJoCo baseline while using far less memory, and the end-to-end PPO result shows that the shared rollout and update stack scales to tens of thousands of parallel environments. To further test the generality of the construction recipe beyond LIBERO, we also reproduced a multi-task RoboTwin [33] benchmark instantiation; implementation details and a qualitative example are provided in section C.1. 
+
+4.3 Method Comparison 
+
+Table 2 compares DGPO against prior-free RL and existing demonstration-based baselines under the same joint multi-task training setup. For Q1, DGPO achieves the strongest mean success in both state-input and visual-input settings, indicating that adaptive regularization on matched actions uses demonstrations more effectively than the compared reset curriculum, fixed imitation, or reward shaping alternatives while preserving the stability and online improvement benefits of on-policy 6PPO. Figure 3(a) further shows the success distribution across tasks: DGPO places most tasks in the high success region, the visual DGPO variant is the next strongest, and the other baselines remain lower and more dispersed. Table 2: Method comparison success rate (%) .
+
+Method Goal Object Spatial Long Mean 
+
+State input actor 
+
+MT-PPO 69 .9±0.1 20 .8±0.5 59 .6±0.4 19 .8±0.2 42 .5±0.2
+
+MT-RLPD 50 .0±0.0 0.0±0.0 79 .4±0.0 0.6±0.0 32 .5±0.0
+
+MT-RFCL 49 .4±0.0 0.0±0.0 85 .0±0.0 19 .4±0.0 38 .4±0.0
+
+MT-DeepMimic 10 .0±0.0 0.0±0.0 0.0±0.0 0.0±0.0 2.5±0.0
+
+MT-DAPG 18 .1±0.5 1.5±0.1 41 .6±0.3 0.0±0.0 15 .3±0.1
+
+DGPO 87 .5±0.3 94 .8±0.5 99 .4±0.0 59 .1±0.8 85 .2±0.3
+
+Visual input actor 
+
+MT-PPO 47 .1±0.8 24 .6±1.4 79 .9±0.2 29 .3±0.4 45 .2±0.6
+
+MT-RLPD – – – – –MT-RFCL – – – – –MT-DeepMimic 9.1±0.2 0.0±0.0 0.0±0.0 0.0±0.0 2.3±0.1
+
+MT-DAPG 18 .9±0.2 9.5±0.2 47 .7±0.9 0.0±0.0 19 .0±0.3
+
+DGPO 66 .1±0.6 86 .9±1.4 85 .1±0.6 41 .2±1.1 69 .8±0.8
+
+State actor input. The state-input setting is the primary comparison be-cause it isolates the RL and demonstration guidance mechanisms from visual representation learning. Here, the actor receives structured observations; only methods trained with the dense tracking reward use privileged critic terms, while the other baselines do not. As shown in Table 2, the single policy learned by DGPO performs best across all suites. The advantage is especially clear on the Long suite, suggesting that the learned policy can handle different task types within a single policy. As a preliminary qualitative sim2real check, we deploy one simulation-trained state-input actor across three real tabletop scenes, with setup and rollout frames in section C.4. 
+
+Visual actor input. The visual setting replaces object state observations in the actor with encoded RGB features; for methods trained with the dense tracking reward, the critic can still use privileged state terms under asymmetric training. This tests whether the same demonstration-guided design transfers beyond structured actor input. Table 2 again shows that a single visual DGPO policy per-forms best across the reported suites, including the multi-stage Long tasks. The MT-RLPD and MT-RFCL entries are marked as “–” because under the same GPU memory budget, the largest fea-sible visual replay configuration severely truncates replay capacity and per-task minibatch coverage, preventing non-trivial convergence; details are provided in section C.3. 
+
+4.4 DGPO Ablation Study 
+
+Table 3: DGPO ablation study. 
+
+Variant SS SR ↑ MS SR ↑ SR-AUC ↑ Tail-20 SR ↑
+
+DGPO 0.824 0.464 0.588 0.043 
+
+w/o IW 0.789 0.217 0.597 0.019 w/o ABC 0.051 0 0.028 0
+
+We isolate the contribution of the two DGPO-specific components, im-portance weighting across tasks and adaptive BC, to answer Q2. The gripper curriculum and the privileged critic are shared MT-Libero infras-tructure, and we further discuss their ablations in section C.2. In table 3, SS SR abbreviates single stage mean success on Object, Goal, and Spatial tasks, while MS SR ab-breviates multi stage mean success on Long tasks. The table also reports SR-AUC for learning speed and Tail-20 SR for success on the 20th percentile tasks. This separates whether a variant improves the easy tasks only, accelerates learning across the suites, or also helps the tail tasks. Figure 3(b) shows that IW-PPO quickly lowers the gradient weights of tasks that reach high success and shifts optimization mass toward harder tasks over the first 200M steps. Figure 3(c) shows the complemen-tary adaptive BC behavior: β starts near 1 for most tasks, decays on tasks that converge quickly, and remains high on tasks that still need demonstration guidance. Figure 3(d) and fig. 3(e) summa-rize the ablation results: ABC improves average learning curves, while IW especially improves the hardest tail tasks by preventing gradients from staying concentrated on easier tasks. 7Figure 3: Experimental overview. (a) Success rate distributions across tasks and methods; (b) IW-PPO task weight heatmap over the first 200M steps; (c) adaptive BC task weight evolution; (d) ablation learning curves; (e) ablation performance on the 20th percentile tasks; and (f) the tradeoff between specialization and generalization under perturbations inside the demonstration range. 
+
+4.5 Demonstration Range Generalization 
+
+Finally, we evaluate whether the preference induced by prior data merely fits the 50 demonstration trajectories or also generalizes within the range those demonstrations cover. We report the trade-off between nominal demonstration start success and perturbation success inside the demonstration range; construction details are provided in section C.2. Figure 3(f) shows the tradeoff: DGPO loses some generalization relative to less specialized policies, but the drop is small compared with its gain in task success on the nominal starts. 
+
+# 5 Conclusion 
+
+We presented MT-Libero, a GPU-parallel construction for joint multi-task RL on structured manip-ulation suites, and DGPO, an on-policy optimizer that uses demonstrations as task-aware guidance. Across Goal, Object, Spatial, and Long tasks, DGPO outperforms both prior-free RL and existing demonstration-based methods in both state and visual settings while preserving the stability and online improvement benefits of on-policy PPO. Together, these results suggest that compact RL policies can already reach VLA-like multi-task breadth with human demonstrations, and we believe the same training interface can extend to larger models. 
+
+# 6 Limitations and Future Work 
+
+Limitations. MT-Libero is currently instantiated on simulated tabletop manipulation with a fixed robot morphology, object vocabulary, and task grammar. Stronger demonstration pressure can still reduce generalization inside the demonstration range, and the failure cases in section C.2 show that ambiguity, contact coordination, long-horizon error accumulation, and articulated dynamics remain challenging. Physical randomization and sim2sim transfer also remain imperfect sources of robustness for contact-rich manipulation. 
+
+Future work. The most important next direction is VLA+RL post training. Future work will connect the visual-input experiments in section 4.3 to full vision-language-action policies, using MT-Libero for large-scale interaction data and GPU-parallel training infrastructure and DGPO for efficient multi-task post-training. 8References 
+
+[1] C. D’Eramo, D. Tateo, A. Bonarini, M. Restelli, and J. Peters. Sharing knowledge in multi-task deep reinforcement learning. In International Conference on Learning Representations , 2020. [2] Z. Xu, Z. Xu, R. Jiang, P. Stone, and A. Tewari. Sample efficient myopic exploration through multitask reinforcement learning with diverse tasks. In The Twelfth International Conference on Learning Representations , 2024. [3] S. Tao, F. Xiang, A. Shukla, Y. Qin, X. Hinrichsen, X. Yuan, C. Bao, X. Lin, Y. Liu, T.-K. Chan, Y. Gao, X. Li, T. Mu, N. Xiao, A. Gurha, V. N. Rajesh, Y. W. Choi, Y.-R. Chen, Z. Huang, R. Calandra, R. Chen, S. Luo, and H. Su. Demonstrating GPU Parallelized Robot Simulation and Rendering for Generalizable Embodied AI with ManiSkill3. In Proceedings of Robotics: Science and Systems , LosAngeles, CA, USA, June 2025. doi:10.15607/RSS.2025.XXI.021. [4] V. Joshi, Z. Xu, B. Liu, P. Stone, and A. Zhang. Benchmarking massively parallelized multi-task reinforcement learning for robotics tasks, 2025. URL https://arxiv.org/abs/2507. 23172 .[5] N. Janwani, E. Novoseller, V. J. Lawhern, and M. Tucker. Mo-playground: Massively paral-lelized multi-objective reinforcement learning for robotics, 2026. [6] B. Liu, Y. Zhu, C. Gao, Y. Feng, Q. Liu, Y. Zhu, and P. Stone. Libero: Benchmarking knowl-edge transfer for lifelong robot learning. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine, editors, Advances in Neural Information Processing Systems , vol-ume 36, pages 44776–44791. Curran Associates, Inc., 2023. [7] NVIDIA, :, M. Mittal, P. Roth, J. Tigue, A. Richard, O. Zhang, P. Du, A. Serrano-Mu˜ noz, X. Yao, R. Zurbr¨ ugg, N. Rudin, L. Wawrzyniak, M. Rakhsha, A. Denzler, E. Heiden, A. Borovicka, O. Ahmed, I. Akinola, A. Anwar, M. T. Carlson, J. Y. Feng, A. Garg, R. Gasoto, L. Gulich, Y. Guo, M. Gussert, A. Hansen, M. Kulkarni, C. Li, W. Liu, V. Makoviychuk, G. Malczyk, H. Mazhar, M. Moghani, A. Murali, M. Noseworthy, A. Poddubny, N. Ratliff, W. Rehberg, C. Schwarke, R. Singh, J. L. Smith, B. Tang, R. Thaker, M. Trepte, K. V. Wyk, F. Yu, A. Millane, V. Ramasamy, R. Steiner, S. Subramanian, C. Volk, C. Chen, N. Jawale, A. V. Kuruttukulam, M. A. Lin, A. Mandlekar, K. Patzwaldt, J. Welsh, H. Zhao, F. Anes, J.-F. Lafleche, N. Mo¨ enne-Loccoz, S. Park, R. Stepinski, D. V. Gelder, C. Amevor, J. Carius, J. Chang, A. H. Chen, P. de Heras Ciechomski, G. Daviet, M. Mohajerani, J. von Muralt, V. Reutskyy, M. Sauter, S. Schirm, E. L. Shi, P. Terdiman, K. Vilella, T. Widmer, G. Yeo-man, T. Chen, S. Grizan, C. Li, L. Li, C. Smith, R. Wiltz, K. Alexis, Y. Chang, D. Chu, L. J. Fan, F. Farshidian, A. Handa, S. Huang, M. Hutter, Y. Narang, S. Pouya, S. Sheng, Y. Zhu, M. Macklin, A. Moravanszky, P. Reist, Y. Guo, D. Hoeller, and G. State. Isaac lab: A gpu-accelerated simulation framework for multi-modal robot learning, 2025. [8] T. Yu, D. Quillen, Z. He, R. Julian, K. Hausman, C. Finn, and S. Levine. Meta-world: A benchmark and evaluation for multi-task and meta reinforcement learning. In L. P. Kaelbling, D. Kragic, and K. Sugiura, editors, Proceedings of the Conference on Robot Learning , volume 100 of Proceedings of Machine Learning Research , pages 1094–1100. PMLR, 30 Oct–01 Nov 2020. [9] R. McLean, E. Chatzaroulas, L. McCutcheon, F. R¨ oder, T. Yu, Z. He, K. Zentner, R. Julian, J. K. Terry, I. Woungang, N. Farsad, and P. S. Castro. Meta-world+: An improved, standard-ized, RL benchmark. In The Thirty-ninth Annual Conference on Neural Information Process-ing Systems Datasets and Benchmarks Track , 2026. [10] H. Geng, F. Wang, S. Wei, Y. Li, B. Wang, B. An, H. Lou, C. T. Cheng, P. Li, H. Chen, Y. Liang, Y. Qian, J. Mao, W. Wan, Y. Geng, M. Zhang, J. Lyu, S. Zhao, J. Zhang, C. Xu, J. Zhang, C. Zhao, H. Lu, Y. Ding, R. Gong, Y. Wang, Y. Kuang, R. Wu, B. Jia, H. Dong, S. Huang, Y. Wang, J. Malik, and P. Abbeel. RoboVerse: A Unified Platform, Benchmark and 9Dataset for Scalable and Generalizable Robot Learning. In Proceedings of Robotics: Science and Systems , LosAngeles, CA, USA, June 2025. doi:10.15607/RSS.2025.XXI.022. [11] N. Hansen, H. Su, and X. Wang. Learning massively multitask world models for continuous control. In The Fourteenth International Conference on Learning Representations , 2026. [12] Z. Zhang, M. Duan, Y. Ye, and H. R. Zhang. Scalable multi-objective and meta reinforcement learning via gradient estimation, 2026. [13] C. Bai, L. Wang, J. Hao, Z. Yang, B. Zhao, Z. Wang, and X. Li. Pessimistic value iteration for multi-task data sharing in offline reinforcement learning. Artificial Intelligence , 326:104048, Jan. 2024. ISSN 0004-3702. doi:10.1016/j.artint.2023.104048. URL http://dx.doi.org/ 10.1016/j.artint.2023.104048 .[14] T. Yu, S. Kumar, A. Gupta, S. Levine, K. Hausman, and C. Finn. Gradient surgery for multi-task learning. In NeurIPS , 2020. [15] B. Liu, X. Liu, X. Jin, P. Stone, and Q. Liu. Conflict-averse gradient descent for multi-task learning. In NeurIPS , pages 18878–18890, 2021. [16] B. Liu, Y. Feng, P. Stone, and Q. Liu. Famo: Fast adaptive multitask optimization, 2023. URL 
+
+https://arxiv.org/abs/2306.03792 .[17] Z. Chen, V. Badrinarayanan, C.-Y. Lee, and A. Rabinovich. Gradnorm: Gradient normalization for adaptive loss balancing in deep multitask networks. In ICML , pages 793–802, 2018. [18] A. Rajeswaran, V. Kumar, A. Gupta, G. Vezzani, J. Schulman, E. Todorov, and S. Levine. Learning complex dexterous manipulation with deep reinforcement learning and demonstra-tions. In Proceedings of Robotics: Science and Systems , Pittsburgh, Pennsylvania, June 2018. doi:10.15607/RSS.2018.XIV.049. [19] P. J. Ball, L. Smith, I. Kostrikov, and S. Levine. Efficient online reinforcement learning with offline data. In A. Krause, E. Brunskill, K. Cho, B. Engelhardt, S. Sabato, and J. Scarlett, editors, Proceedings of the 40th International Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research , pages 1577–1594. PMLR, 23–29 Jul 2023. [20] D. Bhatt, S.-C. Chou, and N. Atanasov. Rainbow-demorl: Combining improvements in demonstration-augmented reinforcement learning. 2026. URL https://arxiv.org/abs/ 2603.27400 .[21] H. Fu, R. Gong, X. Zhang, M. V. Minniti, J. Patel, and K. Schmeckpeper. Data-efficient multitask dagger, 2025. [22] S. Tao, A. Shukla, T. kai Chan, and H. Su. Reverse forward curriculum learning for extreme sample and demo efficiency. In The Twelfth International Conference on Learning Represen-tations , 2024. [23] T. Mu, M. Liu, and H. Su. Drs: Learning reusable dense rewards for multi-stage tasks. In The Twelfth International Conference on Learning Representations , 2024. [24] A. L. Escoriza, N. Hansen, S. Tao, T. Mu, and H. Su. Multi-stage manipulation with demonstration-augmented reward, policy, and world model learning. In A. Singh, M. Fazel, D. Hsu, S. Lacoste-Julien, F. Berkenkamp, T. Maharaj, K. Wagstaff, and J. Zhu, editors, Pro-ceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceed-ings of Machine Learning Research , pages 15542–15563. PMLR, 13–19 Jul 2025. [25] C. Cao, M. R. Garcia, M. Nabail, X. Wang, and N. Rhinehart. Residual reward models for preference-based reinforcement learning. CoRR , abs/2507.00611, July 2025. 10 [26] D. Baimukashev, G. Alcan, K. S. Luck, and V. Kyrki. Learning transparent reward models via unsupervised feature selection. In 8th Annual Conference on Robot Learning , 2024. [27] Y. Tang, Y. Shang, Y. Chen, B. Wei, X. Zhang, S. Yu, L. Shi, C. Yu, C. Gao, W. Wu, and Y. Li. Roboscape-r: Unified reward-observation world models for generalizable robotics training via rl, 2025. [28] S. Ferraro, P. Mazzaglia, T. Verbelen, and B. Dhoedt. FOCUS: Object-centric world mod-els for robotic manipulation. In Intrinsically-Motivated and Open-Ended Learning Workshop @NeurIPS2023 , 2023. [29] Y. Kuang, L. J. Manso, and G. Vogiatzis. Goal-based self-adaptive generative adversarial imitation learning (goal-sagail) for multi-goal robotic manipulation tasks, 2025. [30] N. Glazer, A. Navon, A. Shamsian, and E. Fetaya. Multi task inverse reinforcement learning for common sense reward, 2025. [31] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov. Proximal policy optimization algorithms, 2017. URL https://arxiv.org/abs/1707.06347 .[32] X. B. Peng, P. Abbeel, S. Levine, and M. van de Panne. Deepmimic: Example-guided deep reinforcement learning of physics-based character skills. ACM Trans. Graph. , 37(4):143:1– 143:14, July 2018. ISSN 0730-0301. doi:10.1145/3197517.3201311. URL http://doi. acm.org/10.1145/3197517.3201311 .[33] Y. Mu, T. Chen, Z. Chen, S. Peng, Z. Lan, Z. Gao, Z. Liang, Q. Yu, Y. Zou, M. Xu, L. Lin, Z. Xie, M. Ding, and P. Luo. Robotwin: Dual-arm robot benchmark with generative digital twins. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion (CVPR) , pages 27649–27660, June 2025. [34] J. Shang, K. Schmeckpeper, B. B. May, M. V. Minniti, T. Kelestemur, D. Watkins, and L. Her-lant. Theia: Distilling diverse vision foundation models for robot learning. In 8th Annual Conference on Robot Learning , 2024. [35] M. Jiang, E. Grefenstette, and T. Rockt¨ aschel. Prioritized level replay. In M. Meila and T. Zhang, editors, Proceedings of the 38th International Conference on Machine Learning ,volume 139 of Proceedings of Machine Learning Research , pages 4940–4950. PMLR, 18–24 Jul 2021. URL https://proceedings.mlr.press/v139/jiang21b.html .11 A Implementation Details 
+
+This appendix expands the compact method description in section 3. Unless otherwise stated, the details below apply to the MT-Libero state-input experiments and are reused by the visual variants after replacing the actor’s object-centric state with image features. 
+
+A.1 Benchmark Construction Details Offline task descriptors. The source LIBERO tasks are specified by BDDL problem files, Mu-JoCo scene assets, and natural language instructions. Before RL training, each suite is converted into a cached JSON file whose entries serve as the runtime source of truth. Each task descriptor stores the original task name, language instruction, scene template, robot base pose, fixtures, manipula-ble objects, stochastic spawn regions, objects of interest, goal targets, tactile targets, and predicate thresholds. The original BDDL path is retained only as provenance; no BDDL parser is invoked during rollout collection or policy updates. At runtime, the descriptor determines task encoding, object and target observation slots, reset sampling, success checks, demonstration stream routing, and per-task logging. 
+
+Goal predicates. Every task descriptor contains a list of goal predicates evaluated against the live simulator state. Relational predicates such as in and on compare object and target poses using horizontal and height thresholds, optionally with a contact force gate. Articulation predicates such as open and close check whether a named joint passes a fraction of its travel, while activation predicates such as turn-on check button or toggle joints. Task success is the conjunction of all predicates for that task, and the same success flag is used for sparse evaluation, reward events, reset logging, and per-task success EMAs. 
+
+Asset pipeline. All LIBERO MuJoCo MJCF assets are converted offline into USD assets and cached before training. The converted assets preserve visual meshes, collision geometry, materials and textures, inertial properties, joint topology, and articulation limits for objects such as drawers, cabinets, microwaves, and stove buttons. The runtime environment resolves each object or fixture type in the JSON descriptor to a cached USD asset. This avoids repeated MJCF conversion at startup and allows common objects to be reused across task groups while keeping task specific placement, spawning, and physical parameter randomization separate. 
+
+Heterogeneous vectorized simulation. MT-Libero uses one heterogeneous Isaac Lab scene rather than a collection of independent task specific simulator instances. Each active task is assigned to a group of parallel environments, and each group receives the assets, reset rules, demonstration stream, and success predicates specified by its descriptor. The simulator, renderer, rollout tensor, and PPO update remain shared, so the optimizer consumes a single rectangular batch even though the underlying task semantics are heterogeneous. In a homogeneous vectorized simulator, every parallel environment is a clone of the same scene; here, different task groups share one rollout and optimization stack. The task to environment assignment uses a configurable layout (sequential, round-robin, or random). For a suite with K tasks and g environments per task, the total number of parallel environments is N = Kg ; under the default sequential assignment, environment i maps to task ⌊i/g ⌋.
+
+Task assets grouping. The default full setting contains 40 tasks: ten each from Goal, Object, Spatial, and Long. Tasks are usually assigned to per-task groups, but suites with shared scene structure can be collapsed into suite-level asset groups. In our default construction, Goal and Spatial share one asset group per suite because their tasks use the same table and object set while differing in goal predicates; Object and Long remain per-task groups. Assets and sensors for each group are registered with group specific prim paths so PhysX instantiates them only in the environments owned by that group. Runtime asset operations such as reset and state writes are filtered by assigned environment ids, so a group asset ignores calls for environments outside its group. 12 Runtime routing. The environment to task map is used throughout the stack. It selects the demon-stration cursor and reference action for each environment, writes the task encoding and object target pose buffer into the actor observation, scatters success signals into per-task EMA buffers, provides importance weights for IW-PPO, and aggregates per-task logging. This routing lets state-input and visual-input policies share the same multi-task rollout interface. 
+
+Train/evaluation configuration. The active task set can be restricted for focused experiments without changing the canonical task registry. In focused encoding, the task encoding and object target pose buffer shrink to the active subset, which is useful for compact single suite or ablation runs. In canonical encoding, these channels keep the full benchmark dimensionality, which allows checkpoints trained on full task family to be evaluated on a subset only or trained on one subset to be evaluated on another subset without input dimension mismatch. 
+
+A.2 Action Parameterization and Controller 
+
+The policy outputs a normalized action at ∈ [−1, 1] 7. The first six dimensions are interpreted by an operational space controller and the last dimension controls the gripper. The numerical values for the action and controller symbols in this subsection are listed in table 11. In the default relative pose mode, 
+
+∆pt = spaarm 
+
+> t, 1:3
+
+, ∆Rt = Exp  sRaarm 
+
+> t, 4:6
+
+ . (5) The controller uses motion stiffness ktask on all six task axes, damping ratio ζ, inertial decoupling, and null space regularization to the home pose with stiffness kns .The gripper command is binary: agrip  
+
+> t
+
+> 0 opens the fingers to θgrip open , and agrip  
+
+> t
+
+≤ 0 closes them to 
+
+θgrip close . When the gripper curriculum is enabled, the policy gripper bit is replaced by the demonstra-tion gripper command until the per-task success-rate EMA exceeds τ grip  
+
+> ⋆
+
+. After that threshold, the learned gripper command is used. 
+
+A.3 Observation Groups 
+
+Table 4: Observation groups. The actor receives deployable observations, while the critic can additionally receive privileged tracking and contact terms.        
+
+> Group Contents Used by Policy Previous action, task encoding, object target pose buffer actor and critic Proprioception End effector pose, gripper state, arm joint positions, arm joint velocities actor and critic Privileged proprioception End effector tracking error, joint tracking error, object goal pose error, gripper contact force history critic only Perception Frozen ViT patch tokens from two RGB cameras visual actor and critic
+
+The task encoding zkt is a multi hot vector over shared subtask tags by default, with an optional canonical one hot task ID encoding. The object target pose buffer is a fixed length, per entity buffer expressed in the robot base frame, indexing the union of manipulable objects and goal receptacles across the active task set; for a task of the form “put X on Y ” the slot of X carries the current object pose and the slot of Y carries the corresponding goal pose. Each slot occupies 6 + Jmax dimensions: 6 for rigid body pose ( 3
+
+position and 3 RPY orientation) and Jmax = 3 for articulation joint values, zero padded for rigid bodies and for articulations with fewer joints. Jmax is set to the maximum joint count over LIBERO articulations, saturated by the three drawer cabinet. The canonical setting indexes 26 entities across the 40 tasks ( 22 rigid objects and 4 articulations), giving a buffer dimension of 26 × (6 + 3) = 234 ;focused encoding restricts the index set to the active subset, for example 7 × 9 = 63 for the Goal suite. Entities outside the assigned task of an environment are masked to zero via the group activation mask. 13 The gripper contact feature uses a four step force history, yielding a 24 dimensional vector for both fingers. Keeping tracking errors and contact history critic only implements asymmetric actor critic training: the value function receives shaped state information that need not be available to a deployed actor. 
+
+A.4 Source Demonstrations, Resets, and Terminations 
+
+A source command stream loads expert demonstrations and exposes five synchronized signals: end effector pose, joint state, joint velocity, gripper state, and source action. At each control step it also publishes the current demonstration action a⋆t , a per-step importance weight wt, task identity k, and normalized demonstration progress. The reset and termination constants used below are listed in table 11. Training episodes can optionally use random reset from demonstration states. For a demonstration of length Td, the reset cursor is sampled as 
+
+t0 ∼ U (0 , p max Td), ˜st0 = s(d) 
+
+> t0
+
++ (0 , δq, 0, . . . ), δq ∼ N (0 , σ 2 
+
+> q
+
+I), (6) where the Gaussian perturbation is applied to robot joints in radians. Evaluation resets are anchored at the demonstration start. For logging, success from resets with t0/T d > p filt can be filtered out to avoid overestimating performance from starts near the goal, while the unfiltered signal is still available for adaptive weights. Table 5: Termination conditions. 
+
+Condition Train Eval Demonstration cursor depleted (Timeout) on on Task success, gk (st) at threshold g⋆ off on Joint position out of limit on off Joint velocity above ηv × limit on off 
+
+A.5 Reward Coefficients 
+
+Evaluation uses sparse task success for all methods. Training uses one of two dense reward con-figurations: a demonstration-guided dense reward for MT-DeepMimic, MT-DAPG, and DGPO, or a MetaWorld-style dense reward without demonstration tracking for the MT-PPO, MT-RLPD, and MT-RFCL baselines. The reward coefficients and shaping widths in this subsection are listed in table 11. The demonstration-guided dense configuration used by MT-DeepMimic, MT-DAPG, DGPO, and visual DGPO variants applies κσr (e) = exp( −∥ e∥/σ r ). The dense reward is the sum of per-step tracking, a success-gated accumulated payout, and the same smoothness and safety penalties: 
+
+rdense  
+
+> t
+
+= wee ,p 
+
+> κ
+
+κσr (∆EE pos  
+
+> t
+
+) + wee ,r 
+
+> κ
+
+κσr (∆EE rot  
+
+> t
+
+) + wgrip  
+
+> κ
+
+κσr (∆ qgrip  
+
+> t
+
+)+ wobj ,p 
+
+> κ
+
+κσr (∆ opos  
+
+> t
+
+) + wart  
+
+> κ
+
+κσr (∆ qart  
+
+> t
+
+) + wobj ,r 
+
+> κ
+
+κσr (∆ orot  
+
+> t
+
+)+ ragg 
+
+> t
+
+− w∆a∥at − at−1∥2 − wa∥at∥2 − w ˙q ∥ ˙qt∥2
+
+− wOOL pos 1[joint pos OOL] − wOOL vel 1[joint vel OOL] .
+
+(7) Here overlines denote averages over object or articulation targets in the current task goal set. When success first triggers, three accumulated kernels for end effector position, end effector orientation, and gripper position are paid out with weight wagg each: 
+
+ragg  
+
+> t
+
+= 1[gk(st)] X
+
+> m∈{ EE pos ,EE rot ,grip }
+
+wagg 
+
+X
+
+> u≤t
+
+κσr (emu ). (8) 14 The MetaWorld-style dense configuration used by MT-PPO, MT-RLPD, and MT-RFCL does not use demonstration tracking. It keeps the same penalties but replaces tracking kernels with geometric shaping terms derived from the task predicates: 
+
+rmw  
+
+> t
+
+= wmw succ 1[gk(st)] + rshape 
+
+> t
+
+− w∆a∥at − at−1∥2 − wa∥at∥2 − w ˙q ∥ ˙qt∥2
+
+− wOOL pos 1[joint pos OOL] − wOOL vel 1[joint vel OOL] .
+
+(9) For relation goals such as in and on , the shaping term combines reaching and placement progress, with a lifting bonus: 
+
+rrel  
+
+> g
+
+= H(ρreach , ρ place ) + λlift ρreach ρlift , H(a, b ) = ab a + b − ab + ϵ . (10) Here ρreach = 1 − tanh( ∥EE − pobj ∥/σ reach ), ρplace = 1 − tanh( dplace /σ place ), and ρlift =clip(( zobj  
+
+> t
+
+− zobj 0 )/h lift , 0, 1) .For articulation goals such as opening drawers or turning stove knobs, the shaping term combines approaching and joint motion progress: 
+
+rart  
+
+> g
+
+= H(ρapproach , ρ prog ), (11) where ρapproach = 1 − tanh( ∥EE − phandle ∥/σ reach ) and ρprog = 1 − tanh( djoint /σ eff ), with 
+
+σeff = σrot joint for rotational joints and σlin joint otherwise. For tasks with multiple goals, rshape  
+
+> t
+
+=
+
+smw |G k|−1 P 
+
+> g∈G k
+
+rg , where rg is the corresponding relation or articulation shaping term. 
+
+A.6 DGPO Training Details 
+
+DGPO is implemented as PPO with IW-PPO and adaptive BC. At rollout time, the environment writes wt, a⋆t , and kt into extras. When SR-derived importance weighting is enabled, the raw per-step weight is recomputed from the current per-task success EMAs: 
+
+¯τ = 1
+
+|K init |
+
+X
+
+> j∈K init
+
+τj , pIW  
+
+> k
+
+= σ(sIW (τk − ¯τ )) , wt = wmax (1 −pIW 
+
+> k(t)
+
+)+ wmin pIW 
+
+> k(t)
+
+. (12) The final minibatch normalized weight is 
+
+˜wt = wt
+
+> 1
+> |B|
+
+P 
+
+> u∈B
+
+wu
+
+. (13) The normalized weights multiply the clipped policy loss, the value loss, and the entropy term. Adaptive BC uses the same task level success tracking as IW-PPO. After completed episodes, the student success EMA is updated as 
+
+τk ← (1 − αema )τk + αema SR k. (14) The student success term reduces demonstration pressure as task competence improves: 
+
+pk = clip 
+
+ τk − τlow 
+
+τhigh − τlow 
+
+, 0, 1
+
+
+
+, βk = βmax (1 − pk) + βmin pk. (15) The adaptive BC loss uses the same on-policy rollout observations as PPO and pairs each observation with the matched demonstration action published by the source command stream. No demonstra-tion observations are loaded for adaptive BC; the demo dataset only needs to provide reset states and reference actions. This keeps the demonstration-guided actor losses on the same observation distribution and normalization statistics as PPO, avoiding distribution shift from mixing offline ob-servations with live rollout observations. 15 Algorithm 1 DGPO Training 
+
+Require: Vectorized multi-task environment, demonstration stream, optional flags for IW and adap-tive BC  
+
+> 1:
+
+Initialize actor πθ , value function Vθ , rollout buffer, and per-task success EMAs {τk} 
+
+> 2:
+
+for each PPO iteration do  
+
+> 3:
+
+for each rollout step do  
+
+> 4:
+
+Sample action at ∼ πθ (·| ot) and step all environments  
+
+> 5:
+
+Read task id kt, matched demonstration action a⋆t 
+
+> 6:
+
+if SR-derived IW is enabled then  
+
+> 7:
+
+Compute ¯τ , pIW  
+
+> kt
+
+, and wt from the relative to mean schedule  
+
+> 8:
+
+end if  
+
+> 9:
+
+Compute demonstration weight βt from the absolute success schedule  
+
+> 10:
+
+Store (ot, a t, r t, d t, k t, w t, a ⋆t , β t) in the rollout buffer  
+
+> 11:
+
+if episodes finish then  
+
+> 12:
+
+Update per-task success EMAs τk 
+
+> 13:
+
+end if  
+
+> 14:
+
+end for  
+
+> 15:
+
+Compute GAE advantages ˆAt and return targets ˆRt 
+
+> 16:
+
+for each PPO epoch and minibatch do  
+
+> 17:
+
+Normalize weights ˜wt ← wt/EB[w] 
+
+> 18:
+
+Initialize loss with IW-PPO policy, value, and entropy terms from eq. (3)  
+
+> 19:
+
+if adaptive BC is enabled then  
+
+> 20:
+
+Add cBC βt∥μθ (ot) − a⋆t ∥2 
+
+> 21:
+
+end if  
+
+> 22:
+
+Update θ by gradient descent on the combined loss  
+
+> 23:
+
+end for  
+
+> 24:
+
+end for A.7 Visual Input Variants 
+
+The visual variants replace the actor’s object target pose buffer with frozen ViT image features while retaining task conditioning. We use a compact Theia-style Tiny ViT backbone [34], pretrained by distilling multiple vision foundation models into a single lightweight encoder, with patch size pvit ,hidden dimension Dv , and Lv transformer blocks. The visual encoder parameter values are listed in table 11. The backbone is kept frozen in evaluation mode; only the attention pool and actor critic MLPs are trained by PPO. Agent view and wrist view RGB images are encoded by a frozen ViT backbone: 
+
+zagent  
+
+> t
+
+= ϕ(Iagent  
+
+> t
+
+) ∈ RP ×Dv , zwrist  
+
+> t
+
+= ϕ(Iwrist  
+
+> t
+
+) ∈ RP ×Dv . (16) At camera resolution Himg × Wimg , the encoder returns P patch tokens per camera after positional interpolation, and the CLS token is discarded. The two token sequences are concatenated along the feature dimension, zt = [ zagent  
+
+> t
+
+∥zwrist  
+
+> t
+
+] ∈ RP ×2Dv . A trainable single query attention pool converts them into a compact visual vector: 
+
+hvis  
+
+> t
+
+=
+
+> P
+
+X
+
+> p=1
+
+softmax p
+
+ q⊤zt,p 
+
+√2Dv
+
+
+
+zt,p , q ∈ R2Dv . (17) The vector hvis  
+
+> t
+
+is concatenated with proprioception and task encoding before the actor MLP, and has a scale comparable to the state object buffer feature it replaces. The critic may additionally receive privileged object goal and tracking error terms through the same asymmetric actor critic interface used in the state-input setting. Empirical normalization is applied only to flat nonvisual features. MT-DAPG with visual observations uses the live visual actor observation and the matched demon-stration action, so the demonstration dataset does not need to store rendered camera observations. This mirrors the state-input matched action interface and keeps visual experiments independent of the offline observation format. 16 B Baseline Details 
+
+Section B.1 situates IW-PPO within multi-task gradient management and contrasts its cost and signal choice with GradNorm, PCGrad, CAGrad, and FAMO; section B.2 then details each MTRL baseline (MT-PPO, MT-DeepMimic, MT-DAPG, MT-RLPD, MT-RFCL) and its adaptation to the shared multi-task rollout (sections A.1 and A.4), with hyperparameters in table 11. 
+
+B.1 Multitask Gradient Management Methods 
+
+IW-PPO sits in the broader literature on multi-task gradient management, where the goal is to keep the optimizer from concentrating on the easy tasks. Table 6 contrasts the per-iteration cost and per-task signal of representative methods. GradNorm [17], PCGrad [14], and CAGrad [15] all require explicit per-task gradients, which means K backward passes through the actor each step, plus pair-wise inner products for PCGrad or a K-dimensional QP for CAGrad. FAMO [16] reduces this to a single backward pass by replacing per-task gradients with per-task loss decrease rates. IW-PPO is also single-backward, but uses a per-task success-rate EMA in place of any loss-derived signal. Table 6: Per-iteration cost of multi-task gradient management methods. K is the number of tasks. “Backward passes” counts distinct backward operations through the actor per optimization step; “signal” is the per-task scalar used to set task weights.                       
+
+> Method Backward passes Extra cost Per-task signal GradNorm [17] K–per-task gradient norm PCGrad [14] KK2inner products per-task gradient direction CAGrad [15] KQP in RKper-task gradient + convex combo FAMO [16] 1Kscalar losses per-task loss decrease rate IW-PPO (ours) 1KEMA updates per-task success-rate EMA
+
+Why IW-PPO instead of FAMO at the same complexity. FAMO and IW-PPO share the same 
+
+O(1) -backward-pass complexity but differ in the per-task signal that drives reweighting. FAMO weights each task by its (negative log) loss decrease rate, relying on the supervised-MTL assump-tion that loss is a faithful proxy for progress. This assumption breaks down in on-policy multi-task RL for three concrete reasons. (i) Zero-mean PPO objective. The clipped PPO loss is expectation-zero in advantage by construction, and the value loss oscillates around its current critic baseline rather than monotonically descending; the FAMO update is then driven by sample noise rather than by task progress. (ii) Reward-scale confounding. Tasks in MT-Libero are trained with two distinct dense reward families (demonstration-guided tracking and MetaWorld-style geometric shaping, sec-tion A.5) and different per-task shaping weights, so per-task loss magnitudes track reward scale rather than difficulty. (iii) Critic-fit confounding. The PPO value-loss component reflects how well the critic has fit each task, not whether the actor is making progress; tasks where the critic is poorly initialized appear as “unfit” to a loss-based weighter and are upweighted for reasons unrelated to actor learning. IW-PPO sidesteps all three by using the per-task success-rate EMA, which is the same outcome metric used at evaluation, is bounded in [0 , 1] across tasks regardless of reward scale, and is independent of the critic’s instantaneous fit. A second benefit is composition with adaptive BC: IW-PPO and the demonstration weight βk share the same τk signal, so importance weighting and demonstration pressure coordinate on a single notion of task progress; a loss-based weighter would not align with the τk-driven BC schedule. 
+
+B.2 MTRL Baselines 
+
+The baselines below cover three orthogonal axes along which prior data can enter multi-task RL: as a curated reward shaping signal (MT-DeepMimic), as a behavior-cloning regularizer on the ac-tor (MT-DAPG), as prior replay data for an off-policy critic (MT-RLPD), and as reset states for a reverse curriculum (MT-RFCL); MT-PPO is the prior-free reference point. Each entry below states the original single-task method, the per-environment routing that ports it to the shared multi-task 17 rollout, and any deviations from the original formulation. Table 7 collects the symbols used in this subsection. Table 7: Baseline notation.             
+
+> Symbol Meaning
+> Bon ,Bdemo Online replay buffer and demonstration replay buffer
+> ρFraction of each off policy minibatch sampled from the demonstration replay buffer
+> Qi,Qtar
+> iCritic ensemble member and target critic
+> αSAC entropy temperature
+> UUpdate to data ratio for off policy critic updates
+> ξiDemonstration trajectory used by RFCL curriculum resets
+> ciRFCL reverse curriculum cursor for demonstration ξi
+> phase kPer task RFCL curriculum phase, reverse or forward
+
+MT-PPO. MT-PPO is the prior free on-policy baseline. We adapt standard PPO [31] to the multi-task setting by sharing one actor critic and one rectangular minibatch update across all K active LIBERO tasks: the task encoding zkt enters both networks as part of the policy observation, GAE advantages are computed per environment within episode boundaries so heterogeneous task hori-zons do not bleed across one another, and rewards are produced independently per task by the demonstration-free MetaWorld-style dense formulation in eq. (9) using each environment’s assigned task predicates. No demonstration signal is consumed. 
+
+MT-DeepMimic. DeepMimic [32] learns a single policy that tracks one reference motion by max-imizing an imitation reward composed of pose, velocity, and end effector tracking terms. We retain this formulation as the demonstration-guided dense tracking reward in eq. (7), and adapt it to multi-task training by routing a per-environment reference through the source command stream of sec-tion A.4 and conditioning a shared actor critic on the task encoding zkt , so that K heterogeneous references are tracked by one set of weights. Demonstrations enter only as the moving reference for the reward, not as replay data or actor regularization. 
+
+MT-DAPG. DAPG [18] augments policy gradient with a weighted behavior cloning gradient to-ward demonstration actions sampled from a single offline buffer. We port this regularizer to multi-task PPO by routing the matched action a⋆t and per-task weight βDt per environment through the source command stream, so each environment is regularized toward its own task’s demonstration while the actor critic, task encoding, and PPO loss are shared across the multi-task rollout. MT-DAPG uses the same rollout interface as DGPO. The actor regularizer is 
+
+LDAPG = −cDAPG Et
+
+βDt log πθ (a⋆t |ot) . (18) 
+
+MT-RLPD. RLPD [19] treats demonstrations as prior data for an off policy SAC update, with symmetric online/demo sampling, a large layer normalized critic ensemble, and a high update to data ratio. For multi-task training, the SAC actor and critic ensemble take zkt as part of the observation so that one set of weights is shared across all K tasks, and each demonstration transition is tagged with its source task identity at preprocessing so the demo buffer carries the per-task structure required by the task conditioned critic. Online transitions reuse the heterogeneous vectorized environment with per-task dense rewards computed by the env-to-task router at insertion time. The mixing ratio ρ
+
+controls how strongly demonstrations enter each minibatch. For a minibatch B = B(1 −ρ)B 
+
+> on
+
+∪ B ρB 
+
+> demo
+
+,the critic target and critic loss are 
+
+y = r + γ(1 − d)
+
+
+
+min  
+
+> j∈{ j1,j 2}
+
+Qtar  
+
+> j
+
+(s′, a ′) − α log πθ (a′|s′)
+
+
+
+, a′ ∼ πθ (·| s′), (19) 
+
+LQ = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+E(s,a,r,s ′,d )∼B 
+
+h
+
+(Qi(s, a ) − y)2i
+
+. (20) 18 Algorithm 2 RLPD Baseline 
+
+Require: Demonstration replay buffer Bdemo , online replay buffer Bon , demo ratio ρ, update to data ratio U 
+
+> 1:
+
+Initialize actor πθ , critic ensemble {Qi}ni=1 , target critics {Qtar  
+
+> i
+
+}ni=1 , and temperature α 
+
+> 2:
+
+for each environment step do  
+
+> 3:
+
+Sample a ∼ πθ (·| s), step the environment, and append (s, a, r, s ′, d ) to Bon  
+
+> 4:
+
+if |B on | is large enough then  
+
+> 5:
+
+for u = 1 , . . . , U do  
+
+> 6:
+
+Sample B ← B (1 −ρ)B 
+
+> on
+
+∪ B ρB  
+
+> demo
+> 7:
+
+Update critics with eq. (20)  
+
+> 8:
+
+Soft update target critics Qtar  
+
+> i
+
+← (1 − τQ)Qtar  
+
+> i
+
++ τQQi 
+
+> 9:
+
+end for  
+
+> 10:
+
+Update actor and temperature with eq. (21)  
+
+> 11:
+
+end if  
+
+> 12:
+
+end for 
+
+The actor uses states from the same mixed minibatch, but samples actions from the current policy: 
+
+Lπ = Es∼B , ˜a∼πθ (·| s)
+
+"
+
+α log πθ (˜ a|s) − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+Qi(s, ˜a)
+
+#
+
+. (21) Thus demonstrations influence the policy indirectly as prior knowledge through value learning; there is no explicit matched action actor regularization or DAPG term in RLPD. The target critics are updated softly, Qtar  
+
+> i
+
+← (1 −τQ)Qtar  
+
+> i
+
++τQQi, after critic updates. In our implementation, RLPD uses 
+
+n = nRLPD critics with critic layer normalization, symmetric sampling with ρ = ρRLPD , update to data ratio U = URLPD , and random two critic target backups as in eq. (20). The actor is updated on states from the same mixed minibatch using the ensemble mean Q value in eq. (21). Online MT-RLPD transitions use the active demo-free MetaWorld-style dense reward, while raw demonstration files provide successful state-action trajectories without rewards or done flags. The offline demo buffer is therefore prepared by a one-shot preprocessing step whose form differs between the state-input and the visual variants: • State-input MT-RLPD. Each demonstration is preprocessed offline to produce per-step policy observations, proprioceptive observations, privileged proprioceptive observations, actions, and dense rewards. The reward at each step reproduces the MetaWorld-style dense reward plus the shared safety penalty (eq. (9)–eq. (10)), scaled by the control time step 
+
+∆tctrl to match the reward accumulation convention of the online environment. • Visual-input MT-RLPD. Each demonstration is replayed once through the Isaac Lab en-vironment with the frozen Theia-ViT encoder active, so that the per-step patch tokens of shape (T, P, D v ) are pre-encoded and stored alongside the same flat observation and action groups; an identically computed dense-reward signal is then appended to each trajectory. At training time, MT-RLPD-ViT reads pre-encoded tokens directly from Bdemo , so no ViT forward pass is run inside the SAC loop. 
+
+MT-RFCL. RFCL [22] evaluates a reverse reset curriculum on top of SAC. The original formula-tion tracks a single global phase counter and applies PLR style per-state prioritized sampling [35]. In a heterogeneous multi-task batch this conflates fast and slow tasks and lets a fast task drag a slow one into the forward phase before its reverse curriculum has converged. Our multi-task adaptation therefore runs the curriculum independently per task, decoupling curriculum progress across tasks. The base optimizer keeps an online replay buffer Bon , and our implementation also exposes an optional demonstration replay buffer Bdemo wired through the same preprocessing pipeline as MT-RLPD. The symmetric demo/online mixing ratio ρRFCL controls the fraction of each SAC mini-batch drawn from Bdemo . In our LIBERO experiments, the online-only configuration ( ρRFCL = 0 )achieved higher reverse curriculum success rates than the symmetric ρRFCL = 0 .5 variant: mixing 19 Algorithm 3 RFCL Baseline 
+
+Require: Demonstration trajectories {ξi}, demonstration replay buffer Bdemo , online replay buffer 
+
+Bon , demo ratio ρRFCL  
+
+> 1:
+
+Initialize active RFCL cursors ci near the end of each demonstration and set per-task phase ←
+
+reverse  
+
+> 2:
+
+Initialize SAC actor, critics, target critics, and temperature  
+
+> 3:
+
+for each training episode do  
+
+> 4:
+
+if phase is reverse then  
+
+> 5:
+
+Sample reset state s0 from eq. (22)  
+
+> 6:
+
+Roll out SAC policy from s0 and append transitions to Bon  
+
+> 7:
+
+if the frontier success window is satisfied for demonstration i then  
+
+> 8:
+
+Update cursor ci ← max( ci − δ, 0) using eq. (23)  
+
+> 9:
+
+end if  
+
+> 10:
+
+if all active cursors for the task have reached the start threshold then  
+
+> 11:
+
+Unlock the full task demo pool and set phase ← forward  
+
+> 12:
+
+end if  
+
+> 13:
+
+else  
+
+> 14:
+
+Sample a demonstration uniformly from the full task pool and set s0 to its first state  
+
+> 15:
+
+Roll out SAC policy from s0 and append transitions to Bon  
+
+> 16:
+
+end if  
+
+> 17:
+
+Update SAC with mixed online and demo replay using eqs. (20) and (21) and ρRFCL  
+
+> 18:
+
+end for 
+
+demo transitions during the reverse curriculum biases the critic toward demo-state distributions be-fore the on-policy agent has explored them, which weakens the frontier-success signal that drives the cursor advance. We therefore default to ρRFCL = 0 and report online-only numbers. The curriculum is tracked per task rather than through a single global phase counter, so heteroge-neous tasks progress through the reverse-to-forward schedule independently and a fast task cannot drag a slow one into Phase 2 prematurely. For each task k, only the first N (1) of its |D k| demon-strations are active during Phase 1, while the remaining |D k| − N (1) are held out and unlock only when task k enters Phase 2. Each active demonstration ξi carries a private cursor ci initialized at 
+
+c(0)  
+
+> i
+
+= max(0 , ⌊pinit (Ti − 1) ⌉), where pinit = 0 .85 skips the trivially easy near-goal prefix; the original paper uses pinit = 1 .0. On reset, the environment samples a demonstration with probabil-ity proportional to its remaining cursor progress, samples a small forward offset ∆, and resets to 
+
+si,c i+∆ :
+
+prev (s0) : Pr( ξi) ∝ ci/T i, ∆ ∼ Geom( p∆), s0 = si,c i+∆ . (22) Only frontier resets with ∆ = 0 enter the cursor advance test. The cursor moves backward after the agent succeeds from the frontier state for a fixed window of episodes: 
+
+[last m rollouts from si,c i succeed ] ⇒ ci ← max( ci − δ, 0) . (23) Task k switches to Phase 2 only when all N (1) active cursors have reached the start threshold; this is a cursor-based trigger, not a global success-rate threshold, so admission to Phase 2 is decided strictly on the task’s own reverse curriculum. At the switch the full demo pool for that task is unlocked (N (2) = |D k| demonstrations samplable), and future resets draw a demonstration uniformly and start from its first state si, 0. The broader pool therefore acts as a wider distribution of natural initial conditions; we replace the original PLR-based per-timestep prioritized sampling with this uniform 
+
+t = 0 scheme so that no per-state score buffer or staleness bookkeeping is required. The actor, critics, online buffer, and demo buffer are carried across the switch. The SAC loss follows the off policy objective in eqs. (20) and (21) with ρRFCL , twin-Q critics ( nRFCL = 2 ), and update-to-data ratio URFCL = 1 .20 Figure 4: RoboTwin multi-task benchmark extension. We additionally reproduced a multi-task RoboTwin benchmark instantiation to test whether the same descriptor-based construction recipe extends beyond LIBERO to dual-arm manipulation scenes with different assets, task geometry, and coordination structure. 
+
+# C Supplementary Experimental Details 
+
+Section C.1 verifies that the benchmark construction scales beyond LIBERO (RoboTwin extension) and meets the throughput needed for joint MT training; section C.2 reports the simulation-side supplementary measurements (replay rates, reward ×algorithm cross-matrix, shared-infrastructure ablations, robustness construction, and failure analysis); section C.4 documents the preliminary real-world rollouts. 
+
+C.1 Scalable Workflow Validation RoboTwin multi-task extension. To test whether the same benchmark construction recipe transfers beyond LIBERO, we also reproduced a multi-task RoboTwin benchmark instantiation. RoboTwin [33] is a dual-arm manipulation benchmark built around generative digital twins and real-world-aligned evaluation, with task diversity coming from coordinated bimanual interactions, object variation, and spatially constrained manipulation. In our reproduction, each RoboTwin task is compiled into the same descriptor-driven interface used by MT-Libero: task groups define assets, resets, success checks, and task routing, while the simulator side still shares one vectorized roll-out structure and one policy update stack. This lets the construction recipe extend from single-arm LIBERO suites to a qualitatively different bimanual benchmark without changing the overall multi-task RL interface. Figure 4 shows one example scene from the reproduced RoboTwin benchmark. 
+
+Throughput measurement details. The throughput comparison in table 1 was measured on a host with 8 ×L20 GPUs (48 GB each) and 2 ×Xeon Platinum 8468V CPUs (192 cores total). The single GPU simulator only comparison uses one L20 for Isaac Lab/PhysX and the full 192-cored CPU for the MuJoCo baseline at the same 1,600 environment count; the MuJoCo memory number reports cumulative multi process resident memory. The 8 GPU PPO result includes rollout, policy/value forward and backward passes, and NCCL all reduce. MTBench MT50-rand is included only as a contextual GPU RL throughput reference: its Meta-World scenes have at most two free rigid bodies per environment, whereas MT-Libero scenes typically contain five to eight free bodies plus articulated containers. 21 C.2 Simulation Experiment Details Sim2sim replay success. Direct replay of the MuJoCo source demonstrations under PhysX reaches 37.0% on Goal, 55.6% on Object, 47.8% on Spatial, and 15.0% on Long before online RL. These replay rates quantify the sim2sim gap caused by contact dynamics and controller timing differences between the source and target simulators. Table 8: Algorithm × reward cross-matrix. Mean success rate across MT-Libero suites under both dense rewards.           
+
+> Method MetaWorld-style reward Demo-guided reward MT-PPO 0.392 0.025 (MT-DeepMimic) MT-RLPD 0.325 0.0 MT-RFCL 0.394 0.0 DGPO 0.316 0.893
+
+Algorithm × Reward cross-matrix. 
+
+Table 8 pairs every method with both dense reward formulations. Only the cell combining DGPO with the demonstration-guided reward achieves non-trivial success; every other cell collapses to the prior-free baseline cluster or below. Under the MetaWorld reward, the on-policy distribution drifts away from the demonstrations, leaving DGPO’s matched-action regularizer with little signal and erasing the algorithmic gap to prior-free PPO and other demonstration-based baselines. Under the demonstration-guided reward the tracking kernel in eq. (7) concentrates reward mass on a narrow near-demonstration manifold. This collapses SAC’s maximum-entropy exploration, which is why MT-RLPD and MT-RFCL score zero in this column; granting the SAC critic the same privileged observations DGPO uses does not recover the gap (see the shared-infrastructure paragraph below). The same concentrated reward provides no usable gradient for PPO without an actor-side regularizer, which is why MT-DeepMimic also collapses. DGPO and the demonstration-guided reward are therefore co-designed: the reward keeps the rollout state distribution close to the matched-action targets, and IW-PPO together with adaptive BC convert that proximity into an actor-side gradient. The combined boost, not either piece alone, is what produces DGPO’s gains in table 2. Table 9: Shared infrastructure ablations. DGPO with the gripper curriculum and privileged critic removed; both pieces are applied uniformly across all baselines that share their training regime.                     
+
+> Variant SS SR ↑MS SR ↑SR-AUC ↑Tail-20 SR ↑
+> DGPO 0.824 0.464 0.588 0.043
+> w/o Gripper Cur 0.462 00.317 0w/o Priv Critic 0.001 00.001 0
+
+Shared infrastructure ablations: gripper curriculum and privileged critic. The gripper curriculum and the privileged critic are essential MT-Libero training infrastructure, so we ablate them separately here. The gripper curriculum is enabled for all 
+
+methods evaluated in table 2: un-til the per-task success-rate EMA crosses τ grip  
+
+> ⋆
+
+the policy gripper bit is replaced by the demonstration gripper command, after which the learned bit takes over. The privileged critic is used by every algorithm trained with the demonstration-guided dense reward, including MT-DeepMimic, MT-DAPG, DGPO, and the MT-RLPD and MT-RFCL configurations in the demonstration-guided column of table 8; the SAC base-lines on the MetaWorld-style reward in the main comparison do not use it. Table 9 shows the effect of removing each piece from DGPO: dropping the gripper curriculum roughly halves single-stage success and zeroes multi-stage Long success, and dropping the privileged critic collapses training to 0.1% . We therefore treat these two pieces as required infrastructure for the demonstration-guided dense reward setting and apply them uniformly across the comparison, rather than ablating them in table 3. 
+
+Demonstration range robustness. For each task, we compute the coordinate wise minimum and maximum over the 50 demonstration initial states and construct an in range robustness test by sam-pling resets inside this demonstration envelope. The Robustness Gap measures the drop from suc-cess on nominal demonstration start evaluation to success under these in range perturbations; smaller 22 gaps indicate that a policy has learned a local task region rather than a set of isolated demonstration points. 
+
+Failure case analysis. We inspected failed rollouts and grouped them into four recurring modes. 
+
+Action collapse under task ambiguity appears when the policy produces low magnitude or hesitant motions in shared regions of the state space where different tasks require conflicting behaviors. This accounts for stop moving failures in long 0 , long 8 , long 9 , goal 0 , and goal 2 , as well as initial state hesitation in object 5 . Suboptimal hybrid action coordination covers gripper and contact failures, including missed release triggers in long 7 , object 3 , and object 7 , object ejection after unstable grasping in object 9 , and inaccurate grasp poses in long 1 and spatial 4 . Cascading errors in long horizon execution occur when small early deviations shift the rollout away from the demonstrated state distribution and compound over later stages. Dynamics mismatch in articu-lated manipulation is most visible in incomplete contact rich operations such as knob manipulation, where long 2 and goal 7 accumulate error before the articulation reaches the required state. 
+
+C.3 Visual Input Off-Policy Training Details Memory footprint. The visual actor observation is 2P D v = 13 ,824 floats per step (section A.7), which is ∼ 32 × the state-input dimensionality. Off-policy MT-RLPD and MT-RFCL store 
+
+(ot, at, ot+1 ) tuples and sample at UTD up to 20 , so the replay buffer becomes the dominant GPU-memory consumer. Table 10 quantifies the gap: re-using the state-input hyperparameters in the visual setting requires ∼ 770 GB of replay memory per seed, while the largest visual configuration that fits a single 48 GB L20 caps |B on |+|B demo | ≤ 150 k transitions and num envs = 40 , reducing rollout volume by 23 ×.Table 10: Per-transition memory and total memory footprint for the off-policy visual baselines. 
+
+Three configurations per method: (i) state-input as used; (ii) hypothetical visual training at the state-input hyperparameters; (iii) the largest visual configuration that fits the available GPU memory budget, as used in this paper.                                                               
+
+> (a) MT-RLPD
+> State Visual Visual (used) (state hp.) (fitted)
+> num envs 2,560 2,560 40
+> batch size 4,096 4,096 1,024
+> |B on |3.0 M 3.0 M 50 k
+> |B demo |0.5 M 0.5 M 90 k Bytes / transition 6.8 KB 219 KB 219 KB Replay buffer 23.9 GB 766 GB 30.7 GB Total memory ∼32 GB ∼780 GB ∼40 GB Single-GPU feasible ✓×✓
+> (b) MT-RFCL
+> State Visual Visual (used) (state hp.) (fitted)
+> num envs 2,560 2,560 40
+> batch size 4,096 4,096 1,024
+> |B on |1.0 M 1.0 M 150 k
+> |B demo |–––Bytes / transition 6.8 KB 219 KB 219 KB Replay buffer 6.8 GB 219 GB 32.9 GB Total memory ∼16 GB ∼227 GB ∼40 GB Single-GPU feasible ✓×✓
+
+Same-hardware MT-RLPD and MT-RFCL. We ran MT-RLPD and MT-RFCL in the visual set-ting under the L20-fit configuration of table 10. Neither baseline reached non-trivial success on any LIBERO suite; fig. 5 shows the mean episode reward slowly decreases and per-suite success rate plateauing near zero throughout training. The lack of convergence is consistent with two com-pounding effects of the per-GPU memory budget: (i) the truncated replay buffer limits demonstration coverage and the target-Q diversity that high-UTD SAC depends on; (ii) the 1,024 -sample minibatch is too small for a 40-task conditional policy, and the cross-task gradient variance is inflated further by asymmetric actor–critic training with privileged observations. Neither factor can be relaxed with-out exceeding the 48 GB single-GPU envelope, so the “–” entries for MT-RLPD and MT-RFCL in the visual rows of table 2 reflect an engineering ceiling rather than an algorithmic failure. 
+
+Future engineering directions. The per-GPU memory ceiling is the binding constraint for visual off-policy training in our current stack, and two systems-level improvements should lift it without 23 Figure 5: Comparison of state-input and visual-input MT-RFCL and MT-RLPD under the single-L20 budget. Mean episode reward (left) and per-suite success rate (right) over training; both plateau near zero throughout, consistent with the buffer- and batch-size constraints in table 10. 
+
+Figure 6: Qualitative real robot rollouts. The figure shows rollout snapshots from the preliminary real-world transfer check across three tabletop scenes using one simulation-trained state-input pol-icy. algorithmic changes. A host-RAM-backed replay buffer with overlapped host-to-device streaming and double-buffered minibatches would restore the state-input replay capacity at a modest per-step transfer cost. A distributed rollout buffer that shards transitions, renderer load, and SAC updates across multiple devices would remove the bottleneck entirely. Both directions are orthogonal to DGPO’s multi-task RL design and we leave them to future work. 
+
+C.4 Real-World Experiments Preliminary real-world qualitative check. We set up a real state-input interface that provides the actor with structured task index, robot, object, and target states in the same format used by the state-input policy in simulation. As an initial transfer check, we deploy one simulation-trained state-input multi-task actor without changing its network weights and record qualitative rollouts in three real tabletop scenes. We do not report aggregate real-world success rates at this stage; the purpose is to reserve a compact visual record of transfer behavior for the final paper. 
+
+# D Consolidated Parameter Values 
+
+The appendix formulas keep numerical constants symbolic; the values used in our experiments are collected in table 11. 24 Table 11: Appendix parameter values. Numerical constants used by the implementation details, reward definitions, DGPO schedules, visual encoder, and baselines. 
+
+Symbol Description Value 
+
+Simulation configuration 
+
+∆tsim Physics time step 1/60 s
+
+d Action decimation 3∆tctrl Control time step 0.05 s (20 Hz) 
+
+Tmax Maximum episode length 26 s, or 520 steps 
+
+γ Discount factor 0.99 
+
+g⋆ Evaluation success threshold 0.8
+
+ηv Joint velocity limit multiplier 1.5
+
+pmax Training reset cursor cap 0.8
+
+σq Reset joint noise standard deviation 0.05 rad 
+
+pfilt Logging filter cursor cap 0.3
+
+Action and controller 
+
+sp Relative translation action scale 1/20 
+
+sR Relative rotation action scale 1/2
+
+ktask OSC task-space stiffness 150 
+
+ζ OSC damping ratio 1.0
+
+kns OSC null-space stiffness 10 
+
+θgrip open Open gripper target 0.04 m
+
+θgrip close Closed gripper target 0.0 m
+
+τ grip  
+
+> ⋆
+
+Gripper-curriculum success threshold 0.3
+
+Reward 
+
+wsucc Sparse success bonus 10 
+
+w∆a Action smoothness penalty 5×10 −4
+
+wa Action norm penalty 5×10 −4
+
+w ˙q Joint velocity penalty 10 −3
+
+wOOL pos Joint position out-of-limit penalty 1
+
+wOOL vel Joint velocity out-of-limit penalty 0.5
+
+σr Tracking kernel bandwidth 0.1
+
+wee ,p 
+
+> κ
+
+Dense EE position tracking weight 0.5
+
+wee ,r 
+
+> κ
+
+Dense EE rotation tracking weight 1.0
+
+wgrip  
+
+> κ
+
+Dense gripper tracking weight 0.4
+
+wobj ,p 
+
+> κ
+
+Dense object position tracking weight 0.10 
+
+wart  
+
+> κ
+
+Dense articulation tracking weight 0.05 
+
+wobj ,r 
+
+> κ
+
+Dense object rotation tracking weight 0.05 
+
+wagg Accumulated-kernel success payout weight 0.1
+
+wmw succ MetaWorld-style success bonus 10 
+
+λlift Lift-progress interaction weight 0.5
+
+ϵ Hamacher denominator guard 10 −6
+
+σreach Reach and handle approach width 0.30 m
+
+σplace Placement distance width 0.20 m
+
+hlift Lift saturation height 0.05 m
+
+σrot joint Rotational joint progress width 0.50 
+
+σlin joint Non-rotational joint progress width 0.20 
+
+smw Multi-goal shaping scale 10 
+
+DGPO schedules 
+
+sIW IW-PPO success-balance sigmoid slope 10 
+
+wmax Maximum importance weight 2.0
+
+wmin Minimum importance weight 0.5
+
+αema Per-task success EMA rate 0.05 
+
+τlow Full demonstration guidance threshold 0.10 
+
+τhigh Minimum demonstration guidance threshold 0.50 
+
+βmax Maximum adaptive BC weight 1.0
+
+βmin Minimum adaptive BC weight 0.10 
+
+cBC Base adaptive BC coefficient 1.0
+
+Network architecture and optimizer (shared) 
+
+hπ , h V Actor and critic MLP hidden widths [512 , 256 , 128] act MLP activation ELU 
+
+25 Symbol Description Value 
+
+σ0 Initial policy log-std (Gaussian actor) 0.8norm Observation normalization running mean/std 
+
+opt Optimizer Adam, 
+
+β1=0 .9, β 2=0 .999 
+
+On-policy core (DGPO, MT-PPO, MT-DeepMimic, MT-DAPG) 
+
+ε PPO clip range 0.15 
+
+cv Value-loss coefficient 1.0
+
+cH Entropy bonus coefficient 0.005 
+
+λGAE GAE trace decay 0.95 
+
+Trollout Rollout length per iteration 16 steps 
+
+Nep PPO epochs per rollout 5
+
+Nmb Minibatches per epoch 4
+
+ηθ Policy and value learning rate 2×10 −4
+
+KL ⋆ Adaptive learning rate KL target 0.005 
+
+gmax Global gradient norm clip 1.0
+
+Off-policy core (MT-RLPD, MT-RFCL) 
+
+B SAC minibatch size 4,096 
+
+Bstart Uniform-action warmup env steps 1,000 
+
+ηπ Actor learning rate 3×10 −4
+
+ηQ Critic learning rate 3×10 −4
+
+γα Temperature learning rate 3×10 −3
+
+α0 Initial entropy temperature 1.0
+
+Htarget Target entropy 1.0 (auto-α)
+
+|B on | Online replay capacity 1×10 6 (RFCL) 
+
+3×10 6 (RLPD) 
+
+|B demo | Demonstration replay capacity 5×10 5
+
+Visual variant 
+
+pvit ViT patch size 16 
+
+Dv ViT hidden dimension 192 
+
+Lv ViT transformer depth 12 
+
+Himg , W img Camera image resolution 100 , 100 
+
+P Patch tokens per camera 36 
+
+Baselines 
+
+cDAPG MT-DAPG actor regularizer coefficient 1.0
+
+nRLPD RLPD critic ensemble size 10 
+
+ρRLPD RLPD demonstration minibatch fraction 0.5
+
+URLPD RLPD update-to-data ratio 20 
+
+τQ Soft target update rate 0.01 
+
+nRFCL RFCL twin-critic count 2
+
+URFCL RFCL update-to-data ratio 1
+
+ρRFCL RFCL-SAC demonstration minibatch fraction 0 or 0.5
+
+m RFCL frontier success window 3 rollouts 
+
+δ RFCL cursor decrement 8 steps 
+
+p∆ RFCL geometric offset parameter 0.5
+
+pinit RFCL Phase 1 cursor init fraction 0.85 
+
+26

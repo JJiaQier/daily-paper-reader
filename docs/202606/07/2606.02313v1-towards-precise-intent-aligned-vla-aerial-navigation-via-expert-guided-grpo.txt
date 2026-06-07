@@ -1,0 +1,235 @@
+Title: Towards Precise Intent-Aligned VLA Aerial Navigation via Expert-Guided GRPO
+
+URL Source: https://arxiv.org/pdf/2606.02313v1
+
+Published Time: Tue, 02 Jun 2026 03:00:28 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Towards Precise Intent-Aligned VLA Aerial Navigation via Expert-Guided GRPO 
+
+Tianyang Chen ∗1,2 , Wenjun Li ∗1,2 , Xin Zhou 1,2 , Yuze Wu †1,2 , and Fei Gao †1,2 1Zhejiang University 
+
+> 2
+
+Differential Robotics  
+
+> ∗
+
+Equal contribution; † Corresponding author. 
+
+Abstract: Vision-Language-Action (VLA) models offer a promising end-to-end paradigm for unmanned aerial vehicles (UAVs) to accomplish complex tasks spec-ified by fine-grained instructions. However, standard supervised fine-tuning (SFT) suffers from data scarcity, limited generalization, and weak supervision for nu-anced and complicated human intents. Reinforcement fine-tuning offers a natu-ral way to mitigate these challenges and align policy behaviors with human in-tents through designable feedback, but applying it to aerial navigation remains challenging due to inefficient exploration in expansive continuous spaces. To address these challenges, we introduce an efficient reinforcement learning (RL) framework for VLA-based aerial navigation. At its core, we propose EG-GRPO 
+
+(Expert-Guided Group Relative Policy Optimization) to augment online rollouts with few-shot expert data. Additionally, we design a heterogeneous pipeline en-abling parallel simulation and inference, which reduces rollout time by 43.5% .Across multiple tasks specified by complex human intents, EG-GRPO improves the success rate to 2.13 × that of the SFT baseline, while improving intent align-ment performance by 60.9% . These results demonstrate that our framework can move aerial navigation toward precise intent-aligned flight. Our videos are avail-able on § Intent-Aligned AerialNav, code will be released soon. 
+
+Keywords: UAV Navigation, VLA, Reinforcement Fine-Tuning 
+
+## 1 Introduction 
+
+Vision-Language-Action (VLA) models have emerged as a promising paradigm for autonomous robotic systems [1]. By directly mapping high-level natural-language instructions and visual obser-vations to low-level control commands, VLA models provide an end-to-end pipeline that integrates perception, decision-making, and execution. However, the prevailing supervised fine-tuning (SFT) framework, which consists of large-scale general pre-training followed by fine-tuning on domain-specific datasets [2], faces several challenges. On the one hand, acquiring high-quality datasets, such as complex flight trajectories of unmanned aerial vehicles (UAVs) in navigation scenarios, incurs substantial financial and labor costs [3]. On the other hand, merely scaling SFT datasets encounters diminishing marginal returns and cannot generalize to out-of-distribution (OOD) scenarios [4]. Recent breakthroughs in VLA models have provided a compelling solution to overcome these bot-tlenecks. Pioneering studies [5, 6, 7] on robotic manipulation have proposed several reinforcement learning (RL) frameworks for VLA models, built upon algorithms such as Proximal Policy Op-timization (PPO) [8] and Group Relative Policy Optimization (GRPO) [9]. By leveraging trial-and-error exploration with designable rewards, these works demonstrate that RL can substantially boost performance, adaptability, and generalization of VLA models across diverse scenarios. As manipulation and navigation are core robotic challenges [10], the success of the VLA-RL frame-work naturally raises a question: Can RL also strengthen the capability of VLA models in aerial navigation?   
+
+> arXiv:2606.02313v1 [cs.RO] 1 Jun 2026 Fig. 1: Overview of our framework. We introduce a reinforcement learning framework tailored for VLA-based 3D aerial navigation, which integrates a high-fidelity simulation and expert-guided online training to enable UAVs to acquire precise intent-aligned flight skills.
+
+However, directly migrating this framework to aerial navigation is non-trivial due to several do-main discrepancies. Manipulation tasks frequently employ outcome-based reward structures (e.g., binary success signals for grasping), focusing primarily on the final state [11, 12, 13]. In contrast, navigation is inherently a continuous spatial process that requires evaluating qualitative trajectory attributes at every waypoint [14]—such as safety, smoothness, and alignment with nuanced human intents. Moreover, in 3D UAV navigation, the expansive continuous state space, coupled with the requirements to fulfill fine-grained task instructions, severely constrains the efficiency of random ex-ploration [15, 16, 17]. For complex tasks such as “S-shaped bypassing” (bypass the two objects by passing left of the first and right of the second), random exploration struggles to effectively sample high-value behavioral trajectories. Beyond domain discrepancies, two challenges hinder practical deployment. First, existing naviga-tion frameworks prioritize long-range trajectory planning [18, 19, 20], whereas our work focuses on executing complex semantic instructions within confined spaces. This necessitates a simula-tion infrastructure that integrates high-precision scene modeling, high-fidelity physics, and high-throughput online data acquisition to enable continuous policy learning. Second, the sequential coupling between environment simulation and VLA inference induces substantial resource idling, prolonging data collection cycles and impeding scalable policy iteration [21]. To address these algorithmic and engineering challenges, we introduce a reinforcement learning framework tailored for VLA-based 3D aerial navigation, as illustrated in Fig. 1. To mitigate explo-ration inefficiency in expansive 3D spaces, we propose EG-GRPO (Expert-Guided Group Relative 
+
+Policy Optimization), which integrates few-shot expert data into online rollouts. The expert-guided mechanism preserves non-degenerate relative advantages and delivers stable gradient signals that effectively prevent policy stagnation under sparse reward conditions. Concurrently, we deploy a reward model that provides instruction-conditioned feedback for optimization. At the system level, we construct a high-fidelity, interactable UAV simulation platform and develop a heterogeneous pipeline to parallelize simulation and inference, reducing rollout time by 43.5% . Extensive exper-iments across multiple intent-driven UAV navigation tasks confirm that EG-GRPO improves both task completion and intent alignment: compared with the SFT baseline, EG-GRPO improves the success rate to 2.13 × that of the SFT baseline, and improves intent alignment performance by 
+
+60.9% . Collectively, these results demonstrate that our framework successfully elevates VLA aerial navigation from basic goal-reaching to precise intent-aligned autonomous flight. 22 Related Work 
+
+2.1 Vision-Language Navigation for UAV 
+
+UAV navigation based on human language instructions has evolved from modular language-grounded continuous-control frameworks [22, 23, 24] to aerial Vision-Language Navigation (VLN) and VLA models [25, 26, 27]. While these efforts have successfully addressed the challenge of reaching precise endpoints via complex instructions by leveraging large-scale datasets derived from human pilot operations or high-fidelity simulations, they still exhibit certain limitations. Previous research [28, 29, 30, 31] predominantly centers on long-range navigation tasks. These approaches neglect the critical dimension of “how to fly” , rendering existing models incapable of executing in-structions pertaining to complex and nuanced human intent that extend beyond basic goal-reaching requirements. 
+
+2.2 Reinforcement Learning for VLA Models 
+
+RL has recently emerged as a promising paradigm for improving VLA models in robotic manip-ulation [32, 12, 33]. Lu et al. [34] formulate manipulation trajectories as multi-modal multi-turn conversations and use a robotic process reward model to mitigate sparse rewards, enabling online RL fine-tuning of a pretrained autoregressive VLA model. Li et al. [35] introduce an efficient RL framework with VLA-specific trajectory sampling, scalable parallelization, and multi-environment rendering, showing that binary outcome rewards can improve VLA performance and induce complex behaviors beyond supervised training data. Despite notable progress in developing generalizable and proficient manipulation policies, existing research remains predominantly focused on robotic arm-based manipulation. Although studies such as MoRE [36] and NavGRPO [37] on quadrupedal robots suggest the potential of VLA-RL in navigation, the specific challenges of aligning aerial trajectories with human instructions remain underexplored. 
+
+## 3 Methodology 
+
+As shown in Fig. 2, this section elaborates on the overall architecture and workflow of our frame-work. We build a simulation platform that integrates kinematic simulation with a large collection of high-fidelity scenarios, enabling the policy to generate trajectories in parallelized virtual environ-ments. To mitigate the sparsity of high-value trajectories, we use few-shot expert data to augment online rollouts. Building upon this foundation, we develope a reward model that generates fine-grained trajectory-level reward signals. Finally, the GRPO algorithm completes iterative policy up-dates with reward signals and action probabilities. Additionally, to address efficiency bottlenecks in large-scale training, we significantly reduced the time overhead of the rollout phase by parallelizing simulation and inference on heterogeneous computing platforms. 
+
+3.1 Problem Formulation and Optimization Objective 
+
+We formulate instruction-conditioned UAV navigation as a trajectory-level policy optimization prob-lem. Given a human instruction I and an observation ot, where 
+
+ot = ( ovis  
+
+> t
+
+, o vis 0 , o prop  
+
+> t
+
+)
+
+consists of the current RGB observation ovis  
+
+> t
+
+, the initial RGB observation ovis 0 , and the current pro-prioceptive state oprop  
+
+> t
+
+= [ xt, y t, z t, ψ t], the VLA policy πθ autoregressively generates UAV control commands at = [∆ x, ∆y, ∆z, ∆ψ]. The objective is to maximize the expected trajectory reward 
+
+R(τ, I) produced by the reward model, where τ = {(ot, a t)}Tt=1 denotes a complete flight trajec-tory. Formally, the learning goal is to optimize the policy parameters θ by maximizing the expected return over trajectories conditioned on I:
+
+θ∗ = arg max  
+
+> θ
+
+Eτ ∼πθ (·|I ) [R(τ, I)] , (1) 3Fig. 2: Overview of the Training Pipeline. First, the VLA policy generates actions according to visual observations and nuanced instructions. Then, trajectories are executed in parallelized simulations and augmented with offline expert data. Finally, a reward model is deployed to score these trajectories based on task performance, providing fine-grained rewards for updating VLA models. 
+
+By directly optimizing this trajectory-level expectation, the VLA policy learns to generate control sequences that not only achieve the instructed goal but also adhere to nuanced and complex human intents in 3D aerial environments. 
+
+3.2 Policy Initialization with Supervised Fine-Tuning 
+
+For complex flight navigation tasks, the quality of the initial policy directly determines the conver-gence stability and ultimate performance ceiling during the RL phase. Therefore, acquiring a VLA model with fundamental navigation capabilities is crucial for our pipeline. We select OpenVLA-OFT [38] as the foundation model due to its strong capabilities and frame-work compatibility. To adapt it for UAV navigation, we constrain the original action output via a masking function M(·), filtering out irrelevant degrees of freedom and restricting the output to the 4-DoF pose control commands [∆ x, ∆y, ∆z, ∆ψ]. At the data level, we process the open-source UAV-flow [39] dataset through a custom conversion pipeline, transforming raw flight logs into instruction-conditioned sequential tuples compatible with the training architecture of OpenVLA-OFT. This yields the SFT dataset Dnav = {(o(i), I(i), a (i))}Ni=1 . The SFT phase then optimizes the policy parameters θ by minimizing the conditional log-likelihood of trajectories: 
+
+LSFT (θ) = −E(o, I,a )∼D nav [log πθ (a | o, I)] . (2) Minimizing this objective produces the initialized navigation policy πinit . While not globally opti-mal, πinit establishes critical behavioral priors that anchor early-stage exploration. 
+
+3.3 Expert-Guided Group Relative Policy Optimization 
+
+VLA aerial navigation imposes significant data inefficiency due to vast feasible exploration spaces and sparse reward signals. High-value behaviors aligned with nuanced human intents are extremely scarce in purely online rollouts, often causing policy stagnation in low-reward regions. To over-come this, we propose EG-GRPO , which seamlessly integrates few-shot expert data into GRPO’s group-relative optimization framework. Rather than treating expert data as a separate pre-training phase, we inject it directly into the online learning loop by constructing hybrid trajectory groups that guarantee at least one high-value anchor per update step [40]. Formally, during each policy iteration, we sample a trajectory group G of size G from a hybrid distribution Dmix = (1 − ρ)Donline + ρDexpert , where ρ = 1 /G . In practice, this yields groups com-4posed of G − 1 online exploration trajectories sampled from πθold and exactly one expert trajectory synthesized by a rule-based generator conditioned on task instructions. For such a mixed group 
+
+G = {τ1, . . . , τ expert }, the group-relative advantage for the i-th trajectory is computed as: 
+
+ˆAi = R(τi, I) − μG
+
+σG + ϵ , μG = 1
+
+G
+
+> G
+
+X
+
+> j=1
+
+R(τj , I), σG =
+
+vuut 1
+
+G
+
+> G
+
+X
+
+> j=1
+
+(R(τj , I) − μG )2, (3) where ϵ ensures numerical stability. Crucially, the expert trajectory τexpert ∈ G acts as a high-reward anchor that prevents μG from collapsing to zero in highly complex tasks. This guarantees non-degenerate σG and preserves the discriminative power of ˆAi, allowing online trajectories to receive meaningful relative feedback even when they uniformly underperform. The expert trajectory natu-rally attains a high positive advantage, providing a stable gradient signal for human intent alignment. The policy parameters θ are updated by maximizing the clipped surrogate objective over the hybrid group: 
+
+LEG-GRPO (θ) = EG∼D mix 
+
+ 1
+
+G
+
+> G
+
+X
+
+> i=1
+
+1
+
+|τi|
+
+> |τi|
+
+X
+
+> t=1
+
+min 
+
+
+
+ri,t (θ) ˆAi, clip (ri,t (θ), 1 − δ, 1 + δ) ˆAi
+
+ , (4) where ri,t (θ) = πθ (ai,t |oi,t , I)/π θold (ai,t |oi,t , I) denotes the step-wise policy ratio, and δ controls the clipping range. Furthermore, we remove the KL divergence regularization to avoid constraining the exploration of novel behaviors [35]. By optimizing over G, the algorithm simultaneously learns from online exploration and expert data. This unified formulation resolves the reward sparsity bot-tleneck: the expert anchor prevents exploration collapse and consistently elevates navigation quality on complex fine-grained instructions, as empirically validated in our experiments. 
+
+3.4 UAV Simulation Platform for VLA-RL 
+
+To support high-throughput policy rollouts and ensure physical realism during online RL training, we construct a vectorized simulation platform based on Isaac Lab [41]. As illustrated in Fig. 2, raw 3D assets are first processed to generate precise collision meshes, guaranteeing accurate physics-based interaction and safety-critical collision detection. Instruction-conditioned task templates (e.g., target orbiting, obstacle passing, and approach maneuvers) are then configured and instantiated into 
+
+N parallel environment instances. To bridge policy outputs with physical execution, we integrate a UAV kinematic model that maps the VLA’s action deltas directly to continuous, dynamically feasible flight trajectories. This vectorized architecture enables simultaneous trajectory sampling across large-scale scenarios, sustaining the continuous, high-frequency data acquisition required for stable policy iteration. 
+
+3.5 Efficient Rollout with Heterogeneous Parallelization 
+
+In large-scale online RL training, the rollout phase often constitutes the primary time bottleneck. The Isaac Lab simulation platform relies on GPUs equipped with RT Cores (e.g., NVIDIA L20) for hardware-accelerated ray tracing and physical computations, whereas VLA model inference achieves optimal efficiency on compute-optimized accelerators (e.g., NVIDIA A100). Traditional synchronous workflows enforce a strict serial dependency: generating observations, inferring ac-tions, and executing physics steps must occur sequentially. This conventional pipeline forces the RT Core-equipped GPUs and the compute accelerators to strictly alternate between active and idle states, leading to severe hardware underutilization and extended training times [21]. To circumvent this bottleneck, we design a heterogeneous simulation-inference architecture built upon a double-buffer paradigm. Cross-node data synchronization is facilitated by SSH tunneling and the Ray distributed framework. As depicted in Fig. 3, the environment interaction loop is decoupled into two asynchronous task streams (Group A and Group B) that execute in a cyclic pipeline: 
+
+Step I: Group A performs physics simulation on the L20 workstation to collect observations, while Group B concurrently runs VLA inference on the A100 server to predict actions. 5Fig. 3: Heterogeneous Parallelization Workflow. Conventional serial execution alternates between simulation on RT-core GPUs (L20) and VLA inference on compute GPUs (A100), causing severe hardware idling. Our framework decouples these stages via a dual-group scheduling strategy with a double-buffer mechanism, reducing rollout time by 43.5% .
+
+Step II: Group A streams its newly collected observations to the A100 server. Simultaneously, Group B transmits its predicted actions back to the L20 workstation. 
+
+Step III: Group A initiates inference on the A100 server using the newly received observations, while Group B executes the received actions within the L20 simulation to collect the next set of observations. Iterating through Steps I–III sustains a continuous, non-blocking data collection pipeline. This or-chestrated scheduling strategy fully exploits heterogeneous compute capabilities, dramatically com-pressing GPU idle windows. Empirical evaluations confirm that the proposed architecture substan-tially reduces rollout phase duration, thereby establishing a practically viable engineering pathway for large-scale online RL training. 
+
+3.6 Instruction-Conditioned Reward Model 
+
+To supply trajectory-level optimization signals beyond binary success or failure, we employ an instruction-conditioned reward model that evaluates the quality of complete flight trajectories. Given a flight trajectory τ and the corresponding instruction I, the reward model assigns a scalar score by assessing the degree to which the trajectory aligns with the fine-grained instruction. This enables richer feedback for instruction-conditioned UAV navigation, where intermediate trajectory quality, safety, and motion style are often as important as reaching the final goal. Due to the diversity of navigation tasks and the complexity of nuanced instructions, we implement the reward model with a large language model (LLM), which holistically evaluates the trajectory with respect to the given instruction: 
+
+R(τ, I) = fLLM (τ, I), (5) where fLLM denotes the instruction-conditioned scoring function. To examine the reliability of the evaluator, we validate its scores on 10K trajectories from the online rollouts using a structured human-in-the-loop protocol. Certified drone pilots independently assess the quality of each trajec-tory with respect to the corresponding instruction, and their judgments are compared against the evaluator outputs. The evaluator achieves a high human agreement rate, suggesting strong consis-tency with expert assessments. Here, human agreement rate denotes the fraction of samples for which the evaluator’s score falls within a predefined tolerance of the averaged pilot assessment. This reward model functions as a plug-and-play scoring component within our framework, provid-ing continuous, instruction-aware feedback to guide policy updates. 6Fig. 4: Simulation results of several intent-aligned tasks. We visualize representative tasks covering S-shaped bypassing, object orbiting, under/over passing, speed-modulated approach, risk-aware bypassing, and precision landing. Each example includes follow-view frames, onboard-view frames, and the corresponding 3D trajectory colored by flight speed. 
+
+## 4 Experiments 
+
+4.1 Experimental Setup and Evaluation Metrics 
+
+To evaluate our VLA policy, we construct the Human-Intent-Driven Navigation evaluation suite in our simulation platform. Diverse navigation tasks are organized into two task groups according to whether the required behavior is supported by the initial navigation prior. Easy tasks are derived 7from common navigation instruction templates with additional lightweight intent constraints (e.g., approaching a target quickly, and passing an obstacle from safer side). These tasks evaluate whether our method can improve the navigation performance when the initial policy already possesses rea-sonable navigation priors. Difficult tasks contain complex fine-grained flight skills that are rarely covered by the original instruction set (e.g., S-shaped bypassing, and under/over passing). These tasks are used to evaluate whether EG-GRPO can elicit complex skills when effective trajectories are scarce with initial policy. We evaluate task performance using Success Rate (SR) and Intent Alignment Score (IAS) . SR measures whether the UAV successfully completes the given navigation task, while IAS evaluates the degree to which the executed trajectory satisfies the fine-grained human instruction. Specifically, IAS is derived from the trajectory-level score produced by our instruction-conditioned evaluator, which is validated against expert UAV pilot assessments to ensure consistency with human judg-ment. Compared with SR, which provides a binary measure of task completion, IAS offers a more fine-grained assessment of instruction-following quality. 
+
+4.2 Simulation Results 
+
+We benchmark our policy against two representative vision-language-action models, π0 [42] and 
+
+OpenVLA-OFT [38]. Since raw VLA checkpoints do not possess inherent aerial navigation capa-bilities, we fine-tune both baselines on the UAV-flow dataset using supervised learning. In particular, the SFT-initialized OpenVLA-OFT is used as our policy baseline before RL optimization. Table 1: Results of benchmark evaluations across different task difficulty.                                        
+
+> Model Easy Difficult Overall IAS Mean ⇑SR/% ⇑IAS Mean ⇑SR/% ⇑IAS Mean ⇑SR/% ⇑
+> π06.15 41.2 4.47 22.8 5.31 32.0 OpenVLA-OFT 5.19 33.5 3.81 18.7 4.50 26.1 w/ Ours 8.28 68.2 6.20 43.1 7.24 55.6
+> ∆+3.09 +34.7 +2.39 +24.4 +2.74 +29.5
+
+As shown in Tab. 1, our method substantially improves over both VLA baselines across easy and difficult task groups. On easy tasks, our policy achieves a 34.7% gain in SR over OpenVLA-OFT, improving from 33.5% to 68.2% . Meanwhile, IAS increases from 5.19 to 8.28 , indicating stronger intent alignment under common navigation instructions. The advantage remains clear on difficult tasks. Our method achieves a 24.4% gain in SR over OpenVLA-OFT, improving from 18.7% to 43.1% , while IAS increases from 3.81 to 6.20 . These results suggest that the proposed framework is not limited to refining existing navigation behaviors, but also helps the policy acquire complex flight skills under sparse initially effective trajectories. Overall, EG-GRPO achieves a 29.5% gain in SR over OpenVLA-OFT, improving from 26.1% to 
+
+55.6% , while IAS increases from 4.50 to 7.24 . These findings demonstrate that EG-GRPO improves instruction-conditioned trajectory quality in diverse UAV navigation tasks. 
+
+4.3 Real-World Deployment 
+
+As shown in Fig. 5, we deploy the trained policy in several representative real-world scenarios to evaluate zero-shot transfer. The tasks involve diverse human-intent constraints, including S-shaped bypassing, speed-modulated object navigation, and visual-locking orbiting. Without additional real-world fine-tuning, the policy successfully executes the given instructions and produces physically feasible trajectories, demonstrating effective alignment between high-level semantic intent and low-level UAV kinematic control. 8Fig. 5: Real-world deployment results. We show several distinct linguistic commands executed in a physical environment. The results demonstrate zero-shot transfer from simulation to real-world UAV navigation under complex human instructions. 
+
+4.4 Ablation Studies 
+
+We conduct ablation studies to isolate the contributions of the key components in our framework. In particular, we focus on whether EG-GRPO is necessary for difficult tasks, where high-quality online trajectories are sparse and pure RL exploration may provide unstable optimization signals. For policy learning, we compare three training configurations: 
+
+Baseline : the supervised fine-tuned OpenVLA-OFT policy trained on the UAV-flow dataset. 
+
+Baseline+GRPO : RL initialized from the SFT baseline and optimized with intent-aware trajectory-level feedback, without expert data injection. 
+
+Baseline+EG-GRPO : our complete framework, which injects few-shot expert data into online rollouts during GRPO optimization. As shown in Tab. 2, only applying GRPO improves the IAS from 3.81 to 4.66 and SR from 18.7% 
+
+to 26.4% in difficult tasks. This confirms that GRPO can refine the SFT policy beyond supervised imitation, even when the initial policy provides limited effective priors for difficult tasks. However, the improvement remains limited, indicating that standard online RL still struggles to discover high-quality trajectories in difficult UAV navigation tasks. By contrast, EG-GRPO further improves the difficult-task IAS to 6.20 and SR to 43.1% . Compared with GRPO, expert-guided optimization brings an additional gain of 1.54 in IAS and 16.7% in SR. 9Table 2: Ablation results of different training components on difficult tasks.                     
+
+> Method SFT with Offline Dataset RL with Trajectory-level Reward Expert Data Injection into Online Rollouts IAS Mean ⇑SR/% ⇑
+> Baseline ✓✗✗3.81 18.7 Baseline +GRPO ✓✓✗4.66 26.4 Baseline +EG-GRPO ✓✓✓6.20 43.1
+
+This validates the necessity of expert data injection in challenging tasks. By introducing few-shot ex-pert trajectories into online rollout groups, EG-GRPO preserves non-degenerate relative advantages, and stabilizes policy updates when purely online rollouts rarely sample high-quality behaviors.  
+
+> Table 3: Comparison of the total rollout time cost per RL training step between the sequential baseline and our method.
+
+Method Time Cost (s) Avg. Std. 
+
+Baseline 904.67 58.55 Ours 511.01 91.90 
+
+We further evaluate the efficiency gain brought by the proposed het-erogeneous rollout parallelization. As shown in Tab. 3, the paral-lelized simulation-inference pipeline reduces the rollout time from 
+
+904.67s to 511.01s per RL training step. This corresponds to a re-duction of approximately 43.5% , or equivalently reduces the roll-out time to 56.5% of the sequential baseline. The result verifies that decoupling environment simulation and VLA inference effec-tively alleviates hardware idling between RT-core GPUs used for physics simulation and compute GPUs used for policy inference. By enabling the two stages to proceed asynchronously through double-buffer scheduling, the proposed pipeline substantially im-proves rollout throughput and makes online RL fine-tuning more practical for scalable training. 
+
+## 5 Conclusion 
+
+In this work, we introduce an RL framework for VLA-based UAV navigation under complex, fine-grained language instructions. To overcome inefficient exploration in continuous 3D spaces, we propose EG-GRPO , which augments online rollouts with few-shot expert trajectories and uses trajectory-level reward feedback to guide policy updates. We also design a heterogeneous simulation-inference pipeline that reduces rollout time by 43.5% . Experiments across multiple UAV navigation tasks show that EG-GRPO improves the success rate from 26.1% to 55.6% over the SFT baseline, while improving intent alignment performance by 60.9% . These results suggest that our framework enables VLA aerial navigation to move beyond goal-reaching toward reliable instruction-aligned autonomous flight. 10 References 
+
+[1] R. Sapkota, Y. Cao, K. I. Roumeliotis, and M. Karkee. Vision-language-action models: Con-cepts, progress, applications and challenges. arXiv preprint arXiv:2505.04769 , 2025. [2] G. Tie, Z. Zhao, D. Song, F. Wei, R. Zhou, Y. Dai, W. Yin, Z. Yang, J. Yan, Y. Su, et al. A survey on post-training of large language models. arXiv preprint arXiv:2503.06072 , 2025. [3] J. Gao, A. Xie, T. Xiao, C. Finn, and D. Sadigh. Efficient data collection for robotic manipu-lation via compositional generalization. arXiv preprint arXiv:2403.05110 , 2024. [4] J. Liu, F. Gao, B. Wei, X. Chen, Q. Liao, Y. Wu, C. Yu, and Y. Wang. What can rl bring to vla generalization? an empirical study. arXiv preprint arXiv:2505.19789 , 2025. [5] D. Kim, S. Park, H. Jang, J. Shin, J. Kim, and Y. Seo. Robot-r1: Reinforcement learning for enhanced embodied reasoning in robotics. arXiv preprint arXiv:2506.00070 , 2025. [6] Z. Chen, R. Niu, H. Kong, Q. Wang, Q. Xing, and Z. Fan. Tgrpo: Fine-tuning vision-language-action model via trajectory-wise group relative policy optimization. arXiv preprint arXiv:2506.08440 , 2025. [7] A. Ye, Z. Zhang, B. Wang, X. Wang, D. Zhang, and Z. Zhu. Vla-r1: Enhancing reasoning in vision-language-action models. arXiv preprint arXiv:2510.01623 , 2025. [8] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. [9] Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. Li, Y. Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. [10] L. H. K. Wong, X. Kang, K. Bai, and J. Zhang. A survey of robotic navigation and manipulation with physics simulators in the era of embodied ai. arXiv preprint arXiv:2505.01458 , 2025. [11] J. Luo, C. Xu, J. Wu, and S. Levine. Precise and dexterous robotic manipulation via human-in-the-loop reinforcement learning. Science Robotics , 10(105):eads5033, 2025. [12] Y. Chen, S. Tian, S. Liu, Y. Zhou, H. Li, and D. Zhao. Conrft: A reinforced fine-tuning method for vla models via consistency policy. arXiv preprint arXiv:2502.05450 , 2025. [13] O. Kilinc and G. Montana. Reinforcement learning for robotic manipulation using simulated locomotion demonstrations. Machine Learning , 111(2):465–486, 2022. [14] S. Nahavandi, R. Alizadehsani, D. Nahavandi, S. Mohamed, N. Mohajer, M. Rokonuzzaman, and I. Hossain. A comprehensive review on autonomous navigation. ACM Computing Surveys ,57(9):1–67, 2025. [15] S. Liu, H. Zhang, Y. Qi, P. Wang, Y. Zhang, and Q. Wu. Aerialvln: Vision-and-language navigation for uavs. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 15384–15394, 2023. [16] P. Ladosz, L. Weng, M. Kim, and H. Oh. Exploration in deep reinforcement learning: A survey. 
+
+Information Fusion , 85:1–22, 2022. [17] T. Wu, G. Xu, Z. Wang, J. Lin, T. Chen, Y. Wu, Z. Han, Z. Liu, and F. Gao. Precise aggressive aerial maneuvers with sensorimotor policies. arXiv preprint arXiv:2604.05828 , 2026. [18] P. Lin, G. Sun, C. Liu, F. Li, W. Ren, and Y. Cong. Openvln: Open-world aerial vision-language navigation. arXiv preprint arXiv:2511.06182 , 2025. 11 [19] J. Lee, T. Miyanishi, S. Kurita, K. Sakamoto, D. Azuma, Y. Matsuo, and N. Inoue. City-nav: A large-scale dataset for real-world aerial navigation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 5912–5922, 2025. [20] W. Jiang, L. Wang, K. Huang, W. Fan, J. Liu, S. Liu, H. Duan, B. Xu, and X. Ji. Longfly: Long-horizon uav vision-and-language navigation with spatiotemporal context integration. arXiv preprint arXiv:2512.22010 , 2025. [21] H. Zang, M. Wei, S. Xu, Y. Wu, Z. Guo, Y. Wang, H. Lin, L. Shi, Y. Xie, Z. Xu, et al. Rlinf-vla: A unified and efficient framework for vla+ rl training. arXiv preprint arXiv:2510.06710 , 2025. [22] V. Blukis, Y. Terme, E. Niklasson, R. A. Knepper, and Y. Artzi. Learning to map natural language instructions to physical quadcopter control using simulated flight. arXiv preprint arXiv:1910.09664 , 2019. [23] V. Blukis, N. Brukhim, A. Bennett, R. A. Knepper, and Y. Artzi. Following high-level navigation instructions on a simulated quadcopter with imitation learning. arXiv preprint arXiv:1806.00047 , 2018. [24] V. Blukis, D. Misra, R. A. Knepper, and Y. Artzi. Mapping navigation instructions to con-tinuous control actions with position-visitation prediction. In Conference on Robot Learning ,pages 505–518. PMLR, 2018. [25] X. Wang, D. Yang, Z. Wang, H. Kwan, J. Chen, W. Wu, H. Li, Y. Liao, and S. Liu. Towards re-alistic uav vision-language navigation: Platform, benchmark, and methodology. arXiv preprint arXiv:2410.07087 , 2024. [26] Y. Gao, C. Li, Z. You, J. Liu, Z. Li, P. Chen, Q. Chen, Z. Tang, L. Wang, P. Yang, et al. Openfly: A comprehensive platform for aerial vision-language navigation. arXiv preprint arXiv:2502.18041 , 2025. [27] Y. Wu, M. Zhu, X. Li, Y. Du, Y. Fan, W. Li, Z. Han, X. Zhou, and F. Gao. Vla-an: An efficient and onboard vision-language-action framework for aerial navigation in complex environments. 
+
+arXiv preprint arXiv:2512.15258 , 2025. [28] X. Zhang, Y. Tian, F. Lin, Y. Liu, J. Ma, X. Wang, K. S. Szatm´ ary, and F.-Y. Wang. Logis-ticsvln: Vision-language navigation for low-altitude terminal delivery based on agentic uavs. In 2025 IEEE 28th International Conference on Intelligent Transportation Systems (ITSC) ,pages 4437–4442. IEEE, 2025. [29] P. Saxena, N. Raghuvanshi, and N. Goveas. Uav-vln: End-to-end vision language guided navigation for uavs. In 2025 European Conference on Mobile Robots (ECMR) , pages 1–6. IEEE, 2025. [30] H. Cai, J. Dong, J. Tan, J. Deng, S. Li, Z. Gao, H. Wang, Z. Su, A. Sumalee, and R. Zhong. Flightgpt: Towards generalizable and interpretable uav vision-and-language navigation with vision-language models. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pages 6670–6687, 2025. [31] O. Sautenkov, Y. Yaqoot, A. Lykov, M. A. Mustafa, G. Tadevosyan, A. Akhmetkazy, M. A. Cabrera, M. Martynov, S. Karaf, and D. Tsetserukou. Uav-vla: Vision-language-action system for large scale aerial mission generation. In 2025 20th ACM/IEEE International Conference on Human-Robot Interaction (HRI) , pages 1588–1592. IEEE, 2025. [32] H. Zhang, Z. Zhuang, H. Zhao, P. Ding, H. Lu, and D. Wang. Reinbot: Amplifying robot visual-language manipulation with reinforcement learning. arXiv preprint arXiv:2505.07395 ,2025. 12 [33] Y. Guo, J. Zhang, X. Chen, X. Ji, Y.-J. Wang, Y. Hu, and J. Chen. Improving vision-language-action model with online reinforcement learning. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pages 15665–15672. IEEE, 2025. [34] G. Lu, W. Guo, C. Zhang, Y. Zhou, H. Jiang, Z. Gao, Y. Tang, and Z. Wang. Vla-rl: To-wards masterful and general robotic manipulation with scalable reinforcement learning. arXiv preprint arXiv:2505.18719 , 2025. [35] H. Li, Y. Zuo, J. Yu, Y. Zhang, Z. Yang, K. Zhang, X. Zhu, Y. Zhang, T. Chen, G. Cui, et al. Simplevla-rl: Scaling vla training via reinforcement learning. arXiv preprint arXiv:2509.09674 , 2025. [36] H. Zhao, W. Song, D. Wang, X. Tong, P. Ding, X. Cheng, and Z. Ge. More: Unlocking scal-ability in reinforcement learning for quadruped vision-language-action models. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pages 11212–11218. IEEE, 2025. [37] J. Li, C. Wan, S. Dong, C. Ding, Q. Wang, Z. Ma, and Y. Gong. Trajectory-diversity-driven robust vision-and-language navigation. arXiv preprint arXiv:2603.15370 , 2026. [38] M. J. Kim, C. Finn, and P. Liang. Fine-tuning vision-language-action models: Optimizing speed and success. arXiv preprint arXiv:2502.19645 , 2025. [39] X. Wang, D. Yang, Y. Liao, W. Zheng, B. Dai, H. Li, S. Liu, et al. Uav-flow colosseo: A real-world benchmark for flying-on-a-word uav imitation learning. Advances in Neural Information Processing Systems , 38, 2026. [40] P. J. Ball, L. Smith, I. Kostrikov, and S. Levine. Efficient online reinforcement learning with offline data. In International Conference on Machine Learning , pages 1577–1594. PMLR, 2023. [41] M. Mittal, P. Roth, J. Tigue, A. Richard, O. Zhang, P. Du, A. Serrano-Munoz, X. Yao, R. Zurbr¨ ugg, N. Rudin, et al. Isaac lab: A gpu-accelerated simulation framework for multi-modal robot learning. arXiv preprint arXiv:2511.04831 , 2025. [42] K. Black, N. Brown, D. Driess, A. Esmail, M. Equi, C. Finn, N. Fusai, L. Groom, K. Hausman, B. Ichter, et al. pi 0: A vision-language-action flow model for general robot control. arXiv preprint arXiv:2410.24164 , 2024. 13
