@@ -1,0 +1,653 @@
+Title: Autonomous Aerial Manipulation via Contextual Contrastive Meta Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2606.08533v1
+
+Published Time: Tue, 09 Jun 2026 01:49:15 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# AUTONOMOUS AERIAL MANIPULATION VIA CONTEXTUAL 
+
+# CONTRASTIVE META REINFORCEMENT LEARNING 
+
+A P REPRINT 
+
+Lixuan Jin 1,2, Bingxuan Lan 1,2, Xinyi Bao 1,2, Xiangyuan Xie 3, Chunjie Zhang 3, Zheng Chen 1,2,Tianshuo Liu 1,2, Ruijie Tian 1,2, Jinyu Ru 3, Gang Wang 4, Lei Yuan 1,2, Yang Yu 1,21 National Key Laboratory of Novel Software Technology, Nanjing University, Nanjing, China  
+
+> 2
+
+School of Artificial Intelligence, Nanjing University, Nanjing, China  
+
+> 3
+
+Faculty of Robot Science and Engineering, Northeastern University, China  
+
+> 4
+
+National Key Lab of Autonomous Intelligent Unmanned Systems, Beijing Institute of Technology, China 
+
+{jinlx,lanbx,baoxy}@smail.nju.edu.cn ,
+
+{xiexiangyuan,zhangcj,rujingyu}@mails.neu.edu.cn ,
+
+{chenz,liuts,tianrj,yuanl,yuy}@lamda.nju.edu.cn , {gangwang}@bit.edu.cn 
+
+## ABSTRACT 
+
+Unmanned aerial vehicles (UAVs) are increasingly being deployed in logistics, service robotics, and other real-world applications, creating a growing demand for autonomous payload acquisition and delivery. Existing approaches typically assume pre-attached payloads or rely on specialized grippers, leaving versatile end-to-end aerial delivery largely unresolved, where different payloads induce highly variable flight dynamics, requiring a single policy to adapt online without manual calibration or explicit system identification. To this end, we study Autonomous Aerial Manipu-lation via Co ntextual Co ntrastive Meta Reinforcement Learning ( Aco2 ), a fully autonomous aerial delivery setting in which a quadrotor equipped with a lightweight hook continuously picks up, trans-ports, and delivers diverse handle-equipped objects between randomized locations, all without hu-man intervention. First, we design a contextual observation encoder that infers a compact latent context from recent interaction history, enabling the policy to adapt online to payload-dependent dynamics. To further improve the quality of this context, we introduce a contrastive objective that structures the context embedding around task-relevant variations, improving generalization across diverse payloads without requiring explicit system identification. Trained entirely in simulation with extensive domain randomization, Aco2 can be directly deployed on a physical quadrotor without real-world fine-tuning. Experiments show that it enables unattended delivery of handle-equipped objects that are relatively heavy or bulky for the vehicle, demonstrating the practical potential of Aco2 for scalable aerial logistics, emergency supply delivery, and industrial material transport by leveraging the fast and obstacle-free mobility of UAVs. An overview video is available at 
+
+https://youtu.be/DLuZz9xxrJQ .
+
+## 1 Introduction 
+
+Benefiting from high maneuverability and largely obstacle-free airspace, unmanned aerial vehicles (UAVs) have been increasingly adopted across a wide spectrum of civilian and industrial domains, including environmental monitor-ing (Asher et al., 2021; Chen et al., 2026), precision agriculture (Ahmed et al., 2026; Xing et al., 2025; Manu et al., 2026; Arsenoaia et al., 2026), and infrastructure inspection (Mei et al., 2025; Liu et al., 2026). Beyond perception and navigation, there is growing interest in UAVs that physically interact with objects and environments (Barakou et al., 2024; Deshmukh et al., 2025), with autonomous object transport emerging as a particularly pressing need in demand-ing scenarios such as emergency supply delivery (Nisingizwe et al., 2022) and industrial material handling (Trujillo et al., 2019). The payloads encountered in these settings are often heavy, bulky, and irregularly shaped, with widely varying mass and inertial properties that substantially alter the quadrotor’s flight dynamics upon attachment(Sreenath 
+
+> arXiv:2606.08533v1 [cs.LG] 7 Jun 2026
+
+et al., 2013a), demanding a control policy with strong generalization across diverse objects and rapid online adaptation to each new payload. Existing work has made considerable progress but typically addresses only part of this problem. A large body of aerial transport research assumes the payload is manually attached before takeoff (Zeng et al., 2025; Lorentz et al., 2025; Cao et al., 2026; Wang et al., 2025), which not only requires human intervention but also results in a relatively task-specific setting where the controller is rarely exposed to unfamiliar dynamics. Methods that incorporate autonomous grasping or hooking (Antal et al., 2025a,b; Ye et al., 2026; D’Antonio et al., 2026; Chen et al., 2025) remove this dependency, but typically require modeling, parameter tuning, or controller design, limiting their scalability to diverse objects and deployment conditions. Learning-based approaches have begun to relax these assumptions, yet demonstrations remain limited to simple, lightweight objects such as cups, plush toys, or small parcels (Tucker et al., 2026; Huang et al., 2025), far from the payload diversity that real-world deployment demands. To address these challenges, we adopt a lightweight passive hook as the end-effector, capable of acquiring any handle-equipped object regardless of its geometry and mass. Building on this platform, we propose Autonomous Aerial Manipulation via Co ntextual Co ntrastive Meta Reinforcement Learning ( Aco2 ) to handle the highly variable flight dynamics induced by diverse payloads. Our framework employs a history-conditioned policy that maintains a compact latent embedding for online dynamics inference, with a contrastive auxiliary objective that further structures this embedding by separating representations of different payloads, mitigating the representation collapse common in multi-task learning. Training the full hooking, transport, and detachment sequence end-to-end presents significant optimization difficulties. We address this through a curriculum learning strategy (Bengio et al., 2009) that decomposes the task into manageable stages. A threshold-based reward formulation balances aggressive task completion against conservative control, and extensive domain randomization across physical and perceptual parameters equips the policy with robustness to the sim-to-real gap. Together, these strategies make the learning of Aco2 tractable and enable its successful zero-shot transfer to a physical quadrotor. We comprehensively evaluate the proposed Aco2 framework across simulated environments and real-world deploy-ments, with the two settings playing complementary roles. Leveraging the controlled, quantitative evaluation afforded by simulation, we isolate the effect of the proposed contrastive context learning in producing robust contextual rep-resentations across diverse payloads. Since real-world experiments are required to verify sim-to-real transfer of the policy under payload variations and hardware constraints, we use them to demonstrate Aco2 ’s capability to perform fully autonomous deliveries by executing the complete pipeline of payload engagement, transportation, and automated detachment. Finally, we conduct ablation studies to verify that our proposed regularization terms and threshold-based rewards are strictly necessary for maintaining physical flight stability and robust policy optimization. 
+
+## 2 Related Work 
+
+2.1 Aerial Manipulation 
+
+Aerial manipulation (Khamseh et al., 2018; Ruggiero et al., 2018) and transport aim to enable autonomous deliv-ery across payloads with diverse geometries, masses, and inertial properties. Several existing suspended load ap-proaches (Sreenath et al., 2013b) focus on overcoming in-flight external disturbances by dynamics modeling. They rely on pre-suspended payloads before flight, which cannot address the problem of autonomous attachment. Coopera-tive cable transport (Sreenath and Kumar, 2013; Lee, 2017; Tognon et al., 2018) extends this setting to multiple UAVs, yet it remains dependent on pre-hooked setups, unable to address complex docking situations and resulting in relatively task-specific applications. Another class of methods employs sophisticated controller design (Pounds et al., 2011; Lip-piello and Ruggiero, 2012; Antal et al., 2025b; D’Antonio et al., 2026) and modeling (Mellinger et al., 2011; Orsag et al., 2013; Kim et al., 2013; Ye et al., 2026) to enable autonomous payload acquisition and manipulation, eliminating the need for manual payload pre-attachment. However, their reliance on explicit models or task-specific controllers makes generalization across diverse payloads nontrivial. Recent studies have opted for learning-based methods, such as reinforcement learning (Huang et al., 2025) and vision-language-action models (Tucker et al., 2026), which effec-tively relax these constraints. However, the manipulated objects in current demonstrations remain relatively simple, leaving open the challenge of robust delivery across diverse payloads. 
+
+2.2 Meta-RL 
+
+Traditional RL typically optimizes a policy within a fixed environmental configuration, making it prone to overfitting to specific task dynamics. Meta-RL addresses this limitation by enabling rapid adaptation to unseen tasks through meta-learning how policies solve problems (Beck et al., 2025). This makes meta-RL particularly relevant to robotics, where agents must quickly adjust to varying tasks, dynamics, and environmental conditions during deployment. MAML (Finn et al., 2017)-based methods typically learn an initialization from training tasks and adapt it to a new task through several policy-gradient updates (Kim et al., 2025; Arndt et al., 2020; Yu et al., 2020b; Ghadirzadeh et al., 2021). Such methods require additional model updates in the target environment and typically rely on at least one trajectory for adaptation, which can be costly and risky for safety-critical real-world robotic systems, especially aerial manipulation. Another category of methods conditions the policy on a context vector inferred from historical data to represent the current task (Akkaya et al., 2019; Kumar et al., 2021; He et al., 2023). Among these, (Fu et al., 2021; Wang et al., 2023) use contrastive losses to improve context quality by learning more discriminative task representations. Yet, to the best of our knowledge, existing contrastive meta-RL methods are predominantly evaluated in simulated benchmarks (e.g., MuJoCo (Todorov et al., 2012), Meta-World (Yu et al., 2020a)), while real-world meta-RL demonstrations have mainly focused on ground robots, legged locomotion, or dexterous manipulation platforms. In contrast, our work demonstrates contrastive meta-RL on a physical quadrotor system for zero-shot aerial manipulation, realizing autonomous delivery across diverse payloads. 
+
+## 3 Preliminaries 
+
+We model the aerial manipulation problem as a partially observable Markov decision process (POMDP), defined by the tuple M = ( S, A, O, P, R, Ω, γ, ρ 0). Here, S is the full state space, A is the action space, O is the observation space, 
+
+P (st+1 | st, a t) is the transition function, R(st, a t) is the reward function, Ω( ot | st) is the observation function, 
+
+γ ∈ [0 , 1) is the discount factor, and ρ0 is the initial distribution over states. At each timestep, the agent receives an observation ot ∈ O , selects an action at ∈ A according to its policy. We consider a distribution of POMDPs {M μ}μ∼p(μ), where each task is defined as Mμ = ( S, A, O, P μ, R, Ω, γ, ρ 0).
+
+The tasks share the same observation space, observation function, and reward function, while the transition dynamics 
+
+Pμ vary with the latent context μ. In our setting, μ captures unobserved payload and system properties, including object mass, geometry, center-of-mass offset, aerodynamic drag, motor delay, and action delay, among others. Observations are additionally corrupted by noise under a shared observation model. Initial and target locations are randomized across episodes and represented through relative-position observations. 
+
+## 4 Method 
+
+This section presents the methodology of the proposed Aco2 framework, with the overall architecture shown in Fig. 1. 
+
+Aco2 builds on a context-based policy that infers a compact latent embedding from interaction history for online dynamics adaptation, as described in Sec. 4.1. Sec. 4.2 introduces a contrastive auxiliary objective that further struc-tures this embedding by separating representations of different payloads, mitigating representation collapse. Finally, since learning the complete hooking, transport, and detachment sequence end-to-end is difficult, Sec. 4.3 describes the training procedure used to make optimization tractable. 
+
+4.1 Context-Based Policy Overall architecture The policy and critic architectures are shown in Fig. 1(B). At each timestep, the current obser-vation ot and previous action at−1 are first encoded by separate MLP encoders and then concatenated as the input to a GRU context encoder, which produces a history-dependent context feature. In parallel, ot is encoded by another MLP observation encoder with the same architecture as the observation encoder, producing an instantaneous state feature. The context feature and instantaneous state feature are concatenated and passed to the policy and value head, where the policy outputs parameters of a Beta distribution over bounded actions. The critic follows the same overall architecture but uses independent encoders, allowing the actor and critic to learn different temporal representations for control and value estimation. Detailed network specifications and key implementation details are provided in Appx. A.4. 
+
+Observations, actions and rewards At timestep t, the state of the UAV is given by xu,t = [ pu,t , qu,t , vu,t , ωu,t ],
+
+where the subscript t denotes the timestep, pu,t ∈ R3 denotes the UAV position, qu,t ∈ R4 denotes its orientation quaternion, and vu,t ∈ R3, ωu,t ∈ R3 denote its linear and angular velocities, respectively. The state of the bar attached to the hook is represented as xb,t = [ pb,t , qb,t , vb,t , ωb,t ] . We also include the previous action at−1 in the observation to improve action smoothness. To make the policy directly aware of the manipulation objective, we construct task-relative geometric observations. Let ph,t , pl,t , po,t , pg,t , and pe,t denote the positions of the hook tip, selected handle, selected object, target goal, and exit point, respectively. The task observation is defined as 
+
+xr,t = [ da,t , pl,t , ph,t , pg,t , pe,t , po,t , dhl,t , dog,t , dhe,t ], where da,t contains the relative vectors from the hook tip to all candidate handles, and dhl,t = pl,t −ph,t , dog,t = pg,t −po,t , dhe,t = pe,t −ph,t . The full policy observation (A) Environment 
+
+> Sim to  Real
+
+Aco2 
+
+> Encoder
+> 𝐀
+> Encoder
+> 𝐀 𝐀
+> Encoder
+> 𝐀 𝐀
+> GRU Context Encoder
+> 𝐀 𝐀
+> 𝐀 𝐀 𝐀
+
+Low-level 
+
+Controller  
+
+> CTBR
+> command
+> Policy Network Value Network
+> Domain
+> Randomization
+> Zero-shot
+> Transfer
+
+(B) Contextual Based Policy (C) Contrastive Auxiliary Objective     
+
+> Trajectory Embedding Pool
+> 𝐀 𝐀 = normalize( 𝐀𦠀𝐀𤠀 𝐀 ,𝐀 𝐀 ,𝐀 )
+> chunk-level embeddings {𝐀 𝐀 ,𝐀 𝐀 }
+
+𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 −𝐀  
+
+> Contrastive Loss
+> 𝐀 𝐀𝐀𝐀
+> pull same-payload ,push different-payload
+
+-
+
+> +
+> +
+
+-               
+
+> {𝐀 𝐀 ,𝐀 𝐀 }{𝐀 𝐀 ,𝐀 𝐀 }
+> −𝐀𙐀𝐀 𝐀𗠀𝐀 (𝐀𛀀𝐀 (𝐀 𝐀 ,𝐀 𝐀
+> +)/ 𝐀 )
+> 𝐀𗠀𝐀 (𝐀𛀀𝐀 (𝐀 𝐀 ,𝐀 𝐀
+> +)/ 𝐀 )+ 𝐀 𝐀𗠀𝐀 (𝐀𛀀𝐀 (𝐀 𝐀 ,𝐀 𝐀
+> −)/ 𝐀 )𝐀 =𝐀 𝐀
+> 𝐀𝐀𝐀 +𝐀 𝐀
+> 𝐀𝐀𝐀 +𝐀 ·𝐀 𝐀𝐀𝐀
+
+𝐀 ·𝐀 𝐀𝐀𝐀    
+
+> 𝐀 (𝐀 𝐀 )𝐀 𝐀 (𝐀 𝐀 )𝐀 𝐀 (𝐀 𝐀 −𝐀 )
+> [𝐀 (𝐀 𝐀 ),𝐀 𝐀 ]
+> 𝐀 𝐀
+
+Figure 1: The overall framework of Aco2 .is then 
+
+ot = [ xu,t , at−1, xb,t , xr,t ].
+
+We use collective thrust and body-rate control (CTBR) as the action interface, where the policy specifies collective thrust and desired body rates. The policy outputs a four-dimensional action: 
+
+at = [ ct, ω xt , ω yt , ω zt ] ,
+
+where ct denotes the normalized collective thrust command, and ωxt , ωyt , and ωzt denote the desired body rates around the roll, pitch, and yaw axes. The reward at time t, denoted as rt, is defined as 
+
+rt = rhook ,fine  
+
+> t
+
++ rhook ,coarse  
+
+> t
+
++ robj  
+
+> t
+
++ rexit  
+
+> t
+
+− cact  
+
+> t
+
+− cvel  
+
+> t
+
+− ctilt  
+
+> t
+
+.
+
+Here rhook ,fine  
+
+> t
+
+and rhook ,coarse  
+
+> t
+
+encourage the hook tip to approach the selected handle. The fine-grained term provides high-precision guidance near the handle, which is necessary for successful hooking, while the coarse-grained term provides a smoother long-range signal when the hook is still far from the handle. The term robj  
+
+> t
+
+encourages the selected object to move toward the target position, and rexit  
+
+> t
+
+guides the hook toward a predefined exit point after the object reaches the target region. The remaining terms are regularization costs: cact  
+
+> t
+
+penalizes abrupt action changes, cvel  
+
+> t
+
+penalizes excessive velocity, and ctilt  
+
+> t
+
+penalizes unsafe tilt angles. Instead of continuously encouraging smaller action changes or lower velocities, these costs are activated only when the corresponding quantity exceeds a predefined threshold. This threshold-based design avoids conflicting with task completion while still discouraging unstable behaviors. Detailed reward formula-tions are provided in Appx. A.3. 
+
+4.2 Contrastive Context Encoder 
+
+The GRU context encoder described above produces a latent embedding at each timestep, but without explicit super-vision there is no guarantee that these embeddings capture task-relevant distinctions across episodes with different payload contexts. Contrastive representation learning addresses this by shaping an embedding space in which tra-jectory segments collected under the same latent context are pulled together, while segments from different contexts are pushed apart. Given an encoder gψ (·) that maps an input xi to an embedding zi = gψ (xi), contrastive learning constructs a positive sample x+ 
+
+> i
+
+drawn from the same latent context as xi, and a set of negative samples {x− 
+
+> j
+
+} drawn from episodes with different contexts. A widely used objective is the InfoNCE loss: 
+
+LNCE (i) = − log exp(sim( zi, z + 
+
+> i
+
+)/τ )exp(sim( zi, z + 
+
+> i
+
+)/τ ) + ∑ 
+
+> j
+
+exp(sim( zi, z − 
+
+> j
+
+)/τ ) ,where sim( ·, ·) is typically cosine similarity and τ > 0 is a temperature parameter. Minimizing LNCE aligns the embeddings of trajectory segments that share an underlying context and separates those that do not, so that the recurrent state produced by gψ becomes a discriminative summary of the latent payload context, which the downstream actor and critic can condition on. In our implementation, as illustrated in Fig. 1(C), we adopt the supervised contrastive loss (Khosla et al., 2020) to encourage the recurrent encoder to distinguish different payload contexts. Concretely, during PPO training, we sample a mini-batch of trajectory chunks from the replay buffer. Each chunk is associated with a task label yi corresponding to the latent context of the episode. For the i-th chunk, the valid recurrent features are averaged to obtain a context embedding: 
+
+zi = 1
+
+|T i|
+
+∑
+
+> t∈T i
+
+hi,t , ¯zi = zi
+
+∥zi∥2
+
+,
+
+where Ti denotes the valid timesteps before an episode boundary. For each anchor i, the positive set is P (i) = {p | yp = yi, p ̸ = i}. Anchors without positive samples are ignored. The contrastive loss is defined as 
+
+Lcon = − 1
+
+|I| 
+
+∑
+
+> i∈I
+
+1
+
+|P (i)|
+
+∑ 
+
+> p∈P(i)
+
+log exp ( ¯z⊤ 
+
+> i
+
+¯zp/τ )∑  
+
+> a̸=i
+
+exp ( ¯z⊤ 
+
+> i
+
+¯za/τ ) ,
+
+where I = {i | | P (i)| > 0} and τ is the temperature parameter. 
+
+4.3 Training Procedure 
+
+Aco2 is trained with a curriculum that progressively decomposes the manipulation task, realized entirely by gating individual terms of the per-timestep reward in Sec. 4.1 with indicator functions of the training step and task progress. Let n denote the current training step, N a predefined switching step, and lo,t the distance between the manipulated object and the target region at timestep t, and δ the distance threshold for considering the object delivered. The effective training reward is 
+
+˜rt = rhook ,fine  
+
+> t
+
++ rhook ,coarse  
+
+> t
+
++ robj  
+
+> t
+
++ I(n > N ) I(lo,t < δ ) rexit  
+
+> t
+
+− I(n > N )(cact  
+
+> t
+
++ cvel  
+
+> t
+
++ ctilt 
+
+> t
+
+).
+
+In the early stage ( n ≤ N ), both the exit reward and the regularization costs are switched off, letting the policy focus on engaging the target handle and transporting the object with sufficiently large control inputs. Once n > N , the regularization costs are activated to enforce smoother actions and limit excessive linear velocity and tilt angle, while the exit reward is further gated by I(lo,t < δ ) and only kicks in after stable delivery, guiding the hook toward the predefined exit point. The overall training procedure follows an on-policy recurrent PPO framework. In each iteration, Aco2 collects par-allel rollouts under randomized task and physical conditions, with domain randomization such as observation noise, command latency, and external torque disturbances applied to bridge the sim-to-real gap. The collected transitions are stored together with recurrent states and task labels. Training batches are constructed using a sliding-window strategy along the temporal dimension to improve sample efficiency. The complete training pipeline is provided in Appx. A.5 
+
+## 5 Experiments and Results 
+
+5.1 Experimental Setup 
+
+We train Aco2 entirely in NVIDIA Isaac Sim (NVIDIA, [n. d.]) and directly deploy the learned policy to the physical platform without real-world fine-tuning. The simulation environment includes a hook-equipped quadrotor and four payload categories: medical kit, handbag, weight, and bucket. These objects differ in geometry, mass, and center of mass, inducing distinct flight dynamics after attachment and providing diverse task contexts for policy training. We then evaluate zero-shot transfer in the real world using three container types with different geometries and random-ized internal loads. Pickup and target locations vary across trials to test generalization beyond the training payloads and spatial configurations. The total payload mass ranges from 0.46 kg to 0.90 kg, covering a wide range of real-world payload conditions and approaching the practical carrying limit of the platform. Details of the experimental setup are provided in Appx. A.1. Table 1: Task success rates (%) under in-distribution and out-of-distribution (OOD) settings. Results are reported as mean ± standard error across five seeds. ∆ denotes the absolute improvement of w/ contrastive loss (CL) over w/o CL, measured in percentage points. 
+
+Setting Method Med. Kit Handbag Weight Bucket Avg. In distribution w/o CL 59.1 ± 24.1 29.1 ± 17.8 57.5 ± 23.6 54.7 ± 22.4 50.1 ± 20.6 w/ CL 77.8 ± 19.5 65.3 ± 17.0 74.1 ± 18.6 72.2 ± 19.6 72.3 ± 18.3 
+
+∆ ↑ 18.8 ↑ 36.2 ↑ 16.6 ↑ 17.5 ↑ 22.3 
+
+Mass OOD w/o CL 45.9 ± 18.9 18.1 ± 9.9 37.5 ± 16.7 37.8 ± 15.6 34.8 ± 14.4 w/ CL 59.4 ± 15.0 34.1 ± 9.0 46.9 ± 12.6 57.2 ± 14.4 49.4 ± 12.4 
+
+∆ ↑ 13.4 ↑ 15.9 ↑ 9.4 ↑ 19.4 ↑ 14.5 
+
+Distance OOD w/o CL 35.0 ± 17.8 0.9 ± 0.6 25.0 ± 13.0 13.8 ± 7.0 18.7 ± 7.7 w/ CL 42.5 ± 12.2 19.1 ± 6.2 46.6 ± 13.7 60.0 ± 18.0 42.0 ± 10.6 
+
+∆ ↑ 7.5 ↑ 18.1 ↑ 21.6 ↑ 46.2 ↑ 23.4 Overall           
+
+> Medical Kit
+> Handbag
+> Weight
+> Bucket
+> 0.2
+> 0.4
+> 0.6
+> Adjusted Return  +0.065 +0.076
+> +0.042
+> +0.071 +0.077
+> (a) In-Distribution
+> Overall
+> Medical Kit
+> Handbag
+> Weight
+> Bucket
+> +0.059 +0.038 +0.079 +0.066 +0.070
+> (b) Mass Out-of-Distribution
+> Overall
+> Medical Kit
+> Handbag
+> Weight
+> Bucket
+> +0.061 +0.024 +0.069
+> +0.075 +0.078
+> (c) Distance Out-of-Distribution
+> w/o Contrastive w/ Contrastive
+
+Figure 2: Simulation return under in-distribution and two out-of-distribution settings. The return is adjusted by sub-tracting the mean reward at the initial environment state. Results are reported as mean ± standard error across five seeds. 
+
+5.2 Simulation Evaluation 
+
+We evaluate task success rates under in-distribution and two out-of-distribution (OOD) settings in Table 1. The first OOD setting randomizes object masses outside the training range, while the second shifts the target placement lo-cation. Across all three settings, the contrastive variant consistently outperforms the baseline, confirming that the contrastive objective produces more effective context representations for adaptive control. Without the contrastive loss, performance degrades sharply under OOD conditions, especially in the distance shift setting. The contrastive variant degrades more gracefully, demonstrating stronger robustness to conditions unseen during training. Fig. 2 presents the return across all three settings. The contrastive variant achieves uniformly higher return on every payload, and the improvement remains consistent from in-distribution to both OOD conditions. Notably, the vari-ant without contrastive loss shows growing standard error as the setting becomes more challenging, with individual payloads such as bucket exhibiting particularly large variance in the mass out-of-distribution setting, suggesting that different seeds overfit to different payload subsets. The contrastive variant, by contrast, maintains both higher mean return and tighter standard error across most payloads, indicating that the contrastive objective encourages a balanced, payload-agnostic representation rather than one that favors specific object types. 
+
+Figure 3: t-SNE visualization with and with-out contrastive loss (CL). We dive into the learned representations by visualizing the latent em-beddings via t-SNE (Van der Maaten and Hinton, 2008) in Fig. 3. With the contrastive loss, embeddings of different payloads form clearly separated clusters, whereas without it the representations largely over-lap. This suggests that the contrastive objective mitigates representa-tion collapse and encourages discriminative context encodings, which in turn supports effective online adaptation across diverse payloads. Additional training curves and representative simulation rollouts are provided in Appendix B.1, further showing that the learned policy achieves more stable convergence and adapts to payloads with distinct mass, geometry, and center-of-mass properties. Speed  varies  around   
+
+> the prescribed 𝑣 𝑚𝑎𝑥
+
+Figure 4: Real-world autonomous delivery trial. Left: visualization of the hook-equipped quadrotor completing an unattended delivery sequence from object acquisition to target placement. Right: analysis of the hook-handle distance and quadrotor linear speed for the trial shown on the left. 
+
+5.3 Real-World Evaluation 
+
+We conduct fully autonomous delivery trials by directly deploying the simulation-trained policy without any fine-tuning. Fig. 4 shows a representative trial in which the quadrotor delivers an empty box seen during training. The quadrotor autonomously completes the full hooking, transport, and detachment sequence, with the right panel record-ing the hook-handle distance and linear speed throughout the three phases. During the approach for hooking and the initial transport stage, the quadrotor accelerates toward the target, while slowing down for the precise alignment required during the hooking and detachment maneuvers. To further validate generalization, we test the policy on conditions that are difficult to capture in our rigid-body Isaac Sim environment. As shown in Fig. 6, we first replace the box with a fruit basket whose irregular geometry introduces aerodynamic disturbances absent from training. Despite this unseen payload shape, the quadrotor still completes the full delivery sequence, indicating that the learned context embedding can adapt online to altered external interactions. We then load the box with an everyday meal, raising the total payload to 0.86 kg. Unlike the rigid objects modeled in simulation, the meal can shift inside the container during flight, continuously changing the center of mass and moment of inertia. The policy again completes the delivery without retraining or parameter adjustment, demonstrating robustness to payload dynamics that were not explicitly modeled during training. 
+
+5.4 Ablation Study 
+
+To verify the necessity of each regularization term for stable physical flight, we ablate the thrust smoothness, velocity bound, angular velocity smoothness, and tilt angle penalty individually. 0.0 1.5 3.0 4.5   
+
+> Time (s)
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Thrust Percentage
+> Ablation
+> Baseline
+> −0.25 0.00 0.25
+> Δ Thrust
+> 0.0
+> 1.5
+> 3.0
+> 4.5
+> 6.0
+> Density
+> Ablation
+> Baseline
+
+Figure 5: Thrust profiles w/ and w/o smoothness regularization. 
+
+Thrust smoothness . Fig. 5 compares the thrust pro-file and thrust change distribution with and without the smoothness regularization. With the regulariza-tion, the thrust signal varies gradually and the distri-bution of ∆thrust is concentrated around small val-ues. Removing it leads to noticeably more abrupt thrust fluctuations, with the distribution exhibiting a heavier tail toward large changes. While the vehicle still completes the task in this case, the aggressive thrust commands increase mechanical stress and re-duce flight robustness. In addition to the real-world ablations, we conduct sensitivity analyses on the threshold-based reward in simulation, confirming that the threshold mechanism yields more stable convergence and lower sensitivity to reward hyperpa-rameters. Results for velocity bound, angular velocity smoothness, tilt angle regularization, and the threshold reward sensitivity analysis are all provided in Appx. B.2. Delivering a fruit basket   
+
+> with novel geometry
+> and disturbances
+> Delivering a storage box
+> with a lunchbox for
+> extra mass
+
+Figure 6: Generalization to unseen payloads. Top: delivery of a basket with a different geometry from the training containers. Bottom: delivery of a box loaded with an everyday meal 
+
+## 6 Conclusion 
+
+To address the autonomous delivery problem across diverse objects, we present Autonomous Aerial Manipulation via Contextual Contrastive Meta Reinforcement Learning ( Aco2 ), a framework enabling a quadrotor equipped with a lightweight hook to autonomously transport diverse handle-equipped objects. At its core, a contextual encoder infers payload-induced dynamics from interaction history, while a contrastive objective sharpens this representation and strengthens generalization across payloads. We validate Aco2 in simulation and further demonstrate its effectiveness on a physical quadrotor delivering objects with substantially different shapes and masses, confirming the practical value of meta-reinforcement learning for adaptive aerial transport. 
+
+## 7 Limitations 
+
+Our system relies on external motion capture for state estimation, restricting experiments to controlled lab settings. Future work could replace it with onboard visual-inertial odometry and handle detection, explore end-to-end visuo-motor policies that directly map onboard camera observations to control actions for deployment in less instrumented environments. In addition, the payload capacity of a single quadrotor limits the mass of objects Aco2 can engage and transport, so sufficiently heavy targets remain out of reach. Extending Aco2 to multi-UAV cooperation would lift this ceiling (Yuan et al., 2023; Feng et al., 2026), but requires handling load sharing, inter-robot coordination, communi-cation constraints, and coupled dynamics, motivating decentralized or shared-context policies for larger payloads. References 
+
+Wasiu Akande Ahmed, Joel Segun Ojerinde, Seyi Festus Olatoyinbo, and Friday John Ogaleye. 2026. UAV Tech-nologies for Precision Agriculture: Capabilities, Constraints, and Deployment Models for Smallholder Systems in Sub-Saharan Africa. Drones (2026). 1 Ilge Akkaya, Marcin Andrychowicz, Maciek Chociej, Mateusz Litwin, Bob McGrew, Arthur Petron, Alex Paino, Matthias Plappert, Glenn Powell, Raphael Ribas, et al. 2019. Solving rubik’s cube with a robot hand. arXiv preprint arXiv:1910.07113 (2019). 2.2 Péter Antal, Tamás Péni, and Roland Tóth. 2025a. Autonomous hook-based grasping and transportation with quad-copters. IEEE Transactions on Control Systems Technology 33, 3 (2025), 980–990. 1 Péter Antal, Tamás Péni, and Roland Tóth. 2025b. Hook-Based Aerial Payload Grasping from a Moving Platform. In 
+
+2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 5209–5215. 1, 2.1 Karol Arndt, Murtaza Hazara, Ali Ghadirzadeh, and Ville Kyrki. 2020. Meta reinforcement learning for sim-to-real domain adaptation. In 2020 IEEE international conference on robotics and automation (ICRA) . IEEE, 2725–2731. 2.2 Vlad Nicolae Arsenoaia, Denis Constantin Topa, Roxana Nicoleta Ratu, and Ioan Tenu. 2026. From sensing to intervention: A critical review of agricultural drones for precision agriculture, data-driven decision making, and sustainable intensification. Agronomy 16, 5 (2026), 564. 1 Elizabeth Asher, Alan J Hills, Rebecca S Hornbrook, Stephen Shertz, Stephen Gabbard, Britton B Stephens, Detlev Helmig, and Eric C Apel. 2021. Unpiloted aircraft system instrument for the rapid collection of whole air samples and measurements for environmental monitoring and air quality studies. Environmental science & technology 55, 9 (2021), 5657–5667. 1 Stamatina C Barakou, Costas S Tzafestas, and Kimon P Valavanis. 2024. A review of real-time implementable coop-erative aerial manipulation systems. Drones 8, 5 (2024), 196. 1 Jacob Beck, Risto Vuorio, Evan Zheran Liu, Zheng Xiong, Luisa Zintgraf, Chelsea Finn, and Shimon Whiteson. 2025. A tutorial on meta-reinforcement learning. Foundations and Trends in Machine Learning 18, 2-3 (2025), 224–384. 2.2 Yoshua Bengio, Jérôme Louradour, Ronan Collobert, and Jason Weston. 2009. Curriculum learning. In Proceedings of the 26th annual international conference on machine learning . 41–48. 1 Dongcheng Cao, Jin Zhou, Xian Wang, and Shuo Li. 2026. Flare: Agile flights for quadrotor cable-suspended payload system via reinforcement learning. IEEE Robotics and Automation Letters (2026). 1 Dukun Chen, Weifeng Su, Shaojie Jiang, Honglong Yang, Chunsheng Zhang, Shutong Jiang, Dongyang Chang, Yuxin Liang, Hao Wang, Xin Yang, et al. 2026. Wind estimation based on flight dynamics of unmanned aerial vehicle: influencing variables and its environmental application. Atmospheric Chemistry and Physics 26, 5 (2026), 3607– 3620. 1 Haoran Chen, Weiliang Deng, Biyu Ye, Yifan Xiong, Zongliang Pan, and Ximin Lyu. 2025. Aerial Grasping via Maximizing Delta-Arm Workspace Utilization. In 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 12216–12223. 1 Diego S D’Antonio, Tongshu Wu, Subhrajit Bhattacharya, and David Saldaña. 2026. From Hitch to Lift: Autonomous Cable Interlacing by Multi-UAV Teams for Aerial Grasping and Transportation. IEEE Transactions on Robotics 
+
+(2026). 1, 2.1 Shlok Deshmukh, Javier Alonso-Mora, and Sihao Sun. 2025. Global End-Effector Pose Control of an Underactuated Aerial Manipulator via Reinforcement Learning. arXiv preprint arXiv:2512.21085 (2025). 1 Zhaohan Feng, Ruiqi Xue, Lei Yuan, Yang Yu, Ning Ding, Meiqin Liu, Bingzhao Gao, Jian Sun, Xinhu Zheng, and Gang Wang. 2026. Multi-agent embodied ai: Advances and future directions. Science China Information Sciences 
+
+69, 5 (2026), 151202. 7 Chelsea Finn, Pieter Abbeel, and Sergey Levine. 2017. Model-agnostic meta-learning for fast adaptation of deep networks. In International conference on machine learning . PMLR, 1126–1135. 2.2 Haotian Fu, Hongyao Tang, Jianye Hao, Chen Chen, Xidong Feng, Dong Li, and Wulong Liu. 2021. Towards effective context for meta-reinforcement learning: an approach based on contrastive learning. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 35. 7457–7465. 2.2 Ali Ghadirzadeh, Xi Chen, Petra Poklukar, Chelsea Finn, Mårten Björkman, and Danica Kragic. 2021. Bayesian meta-learning for few-shot policy adaptation across robotic platforms. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 1274–1280. 2.2 Jerry Zhi-Yang He, Zackory Erickson, Daniel S Brown, Aditi Raghunathan, and Anca Dragan. 2023. Learning rep-resentations that enable generalization in assistive tasks. In Conference on Robot Learning . PMLR, 2105–2114. 2.2 Ziken Huang, Xinze Niu, Bowen Chai, Renbiao Jin, and Danping Zou. 2025. Swooper: Learning High-Speed Aerial Grasping With a Simple Gripper. IEEE Robotics and Automation Letters 11, 2 (2025), 2298–2305. 1, 2.1 Hossein Bonyan Khamseh, Farrokh Janabi-Sharifi, and Abdelkader Abdessameud. 2018. Aerial manipulationA liter-ature survey. Robotics and Autonomous Systems 107 (2018), 221–235. 2.1 Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna, Yonglong Tian, Phillip Isola, Aaron Maschinot, Ce Liu, and Dilip Krishnan. 2020. Supervised contrastive learning. Advances in neural information processing systems 33 (2020), 18661–18673. 4.2 Suseong Kim, Seungwon Choi, and H Jin Kim. 2013. Aerial manipulation using a quadrotor with a two dof robotic arm. In 2013 IEEE/RSJ International Conference on Intelligent Robots and Systems . IEEE, 4990–4995. 2.1 Seonsoo Kim, Jun-Gill Kang, Taehong Kim, and Seongil Hong. 2025. Disentangled Multi-Context Meta-Learning: Unlocking Robust and Generalized Task Learning. arXiv preprint arXiv:2509.01297 (2025). 2.2 Ashish Kumar, Zipeng Fu, Deepak Pathak, and Jitendra Malik. 2021. Rma: Rapid motor adaptation for legged robots. 
+
+arXiv preprint arXiv:2107.04034 (2021). 2.2 Taeyoung Lee. 2017. Geometric control of quadrotor UAVs transporting a cable-suspended rigid body. IEEE Trans-actions on Control Systems Technology 26, 1 (2017), 255–264. 2.1 Vincenzo Lippiello and Fabio Ruggiero. 2012. Cartesian impedance control of a UAV with a robotic arm. IFAC Proceedings Volumes 45, 22 (2012), 704–709. 2.1 Peisong Liu, Xiangpei Hu, and Chun Cheng. 2026. Drone station location and routing optimization for infrastructure inspection. European Journal of Operational Research (2026). 1 Viktor Lorentz, Khaled Wahba, Sayantan Auddy, Marc Toussaint, and Wolfgang Hönig. 2025. CrazyMARL: De-centralized Direct Motor Control Policies for Cooperative Aerial Transport of Cable-Suspended Payloads. arXiv preprint arXiv:2509.14126 (2025). 1 Andrew Manu, Jeff Dacosta Osei, and Thomas Lawler. 2026. UAV-Based Remote Sensing and Artificial Intelligence for Climate-Smart Agriculture: A Systematic Review of Technologies, Analytics, and Applications in Smallholder Systems. (2026). 1 Xinyu Mei, Feng Xu, Zhipeng Zhang, and Yongshuang Li. 2025. Unmanned Aerial Vehicle-Assisted Inspection for Transportation Infrastructure Operation and Maintenance: A Review. In 2025 IEEE International Conference on Industrial Engineering and Engineering Management (IEEM) . IEEE, 1215–1220. 1 Daniel Mellinger, Quentin Lindsey, Michael Shomin, and Vijay Kumar. 2011. Design, modeling, estimation and control for aerial grasping and manipulation. In 2011 IEEE/RSJ International Conference on Intelligent Robots and Systems . IEEE, 2668–2673. 2.1 Marie Paul Nisingizwe, Pacifique Ndishimye, Katare Swaibu, Ladislas Nshimiyimana, Prosper Karame, Valentine Dushimiyimana, Jean Pierre Musabyimana, Clarisse Musanabaganwa, Sabin Nsanzimana, and Michael R Law. 2022. Effect of unmanned aerial vehicle (drone) delivery on blood product delivery time and wastage in Rwanda: a retrospective, cross-sectional study and time series analysis. The Lancet Global Health 10, 4 (2022), e564–e569. 1 NVIDIA. [n. d.]. Isaac Sim . https://github.com/isaac-sim/IsaacSim 5.1 Matko Orsag, Christopher Korpela, and Paul Oh. 2013. Modeling and control of MM-UAV: Mobile manipulating unmanned aerial vehicle. Journal of Intelligent & Robotic Systems 69, 1 (2013), 227–240. 2.1 Paul EI Pounds, Daniel R Bersak, and Aaron M Dollar. 2011. Grasping from the air: Hovering capture and load stability. In 2011 IEEE international conference on robotics and automation . IEEE, 2491–2498. 2.1 Fabio Ruggiero, Vincenzo Lippiello, and Anibal Ollero. 2018. Aerial manipulation: A literature review. IEEE Robotics and Automation Letters 3, 3 (2018), 1957–1964. 2.1 Koushil Sreenath and Vijay Kumar. 2013. Dynamics, control and planning for cooperative manipulation of payloads suspended by cables from multiple quadrotor robots. rn 1, r2 (2013), r3. 2.1 Koushil Sreenath, Taeyoung Lee, and Vijay Kumar. 2013a. Geometric control and differential flatness of a quadrotor UAV with a cable-suspended load. In 52nd IEEE conference on decision and control . IEEE, 2269–2274. 1 Koushil Sreenath, Nathan Michael, and Vijay Kumar. 2013b. Trajectory generation and control of a quadrotor with a cable-suspended load-a differentially-flat hybrid system. In 2013 IEEE international conference on robotics and automation . IEEE, 4888–4895. 2.1 Emanuel Todorov, Tom Erez, and Yuval Tassa. 2012. Mujoco: A physics engine for model-based control. In 2012 IEEE/RSJ international conference on intelligent robots and systems . IEEE, 5026–5033. 2.2 Marco Tognon, Chiara Gabellieri, Lucia Pallottino, and Antonio Franchi. 2018. Aerial co-manipulation with cables: The role of internal force for equilibria, stability, and passivity. IEEE Robotics and Automation Letters 3, 3 (2018), 2577–2583. 2.1 Miguel Ángel Trujillo, José Ramiro Martínez-de Dios, Carlos Martín, Antidio Viguria, and Aníbal Ollero. 2019. Novel aerial manipulator for accurate and robust industrial NDT contact inspection: A new tool for the oil and gas inspection industry. Sensors 19, 6 (2019), 1305. 1 Johnathan Tucker, Denis Liu, Aiden Swann, Allen Ren, Javier Yu, Jiankai Sun, Brandon Kim, Lachlain McGranahan, Quan Vuong, and Mac Schwager. 2026. π, But Make It Fly: Physics-Guided Transfer of VLA Models to Aerial Manipulation. arXiv preprint arXiv:2603.25038 (2026). 1, 2.1 Laurens Van der Maaten and Geoffrey Hinton. 2008. Visualizing data using t-SNE. Journal of machine learning research 9, 11 (2008). 5.2 Bingheng Wang, Yichao Gao, Tianchen Sun, and Lin Zhao. 2025. Learning to Coordinate: Distributed Meta-Trajectory Optimization Via Differentiable ADMM-DDP. arXiv preprint arXiv:2509.01630 (2025). 1 Mingyang Wang, Zhenshan Bing, Xiangtong Yao, Shuai Wang, Huang Kai, Hang Su, Chenguang Yang, and Alois Knoll. 2023. Meta-reinforcement learning based on self-supervised task representation learning. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 37. 10157–10165. 2.2 Yingyig Xing, Xuning Liu, and Xiukang Wang. 2025. Integrating UAVs, satellite remote sensing, and machine learn-ing in precision agriculture: pathways to sustainable food production, resource efficiency, and scalable innovation. 
+
+Frontiers in Agronomy 7 (2025), 1670380. 1 Biyu Ye, Na Fan, Zhengping Fan, Weiliang Deng, Hongming Chen, Qifeng Chen, and Ximin Lyu. 2026. Fly-Aware: Inertia-Aware Aerial Manipulation via Vision-Based Estimation and Post-Grasp Adaptation. arXiv preprint arXiv:2601.22686 (2026). 1, 2.1 Tianhe Yu, Deirdre Quillen, Zhanpeng He, Ryan Julian, Karol Hausman, Chelsea Finn, and Sergey Levine. 2020a. Meta-world: A benchmark and evaluation for multi-task and meta reinforcement learning. In Conference on robot learning . PMLR, 1094–1100. 2.2 Wenhao Yu, Jie Tan, Yunfei Bai, Erwin Coumans, and Sehoon Ha. 2020b. Learning fast adaptation with meta strategy optimization. IEEE Robotics and Automation Letters 5, 2 (2020), 2950–2957. 2.2 Lei Yuan, Ziqian Zhang, Lihe Li, Cong Guan, and Yang Yu. 2023. A survey of progress on cooperative multi-agent reinforcement learning in open environment. arXiv preprint arXiv:2312.01058 (2023). 7 Jack Zeng, Andreu Matoses Gimenez, Eugene Vinitsky, Javier Alonso-Mora, and Sihao Sun. 2025. Decentral-ized aerial manipulation of a cable-suspended load using multi-agent reinforcement learning. arXiv preprint arXiv:2508.01522 (2025). 1 A Experimental Details 
+
+A.1 Experimental Setup 
+
+This section details the simulation and real-world experimental settings. Representative payloads and the physical deployment setups are shown in Fig. 7. 
+
+Figure 7: Simulation and real-world experimental setups 
+
+A.1.1 Simulation Setup 
+
+All simulation experiments are conducted in NVIDIA Isaac Sim 5.0.0 with 2048 parallel simulation environments on a single NVIDIA RTX 5090 GPU. The simulated environment contains a hook-equipped quadrotor and four payload categories: medical kit, handbag, weight, and bucket. These objects are designed to induce distinct payload dynamics through variations in mass distribution, total mass, and geometry, thereby providing diverse task contexts for evaluating online adaptation. The medical kit and handbag have similar overall object scales but differ in their center-of-mass configurations. Specif-ically, we shift their centers of mass in opposite directions in the object frame, modeling asymmetric internal loading that commonly occurs in real containers. To further approximate the rotational disturbances observed during real flight, we additionally apply external torques to the quadrotor body in the corresponding directions. This compensates for aerodynamic effects that are difficult to model accurately in simulation, such as downwash-induced payload motion and its feedback on the vehicle. The weight is designed to be significantly heavier than the other payloads, with a mass approximately three times larger than the remaining object categories. This setting evaluates whether the policy can adapt to large changes in payload-induced inertia and required thrust. In contrast, the bucket is characterized pri-marily by its large volume, which introduces different geometric constraints during hooking and transport despite not being the heaviest object. Together, these four payload categories cover complementary sources of variation, including center-of-mass offset, payload mass, and object size. 
+
+A.1.2 Real-world Setup 
+
+For real-world deployment, we use a quadrotor with a diagonal size of 290 mm and a total takeoff weight of 2.09 kg. The learned policy is executed onboard an NVIDIA Jetson Orin NX and outputs collective thrust and body rate (CTBR) commands to the low-level flight controller. The measured onboard inference latency is approximately 5–10 ms. To evaluate generalization under real-world payload variation, we prepare three container types with different geome-tries. In each trial, a random subset of four object categories is loaded into the container, producing different internal mass distributions and total payload masses. Pickup and target locations are also randomized across trials. The total payload mass ranges from 0.46 kg to 0.90 kg, approaching the practical carrying limit of the platform. During deployment, the policy observation is constructed from a NOKOV Motion Capture System and the onboard inertial measurement unit (IMU). The motion capture system provides the UAV position, attitude, and linear velocity, the payload bar pose and velocity, and the positions of task-relevant markers. The UAV body angular velocity is obtained from the onboard IMU, replacing the corresponding motion capture estimate for closer consistency with the actual flight controller state. Table 2: Domain randomization ranges. Symbol (unit) Range Symbol (unit) Range 
+
+∆mp (kg) [-0.1, 0.1] sI [0.8, 1.2] 
+
+Tmax (N) [45.5, 46.5] αup [0.6, 0.85] 
+
+αdown [0.65, 0.9] σT (N) 0.01 
+
+pdelay 0.5 dh [0.003, 0.004] 
+
+τp (N ·m) [-0.2, 0.2] ∆cp,x (m) [-0.02, 0.02] 
+
+∆cp,y (m) [-0.02, 0.02] ∆cp,z (m) [-0.03, 0] 
+
+ϵp (m) [-0.03, 0.03] ϵq (deg) [-1, 1] 
+
+ϵv (m/s) [-0.05, 0.05] ϵω (rad/s) [-0.03, 0.03] 
+
+∆pxu, 0 (m) [-0.2, 0.2] ∆pyu, 0 (m) [-0.2, 0.2] 
+
+∆pzu, 0 (m) [0, 0.2] vu, 0 (m/s) [-0.1, 0.1] 
+
+ωxu, 0 (deg/s) [-0.3, 0.3] ωyu, 0 (deg/s) [-0.3, 0.3] 
+
+kd [0.1, 0.3] 
+
+A.2 Domain Randomization 
+
+In our domain randomization setup for unmanned aerial vehicles, several parameters are adjusted to enhance the robustness and generalization of the policy. The corresponding randomization ranges are reported in Table 2. • payload_mass_range : Perturbs the payload mass by ∆mp around the nominal value. • uav_inertia_range : Scales the quadrotor inertia tensor by sI , changing the quadrotor’s angular re-sponse to control commands. • max_thrust_range : Changes the maximum motor thrust Tmax to model voltage-dependent thrust varia-tion and actuator performance changes. • motor_delay_coefficient_range : Models motor response latency by varying the current command weight α in Tapplied ,t = αTcmd ,t + (1 − α)Tapplied ,t −1. Separate coefficients αup and αdown are sampled for increasing and decreasing thrust commands to account for asymmetric motor spin-up and spin-down responses. • thrust_noise_range : Adds zero-mean Gaussian thrust noise to motor thrust after motor delay compu-tation, with standard deviation σT capturing unmodeled actuator uncertainty and thrust fluctuations. • hook_joint_damping_range : Varies the hook joint damping coefficient dh, changing how payload swing and contact impulses are transmitted from the hook to the quadrotor. • payload_torque_range : Applies external body torque τp to approximate payload-induced rotational disturbances. • payload_com_offset_range : Adds a perturbation ∆cp to the nominal payload center-of-mass offset, with separate ranges for the horizontal components ∆cp,x , ∆cp,y and the vertical component ∆cp,z .• observation_noise_range : Adds observation noise to policy inputs, with separate noise terms for position ϵp, orientation ϵq , linear velocity ϵv , and angular velocity ϵω .• initial_position_range : Varies the initial position offset of the quadrotor, with separate ranges for the horizontal components ∆pxu, 0, ∆pxu, 0 and the vertical component ∆pzu, 0.• uav_initial_velocity_range : Varies the quadrotor initial linear velocity vu, 0 and roll/pitch angular velocity components ωxu, 0, ω yu, 0, which mainly affect attitude transients. • air_drag_coefficient_range : Varies the aerodynamic drag coefficient kd.
+
+A.3 Reward Function Details 
+
+We design the reward components to support both precise task execution and control behaviors suitable for hardware deployment. The task-related terms use exponential distance rewards, providing dense gradients for fine control near the handle, target position, and exit point. The control costs are defined with thresholded linear penalties, so they are activated only when action changes, velocity, or tilt exceed predefined smoothness or safety bounds. This design Table 3: Reward parameters used in the two-stage curriculum. Stage I emphasizes object acquisition and transport, while Stage II activates exit guidance and control regularization for real-world deployment. Reward term Parameter Stage I Stage II Hooking reward (fine) λ1, λ 2 0.3, 10.0 0.0, 0.0 Hooking reward (coarse) λ3, λ 4 0.3, 0.5 0.0, 0.0 Object-to-goal reward λ5, λ 6 1.6, 0.5 1.6, 0.5 Exit reward λ7, λ 8 0.0, 0.0 2.0, 1.8 Action smoothness penalty λ9, athreshold 0.0, 0.0 0.2, 0.12 Velocity penalty λ10 , vthreshold 0.0, 0.0 0.3, 0.8 Tilt penalty λ11 , θthreshold 0.0, 0.0 0.2, 0.17 discourages overly conservative behavior within the normal operating range while still penalizing unsafe or unstable motions. The reward function components are formulated as: 
+
+rhook ,fine  
+
+> t
+
+= λ1 exp ( −λ2∥pl,t − ph,t ∥),rhook ,coarse  
+
+> t
+
+= λ3 exp ( −λ4∥pl,t − ph,t ∥),robj  
+
+> t
+
+= λ5 exp ( −λ6∥pg,t − po,t ∥),rexit  
+
+> t
+
+= λ7 exp ( −λ8∥pe,t − ph,t ∥),cact  
+
+> t
+
+= λ9∥relu (|at − at−1| − athreshold )∥,cvel  
+
+> t
+
+= λ10 ∥relu (vu,t − vthreshold )∥,ctilt  
+
+> t
+
+= λ11 ∥relu (θu,t − θthreshold )∥,
+
+(1) where θu,t ∈ [0 , π ] denotes the tilt angle of the quadrotor relative to the vertical z-axis at time t. The reward parame-ters are scheduled with a two-stage curriculum, as summarized in Table 3. In the first stage, the task is initialized with relaxed regularization to encourage exploration and successful object acquisition. In the second stage, the task diffi-culty is increased and the control regularization is tightened to encourage hardware-compatible behaviors, including smoother actions, lower velocity, and safer flight attitudes. 
+
+A.4 Training Details A.4.1 Network Architecture 
+
+The recurrent context branch encodes the current observation ot and the previous action at−1 with separate one-layer MLP encoders, each producing a 128-dimensional feature. This keeps observation and action information at the same representational scale before their concatenation and input to a single-layer GRU with a 128-dimensional hidden state. The instantaneous observation branch uses a two-layer MLP encoder that maps the current observation to a 128-dimensional feature, matching the dimension of the GRU context. The policy and value networks therefore receive the feature formed by concatenating the instantaneous observation embedding and the history-dependent context. The actor head is a two-layer MLP with 256 hidden units per layer and Tanh activations. It outputs the α and β
+
+parameters of a Beta distribution for each action dimension. The critic uses an independent encoder stack with the same dimensions as the actor, followed by a two-layer MLP value head with 128 hidden units per layer and a scalar output. 
+
+A.4.2 PPO Hyperparameters 
+
+The PPO optimization hyperparameters used in our experiments are summarized in Table 4. 
+
+A.5 Pseudo-code For Aco2 
+
+Algorithm 1 outlines the training procedure of Aco2 , which follows the curriculum introduced in Sec. 4.3: once the switching step is reached, the reward formulation transitions to its second stage, thereby shifting the task distribution that the policy effectively sees. Throughout rollout collection, every parallel environment is reset upon hitting the maximum episode length or a termination condition, and the task configuration together with the domain randomized Table 4: PPO optimization hyperparameters. 
+
+Hyperparameter Value Hyperparameter Value Discount factor γ 0.99 Final Critic learning rate 1e-5 GAE parameter λGAE 0.95 RNN learning-rate multiplier 0.03 PPO clipping coefficient ϵclip 0.2 Optimizer Adam Entropy coefficient 0.01 Adam epsilon 1e-5 Maximum gradient norm 10.0 Number of PPO epochs per update K 4Actor learning rate 3e-4 Mini-batch size 1024 Critic learning rate 5e-4 Rollout length per environment T 128 Learning rate schedule Linear decay Maximum episode length 450 Final Actor learning rate 5e-6 Recurrent training chunk L 32 Curriculum switching step N 6 × 10 4 Advantage normalization True 
+
+Algorithm 1 Training procedure of Aco2 
+
+Require: Parallel environments E, recurrent policy πθ , value function Vϕ, rollout buffer B, rollout length T , chunk length L, PPO epochs K, contrastive weight λcon , entropy coefficient β
+
+1: Initialize θ, ϕ, B and recurrent states hπ , hV
+
+2: for training iteration = 1 , 2, . . . do 
+
+3: Collect T -step recurrent rollouts in E using πθ with domain randomization in Appx. A.2 
+
+4: B ← B ∪ { ot, a t, r t, d t, y t, hπt , hVt }Tt=1 
+
+5: Construct overlapping trajectory chunks of length L using a sliding temporal window 
+
+6: for epoch = 1 , . . . , K do 
+
+7: Update the recurrent actor–critic with PPO and supervised contrastive context loss: 
+
+L = Lclip + Lvalue − βH + λcon Lcon .
+
+8: end for 
+
+9: Clear rollout buffer B
+
+10: end for 
+
+physical parameters is resampled at that moment. As a result, the recurrent policy is continually confronted with varying payloads, spatial layouts, actuation delays, and other sources of system variation. 
+
+## B Additional Results 
+
+B.1 Simulation Training Results 0.0 0.2 0.4 0.6 0.8 1.0                       
+
+> timestep 1e5
+> 1.0
+> 1.1
+> 1.2
+> 1.3
+> 1.4
+> 1.5
+> 1.6
+> Average Reward
+> (a) Medical Kit
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> timestep 1e5
+> 1.0
+> 1.1
+> 1.2
+> 1.3
+> 1.4
+> 1.5
+> 1.6
+> (b) Handbag
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> timestep 1e5
+> 1.0
+> 1.1
+> 1.2
+> 1.3
+> 1.4
+> 1.5
+> 1.6
+> Average Reward
+> (c) Weight
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> timestep 1e5
+> 1.0
+> 1.1
+> 1.2
+> 1.3
+> 1.4
+> 1.5
+> 1.6
+> (d) Bucket
+> w/ contrastive (ours) w/o contrastive w/ contrastive average w/o contrastive average
+
+Figure 8: Training curves w/ and w/o con-trastive loss. Fig. 8 compares the training curves of Aco2 with and without the contrastive auxiliary loss. The evaluation reward covers only the hooking and transport phases, isolating the core adaptive control challenge from the detachment procedure. Solid lines denote the per-task reward for each payload, while dashed lines indicate the average reward across all four tasks, serving as a shared reference to reveal how each individual payload’s learning progress deviates from the overall trend. The contrastive variant consistently achieves higher final reward on all payloads and exhibits more stable convergence in the later stages of training. Beyond the reward curves, Fig. 9 visualizes representative simula-tion rollouts for the four payload categories. For the medical kit and handbag, the effect of the shifted center of mass is directly visible during hooking and early transport: although the hook engages near the handle center, the payloads slide and tilt toward opposite sides instead of remaining centered under the hook. This produces different lateral load directions and rotational distur-bances that the policy must compensate for online. For the weight and bucket, the visual difference is less about lateral sliding and more about transport response: the weight imposes a much larger load, while the bucket presents a larger Figure 9: Representative simulation rollouts across four payload categories. Rows correspond to the medical kit, hand-bag, weight, and bucket, respectively. The sequences illustrate successful delivery under distinct payload behaviors, including lateral sliding caused by shifted centers of mass, large mass variation, and geometric variation. geometry. The learned policy completes delivery in all cases, showing that it adapts to the distinct behaviors induced by each payload rather than relying on a single nominal transport pattern. 
+
+B.2 Additional Ablation Studies 
+
+This section provides additional ablation studies on the reward design. In the main text, we report the representative real-world ablation on action smoothness regularization. Here, we provide the remaining results for the hardware-oriented regularization terms, including velocity bound, angular velocity smoothness, and tilt angle regularization. We then analyze the threshold-based reward formulation in simulation, showing how activating penalties only beyond predefined bounds affects training stability and sensitivity to reward hyperparameters. 
+
+B.2.1 Real-World Regularization Ablations Tilt angle regularization. We further evaluate the effect of the tilt-angle regularization in real-world deployment. Since the quadrotor primarily moves along the x direction during transport, the roll angle directly reflects lateral attitude variation and flight stability. As shown in Fig. 10A, the policy with tilt angle regularization keeps the roll angle concentrated within a smaller range for most of the trajectory. This indicates a more stable flight attitude, reducing the risk of side tilting or rollover when carrying a suspended payload. By maintaining a larger attitude stability margin, the regularized policy is also expected to be more robust to stronger external disturbances and payload-induced oscillations. (A) Tilt angle regularization ablation results . (B) Angular velocity smoothness ablation results .
+
+Figure 10: Additional real-world ablations on attitude regularization. (A) Tilt angle regularization, showing the roll angle trajectory and distribution. (B) Angular velocity smoothness regularization, showing the x-axis angular velocity trajectory and distribution. 0.0 0.5 1.0 1.5   
+
+> x (m)
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> y (m)
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> z (m)
+> With speed regularization
+> Without speed regularization
+> start point
+> hook point
+> end point
+> 012 [m/s]
+
+Figure 11: Additional real-world ablation on velocity regularization, showing the 3D transport trajectories with and without the velocity bound. Trajectory color indicates the quadrotor linear speed. 
+
+Velocity bound . Fig. 11 compares flight trajectories with and without velocity regularization. With the regularization, the quadrotor maintains an average speed of 0.803 m/s, close to the prescribed vmax = 0 .8 m/s, whereas removing it increases the average speed to 1.097 m/s. The un-regularized policy also spends 74.78% of the trajectory above 0.9 m/s, compared with 30.37% when the velocity bound is used, indicating that high-speed motion becomes persistent rather than occasional. This is also reflected in the spatial trajectory: without velocity regularization, the quadrotor reaches a higher transport arc with a maximum height of 2.30 m, while the regularized policy remains lower at 1.88 m. These results show that the velocity bound keeps the policy closer to the in-tended operating envelope instead of merely reducing the average speed. As speed increases beyond the designed range, controller vibration be-comes more pronounced and the sim-to-real dynamics gap widens, since our quasi-static Isaac Sim simulation does not capture aerodynamic ef-fects that become dominant at higher speeds. 
+
+Angular velocity smoothness. We also evaluate the regularization on angular-velocity smoothness using the UAV’s x-axis angular velocity. As shown in Fig. 10B, removing this regularization leads to large oscil-lations around zero, indicating frequent alternating roll rate commands. In real flight, this behavior appears as visible left-right jittering of the quadrotor and results in unstable transport. With angular-velocity smoothness regularization, the angular velocity remains more concentrated around zero, leading to smoother attitude motion and more stable payload transport. 
+
+B.2.2 Threshold-Based Reward Sensitivity (A) Effect of thresholding under large regularization -weight variation. (B) Sensitivity of thresholded rewards under moderate regularization weights. (C) Sensitivity of thresholded rewards to different threshold values. 
+
+Figure 12: Sensitivity analysis of threshold-based rewards. Solid lines denote task-related rewards, and dashed lines denote the mean action difference (action diff). In this analysis, we evaluate the reward design on the hooking-only task. Because different regularization weights and threshold values change the scale of penalty terms, we report only the task-related reward components. We also report the mean action difference, defined as the average absolute difference between consecutive policy actions, to measure action smoothness. The task reward follows Table 3, with weights of 0.3 for both the fine and coarse hooking rewards. We first vary the action smoothness penalty weight over a wide range, including 0.02, 0.2, and 2.0. As shown in Fig. 12A, the threshold-based formulation completes the task under all three weights, even when the penalty weight is 2.0, which is substantially larger than the total hooking reward weight of 0.6. In all cases, the mean action difference also converges, indicating that the policy can improve smoothness without sacrificing task completion. In contrast, without the threshold, the mean action difference remains very small, but the policy succeeds only when the penalty weight is 0.02. For larger weights, the smoothness penalty dominates the task reward and prevents effective learning, and even the 0.02 setting shows instability in the later stage of training. We further test the threshold-based formulation with action smoothness penalty weights around the default setting, using 0.1, 0.2, and 0.3. As shown in Fig. 12B, all three settings achieve comparable task reward and converge to similar ranges of mean action difference. This indicates that the threshold-based reward is not sensitive to moderate changes in the smoothness penalty weight, while still maintaining both task completion and action smoothness. Finally, we analyze the effect of the threshold value itself. Fig. 12C shows that different thresholds have only minor effects on the task reward, while smaller thresholds lead to lower converged mean action difference because the smoothness penalty becomes active earlier.
