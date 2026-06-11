@@ -1,0 +1,233 @@
+Title: Baseline-Free Policy Optimization for Neural Combinatorial Optimization
+
+URL Source: https://arxiv.org/pdf/2606.10321v1
+
+Published Time: Wed, 10 Jun 2026 00:25:58 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Baseline-Free Policy Optimization for Neural Combinatorial Optimization 
+
+Carlos S. Sep´ ulveda Facultad de Ingenier´ ıa y Ciencias, Universidad Adolfo Ib´ a˜ nez Direcci´ on de Programas, Investigaci´ on y Desarrollo, Armada de Chile Valpara´ ıso, Chile 
+
+carlos.sepulveda@alumnos.uai.cl 
+
+Gonzalo A. Ruz Facultad de Ingenier´ ıa y Ciencias, Universidad Adolfo Ib´ a˜ nez Millennium Nucleus for Social Data Science (SODAS) Millennium Nucleus in Data Science for Plant Resilience (PhytoLearning) Santiago, Chile 
+
+gonzalo.ruz@uai.cl 
+
+Preprint, June 2026 
+
+Abstract 
+
+Neural combinatorial optimization (NCO) trains autoregressive policies to solve routing prob-lems. The standard training algorithm, REINFORCE with a rollout baseline, requires maintain-ing and periodically updating a frozen copy of the policy for variance reduction. This baseline introduces a structural vulnerability: on harder instances, a poor baseline produces noisy gra-dient estimates that can destabilize training. We evaluate Group Relative Policy Optimization (GRPO), an algorithm from large language model alignment that eliminates the baseline entirely by normalizing advantages within groups of sampled trajectories. In a controlled comparison of five RL algorithms on TSP and CVRP benchmarks within the RL4CO framework, we find that: (i) GRPO avoids the training collapse observed with REINFORCE on TSP-100, where performance degrades from cost 9.8 to 52.1 immediately after the warmup phase and does not recover under extended training; (ii) at matched gradient updates, GRPO achieves solution quality within 2% of POMO, a strong AM-based multi-start baseline, while requiring no exter-nal baseline; and (iii) P3O, a pairwise preference algorithm also from the alignment literature, is competitive on TSP but shows higher variability on CVRP. These results identify GRPO as a promising baseline-free alternative for NCO, particularly in settings where baseline-dependent training becomes fragile. 
+
+Keywords: Reinforcement learning; neural combinatorial optimization; vehicle routing; policy optimization; baseline-free learning; benchmarking. 
+
+# 1 Introduction 
+
+Neural combinatorial optimization (NCO) uses autoregressive neural networks to construct solu-tions for NP-hard routing problems [1, 2]. The dominant training paradigm is REINFORCE [3] with a rollout baseline [1]: a frozen copy of the current policy generates greedy solutions that serve 1
+
+> arXiv:2606.10321v1 [cs.LG] 9 Jun 2026
+
+as a reference for computing advantages. POMO [4] extended this with multiple starting points and a shared baseline. Both methods rely on an external baseline mechanism for variance reduction. This dependence on a baseline introduces a vulnerability. On small instances (TSP-50), any reasonable policy produces acceptable greedy tours, so the rollout baseline provides a useful refer-ence. On larger or more constrained instances, the baseline quality degrades alongside the policy quality, creating a circular dependency that can destabilize training. We demonstrate this failure concretely: on TSP-100, REINFORCE with rollout baseline learns during a brief warmup phase (cost drops from 52 to 9.8 in one epoch) but degrades catastrophically once the rollout baseline activates, never recovering even after 800 epochs. Group Relative Policy Optimization (GRPO) [5], originally proposed for aligning large language models (LLMs), offers a principled alternative. GRPO generates G trajectories per instance and computes advantages as z-scores within each group, requiring no external baseline. This paper investigates whether this baseline-free approach can benefit NCO. We evaluate GRPO, P3O [6], PPO [7], REINFORCE [1], and POMO [4] on four standard benchmarks using the RL4CO framework [2]. To ensure a fair comparison, we report results at both equal training epochs and equal gradient updates, since GRPO’s multi-epoch inner loop performs approximately 8 × more gradient updates per training epoch than single-update methods. Our contributions are: 1. To the best of our knowledge, the first evaluation of GRPO and P3O on standard NCO benchmarks, with both epoch-matched and gradient-update-matched comparisons. 2. Evidence that REINFORCE with a rollout baseline exhibits a reproducible failure mode on TSP-100 in the tested RL4CO configuration, persisting across two seeds and extended training. 3. A finding that, at matched gradient updates, GRPO achieves competitive quality with POMO-4 (within 2%) while using no external baseline, establishing it as a viable baseline-free alter-native for NCO. 
+
+# 2 Related Work 
+
+Neural combinatorial optimization. Recent surveys further frame graph reinforcement learning as a unifying perspective for combinatorial optimization [8]. Pointer Networks [9] first applied attention-based sequence models to TSP, and Bello et al. [10] introduced policy-gradient training for NCO. Subsequent work extended neural routing to VRP variants [11–14]. The Attention Model (AM) [1] combined Transformer-style encoders with a rollout baseline and became a standard architecture for learned routing. POMO [4] improved AM-style training by exploiting multiple equivalent optima through multi-start rollouts. RL4CO [2] provides a unified implementation and benchmark suite for these methods. 
+
+Robotics and automation relevance. TSP, VRP, and coverage variants are canonical ab-stractions behind mobile-robot inspection, UAV/ASV surveillance, agricultural coverage, and fleet-level task allocation. Coverage path planning is a central robotics problem [15]. Recent robotic surveillance, coverage, and learning-based planning studies further illustrate that practical plan-ning pipelines often include waypoint ordering, route construction, or constrained routing compo-nents [16–20]. 
+
+RL baselines for NCO. Baseline design is critical for policy-gradient NCO. AM uses a rollout baseline from a frozen policy snapshot [1]; POMO uses a shared baseline across multiple starts [4]; 2PPO replaces explicit rollout baselines with a learned critic [7]. These choices affect variance reduction, sample reuse, and stability. 
+
+Relative and preference-based policy optimization. GRPO [5] and P3O [6] were intro-duced in LLM alignment, using group-relative or pairwise comparisons rather than learned value functions. Concurrently, Pan et al. [21] proposed preference optimization for combinatorial opti-mization fine-tuning. Our work differs by evaluating GRPO and P3O as direct training methods for standard learned-routing benchmarks. 
+
+# 3 Methods 
+
+3.1 Problem Setting 
+
+We consider TSP and CVRP. An autoregressive policy πθ(at|st) constructs a feasible solution τ by selecting nodes sequentially. Let C(τ ) denote the solution cost: the tour length for TSP and the total route length for CVRP. Since the learning algorithms are formulated as reward maximization, we define R(τ ) = −C(τ ) and report C(τ ) in all tables, where lower is better. 
+
+3.2 REINFORCE with Rollout Baseline 
+
+REINFORCE [1, 3] maximizes expected reward J(θ) = Eτ ∼πθ [R(τ )] using 
+
+∇θJ = E [( R(τ ) − bR(x)) ∇θ log πθ(τ |x)] ,
+
+where bR(x) = −Cgreedy (x) is the reward equivalent of the greedy-rollout cost produced by a frozen policy. Equivalently, in cost-minimization form, the advantage is Cgreedy (x) − C(τ ). In RL4CO, this is wrapped in a WarmupBaseline [1] that returns a convex combination of an exponential moving average baseline and the rollout baseline during a warmup phase ( n epochs =1 by default), transitioning to the pure rollout baseline afterward. POMO [4] generates G solutions from different starting nodes and uses a shared baseline (mean reward across starts). 
+
+3.3 GRPO for Combinatorial Optimization 
+
+For each instance in a batch, GRPO generates G trajectories by sampling from πθ with temperature 
+
+T and computes intra-group advantages: ˆAg = R(τg) − μG
+
+max( σG, ϵ ) (1) where μG and σG are the mean and standard deviation of the G returns. Because R(τ ) = −C(τ ), lower-cost trajectories receive higher relative rewards and therefore positive normalized advantages when they outperform the group mean. The policy is updated using PPO-clip: 
+
+L = − 1
+
+BG 
+
+X
+
+> b,g
+
+min  rbg ˆAbg , clip( rbg , 1±ε) ˆAbg 
+
+ (2) where B is the batch size, G is the group size, and rbg = πθ(τbg |xb)/π θold (τbg |xb) is the trajectory probability ratio. After collecting the BG trajectories, we apply Eq. (2) for K inner PPO epochs using mini-batches drawn from the stored trajectories. Two properties distinguish GRPO from baseline-dependent methods. First, the advantage computation is self-contained: no frozen policy copy or critic is needed. Second, group-relative 3normalization makes the update invariant to affine reward scaling within each instance, because advantages are computed from the relative ranking of sampled trajectories rather than from their absolute cost scale. A practical requirement for group-based methods is trajectory diversity within each group: if all G rollouts yield identical tours (likely at low temperature for easy instances), the standard deviation σG approaches zero and advantages become degenerate. To maintain diversity throughout training, we linearly anneal the sampling temperature from Tinit =2 .0 to Tfinal =1 .0 over the first 30% of training epochs. The high initial temperature ensures diverse group members with well-defined z-scores during early training; as training progresses, the temperature is reduced to move the sampling distribution closer to the greedy evaluation regime while preserving early exploration. 
+
+3.4 P3O for Combinatorial Optimization 
+
+P3O [6] uses pairwise trajectory comparisons. For each instance, two trajectories ( τ1, τ 2) are sam-pled from πθ and the pairwise advantage is their reward difference: Apair = R(τ1) − R(τ2). Under the cost convention, this is equivalent to Apair = C(τ2) − C(τ1), so the first trajectory receives a positive pairwise advantage when it has lower cost than the second. The policy is updated by clipping the log-ratio of selection probabilities around its old value: 
+
+LP3O = −Emin  Apair δ, A pair clip( δ, δ old ±ε) (3) where δ = log πθ(τ1) − log πθ(τ2) is the current log-ratio and δold is its value under the previous policy. Like GRPO, P3O requires no external baseline, the pairwise comparison is self-referencing. We use the v2 clipping variant [6] and the same temperature schedule as GRPO. 
+
+3.5 Compute Cost Analysis 
+
+GRPO, PPO, and P3O perform K inner PPO epochs per training step, each iterating over mini-batches, yielding approximately 8 gradient updates per outer batch (with K=2 and mini-batch fraction 0 .25). REINFORCE and POMO perform one gradient update per batch. Over 100 training epochs (391 batches each), this results in ∼312K gradient updates for GRPO versus ∼39K for REINFORCE and POMO, an 8 × ratio. We address this disparity explicitly through gradient-update-matched experiments (Section 5.2). 
+
+# 4 Experimental Setup 
+
+4.1 Benchmarks and Architecture 
+
+We evaluate on TSP-50, TSP-100, CVRP-50, and CVRP-100 with node coordinates sampled uni-formly in [0 , 1] 2. All five algorithms share the same Attention Model policy [1] built on a Trans-former encoder [22]: 6 layers, 8 attention heads, embedding dimension 128. 
+
+4.2 Training Protocol 
+
+All experiments use RL4CO [2] with batch size 256, learning rate 10 −4 (Adam), 100K on-the-fly training instances per epoch, mixed precision (FP16), and gradient clipping at norm 1.0. Each configuration is run with two random seeds (42, 123). Algorithm-specific settings: GRPO uses G=4, K=2 inner epochs, clip ε=0 .2. P3O uses the same clip, inner epochs, and temperature annealing. REINFORCE uses the RL4CO rollout baseline with 4Table 1: Tour cost at 100 epochs (mean ± std over 2 seeds, 10K greedy). Lower is better. Best per column in bold . All methods use the same architecture and data. Note: GRPO, P3O, and PPO perform ∼8× more gradient updates per epoch than REINFORCE and POMO (see Section 3.5).                        
+
+> TSP-50 TSP-100 CVRP-50 CVRP-100 GRPO 5.81 ±.00 8.20 ±.07 10 .98 ±.04 16 .78 ±.04
+> P3O 5.88 ±.01 8.41 ±.07 11 .71 ±.17 18 .47 ±.52
+> POMO 5.90 ±.00 8.48 ±.01 11 .23 ±.04 16 .91 ±.02
+> REINFORCE 5.89 ±.00 9.79 ±.00 11 .25 ±.00 17 .15 ±.01
+> PPO 5.90 ±.00 8.97 ±.06 11 .81 ±.12 19 .54 ±.95
+
+one warmup epoch. POMO uses G=4 starts with shared baseline. PPO uses ε=0 .2, K=2. GRPO and P3O anneal temperature T :2 →1 over 30 epochs; REINFORCE and POMO use T =1. RL4CO generates fresh training instances on-the-fly each epoch; no static dataset is reused. Over 100 epochs, each method sees 100 × 100K = 10M unique instances. Extended runs (800 epochs) see 80M unique instances proportionally. All experiments were conducted on a single NVIDIA RTX PRO 6000 Blackwell Max-Q GPU. 
+
+4.3 Evaluation and Validation 
+
+The best checkpoint is selected on a fixed 10K-instance validation set, then evaluated on a separate fixed 10K-instance test set using greedy decoding. All 40 checkpoints were independently validated by reloading and re-evaluating, yielding <1.2% deviation from reported values (0 mismatches above 2%). 
+
+# 5 Results 
+
+5.1 Epoch-Matched Comparison 
+
+Table 1 shows results at 100 training epochs. GRPO achieves the lowest cost on all four benchmarks. However, this comparison conflates algorithmic quality with compute: GRPO performs 8 × more gradient updates per epoch than REINFORCE and POMO. We address this in the next section. 
+
+5.2 Gradient-Update-Matched Comparison 
+
+To separate epoch-level progress from optimizer update budget, we evaluate two additional settings on the largest instances (TSP-100 and CVRP-100), where differences are most pronounced: 1. Extended baselines : POMO and REINFORCE trained for 800 epochs ( ∼312K gradient updates, matching GRPO at 100 epochs). 2. Reduced GRPO : GRPO at epoch 12 ( ∼39K gradient updates, matching REINFORCE/POMO at 100 epochs), extracted from training logs. Table 2 reveals three key findings: POMO is the most efficient per gradient update. At 312K updates, POMO (800 epochs) slightly outperforms GRPO (100 epochs) on both TSP-100 (1.5% lower cost) and CVRP-100 (1.6% lower cost). At 39K updates, POMO (100 epochs) also leads. POMO’s single REINFORCE update per batch, combined with its multi-start symmetry exploitation, yields the best quality per gradient step. 50 20 40 60 80 100      
+
+> Epoch
+> 10
+> 20
+> 30
+> 40
+> 50
+> Tour Cost (greedy)
+> TSP-100
+> GRPO
+> POMO
+> P3O
+> REINFORCE
+> 020 40 60 80 100
+> Epoch
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Tour Cost (greedy)
+> CVRP-100
+> GRPO
+> POMO
+> P3O
+> REINFORCE
+
+Figure 1: Validation cost vs. training epoch on TSP-100 and CVRP-100. REINFORCE (purple) learns during warmup (epoch 0) but degrades once the rollout baseline activates on TSP-100. GRPO (red) and POMO (blue) converge stably on both problems. Shaded regions: ±1 std over 2 seeds. PPO omitted for clarity (see Table 1). Table 2: Gradient-update-matched comparison on TSP-100 and CVRP-100. Gradient updates are matched across rows. Best per row in bold .
+
+Updates Method Epochs TSP-100 CVRP-100 
+
+∼312K POMO 800 8.07 16 .51 
+
+GRPO 100 8.20 16 .78 REINFORCE 800 9.79 † 16 .59 
+
+∼39K POMO 100 8.48 16 .91 
+
+REINFORCE 100 9.79 † 17 .15 GRPO 12 11 .00 21 .09  
+
+> †Best checkpoint at epoch 0; unchanged regardless of training duration.
+
+GRPO converges in fewer epochs but not fewer updates. GRPO’s epoch-level advantage (Table 1) reflects its 8 × higher update rate, not a fundamentally faster learning algorithm. At equal updates, GRPO is competitive with POMO (within 1.5–1.6%) but does not surpass it. 
+
+REINFORCE on TSP-100 fails structurally. At 800 epochs (312K updates), the best checkpoint remains at epoch 0 with cost 9.79, identical to the 100-epoch result. This confirms that the failure is not a compute limitation but a structural instability of the rollout baseline. On CVRP-100, by contrast, REINFORCE improves to 16.59 at 800 epochs, outperforming GRPO at 100 epochs. 
+
+5.3 Rollout Baseline Failure Analysis 
+
+Table 3 reports when each method reaches its best TSP-100 validation checkpoint, distinguishing late-stage improvement from early plateauing or warmup-only behavior. The aggregate costs in Tables 1 and 2 hide an important temporal effect: several methods reach their best checkpoint at very different stages of training. Table 3 summarizes the epoch at which each method attains its best TSP-100 validation performance, exposing whether the final result reflects stable late-stage convergence, early plateauing, or warmup-only learning. In RL4CO, selecting the rollout baseline for the Attention Model wraps the baseline in a warmup 60 50 100 150 200 250 300       
+
+> Gradient Updates (×1000)
+> 10
+> 20
+> 30
+> 40
+> 50
+> Tour Cost (greedy)
+> TSP-100
+> GRPO
+> POMO (800ep)
+> P3O
+> REINFORCE (800ep)
+> 050 100 150 200 250 300
+> Gradient Updates (×1000)
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> Tour Cost (greedy)
+> CVRP-100
+> GRPO
+> POMO (800ep)
+> P3O
+> REINFORCE (800ep)
+
+Figure 2: Cost vs. gradient updates on TSP-100 and CVRP-100. At matched gradient updates (∼312K updates), POMO at 800 epochs (blue) slightly outperforms GRPO at 100 epochs (red). REINFORCE at 800 epochs (purple) remains collapsed on TSP-100 but improves on CVRP-100. Table 3: Best-checkpoint timing on TSP-100. 
+
+Method Best Epoch Test Cost Observed Pattern GRPO 97–99/100 8.20 Late best checkpoint POMO 94–98/100 8.48 Late best checkpoint P3O 94–95/100 8.41 Late best checkpoint PPO 9–18/100 8.97 Early plateau REINFORCE 0/800 9.79 Warmup-only best checkpoint 
+
+mechanism. During epoch 0, this mechanism blends an exponential moving average estimate with the rollout baseline; from epoch 1 onward, it uses the pure rollout baseline. During the warmup phase (epoch 0), the exponential baseline provides smooth gradient esti-mates, enabling rapid learning: the greedy tour cost drops from ∼52 (random policy) to ∼9.8 in a single epoch. When the rollout baseline activates at epoch 1, it uses this partially trained policy’s greedy rollout as the new baseline. However, the gradient estimates become noisy because the greedy baseline is still far from optimal on TSP-100. This noise destabilizes training: the policy de-grades back to random performance ( ∼52), which in turn degrades the baseline, creating a negative feedback loop from which the system never recovers. This failure is not a hyperparameter issue: it persists across both random seeds and at 800 epochs (8 × longer training). It is a structural limitation of coupling the baseline to the policy on problems where the initial greedy policy is too poor to serve as a useful reference. GRPO sidesteps this entirely: with no external baseline, there is no feedback loop. The intra-group z-score normalization provides informative gradients regardless of the absolute quality level, since even among poor trajectories, some are relatively better. Fig. 1 and Fig. 2 visualize these patterns. REINFORCE’s cost drops sharply at epoch 0 then reverts to random-level performance, while GRPO and POMO show monotonic improvement. 
+
+5.4 PPO and P3O 
+
+PPO, which in RL4CO treats solution construction as a single-step MDP with an episode-level learned critic [2], exhibits early convergence followed by degradation on the larger instances, with 7best checkpoints at epochs 9–18 for TSP-100 and 5–24 for CVRP-100. The episode-level critic must predict total tour cost from the initial graph state alone, a task that becomes increasingly difficult as problem size grows. P3O achieves the second-best cost on TSP at both sizes (5.88 on TSP-50, 8.41 on TSP-100), but shows higher variability on CVRP-100 across the two tested seeds (inter-seed coefficient of variation 5.7%, compared with 0.5% for GRPO and 0.2% for POMO). This suggests that the pairwise comparison mechanism may be more sensitive to noisy trajectory pairs in constrained routing settings. 
+
+# 6 Discussion 
+
+When to use GRPO. GRPO is most valuable when the rollout baseline is fragile, on larger instances, more constrained problems, or problems where greedy heuristics perform poorly. For small instances like TSP-50 where all methods converge to similar quality, the simpler REINFORCE or POMO may be preferred. For practitioners who want baseline-free training without maintaining a frozen rollout policy or learned critic, GRPO provides a practical alternative. 
+
+Sample efficiency vs. gradient efficiency. The gradient-update-matched comparison (Ta-ble 2) equalizes gradient updates but not unique problem instances. Because RL4CO generates fresh instances each epoch, POMO at 800 epochs sees 8 × more unique problem instances (80M) than GRPO at 100 epochs (10M). GRPO’s multi-trajectory group sampling and off-policy inner-loop reuse extract more learning signal per instance: GRPO achieves quality within 1.6% of POMO while seeing 8 × fewer unique problems. POMO is more efficient per gradient update; GRPO is more efficient per unique instance. In domains where instance generation is expensive (e.g., simulation-based environments or real-world logistics), GRPO’s lower instance requirement may be the deciding factor. 
+
+Temperature annealing. GRPO and P3O use temperature annealing ( T :2 →1) while REIN-FORCE and POMO use T =1. This asymmetry is a potential confound: higher initial temperature increases exploration diversity in GRPO’s group sampling. However, the REINFORCE failure on TSP-100 occurs during the exponential baseline warmup at T =1 and is unrelated to the tempera-ture schedule. 
+
+Limitations. We evaluate only one architecture (6-layer AM) and two problem types. The conclusions about baseline fragility may not generalize to problems where greedy heuristics are already strong. All experiments use greedy decoding at inference; search-based methods (beam search, sampling) may alter the ranking. 
+
+# 7 Conclusion 
+
+We evaluated Group Relative Policy Optimization (GRPO) as a baseline-free training algorithm for neural combinatorial optimization. The central finding is that the rollout baseline, the standard variance-reduction technique in NCO, introduces a structural vulnerability on harder instances: on TSP-100, REINFORCE learns during a brief warmup but degrades catastrophically once the rollout baseline activates. GRPO avoids this failure entirely through intra-group advantage normalization that requires no external baseline. At equal gradient updates, GRPO achieves solution quality within 2% of POMO, a strong AM-based multi-start baseline, demonstrating that baseline-free training is competitive with, though not superior to, baseline-dependent methods under a matched gradient-update budget. We also provide the first evaluation of P3O for NCO, finding it competitive on TSP but unstable on CVRP. 8These results suggest that GRPO is a promising baseline-free alternative for NCO training, particularly when scaling to settings where baseline-dependent methods may become fragile. Future work includes extending the evaluation to larger instances (TSP-200+), additional problem types, and investigating whether GRPO’s stability advantage compounds with curriculum learning or more complex environments. Code and instructions to reproduce the experiments: https://github.com/carsepmo/grpo-nco .
+
+# References 
+
+[1] W. Kool, H. V. Hoof, and M. Welling, “Attention, learn to solve routing problems!” arXiv preprint arXiv:1803.08475 , 2018. [2] F. Berto, C. Hua, J. Park, L. Luttmann, Y. Ma, F. Bu, J. Wang, H. Ye, M. Kim, S. Choi et al. ,“RL4CO: an extensive reinforcement learning for combinatorial optimization benchmark,” in 
+
+Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 , 2025, pp. 5278–5289. [3] R. J. Williams, “Simple statistical gradient-following algorithms for connectionist reinforce-ment learning,” Machine learning , vol. 8, no. 3, pp. 229–256, 1992. [4] Y.-D. Kwon, J. Choo, B. Kim, I. Yoon, Y. Gwon, and S. Min, “POMO: Policy optimization with multiple optima for reinforcement learning,” Advances in Neural Information Processing Systems , vol. 33, pp. 21 188–21 198, 2020. [5] Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. Li et al. , “Deepseek-Math: Pushing the limits of mathematical reasoning in open language models,” arXiv preprint arXiv:2402.03300 , 2024. [6] T. Wu, B. Zhu, R. Zhang, Z. Wen, K. Ramchandran, and J. Jiao, “Pairwise proximal policy op-timization: Harnessing relative feedback for llm alignment,” arXiv preprint arXiv:2310.00212 ,9 2023. [7] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Proximal policy optimiza-tion algorithms,” arXiv preprint arXiv:1707.06347 , 7 2017. [8] V.-A. Darvariu, S. Hailes, and M. Musolesi, “Graph reinforcement learning for combinatorial optimization: A survey and unifying perspective,” arXiv preprint arXiv:2404.06492 , 2024. [9] O. Vinyals, M. Fortunato, and N. Jaitly, “Pointer networks,” Advances in neural information processing systems , vol. 28, 2015. [10] I. Bello, H. Pham, Q. V. Le, M. Norouzi, and S. Bengio, “Neural combinatorial optimization with reinforcement learning,” 5th International Conference on Learning Representations, ICLR 2017 - Workshop Track Proceedings , 11 2016. [11] M. Nazari, A. Oroojlooy, M. Tak´ aˇ c, and L. V. Snyder, “Reinforcement learning for solving the vehicle routing problem,” Advances in neural information processing systems , vol. 31, 2018. [12] A. Delarue, R. Anderson, and C. Tjandraatmadja, “Reinforcement learning with combinato-rial actions: An application to vehicle routing,” Advances in Neural Information Processing Systems , vol. 33, pp. 609–620, 2020. 9[13] J. Li, Y. Ma, R. Gao, Z. Cao, A. Lim, W. Song, and J. Zhang, “Deep reinforcement learning for solving the heterogeneous capacitated vehicle routing problem,” IEEE Transactions on Cybernetics , vol. 54, pp. 13 572–13 585, 10 2021. [14] L. Xin, W. Song, Z. Cao, and J. Zhang, “Multi-decoder attention model with embedding glimpse for solving vehicle routing problems,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 35, no. 13, 2021, pp. 12 042–12 049. [15] E. Galceran and M. Carreras, “A survey on coverage path planning for robotics,” Robotics and Autonomous systems , vol. 61, pp. 1258–1276, 2013. [16] J. Faigl and P. Vana, “Surveillance planning with b´ ezier curves,” IEEE Robotics and Automa-tion Letters , vol. 3, pp. 750–757, 4 2018. [17] N. Karapetyan, A. Braude, J. Moulton, J. A. Burstein, S. White, J. M. O’Kane, and I. Rek-leitis, “Riverine coverage with an autonomous surface vehicle over known environments,” in 
+
+2019 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2019, pp. 3098–3104. [18] G. Mier, J. Valente, and S. D. Bruin, “Fields2cover: An open-source coverage path planning library for unmanned agricultural vehicles,” IEEE Robotics and Automation Letters , vol. 8, pp. 2166–2172, 2023. [19] R. Shah, Y. Jiang, J. Hart, and P. Stone, “Deep r-learning for continual area sweeping,” in 
+
+2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 5 2020, pp. 5542–5547. [20] A. Jonnarth, J. Zhao, and M. Felsberg, “Learning coverage paths in unknown environments with deep reinforcement learning,” in International Conference on Machine Learning . PMLR, 2024, pp. 22 491–22 508. [21] M. Pan, G. Lin, Y.-W. Luo, B. Zhu, Z. Dai, L. Sun, and C. Yuan, “Preference optimization for combinatorial optimization problems,” arXiv preprint arXiv:2505.08735 , 2025. [22] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, “Attention is all you need,” Advances in neural information processing systems ,vol. 30, 2017. 10

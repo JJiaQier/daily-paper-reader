@@ -1,0 +1,783 @@
+Title: Vision-Assisted Foundation Model for Solving Multi-Task Vehicle Routing Problems
+
+URL Source: https://arxiv.org/pdf/2606.10431v1
+
+Published Time: Wed, 10 Jun 2026 00:33:34 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 1
+
+# Vision-Assisted Foundation Model for Solving Multi-Task Vehicle Routing Problems 
+
+Shuangchun Gui, Zhiguang Cao, Wen Song, and Yew-Soon Ong 
+
+Abstract —Multi-task vehicle routing problems (VRPs) play a critical role in enhancing efficiency across various industries and service sectors. These problems consist of multiple variants that optimize routing costs while meeting diverse customer constraints. Existing multi-task VRP solvers solely utilize agraph-based modality, limiting their ability to address variants with multiple constraints. As a format to represent complex semantics, vision modality shows great potential for encoding diverse VRP constraints. This motivates us to learn patch-level semantics from the vision images, and then integrate them into a graph-based model to solve various VRP variants simultane-ously. However, directly applying this approach to multi-task VRPs presents three challenges: 1) existing VRP images lack constraint representations, which are essential for multi-task VRPs, 2) the fixed receptive field of individual patches cannot effectively accommodate varying requirements across tasks, and 3) imbalanced pixel distribution among constraints may cause the model to overlook constraints with fewer pixels. In this paper, we propose a vision-assisted foundation model (VaFM) to address these challenges. In the vision modality, input images tailored to all constraints are encoded by a convolutional neural network (CNN). The obtained patch embeddings are fused with graph-based nodes to generate solutions, with an auxiliary task designed to address the pixel-imbalanced issue. Specifically, we design a hybrid cross-attention fusion module to enable adaptive receptive fields for different tasks. It incorporates feature maps from shallow layers to focus on local details and uses cross-patch attention to capture global information. Moreover, we design a constraint-aware auxiliary task and utilize binary cross-entropy (BCE) loss to ensure balanced learning of all constraints. The performance of VaFM is evaluated across 16 different VRP variants. The experimental results demonstrate the superiority of VaFM over state-of-the-art (SOTA) methods, especially for variants with complex constraints. 
+
+Index Terms —Multi-task learning, multi-modality model, deep reinforcement learning, vehicle routing problems. 
+
+I. I NTRODUCTION 
+
+Vehicle Routing Problems (VRPs) focus on minimizing routing costs by efficiently managing vehicles to meet cus-tomer demands. It plays a critical role in improving efficiency in logistics, transportation, retail distribution, waste collection, and manufacturing [1]. However, VRPs are NP-hard combina-torial optimization problems in general, and efficiently solving large-scale instances has been a long-standing challenge in 
+
+Shuangchun Gui and Zhiguang Cao are with the School of Computing and Information Systems, Singapore Management University, Singapore (Emails: gshuangchun@outlook.com, zgcao@smu.edu.sg). Wen Song is with the Institute of Marine Science and Technology, Shan-dong University, China (Email: wensong@email.sdu.edu.cn). Yew-Soon Ong is with the College of Computing and Data Science, Nanyang Technological University, Singapore, and the Centre for Frontier AI Research, Institute of High Performance Computing, Agency for Science, Technology and Research, Singapore (Email: asysong@ntu.edu.sg). Encoder 
+
+Decoder             
+
+> CVRP
+> OVRP VRPL VRPB VRPTW
+> CVRP
+> OVRP VRPL VRPB VRPTW
+> CVRP
+> OVRP VRPL VRPB VRPTW
+> CVRP
+> OVRP VRPL VRPB VRPTW
+
+Graph Encoder Vision Encoder 
+
+Decoder 
+
+(a) Graph-based Model (b) Vision-assisted Foundation Model    
+
+> CVRP
+> OVRP VRPL VRPB VRPTW
+
+Fig. 1. (a) Conventional multi-task VRP solvers utilize graph-based attributes as input to an encoder-decoder architecture, which generates next-node selection probabilities. For the four constraints O, L, B, and TW, the input attributes include coordinates, open route flags, distance limits, demands, and time window values. (b) VaFM combines graph and vision modalities to collaboratively generate final solutions. Red denotes the depot nodes, while Black represents customer nodes. 
+
+both research and practice. Recently, to accelerate VRP solv-ing, neural VRP methods have received much attention [2], [3], [4], [5], [6], [7]. Leveraging the representation learning power of modern deep neural networks, these methods extract useful patterns and policies from historical VRP instances through offline learning, so as to accelerate online instance solving. They typically consider VRP instances as graphs, where customer locations are represented as various nodes. VRP models are often designed based on graph neural networks (GNNs) [2], [7] and transformers [3], [4], [8], both of which are capable of learning node-specific features and effectively capturing complex relationships within graph structures. Despite the promising results, mainstream approaches in neural VRP solving suffer from a major limitation that the solver is designed and trained for a specific VRP variant. It is well known that, in reality, VRP could involve numerous variants with different constraints [9]. Specifically, given a set of constraints, the number of possible VRP variants may grow exponentially. For example, if we consider four commonly studied constraints, backhaul demands (B) for pickups and deliveries, open routes (O) that do not require a return to the depot, duration limits (L) on vehicle travel time, and time windows (TW) for specific service periods [10], [9], there will be 24 = 16 VRP variants. If we train a specific model for each variant (or task) separately, as in mainstream approaches, the computational and resource demand will be prohibitive, thereby limiting its feasibility in practical applications [11]. A more reasonable approach is to train a single unified model to  
+
+> arXiv:2606.10431v1 [cs.CV] 9 Jun 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 2
+
+capture shared knowledge across different tasks. For example, Liu et al . [12] explore this direction by training a model on multiple tasks with single constraints and applying the model to all possible variants. Moreover, a recent study [13] focuses on developing a foundation model for all task variants by using a mixed batch training strategy. These multi-task 
+
+solvers follow the classic graph-based paradigm and employ attributes of the aforementioned constraints (B, O, L, and TW) to formulate node information. Specifically, these solvers sequentially select nodes and link them into complete routes under a reinforcement learning (RL) framework. As shown in Fig. 1 (a), multiple attributes are fed to an encoder-decoder architecture to generate probabilities for selecting the next node. The resulting action (node) then updates the environment (e.g. , remaining capacity and current time) for the subse-quent decision step. While achieving desirable performance, the graph-based solver relies on the model to learn local spatial relations, such as surrounding node density and relative demand distribution. As the task becomes more complex ( e.g. ,VRPs involving both demand objectives and time window restrictions), these relations are difficult for the model to reliably learn without explicit spatial cues. As a format for intuitively representing complex seman-tics, vision images demonstrate significant potential in object detection and segmentation [14], [15], [16], [17], [18], [19]. This motivates us to integrate visual representations into the graph-based VRP solver to enhance its performance. The key idea is to learn patch-level semantics from the vision images, such as spatial demand distributions or service time patterns, and then adopt them to enrich constraint representation for graph-based node embeddings. In neural combinatorial optimization, several studies [20], [21], [22], [23] develop vision-based models for solving a single-task VRP, e.g. , the traveling salesman problem (TSP). By leverag-ing vision architectures, such as convolutional neural network (CNN) [20], [21] and diffusion models [22], these neural methods learn representations from input images that contain customer location information. However, directly applying this approach to a multi-task neural VRP solver presents three challenges: 1) existing VRP images lack crucial attributes, such as task-specific demands and time windows, which are essential for multi-task VRPs, 2) the fixed receptive field of individual patches cannot effectively accommodate varying requirements across tasks, and 3) imbalanced pixel distribution among constraints may cause the model to overlook constraints with fewer pixels. To this end, we develop a Vision-assisted Foundation Model (VaFM) to address these challenges. As illustrated in Fig. 1 (b), VaFM combines graph and vision modalities to collabo-ratively generate final solutions. In the vision modality, two images are designed to address challenge 1) . Both images consist of varying node color intensities, with one representing demand and the other capturing time window information. Additionally, distinct background colors and node shapes are used in both images to represent O and L. To process the two modality inputs, we employ transformer-based and CNN-based models as the graph and vision encoders, respectively. The obtained graph nodes and vision patches are fused to 1.33                    
+
+> 2.90
+> 1.63 1.55 1.26 1.30
+> 2.72
+> 1.29 1.23 0.99
+> Gap (%)
+> RF
+> VaFM
+> Task CVRP OVRP OVRPTW OVRPLTW OVRPBLTW
+> Number 01234
+> (Δ) 0.03% 0.18% 0.34% 0.32% 0.27%
+> Fig. 2. The performance (gap to solutions found by the SOTA heuristic HGS) of the SOTA method (RF) and the proposed VaFM across different tasks. "RF" and "VaFM" correspond to RF-MoE-L and VaFM-MoE-L in Table I, respectively. "Number" indicates the number of constraints in each task, while "( ∆)" represents the improvement of VaFM over RF.
+
+produce the final solution, with an auxiliary task introduced to mitigate the pixel imbalance issue. For challenge 2) , we propose a hybrid cross-attention fusion module to enable adaptive receptive fields for different tasks. This module collects feature maps from various vision encoder layers and then integrates them into node embeddings using a cross-patch attention mechanism. On the one hand, embeddings from shallow layers have a smaller patch size, which can provide fine-grained context information. On the other hand, cross-patch attention calculates the similarities between node and patch embeddings within an instance, adaptively enlarging the receptive field by aggregating relevant patches for the current node. Moreover, to address challenge 3) , we design an auxiliary task based on constraint recognition. This is achieved by incorporating a classifier after the vision encoder and applying the binary cross-entropy (BCE) loss to guide model training. By encouraging the model to recognize the presence of each constraint, the BCE loss ensures balanced learning across all constraints, regardless of their pixel distribution. We conduct experiments with various combinations of the four constraints B, O, L, and TW, resulting in 16 VRP variants. Experimental results show that VaFM outperforms SOTA methods, particularly for variants with complex constraints. As illustrated in Fig. 2, VaFM achieves greater improvements on tasks with multiple constraints, such as OVRPTW, OVRPLTW, and OVRPBLTW, compared to simpler tasks like CVRP and OVRP. Our contributions are summarized as follows:  
+
+> •
+
+To the best of our knowledge, our work is the first to develop a vision-assisted foundation model for multi-task VRPs, which combines graph and vision modalities to understand complex attributes.  
+
+> •
+
+We propose multi-task VRP images, a hybrid cross-attention fusion module, and a constraint-aware auxiliary task to address the challenges in applying the vision modality to the graph-based VRP solver.  
+
+> •
+
+We conduct extensive experiments, and the results show that VaFM surpasses SOTA methods across most variants, especially for those with complex constraints. The remainder of this paper is organized as follows. Section 2 reviews neural methods for VRPs and examines studies on multi-modality learning. Section 3 introduces the con-ventional pipeline of neural methods for multi-task VRPs. JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 3
+
+Section 4 describes the architecture of the proposed vision-assisted foundation model. Section 5 presents experimental results and analysis. Section 6 provides additional insights and discussions. Section 7 concludes the paper. II. R ELATED WORKS 
+
+We begin by reviewing the graph-based neural VRP solvers, which is followed by an examination of vision-based neural methods for single-task VRPs and the Hamiltonian cycle problem. We further explore the application of multi-modality learning and analyze its mainstream techniques. 
+
+A. Graph-based Neural Solver 
+
+We focus on graph-based VRP neural solvers that construct solutions in an autoregressive manner. They typically model VRP instances as graphs, with customer locations represented as nodes. The employed models can be categorized into graph neural networks (GNNs) [2] and transformers [3], [4], [8]. Joshi et al . [2] exploit graph convolutional networks to model structural relationships between TSP customers. For transformer-based approaches, Nazari et al . [24] first adapt pointer networks [25] to VRPs. The attention model (AM)[3] employs a transformer with reinforcement learning[26] and a rollout baseline to solve VRPs. Kwon et al . [4] further enhance performance with policy optimization using multiple optima (POMO), which leverages diverse rollouts and data augmentations. Recently, DAR [27] proposes distance-aware attention reshaping to improve the size generalization of neural solvers. However, these methods are trained and evaluated on the same task, limiting their generalization capability across different task variants. Multi-task VRPs extend conventional VRP by considering diverse tasks within a single framework, where different com-binations of constraints define distinct task variants. These constraints include backhaul demands (B) for pickups and deliveries [28], [29], open routes (O) for routes without a return to the depot [30], [31], duration limits (L) for travel time restrictions [32], and time windows (TW) for specific service periods [33], [34]. Some works train a unified model to capture the shared knowledge [35], [12], [36], [13], [37], [38]. For example, Lin et al . [35] demonstrate a pre-trained TSP model that can be fine-tuned for other VRP tasks. To expand task coverage, recent works [12], [36] extend CVRP by integrating B, L, O, and TW. These models are trained on single-attribute VRPs and generalized to various attribute com-binations. A recent study [13] introduces a foundation model for all task variants, fine-tuned on an unseen attribute ( i.e. ,mixed backhaul). A subsequent extension [37] further develops the model architecture by adopting a modern transformer-based encoder. However, these multi-task VRP solvers rely solely on graph-based inputs, restricting their ability to capture complex constraint interactions. 
+
+B. Vision-based Neural Solver 
+
+Motivated by the success of computer vision, some studies investigate the application of the vision modality in combi-natorial optimization. Most of them [20], [21], [22] employ CNNs and diffusion models to transform a fully connected graph into solution images, aiming to maximize the similarity between the output and the optimal solution image. For example, Ling et al . [20], [21] use convolutional layers to generate solutions, with the latter addressing scale limitations by incorporating multiple repeated sub-problems. Graikos et al . [22] generate a grayscale image from an adjacency matrix and encode the image using diffusion models. To intuitively interpret graph-based data, Samizadeh et al . [23] explore vision-based approaches for solving the Hamiltonian cycle problem. They convert nodes into images with elliptical, spiral, or random distributions, then use a vision backbone followed by a classifier to determine if the input image contains a Hamiltonian cycle. On the one hand, none of the above works has yet developed a vision-based solver for multi-task VRPs. On the other hand, existing VRP images capture only location information, neglecting the various attributes crucial for constraint understanding. To fill this gap, this paper proposes a vision-based foundation model for solving multi-ple VRP variants simultaneously. Unlike the single-modality methods, we integrate vision images into a graph-based model to enhance performance. 
+
+C. Multi-modality Learning 
+
+Humans perceive the world by interpreting high-dimensional inputs from diverse modalities, such as text, audio, and visual data [39]. Inspired by this, numerous studies explore the application of multi-modality learning (MML) to tasks like speech recognition [40], image segmentation [41], and numerous smart city scenarios [42]. In the VRP field, efforts have been made to incorporate the vision modality into large language models (LLMs) to enhance their ability to solve routing problems [43]. However, their performance remains inferior to that of graph-based solvers. In contrast, this paper addresses multi-task VRPs by integrating the vision modality with graph-based models, thereby significantly enhancing the neural solver’s capacity. As a core aspect of MML, multi-modal fusion integrates information from diverse modalities. Common approaches combine representations from individual models using oper-ations like concatenation [44], element-wise averaging [45], and linear combination [46]. These operations can occur at different stages of the learning process: early fusion [47] integrates low-level features, late fusion [48] combines high-level features, and hybrid fusion [46] benefits from both early and late fusion. Due to the substantial heterogeneity between modalities, some tasks require feature alignment to match corresponding elements, such as linking textual descriptions to object regions in images. Recently, attention mechanisms have become a popular approach for aligning multi-modal features [49]. In this paper, to accommodate adaptive receptive fields for various tasks, vision and graph modalities are fused in a hybrid manner, with node-image features aligned through cross-patch attention. III. P RELIMINARIES JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 4cDN                   
+
+> dDLinear
+> Linear
+> Concat
+> DN1DN1
+> Multi-Head Attention
+> Add & Norm
+> MLP & ReLU
+> Add & Norm
+> (a) RF Encoder
+> 6
+> C & L
+> D
+> 11N
+> ℒ𝐀 𝐀
+> Multi-Head Attention
+> Linear
+> DN1
+> vD1N
+> Linear
+> k
+
+                       
+
+> DN1
+> q
+> (b) RF Decoder
+> Linear  Linear  DN1
+> D
+> sD
+> update
+> Depot
+> Attributes
+> Customer
+> Attributes
+> Visited
+> Mask
+> Node
+> Embeddings
+> State
+> Embedding
+> Current Node
+> Embedding
+> Probability
+> Distribution
+> C & LConcat
+> & Linear
+> RL Loss
+> Fig. 3. (a) Attributes of the depot and customers are passed through linear layers and concatenated to form the initial node embeddings. These embeddings are then encoded by a 6-layer transformer-based model to obtain graph-based node representations. (b) The decoder constructs the solution in an auto-regressive manner. At each step, the query is derived from the current node and state embeddings, while the keys and values are obtained from the graph-based node embeddings. Both the encoder and decoder are jointly trained through an RL loss LRL defined in Eq. 3.
+
+A. Problem Definition 
+
+We begin by introducing a typical VRP, i.e. , the capacitated vehicle routing problem (CVRP). CVRP aims to determine optimal sub-routes that minimize the total travel cost while satisfying customer demands. In each sub-route, the vehicle must load goods at the depot and deliver them to customers, while ensuring the following three constraints: 1) the sub-route starts and ends at the depot, 2) each customer is visited exactly once, and 3) the total demand of the sub-route does not exceed the vehicle’s capacity. To formulate this problem, we define a graph with different nodes to represent the depot and N
+
+customers, denoted as V = {v0, v 1, . . . , v N }. Each customer node has a demand value, and each sub-route is limited by the capacity Q. CVRP can be extended to various VRP variants by incorporating additional constraints. Below, we describe each constraint in detail. Following [13], this paper examines two types of con-straints: instance-based open route (O) and duration limit (L), as well as customer-based backhaul demand (B) and time window (TW). Specifically, O is represented by a binary flag 
+
+o ∈ { 0, 1}, and in OVRP ( i.e. , o = 1 ), vehicles do not return to the depot v0 after completing a sub-route. Meanwhile, L
+
+(e.g. , VRPL) imposes a travel length limit l on sub-routes to ensure a balanced workload. In tasks involving B (e.g. , VRPB), customer nodes are classified as linehaul or backhaul. The demands are represented by two sets: {δl
+
+> 1
+
+, . . . , δ lN } for linehaul and {δb
+
+> 1
+
+, . . . , δ bN } for backhaul, with each demand satisfying 
+
+δli, δ bi ∈ [0 , Q ]. Linehaul refers to transporting goods from the depot to customers, while backhaul involves returning goods from customers to the depot. Each sub-route must serve all linehaul customers before handling backhauls. In tasks with 
+
+TW (e.g. , VRPTW), each customer vi has the early and late time windows, as well as a service time {tei , t li, t si }. Vehicles must arrive at vi before tli, with early arrivals waiting until tei .
+
+B. Conventional Pipeline for Solving Multi-Task VRPs 
+
+We describe the conventional pipeline of neural methods for solving multi-task VRPs, i.e. , RouteFinder (RF) [13]. As shown in Fig. 3, RF undertakes three steps: 1) encoding input attributes into node embeddings, 2) decoding these embed-dings into action probabilities, 3) optimizing a reinforcement learning (RL) objective to minimize routing cost. 
+
+1) Encoder: As shown in Fig. 3 (a), the input at-tributes are denoted as {h0, h1, . . . , hN }. The depot attribute 
+
+h0 = {cx 
+
+> 0
+
+, c y 
+
+> 0
+
+, o, l } ∈ RDd includes the depot coordi-nates, open route flag, and duration limit, with a feature dimension of Dd. Customer features {h1, h2, . . . , hN } ∈
+
+RN ×Dc are Dc-dimensional, where the i-th node hi =
+
+{[cxi , c yi ], [δli, δ bi ], [tei , t li, t si ]} specifies the coordinates, de-mands, and time windows. The depot and customer attributes are projected to dimension D through two linear layers H(·),forming the initial node embedding: 
+
+I = Concat (H(h0), H({h1, h2, . . . , hN })) , (1) where Concat (·) denotes the concatenation operation, i.e. , a 
+
+(1 × D) vector is concatenated with an (N × D) matrix along the row dimension, yielding I ∈ R(N +1) ×D . The embedding 
+
+I is fed into a 6-layer transformer-based graph encoder Eg (·),and the node embeddings are derived from the last layer, denoted as H = Eg (I), where H ∈ R(N +1) ×D .
+
+2) Decoder: As shown in Fig. 3 (b), the decoding process uses a multi-head attention mechanism to compute the action probability distribution and construct solutions autoregres-sively across N solution trajectories. For clarity, trajectory indexes are omitted in this subsection. At step j, the current node index is denoted as πj , and its corresponding node embedding is Hπj ∈ RD . The state em-bedding, denoted as Sj = {cj , d j , t j } ∈ RDs , consists of the remaining capacity cj , remaining distance dj (for constraint 
+
+L), and current time tj . The current node (1 × D) and state embeddings ( 1× Ds) are concatenated to 1×(D+Ds), thereby forming the query qj = H(Concat (Hπj , Sj )) . H(·) is a linear layer that maps the features from Ds +D to D, resulting in qj ∈ RD . In the multi-head attention mechanism, the key and value embeddings are learned from the graph-based node embeddings, i.e. , k, v = H(H), where k, v ∈ R(N +1) ×D .Since each node is visited only once, RF applies mask Mj to the visited nodes for computing the attention weights, denoted as Aj = Softmax ( qj k⊤ 
+
+> √D
+
+⊙ Mj ), where Aj , Mj ∈ RN +1 .The function Softmax (·) denotes the Softmax operation, and 
+
+⊙ ensures that multiplication values for visited nodes are set to −∞ . The context query is computed as ˜qj = H(Aj v), and JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 5Hybrid Cross-attention Fusion Module        
+
+> Multi-Head Attention
+> Add & Norm
+> MLP & ReLU
+> Add & Norm
+> Graph Encoder
+> Vision Encoder
+> Decoder
+> (a) Vision-Assisted Foundation Model (b) Hybrid Cross-attention Fusion Module
+> Graph Vision Fusion
+> qkv
+
+ℒ𝐀 𝐀 
+
+> Decoder
+> Ensemble
+
+0101 ℒ𝐀 𝐀 𝐀 Task Label   
+
+> Multi-Head Attention
+> Add & Norm
+> MLP & ReLU
+> Add & Norm
+> qkv
+> cDN
+> dD
+
+  DN 1
+
+  DN 1
+
+  DN 1       
+
+> Concat
+> 1N
+> 1N
+> 1N
+> 111KKKWHC
+> KKKWHC
+> C & P Linear
+
+  DN 1 DWH KK    DN 1  
+
+> Conv. Conv.
+> Eq. (11) Eq. (11) Flatten
+
+  DN 1 111   KKK WHC KKK WHC       
+
+> C & P
+> Feature Maps Graph Nodes Patch Embedding Fused Nodes Conv. & Pooling Instance Embedding
+> DPrediction
+> WHC
+
+  DN 1
+
+> Classification Loss
+> RL Loss
+
+Fig. 4. (a) In the graph modality, depot and customer attributes are processed by the graph encoder to generate node embeddings. In the vision modality, two images of each VRP instance are input into the vision encoder. The obtained feature maps are fused with the graph nodes to generate the final solutions, while a constraint classifier performs the constraint-aware auxiliary task. All modules are jointly trained with the weighted sum of LRL and LCls (Eq. 4). (b) The hybrid fusion module uses the patch embeddings from the last two layers of the vision encoder, with a cross-attention mechanism applied to align the node-patch semantics. 
+
+the candidate node representations are obtained as ˜k = H(H).The action probability distribution is derived as follows: 
+
+Dj = ˜ qj ˜k⊤/√D, (2) where ˜qj ∈ RD , ˜k ∈ R(N +1) ×D , and Dj ∈ RN +1 . To generate solutions, the unnormalized log-probability (logit) is calculated as uj = ξ · Tanh (Dj ) ⊙ Mj , where Tanh (·) is the Hyperbolic Tangent operation, and ξ = 10 is a predefined clipping hyperparameter. The final probability for selecting the k-th node is calculated by applying the Softmax function, denoted as Pj = Softmax (uj ). If all constraints are satisfied, the node with the highest probability is selected as the next node to visit. Otherwise, the depot is selected. 
+
+3) Optimizing Objective: To ensure minimal routing cost, RF employs the reinforcement learning (RL) algorithm to guide the training process. This approach takes into ac-count both the reward and the probability of selecting the current node. For the i-th trajectories, once the solutions 
+
+{πi, 1, π i, 1, . . . , π i,N ′ } are obtained, the reward is calculated by summing the node-to-node distances ri = PN ′ 
+
+> −1
+> j=1
+
+∥cπi,j −
+
+cπi,j +1 ∥2, where c = {cx, c y } represents the Euclidean co-ordinates, and N ′
+
+denotes the total number of steps. The corresponding probabilities are represented by the likelihood 
+
+hi = PN ′ 
+
+> j=1
+
+log( Pi,j,π i,j ), where i, j, and πi,j are the indexes for trajectory, step, and selected node, respectively. The training objective is 
+
+LRL = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+(ri − b)hi, (3) where b is a shared baseline to reduce the variance of sampled gradients. It is calculated by averaging the reward from all trajectories, denoted as b = 1
+
+> N
+
+PNi=1 ri.IV. M ETHODOLOGY 
+
+A. Overall Workflow 
+
+Fig. 4 (a) presents the overall workflow of our proposed VaFM, which integrates vision information into the graph-based neural VRP solver through a multi-modality framework. Both modalities use the coordinates, open route flag, duration limit, demand, and time window values as inputs. In the graph modality, these attributes are represented along the node axis and passed through a graph encoder. In the vision modality, two images are designed to represent all attributes of each indi-vidual VRP instance, which are then concatenated and fed into a vision encoder. The obtained vision patches are incorporated into the graph nodes using the proposed hybrid cross-attention fusion module. These fused embeddings are then passed to their respective decoders, which are ensembled to generate the final solutions. Additionally, VaFM incorporates a constraint classifier after the vision encoder to perform the auxiliary task. The overall training objective is defined as follows: 
+
+L = LRL + αLCls , (4) where LRL represents the RL loss for minimizing routing cost, and LCls denotes the classification loss for identifying constraint types. The coefficient α balances the loss terms and is empirically set to 0.1. 
+
+B. Vision Input 
+
+In the vision modality, we map customer coordinates as nodes and plot them into images. In multi-task scenarios, designing images for multiple attributes should follow: Prin-ciple 1: Represent attributes according to their type, using categorical cues for discrete variables and continuous cues for continuous variables. Principle 2: Use distinct visual channels JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 6
+
+for different attributes to prevent overlap, enabling a scalable combination of multiple attributes. Based on these principles, each VRP instance is represented by demand and TW images, with depots shown as red nodes, L and O indicated by node shape and background color, and demand and time window conveyed through node color intensities. Below, we first introduce the vision input for CVRP and then extend it to cases with additional attributes. 
+
+1) Vision Input for CVRP: The demand and TW images are denoted as f1, f2 ∈ RC×H×W , where C=3 denotes the number of channels, H and W represent the height and width of the images, respectively. Since the coordinates are within (0, 1), the corresponding image pixel index is calculated as follows: 
+
+exi = cxi × (W − 2M ) + M, eyi = cyi × (H − 2M ) + M. (5) As shown in Fig. 5 (a), M is a margin hyperparameter that pre-vents nodes from going beyond the image boundary. (cxi , c yi )
+
+and (exi , e yi ) represent the original Euclidean coordinates and the corresponding node pixel indexes, respectively. Each node is centered at (exi , e yi ) and occupies an S ×S pixel area, where larger-scale instances correspond to smaller S. The demand and TW images represent customers using green and white nodes, respectively, with the demand image indicating linehaul demand values through varying color intensities. Specifically, different instances may have widely varying demand levels, 
+
+e.g. , some instances having generally high demands and others low. To ensure sufficient color contrast within each image, the color intensity sli is normalized as follows: 
+
+sli = ( δli − δmin )/(δmax − δmin ), (6) where δmin , and δmax denote the minimum and maximum demands among all customers within an instance. 
+
+2) Extend CVRP to Tasks with a Single Attribute: To incorporate O into CVRP ( e.g. , OVRP), as shown in Fig. 5 (b), we invert the background pixel values from P to 1 − P (with 
+
+P =0.25), resulting in a darker background. To incorporate L ( e.g. , VRPL), the depot and customer nodes are changed from rectangles to plus signs. These changes are applied to both images. In the VRPB, the demand image f1 uses green and blue nodes to represent linehaul and backhaul customers, respectively. The color intensity of each node is determined by its normalized demand: 
+
+sli = ( δli − δmin )/(δmax − δmin ),sbi = ( δbi − δmin )/(δmax − δmin ), (7) where sli and sbi represent the color intensities for linehaul and backhaul, respectively. For backhaul customers, δli = 0 ,and for linehaul customers, δbi = 0 . δmin , and δmax denote the minimum and maximum values among all customers, i.e. ,
+
+{δl 
+
+> 1
+
++ δb
+
+> 1
+
+, δ l 
+
+> 2
+
++ δb
+
+> 2
+
+, . . . , δ lN + δbN }. Similarly, in VRPTW, the TW image f2 uses orange nodes to represent time window information, with the color intensity defined as 
+
+sti = ( ti − tmin )/(tmax − tmin ), (8) where ti = tei + tsi represents the sum of the early time and service time. The terms tmin and tmax denote the minimum and ``    
+
+> OVRP
+> Dark Background
+> VRPL
+> Plus Sign Nodes
+> VRPB
+> Green & blue Nodes
+> VRPTW
+> Orange Nodes
+> OVRPTW OVRPBTW OVRPBLTW
+> CVRP
+> 1
+> 1
+
+ y  
+
+> i
+> x
+> icc,
+> W
+> H
+> M
+
+x
+
+y
+
+x
+
+y
+
+ y      
+
+> i
+> x
+> iee,S
+> Depot Costomers
+> Demand
+> Image
+> TW
+> Image
+> (a) Vision input for CVRP.
+> Euclidean Coordinates Pixel Index Vision Images
+> (b) Extend CVRP to tasks with a single attribute.
+> (c) Task with multiple attributes.
+> Fig. 5. (a) For CVRP, the Euclidean coordinates are converted into image pixel indices, which are then used to generate the demand and TW images. (b) CVRP is extended by adding one attribute. OVRP: background changes from light to dark grey; VRPL: nodes change from rectangles to plus signs. VRPB: demand image uses green/blue for linehaul and backhaul; VRPTW: orange nodes indicate time windows in the TW image. (c) We incorporate O-TW, O-TW-B, and O-TW-B-L into CVRP.
+
+maximum values within {te 
+
+> 1
+
++ ts
+
+> 1
+
+, t e 
+
+> 2
+
++ ts
+
+> 2
+
+, . . . , t eN + tsN }. We combine these constraint designs to formulate vision images for 16 VRP variants, with several examples shown in Fig. 5 (c). 
+
+C. Vision Encoder 
+
+To extract visual representations, we utilize a CNN-based vision encoder to process two images. Specifically, f1 and f2
+
+are concatenated along the channel axis to form the encoder input f ∈ R2C×H×W . It is subsequently passed through ResNet-18, which comprises an initial convolutional layer followed by various residual layers. We modify the input channel number of the initial layer from C to 2C and maintain the subsequent layers’ settings. The encoding process can be represented as 
+
+F1, F2, . . . , FK = Ev (f ), (9) where Ev (·) is the CNN-based vision encoder that consists of K residual layers, and Fk ∈ RCk ×Hk ×Wk represents the encoded feature maps from the k-th layer. As the layer number increases, the number of channels doubles, while the height and width are halved, i.e. , Ck+1 = 2 Ck, Hk+1 = Hk/2,and Wk+1 = Wk/2. These feature maps are fused with the graph modality to generate solutions, followed by a constraint classifier after the encoder for the auxiliary task. JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 7
+
+D. Solution Generation 
+
+The final solutions are derived from the multi-scale feature maps and graph-based node embeddings. Specifically, feature maps from the last two layers are integrated into node embed-dings using the proposed hybrid cross-attention fusion module. This produces two fused embeddings, which are independently decoded to generate the final solutions. As the fusion process is similar for both layers, we use the k-th layer as a representative example in the following description to avoid redundancy. 
+
+1) Hybrid Cross-Attention Fusion Module: As described in Section III-B1 and Eq. 9, the node embeddings and feature maps from the k-th layer are denoted as H ∈ R(N +1) ×D and 
+
+Fk ∈ RCk ×Hk ×Wk , respectively. This module is used to fuse two embeddings into ˜Ek ∈ R(N +1) ×D .
+
+Dimension Alignment for Patch Embeddings. As illustrated in Fig. 4 (b), a 1 × 1 convolutional layer C(·) performs a weighted linear transformation on the spatial feature map of size Hk × Wk, thereby projecting the feature dimension from 
+
+Ck to D. Specifically, for each spatial location (w, h ), the output feature at the d-th channel is computed as 
+
+˜Fkd,w,h =
+
+> Ck
+
+X
+
+> c=1
+
+Wd,c , Fkc,w,h + bd, (10) where W ∈ RD×Ck and b ∈ RD are learnable weights and biases, respectively, resulting in ˜Fk ∈ RD×Hk ×Wk .Subsequently, the patch embedding for node i is derived using the corresponding pixel indexes: 
+
+Pki = ˜Fkw,h , w =
+
+ Wk
+
+W exi
+
+
+
+, h =
+
+ Hk
+
+H eyi
+
+
+
+, (11) where (exi , e yi ) is calculated in Eq. 5. ˜Fkh,w ∈ RD represents the features at the h-th row and w-th column of the corre-sponding feature map, where the floor function ⌊·⌋ ensures that w and h are integers. 
+
+Graph-vision Integration. Instead of directly adding graph and vision embeddings, we adopt a hybrid cross-attention mechanism to enable adaptive receptive fields. This mech-anism combines the node embeddings with patch embed-dings from different layers (corresponding to varying receptive fields), and further enhances representation ability by fusing the deepest-layer patch features. Specifically, queries are con-structed by combining the node and patch embeddings: 
+
+qk = H + βPk, (12) where H is the graph node embedding calculated in Sec-tion III-B1, the patch embedding Pk = {Pk 
+
+> 0
+
+, Pk 
+
+> 1
+
+, . . . , PkN },both having the feature dimension H, Pk ∈ R(N +1) ×D . β
+
+is the coefficient balancing graph and vision information, resulting in qk ∈ R(N +1) ×D . The feature map from the final layer is flattened to serve as the key and value embeddings: 
+
+k, v = H(Flatten ( ˜FK )) , (13) where k, v ∈ RHK WK ×D , Flatten (·) represents the flatten operation, and H(·) is the linear layer to project key and value embeddings. The key and value embeddings are subsequently fused by the query embedding from the k-th layer of the vision encoder. It is implemented by using the transformer layer, with the attention matrices expressed as: 
+
+Ak = qkk⊤/√D, (14) where Ak ∈ R(N +1) ×Hk Wk . The fused node embedding is 
+
+Ek = IN (qk + H(Akv)) , ˜Ek = IN (Ek + MLP (Ek)) ,
+
+(15) where Ek, ˜Ek ∈ R(N +1) ×D , IN (·) represents the instance normalization layer, and MLP (·) refers to the multi-layer perceptron (MLP) with a hidden dimension of 4D. It consists of two linear layers, separated by a ReLU activation. 
+
+2) Ensembled Decoder: The fused embeddings from the last two layers are denoted as ˜EK−1 and ˜EK , respectively. At each decoding step j, the corresponding action probability distributions are represented by DK−1 
+
+> j
+
+and DKj , as calculated in Eq. 2. The final probability distribution is ensembled by averaging decoder outputs, expressed as 
+
+Dj = 12 (DK−1 
+
+> j
+
++ DKj ). (16) We follow the pipeline outlined in Section III-B2 to compute the final probabilities for selecting the next node. Subse-quently, we employ the RL loss LRL from Section III-B3 to minimize the routing cost. 
+
+E. Constraint-aware Auxiliary Task 
+
+As shown in Fig. 5, the CVRP and OVRP images exhibit significant background discrepancies. This may lead the model to overemphasize the features of O while neglecting the char-acteristics of L and B, which occupy fewer pixels. To mitigate this issue, we introduce a constraint-aware auxiliary task to encourage more balanced learning across different constraints. This task requires the model to identify the constraint type from the image, which can promote attention to constraints with lower pixel presence. As illustrated in Fig. 4 (a), the feature map from the final layer of the vision encoder is utilized to construct the instance-level embedding, denoted as 
+
+F′
+
+= Pool (C(FK )) , where F′
+
+∈ RD , Pool (·) and C(·)
+
+represent the average pooling layer and a 1 × 1 convolutional layer, respectively. F′
+
+is then fed into a constraint classifier to generate the prediction ˆT = H(F′
+
+), where ˆT ∈ R4 represents the logits corresponding to the constraints O, L, B, and TW, and H(·) denotes the classifier which consists of a linear layer. We employ the binary cross-entropy (BCE) loss [50] as the training objective: 
+
+LCls = − 1
+
+C
+
+> C
+
+X
+
+> i=1
+
+h
+
+Ti log( σ( ˆTi)) + (1 − Ti) log(1 − σ( ˆTi)) 
+
+i
+
+,
+
+(17) where C = 4 is the number of constraint classes, Ti is the corresponding one-hot label for the i-th constraint, and σ(·) is the sigmoid function. This part is jointly trained within VaFM, with the overall training objective defined in Eq. 4. JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 8
+
+TABLE I PERFORMANCE ON MULTI -TASK VRP S. * DENOTES THE STRONG BASELINE USED TO COMPUTE THE GAP . B EST NEURAL APPROACH IN BOLD ; SECOND UNDERLINED .Solver N = 50 N = 100 Solver N = 50 N = 100 
+
+Obj. ↓ Gap ↓ Time ↓ Obj. ↓ Gap ↓ Time ↓ Obj. ↓ Gap ↓ Time Obj. ↓ Gap ↓ Time ↓
+
+> CVRP
+
+HGS-PyVRP 10.287 * 4.6m 15.543 * 9.2m OVRP HGS-PyVRP 6.494 * 4.6m 9.730 * 9.2m OR-Tools 10.523 2.294% 4.6m 16.361 5.263% 9.2m OR-Tools 6.555 0.939% 4.6m 10.081 3.607% 9.2m MTPOMO 10.458 1.662% 2s 15.796 1.628% 10s MTPOMO 6.818 4.989% 2s 10.239 5.231% 10s MVMoE 10.414 1.235% 3s 15.759 1.390% 13s MVMoE 6.760 4.096% 3s 10.195 4.779% 13s MVMoE-L 10.448 1.565% 3s 15.777 1.506% 12s MVMoE-L 6.796 4.650% 2s 10.224 5.077% 12s RF-POMO 10.438 1.468% 2s 15.836 1.885% 10s RF-POMO 6.706 3.265% 2s 10.204 4.872% 10s RF-MoE-L 10.424 1.332% 2s 15.818 1.769% 12s RF-MoE-L 6.682 2.895% 2s 10.165 4.471% 12s VaFM-POMO 10.432 1.412% 5s 15.812 1.730% 13s VaFM-POMO 6.677 2.811% 4s 10.144 4.258% 13s VaFM-MoE-L 10.421 1.304% 5s 15.802 1.665% 18s VaFM-MoE-L 6.671 2.719% 5s 10.141 4.228% 19s VRPB HGS-PyVRP 9.688 * 4.6m 14.386 * 9.2m OVRPB HGS-PyVRP 6.897 * 4.6m 10.304 * 9.2m OR-Tools 9.829 1.455% 4.6m 15.010 4.338% 9.2m OR-Tools 6.940 0.623% 4.6m 10.611 2.979% 9.2m MTPOMO 10.105 4.304% 2s 15.012 4.351% 10s MTPOMO 7.269 5.394% 2s 10.901 5.794% 10s MVMoE 10.009 3.313% 3s 14.948 3.907% 13s MVMoE 7.179 4.089% 3s 10.846 5.260% 13s MVMoE-L 10.069 3.933% 2s 14.983 4.150% 11s MVMoE-L 7.239 4.959% 2s 10.874 5.532% 12s RF-POMO 10.012 3.344% 2s 15.020 4.407% 10s RF-POMO 7.108 3.059% 2s 10.816 4.969% 10s RF-MoE-L 9.977 2.983% 2s 14.980 4.129% 11s RF-MoE-L 7.091 2.813% 2s 10.773 4.552% 12s VaFM-POMO 9.966 2.874% 3s 14.967 4.038% 13s VaFM-POMO 7.068 2.472% 4s 10.745 4.281% 13s VaFM-MoE-L 9.948 2.689% 5s 14.956 3.964% 18s VaFM-MoE-L 7.054 2.271% 5s 10.737 4.197% 19s VRPBL HGS-PyVRP 9.688 * 4.6m 14.373 * 9.2m OVRPBL HGS-PyVRP 6.904 * 4.6m 10.310 * 9.2m OR-Tools 9.820 1.363% 4.6m 15.084 4.947% 9.2m OR-Tools 6.949 0.652% 4.6m 10.613 2.939% 9.2m MTPOMO 10.112 4.377% 2s 15.023 4.522% 10s MTPOMO 7.274 5.359% 2s 10.903 5.752% 10s MVMoE 10.018 3.406% 3s 14.951 4.021% 13s MVMoE 7.191 4.157% 3s 10.858 5.315% 13s MVMoE-L 10.080 4.046% 2s 14.993 4.314% 11s MVMoE-L 7.239 4.852% 2s 10.886 5.587% 12s RF-POMO 10.026 3.489% 2s 15.030 4.571% 10s RF-POMO 7.117 3.085% 2s 10.825 4.995% 10s RF-MoE-L 9.992 3.138% 2s 14.982 4.237% 12s RF-MoE-L 7.099 2.824% 2s 10.781 4.568% 12s VaFM-POMO 9.976 2.969% 3s 14.960 4.086% 13s VaFM-POMO 7.078 2.519% 4s 10.757 4.334% 13s VaFM-MoE-L 9.959 2.798% 5s 14.958 4.072% 18s VaFM-MoE-L 7.062 2.291% 5s 10.737 4.141% 19s VRPBLTW HGS-PyVRP 18.361 * 4.6m 29.026 * 9.2m OVRPBLTW HGS-PyVRP 11.597 * 4.6m 19.005 * 9.2m OR-Tools 18.422 0.332% 4.6m 29.830 2.770% 9.2m OR-Tools 11.612 0.129% 4.6m 19.198 1.016% 9.2m MTPOMO 18.841 2.614% 2s 30.232 4.155% 11s MTPOMO 11.963 3.156% 2s 19.626 3.268% 11s MVMoE 18.715 1.928% 3s 30.216 4.100% 15s MVMoE 11.847 2.156% 3s 19.588 3.068% 15s MVMoE-L 18.773 2.244% 3s 30.223 4.124% 13s MVMoE-L 11.883 2.466% 3s 19.605 3.157% 14s RF-POMO 18.628 1.454% 2s 30.094 3.679% 11s RF-POMO 11.735 1.190% 2s 19.429 2.231% 11s RF-MoE-L 18.622 1.421% 3s 30.060 3.562% 13s RF-MoE-L 11.743 1.259% 3s 19.402 2.089% 14s VaFM-POMO 18.610 1.356% 4s 29.990 3.322% 14s VaFM-POMO 11.727 1.122% 4s 19.365 1.895% 15s VaFM-MoE-L 18.572 1.150% 5s 29.985 3.305% 21s VaFM-MoE-L 11.712 0.991% 5s 19.359 1.861% 22s VRPBTW HGS-PyVRP 18.167 * 4.6m 29.000 * 9.2m OVRPBTW HGS-PyVRP 11.590 * 4.6m 19.167 * 9.2m OR-Tools 18.374 1.139% 4.6m 29.964 3.324% 9.2m OR-Tools 11.610 0.173% 4.6m 19.314 0.767% 9.2m MTPOMO 18.797 3.468% 2s 30.325 4.569% 11s MTPOMO 11.957 3.167% 2s 19.780 3.198% 11s MVMoE 18.684 2.846% 3s 30.319 4.548% 15s MVMoE 11.849 2.235% 3s 19.752 3.052% 15s MVMoE-L 18.760 3.264% 2s 30.323 4.562% 14s MVMoE-L 11.880 2.502% 2s 19.770 3.146% 14s RF-POMO 18.589 2.323% 2s 30.181 4.072% 11s RF-POMO 11.733 1.234% 2s 19.579 2.150% 11s RF-MoE-L 18.585 2.301% 3s 30.157 3.990% 13s RF-MoE-L 11.737 1.268% 3s 19.558 2.040% 14s VaFM-POMO 18.578 2.262% 4s 30.099 3.790% 14s VaFM-POMO 11.720 1.123% 4s 19.519 1.834% 15s VaFM-MoE-L 18.536 2.031% 5s 30.090 3.758% 20s VaFM-MoE-L 11.703 0.974% 6s 19.511 1.795% 22s VRPL HGS-PyVRP 10.328 * 4.6m 15.637 * 9.2m OVRPL HGS-PyVRP 6.510 * 4.6m 9.709 * 9.2m OR-Tools 10.570 2.343% 4.6m 16.466 5.302% 9.2m OR-Tools 6.571 0.937% 4.6m 10.047 3.481% 9.2m MTPOMO 10.502 1.685% 2s 15.905 1.714% 12s MTPOMO 6.839 5.054% 2s 10.210 5.160% 10s MVMoE 10.457 1.249% 3s 15.865 1.458% 13s MVMoE 6.777 4.101% 3s 10.169 4.738% 13s MVMoE-L 10.488 1.549% 2s 15.885 1.586% 10s MVMoE-L 6.803 4.501% 2s 10.199 5.047% 12s RF-POMO 10.482 1.491% 2s 15.955 2.034% 10s RF-POMO 6.727 3.333% 2s 10.176 4.810% 10s RF-MoE-L 10.464 1.317% 2s 15.924 1.835% 12s RF-MoE-L 6.700 2.919% 2s 10.135 4.388% 12s VaFM-POMO 10.448 1.165% 3s 15.926 1.850% 13s VaFM-POMO 6.686 2.708% 4s 10.144 4.485% 13s VaFM-MoE-L 10.436 1.050% 5s 15.921 1.818% 19s VaFM-MoE-L 6.676 2.548% 5s 10.134 4.376% 19s VRPLTW HGS-PyVRP 15.951 * 4.6m 25.678 * 9.2m OVRPLTW HGS-PyVRP 10.455 * 4.6m 16.962 * 9.2m OR-Tools 16.036 0.533% 4.6m 26.156 1.862% 9.2m OR-Tools 10.465 0.096% 4.6m 17.100 0.814% 9.2m MTPOMO 16.480 3.316% 2s 26.684 3.918% 11s MTPOMO 10.803 3.329% 2s 17.589 3.696% 11s MVMoE 16.368 2.614% 3s 26.655 3.805% 14s MVMoE 10.718 2.516% 3s 17.553 3.484% 15s MVMoE-L 16.437 3.047% 3s 26.674 3.879% 13s MVMoE-L 10.750 2.822% 3s 17.577 3.626% 14s RF-POMO 16.303 2.207% 2s 26.572 3.482% 11s RF-POMO 10.611 1.492% 2s 17.429 2.753% 11s RF-MoE-L 16.298 2.175% 3s 26.533 3.330% 13s RF-MoE-L 10.617 1.549% 3s 17.401 2.588% 14s VaFM-POMO 16.287 2.108% 4s 26.496 3.187% 14s VaFM-POMO 10.602 1.406% 4s 17.367 2.386% 14s VaFM-MoE-L 16.249 1.868% 5s 26.469 3.080% 20s VaFM-MoE-L 10.584 1.233% 5s 17.361 2.350% 21s VRPTW HGS-PyVRP 16.032 * 4.6m 25.433 * 9.2m OVRPTW HGS-PyVRP 10.485 * 4.6m 16.900 * 9.2m OR-Tools 16.124 0.574% 4.6m 25.923 1.927% 9.2m OR-Tools 10.497 0.114% 4.6m 17.023 0.728% 9.2m MTPOMO 16.570 3.356% 2s 26.403 3.814% 11s MTPOMO 10.851 3.491% 2s 17.525 3.698% 11s MVMoE 16.455 2.638% 3s 26.374 3.700% 14s MVMoE 10.760 2.623% 3s 17.496 3.527% 15s MVMoE-L 16.521 3.050% 3s 26.392 3.771% 13s MVMoE-L 10.797 2.976% 2s 17.516 3.645% 14s RF-POMO 16.380 2.171% 2s 26.294 3.385% 11s RF-POMO 10.651 1.583% 2s 17.355 2.692% 11s RF-MoE-L 16.381 2.177% 3s 26.256 3.236% 13s RF-MoE-L 10.656 1.631% 3s 17.330 2.544% 14s VaFM-POMO 16.367 2.091% 4s 26.216 3.077% 14s VaFM-POMO 10.633 1.413% 4s 17.296 2.344% 14s VaFM-MoE-L 16.335 1.891% 5s 26.211 3.059% 20s VaFM-MoE-L 10.620 1.291% 5s 17.297 2.347% 21s JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 9
+
+TABLE II PERFORMANCE OF VAFM AND RF ACROSS TASKS WITH DIFFERENT NUMBERS OF CONSTRAINTS . "RF" AND "V AFM" CORRESPOND TO RF-M OE-L AND 
+
+VAFM-M OE-L IN TABLE I, RESPECTIVELY . "N UMBER " INDICATES THE NUMBER OF CONSTRAINTS IN EACH TASK , WHILE "( ∆)" REPRESENTS THE IMPROVEMENT OF VAFM OVER RF.                                                                                                                                                                                                                                                               
+
+> N= 50 N= 100
+> Task Number Obj. ↓(∆)↑Gap ↓(∆)↑Obj. ↓(∆)↑Gap ↓(∆)↑
+> RF VaFM RF VaFM RF VaFM RF VaFM CVRP 010.424 10.421 (0.003) 1.332% 1.304% (0.028%) 15.818 15.802 (0.016) 1.769% 1.665% (0.104%) OVRP 16.682 6.671 (0.011) 2.895% 2.719% (0.176%) 10.165 10.141 (0.024) 4.471% 4.228% (0.243%) VRPB 9.977 9.948 (0.029) 2.983% 2.689% (0.294%) 14.980 14.956 (0.024) 4.129% 3.964% (0.165%) VRPL 10.464 10.436 (0.028) 1.317% 1.050% (0.267%) 15.924 15.921 (0.003) 1.835% 1.818% (0.017%) VRPTW 16.381 16.335 (0.046) 2.177% 1.891% (0.286%) 26.256 26.211 (0.045) 3.236% 3.059% (0.177%) Avg. 10.876 10.848 (0.028) 2.343% 2.087% (0.256%) 16.831 16.807 (0.024) 3.418% 3.267% (0.151%) OVRPB 27.091 7.054 (0.037) 2.813% 2.271% (0.542%) 10.773 10.737 (0.036) 4.552% 4.197% (0.355%) OVRPL 6.700 6.676 (0.024) 2.919% 2.548% (0.371%) 10.135 10.134 (0.001) 4.388% 4.376% (0.012%) VRPBL 9.992 9.959 (0.033) 3.138% 2.798% (0.340%) 14.982 14.958 (0.024) 4.237% 4.072% (0.165%) OVRPTW 10.656 10.620 (0.036) 1.631% 1.291% (0.340%) 17.330 17.297 (0.033) 2.544% 2.347% (0.197%) VRPBTW 18.585 18.536 (0.049) 2.301% 2.031% (0.270%) 30.157 30.090 (0.067) 3.990% 3.758% (0.232%) VRPLTW 16.298 16.249 (0.049) 2.175% 1.868% (0.307%) 26.533 26.469 (0.064) 3.330% 3.080% (0.250%) Avg. 11.554 11.516 (0.038) 2.496% 2.134% (0.362%) 18.318 18.281 (0.038) 3.840% 3.638% (0.202%) OVRPBL 37.099 7.062 (0.037) 2.824% 2.291% (0.533%) 10.781 10.737 (0.044) 4.568% 4.141% (0.427%) OVRPBTW 11.737 11.703 (0.034) 1.268% 0.974% (0.294%) 19.558 19.511 (0.047) 2.040% 1.795% (0.245%) OVRPLTW 10.617 10.584 (0.033) 1.549% 1.233% (0.316%) 17.401 17.361 (0.040) 2.588% 2.350% (0.238%) VRPBLTW 18.622 18.572 (0.050) 1.421% 1.150% (0.271%) 30.060 29.985 (0.075) 3.562% 3.305% (0.257%) Avg. 12.019 11.980 (0.039) 1.766% 1.412% (0.354%) 19.450 19.399 (0.051) 3.190% 2.898% (0.292%) OVRPBLTW 411.743 11.712 (0.031) 1.259% 0.991% (0.268%) 19.402 19.359 (0.043) 2.089% 1.861% (0.228%)
+
+V. E XPERIMENTS 
+
+A. Experimental Setup 1) Dataset: We evaluate the performance of our method using 16 VRP variants. Following [13], node locations are represented as two-dimensional Euclidean coordinates sam-pled from a uniform distribution within the range [0 , 1) . Each vehicle is initialized with a capacity of Q =1 at the depot. The linehaul and backhaul nodes share the same demand configuration, where demands are uniformly distributed inte-ger values in the range [1 , 10) , which is subsequently scaled by a factor of 30 + N/ 5, with N representing the number of customers. For instances involving backhaul, 20% of the customers are randomly selected and reassigned from linehaul to backhaul. In the time window formulation, the vehicle speed is set to 1, and the early times are randomly selected from the range [0 .0126 , 4.25] . The service times and window lengths are drawn from the ranges [0 , 0.15) and [1 .8, 2.0) , respectively. The late times are computed by adding the early times and window lengths. For instances without TW, all time values are set to zero. The distance limit is set to l=3 for instances with L, and instances without L are assigned a value of zero. A total of 100,000 instances are uniformly generated across 16 variants for training. During evaluation, each task employs 128 instances for validation and 1,000 for testing. In this paper, we compare the performance of VaFM with the state-of-the-art (SOTA) methods by training models on both N =50 and 
+
+N =100, while mainly using N =50 for ablation, sensitivity, and other analysis studies. 
+
+2) Implementation Details: Our method is developed using PyTorch [51]. The training and evaluation experiments are conducted on an AMD EPYC 7702P 24-core CPU with a single RTX 3090 GPU. In the graph encoder, we adopt the one from RF-MoE-L [13], which consists of four experts and hierarchical gating. The embedding dimension D is set to 128. We employ the ResNet-18 pre-trained on ImageNet [52] as the vision encoder, consisting of K=4 residual layers. The input im-age size is H=W =224, and the initial convolutional layer’s channel number is modified from 3 to 6. Feature maps are extracted from the last two layers, yielding dimensions 
+
+C3=256, C4=512, and map sizes H3=W3=14, H4=W4=7. In the constraint classifier, we use a 1 × 1 convolutional kernel with a stride of 1. In the decoding process, we continue to use the RF-MoE-L decoder with the same feature dimension of 128. All modules are jointly trained by using the Adam optimizer. It is initialized with a learning rate of 3 × 10 −4 and a weight decay of 10 −6. During the 300 training epochs, the learning rate is reduced using the MultiStepLR strategy by a factor of 0.1 at the 270th and 295th epochs. The checkpoint with the best validation performance is used for testing. Code is available at: https://github.com/gshuangchun/VaFM .
+
+3) Evaluation Metrics: During the inference stage, we generate greedy solutions using multi-starts and eight sym-metric dihedral augmentations from [4], resulting in 8 × N
+
+solutions per instance. The model produces these solutions independently of the constraint classifier. To assess the model’s performance, we use two widely adopted metrics in VRPs: the total routing length ("Obj.") and the performance gap ("Gap") to the strong baseline, HGS-PyVRP [53]. Additionally, we report the inference time (latency). All metrics are computed over 1,000 test instances, where "Obj." and "Gap" represent the average values per instance, and the inference time reflects the total computation cost for all 1,000 test instances. JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 10 
+
+B. Comparison with the State-of-the-Arts 1) Comparison Across Different Tasks: We compare VaFM with the traditional and SOTA neural solvers. In traditional solvers, HGS-PyVRP extends the SOTA heuristic algorithm HGS-CVRP on 16 VRPs, while OR-Tools is a commonly used method in solving various VRP variants through con-straint programming. The implementation follows the setup as illustrated in [13]. Both methods adopt time limits of 10 and 20 seconds for instances with 50 and 100 nodes, respectively. Neural solvers include MTPOMO [12], the first multi-task VRP baseline, and MVMoE [36], which utilizes mixture-of-experts [54] to enhance model performance. Additionally, we incorporate two RF variants [13]: RF-POMO, derived from MTPOMO, and RF-MoE-L based on MVMoE-L. Compared to MVMoE, MVMoE-L incorporates a hierarchical gating mechanism. Accordingly, we develop two VaFM variants: VaFM-POMO and VaFM-MoE-L. Table I presents the total routing length, gap to strong baseline, and inference time on test instances with 50 and 100 customer nodes. The results demonstrate that VaFM-MoE-L achieves superior performance across most VRP variants, with the best results in 15 out of 16 cases for N =50 and 12 out of 16 cases for N =100. Compared to RF-MoE-L, VaFM-MoE-L demonstrates gap improvements of 0.542% and 0.427% in OVRPB with N =50 and OVRPBL with N =100, respectively. Moreover, we observe that VaFM suggests modest benefits in CVRP, with VaFM-MoE-L nar-rowing a 0.028% gap from RF-MoE-L in N =50. This may be attributed to redundancy in visual inputs. For example, the visual input includes both demand and TW images, but the TW image provides little useful information for CVRP and may even introduce noise. Regarding the inference time, all neural solvers demonstrate superiority over conventional HGS-PyVRP and OR-Tools. However, VaFM-MoE-L takes slightly longer than RF-MoE-L when solving each VRP variant. For variants with N =100, RF-MoE-L and VaFM-MoE-L require 12–14s and 18-22s for inference, respectively. 
+
+2) Comparison Across Different Constraint Numbers: We investigate the improvements of VaFM over the SOTA method RF across tasks with varying numbers of constraints. Based on CVRP, we present the performance across various combi-nations of constraints. Table II presents the values of "Obj." and "Gap", as well as their improvements from RF (RF-MoE-L in Table I) to VaFM (VaFM-MoE-L in Table I). We observe that variants with different constraint numbers exhibit similar averaged values of "Obj." and "Gap". For RF with N =50, the averaged "Gap" values for tasks with 0, 1, 2, 3, and 4 constraints are distributed as {1.332%, 2.343%, 2.496%, 1.766%, 1.259%}. This ensures that any observed performance improvements are not attributable to inherently larger "Gap" values in multi-constraint tasks. In contrast, the "( ∆)" results indicate that VaFM achieves greater improvements in tasks with multiple constraints. Specifically, VaFM outperforms RF by a 0.028% "Gap" in CVRP with N =50. As the constraint number increases, VaFM achieves average "Gap" improve-ments of 0.256%, 0.362%, and 0.354% in tasks with 1, 2, and 3 constraints, respectively. These results highlight VaFM’s superiority in handling tasks with complex constraints, where                                                              
+
+> TABLE III ABLATION ON MULTI -TASK VRP IMAGE .OBLTW Obj. ↓Gap ↓
+> ✓✓✓✓11.409 1.819%
+> ✗✓✓✓11.425 1.861%
+> ✓✗✓✓11.413 1.994%
+> ✓✓✗✓11.409 1.827%
+> ✓✓✓✗11.416 1.898%
+> ✗✗✗✗11.438 2.174% TABLE IV ABLATION ON HYBRID CROSS -ATTENTION FUSION MODULE .CA LLF HF Obj. ↓Gap ↓
+> ✓✓✓11.409 1.819%
+> ✗✓✓11.413 1.876%
+> ✓✗✓11.414 1.875%
+> ✓✓✗11.415 1.887%
+
+the improvements are attributed to the model’s effectiveness. 
+
+C. Ablation Studies 1) Ablation on Multi-task VRP Image: To evaluate the effectiveness of the proposed vision input, we conduct abla-tion studies by systematically removing each design for the constraint. O ✗ means the background design is removed, leaving a uniform color. B ✗ indicates that backhaul shares the same node color as linehaul. L ✗ denotes that tasks with or without L have the same node shape. TW ✗ refers to using an image with only the first demand information, excluding the second TW image. Additionally, we design an image that simultaneously removes all constraints, denoted as O ✗, B 
+
+✗, L ✗, and TW ✗ (last row). The results in Table III show that incorporating any constraint design in the image improves performance. Specifically, removing B and TW leads to a more severe performance drop than removing O and L. For example, eliminating B causes a 0.175% performance drop, while removing L results in a smaller magnitude of 0.008%. These findings suggest that node-based constraints contribute more to performance improvements than instance-based ones. 
+
+2) Ablation on Hybrid Cross-attention Fusion Module: 
+
+To evaluate the effectiveness of each component within the hybrid cross-attention fusion module, we assess the model per-formance by individually removing the cross-attention mech-anism (CA), the lower-layer feature (LLF), and the hybrid fusion (HF). As illustrated in Fig. 6, removing CA directly uses the summed graph and patch features as the fused node embedding. Removing LLF retains only the patch embedding from the last encoder layer, while removing HF employs the 
+
+q, k, and v from the same layer. As shown in Table IV, removing each module increases the Gap by 0.057%, 0.056%, and 0.068% for CA, LLF, and HF, respectively. 
+
+D. Impact of Auxiliary Task 
+
+We further analyze the effectiveness of the constraint-aware auxiliary task by examining its impact on the performance gap and the resulting task distribution. As shown in Fig. 7, “w/o JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 11 Conv. Conv.                                             
+
+> Eq. (11) Eq. (11)
+> Cross-Attention
+> (b) w/o Lower Layer Feature (LLF)
+> qkv
+> Cross-Attention
+> qkv
+> Conv. Conv.
+> Eq. (11) Eq. (11) Flatten
+> (c) w/o Hybrid Fusion (HF)
+> qv
+> Cross-Attention
+> qk
+> Conv. Conv.
+> Eq. (11) Eq. (11) Flatten
+> v
+> Flatten
+> k
+> Cross-Attention
+> (a) w/o Cross-Attention (CA)
+> Fig. 6. Ablation study on the hybrid cross-attention fusion module: (a) directly adds the graph and patch embeddings; (b) uses the same patch embedding from the last encoder layer; (c) employs the q,k, and vfrom the patch embedding within the same encoder layer. w/o Auxiliary Task (α=0) w/ Auxiliary Task (α=0.1) w/ Auxiliary Task (α=0.5)
+> •OVRPTW
+> •OVPRLTW
+> •OVRPBTW
+> •OVRPBLTW
+> •VRPTW
+> •VPRLTW
+> •VRPBTW
+> •VRPBLTW
+> •CVRP
+> •VPRL
+> •VRPB
+> •VRPBL
+> •OVRP
+> •OVPRL
+> •OVRPB
+> •OVRPBL
+> Gap: 1.904% Gap: 1.819% Gap: 1.800%
+> Fig. 7. Variant distribution of VaFM under different loss weights. TABLE V PERFORMANCE OF PATCH EMBEDDINGS FROM DIFFERENT LAYERS ."B ASELINE ×n"DENOTES RF WITH nENSEMBLE DECODERS .
+
+Layer 1 Layer 2 Layer 3 Layer 4 Obj. ↓ Gap ↓
+
+Baseline ×1 11.446 2.176% 
+
+✓ ✗ ✗ ✗ 11.489 2.620% 
+
+✗ ✓ ✗ ✗ 11.485 2.606% 
+
+✗ ✗ ✓ ✗ 11.437 2.081% 
+
+✗ ✗ ✗ ✓ 11.422 1.960% Baseline ×2 11.429 2.021% 
+
+✓ ✓ ✗ ✗ 11.425 1.981% 
+
+✓ ✗ ✓ ✗ 11.420 1.927% 
+
+✓ ✗ ✗ ✓ 11.414 1.873% 
+
+✗ ✓ ✓ ✗ 11.427 1.987% 
+
+✗ ✓ ✗ ✓ 11.426 1.968% 
+
+✗ ✗ ✓ ✓ 11.409 1.819% Baseline ×3 11.432 2.020% 
+
+✓ ✓ ✓ ✗ 11.413 1.858% 
+
+✓ ✓ ✗ ✓ 11.411 1.842% 
+
+✓ ✗ ✓ ✓ 11.408 1.809% 
+
+✗ ✓ ✓ ✓ 11.422 1.931% Baseline ×4 11.431 2.015% 
+
+✓ ✓ ✓ ✓ 11.429 1.981% 
+
+Auxiliary Task ( α=0)” removes the constraint-classifier branch and excludes the classification loss from the training objective. The other two settings evaluate VaFM under different balance coefficients in Eq. 4. The results indicate that our VaFM incorporating auxiliary task with α=0.1 improves performance by 0.085% in "Gap". Regarding the task (variant) distribution, we extract feature maps from the last layer of the vision encoder and apply an adaptive average pooling layer to com-pute instance-level high-dimensional features. Subsequently, 20 instances are randomly selected from each variant, and T-SNE [55] is applied to project the feature space into 2D. As shown in Fig. 7, VaFM without the auxiliary task exhibits a large feature distance between {OVRPBLTW, OVRPBTW, OVRPLTW, OVRPTW} and {VRPBLTW, VRPBTW, VR-PLTW, VRPTW}. This suggests that the model overempha-sizes constraints represented by different backgrounds (the image design of O) while overlooking those with minimal visual presence, such as B and L. In contrast, VaFM correctly distinguishes all eight TW variants, indicating that the auxil-iary task enables the model to capture the semantics of O, B, and L in this setting. For tasks without TW, the auxiliary task brings modest improvements in recognizing L. We attribute this to the small weight assigned to the classification loss, and a larger balance coefficient ( e.g. , α=0.5) can alleviate this. This indicates that the recognition of B and L could be influenced by the auxiliary loss weight, as the classification loss serves only as additional supervision rather than directly optimizing VRP. More robust recognition may require redesigned visual encoding schemes, which we plan to explore in the future ( e.g. ,using a striped background for L and striped nodes for B). 
+
+E. Impact of Patch Embeddings from Different Layers 
+
+We continue to evaluate the effectiveness of patch em-beddings from different layers of the vision encoder. We begin by establishing baseline models with varying numbers of decoders, each sharing input node embeddings from the graph encoder. "Baseline ×1" refers to the reproduced results of RF-MoE-L from Table I, using the code provided by [13]. Subsequently, we incorporate patch embeddings from different layer combinations and compare their performance with the corresponding baselines. As shown in Table V, when using a single layer, only the embeddings from layers 3 and 4 reduce the optimality gap compared to “Baseline ×1”, with deeper layers yielding better performance. In multi-layer integration, all combinations achieve smaller gaps than their corresponding baselines. In this paper, we adopt the second-best setting ( i.e. ,layers 3 and 4) to balance performance and model complexity. 
+
+F. Sensitivity Studies 1) Impact of Vision Image Design Parameters: In Sec-tion IV-B1, S denotes the pixel side length of each node, whereas in Section IV-B2, P represents the background pixel value of an image without open route (O). To investigate the impact of design choices, we evaluate VaFM with P =0.25 JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 12 
+
+TABLE VI ANALYSIS OF GENERALIZATION ABILITY . "B ASELINE ×1" AND "B ASELINE ×2" REFER TO THE BASELINE METHODS WITH ONE AND TWO DECODERS 
+
+(THE 1ST AND 6TH ROWS IN TABLE V), RESPECTIVELY . V AFM † IS A ONE -DECODER VERSION , CORRESPONDING TO THE 5TH ROW IN TABLE V. "( ∆)" 
+
+REPRESENTS THE IMPROVEMENT OF VAFM OVER BASELINES . A LL METHODS ARE TRAINED ON 16 VRP VARIANTS WITH 50 CUSTOMER NODES .Task Obj. ↓ (∆) ↑ Gap ↓ (∆) ↑ Obj. ↓ (∆) ↑ Gap ↓ (∆) ↑
+
+Baseline ×1 VaFM † Baseline ×1 VaFM † Baseline ×2 VaFM Baseline ×2 VaFM 
+
+Generalization on N =200 
+
+CVRP 24.024 23.582 (0.442) 9.153% 7.128% (2.025%) 23.662 23.842 (-0.180) 7.501% 8.309% (-0.808%) VRPB 23.905 22.462 (1.443) 14.010% 7.121% (6.890%) 23.191 22.542 (0.649) 10.606% 7.478% (3.128%) VRPBL 24.063 22.556 (1.508) 14.290% 7.124% (7.165%) 23.459 22.672 (0.787) 11.419% 7.663% (3.757%) VRPL 24.035 23.576 (0.459) 6.135% 4.100% (2.036%) 23.780 23.878 (-0.097) 5.000% 5.434% (-0.434%) OVRP 16.681 15.610 (1.071) 19.815% 12.067% (7.748%) 16.271 15.564 (0.707) 16.788% 11.723% (5.065%) OVRPB 18.215 17.245 (0.971) 20.801% 14.324% (6.476%) 17.790 17.289 (0.501) 17.864% 14.623% (3.241%) OVRPBL 18.257 17.274 (0.983) 20.901% 14.355% (6.545%) 18.307 17.324 (0.982) 21.081% 14.690% (6.391%) OVRPL 16.721 15.578 (1.142) 20.195% 11.910% (8.285%) 16.852 15.552 (1.301) 21.012% 11.710% (9.302%) VRPBLTW 50.217 50.150 (0.067) 1.852% 1.709% (0.143%) 50.159 50.342 (-0.183) 1.730% 2.106% (-0.375%) VRPBTW 50.807 50.727 (0.080) 1.316% 1.150% (0.166%) 50.726 50.935 (-0.210) 1.145% 1.567% (-0.422%) VRPLTW 44.121 44.100 (0.021) 3.121% 3.065% (0.056%) 44.130 44.310 (-0.180) 3.148% 3.578% (-0.430%) VRPTW 43.705 43.726 (-0.021) 3.234% 3.285% (-0.051%) 43.694 43.966 (-0.272) 3.209% 3.874% (-0.665%) OVRPBLTW 33.454 33.503 (-0.049) 4.295% 4.446% (-0.151%) 33.318 33.810 (-0.492) 3.877% 5.411% (-1.534%) OVRPBTW 33.454 33.492 (-0.038) 4.379% 4.489% (-0.110%) 33.318 33.854 (-0.535) 3.960% 5.617% (-1.657%) OVRPLTW 29.927 30.061 (-0.134) 8.661% 9.134% (-0.473%) 29.863 30.323 (-0.460) 8.438% 10.096% (-1.658%) OVRPTW 29.897 29.993 (-0.096) 8.751% 9.092% (-0.340%) 29.818 30.328 (-0.511) 8.475% 10.312% (-1.837%) Avg. 30.093 29.602 (0.491) 10.057% 7.156% (2.901%) 29.896 29.783 (0.113) 9.078% 7.762% (1.316%) 
+
+Generalization on 8 unseen vraints 
+
+OVRPMB 6.981 6.972 (0.009) 14.381% 14.252% (0.130%) 6.945 6.947 (-0.001) 13.802% 13.822% (-0.019%) OVRPMBL 6.991 6.975 (0.016) 14.423% 14.159% (0.264%) 6.941 6.950 (-0.010) 13.590% 13.748% (-0.157%) VRPMB 9.910 9.864 (0.046) 9.430% 8.908% (0.522%) 9.848 9.860 (-0.011) 8.730% 8.854% (-0.124%) VRPMBL 9.929 9.899 (0.031) 9.112% 8.761% (0.351%) 9.879 9.885 (-0.006) 8.541% 8.610% (-0.068%) OVRPMBLTW 11.082 11.081 (0.001) 6.291% 6.282% (0.009%) 11.046 11.050 (-0.004) 5.950% 5.967% (-0.017%) OVRPMBTW 11.100 11.109 (-0.009) 6.112% 6.201% (-0.088%) 11.083 11.083 (0.001) 5.937% 5.942% (-0.005%) VRPMBLTW 17.241 17.226 (0.015) 7.923% 7.825% (0.097%) 17.193 17.187 (0.006) 7.597% 7.564% (0.033%) VRPMBTW 17.282 17.256 (0.026) 8.004% 7.863% (0.141%) 17.245 17.222 (0.023) 7.760% 7.623% (0.137%) Avg. 11.314 11.298 (0.017) 9.460% 9.281% (0.178%) 11.273 11.273 (0.000) 8.301% 9.016% (-0.715%) 
+
+Generalization on real-world CVRPLib dataset 
+
+Group A 106222 107963 (-1741) 1.845% 3.373% (-1.528%) 106856 108033 (-1178) 2.466% 3.416% (-0.950%) Group B 99026 99443 (-417) 2.669% 3.025% (-0.356%) 99126 99552 (-426) 2.871% 3.169% (-0.298%) Group E 74864 75145 (-282) 2.719% 2.832% (-0.113%) 74809 75209 (-400) 2.648% 2.849% (-0.201%) Group F 79300 79167 (133) 10.868% 10.763% (0.105%) 78833 78267 (567) 12.231% 10.091% (2.140%) Group M 119640 117360 (2280) 10.104% 8.078% (2.026%) 119240 119680 (-440) 9.830% 10.222% (-0.392%) Group P 60313 60675 (-363) 2.810% 3.342% (-0.532%) 60571 60613 (-42) 3.919% 3.157% (0.762%) Group X<251 3442436 3433130 (9306) 8.415% 8.222% (0.193%) 3435621 3462430 (-26809) 7.871% 9.301% (-1.430%) Group 251<X<501 6517137 6350520 (166617) 14.980% 12.474% (2.506%) 6424537 6674926 (-250389) 12.983% 19.058% (-6.075%) Avg. 1312367 1290425 (21942) 6.801% 6.514% (0.288%) 1299949 1334839 (-34890) 6.852% 7.658% (-0.805%) 1.82            
+
+> 1.84
+> 1.82
+> 1.79 1.78
+> 0.05 0.15 0.25 0.35 0.45
+> S=5, P ∈[0.05,0.45]
+> 1.82 1.82
+> 1.80
+> 1.83 1.84
+> 357911
+> P=0.25, S ∈[3,11]
+
+Gap (%) 
+
+> Pixel side length per node ( S)
+
+Gap (%) 
+
+(a) Different vision image design choices. 
+
+Gap (%) 
+
+(b) Different loss and modality combinations.   
+
+> Background pixel value for open-route control ( P)
+> Graph–vision balancing coefficient ( β)
+> Auxiliary–VRP loss trade-off coefficient ( α)
+
+Fig. 8. Sensitivity study on image parameters and balancing coefficients. 
+
+and S ∈ {3, 5, 7, 9, 11 }, as well as with S=5 and P ∈{0.05 , 0.15 , 0.25 , 0.35 , 0.45 }. Fig. 8 (a) presents the averaged gap across 16 tasks under these settings. The results show that the gap increases when the pixel side length is too large or too small, and it reaches the minimum at S=7. For the background design, increasing P leads to better performance. This suggests that a smaller color intensity difference between the backgrounds with and without L is more effective. In this paper, we empirically set S=5 for N =50 and S=3 for N =100, while P =0.25 is used for both cases. 
+
+2) Impact of Modality and Loss Balancing Coefficients: In Eq. 4, α adjusts the trade-off between the auxiliary task and the VRP objective, while in Eq. 12, β serves as a coefficient that balances graph and vision modality information. To study the impact of different combinations on the optimization performance, we evaluate VaFM using different α and β
+
+settings. All 30 combinations with α ∈ {0.0, 0.1, 0.2, 0.3, 0.4, 0.5} and β ∈ {0.0, 0.5, 1.0, 1.5, 2.0} are examined across 16 task variants with 50 customer nodes. Fig. 8 presents the "Gap" achieved under different combinations. The results show that VaFM consistently performs well with α ∈ [0 .1, 0.5] and 
+
+β=1.0. However, when α or β is set to zero, performance decreases significantly, highlighting the effectiveness of the constraint-aware auxiliary task and the vision modality. In this paper, we empirically set α=0.1 and β=1.0 for simplicity. VI. D ISCUSSION 
+
+A. Generalization Ability 
+
+To investigate generalization capacity, we employ two vari-ants of VaFM and evaluate their performance on large-scale VRPs, unseen variants, and a real-world CVRPLib dataset. VaFM † is a single-decoder version of VaFM, corresponding JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 13 
+
+TABLE VII ANALYSIS OF MODEL COMPLEXITY .Method Time ↓ Memory ↓ # Params ↓ Latency ↓ Gap ↓                                 
+
+> (h) (GB) (M) (s) Baseline ×125.6 2.5 3.7 2.5 2.176% Baseline ×232.6 2.5 3.9 3.8 2.021% Baseline ×2 + HE 58.4 2.6 19.4 4.4 2.281% VaFM †30.3 7.8 15.7 3.7 1.960% VaFM 44.6 19.7 16.1 5.1 1.819% VaFM + SpeedUp 44.6 7.8 16.1 4.8 1.817%
+
+to the 5th row in Table V. Table VI presents the results of the two variants and their corresponding baselines. All models are trained on 16 VRP variants with N =50 and are subsequently tested on these settings in a zero-shot manner. 
+
+1) Large-scale Data: The models are tested on 16 variants with 200 customer nodes, and the upper block of Table VI presents the scores for these variants along with the averaged result. These results show that VaFM † consistently outper-forms Baseline ×1 on variants without TW. In terms of aver-aged performance, both versions surpass their corresponding baselines, with VaFM † achieving a 2.901% gap reduction, while VaFM achieves a smaller 1.316% reduction. 
+
+2) Unseen Constraints: We follow [13] and adopt mixed backhaul (MB), which relaxes visit order restrictions, allowing linehaul and backhaul customers to be mixed along a route in any configuration. This setting results in 8 variants, with the corresponding scores and their average values presented in the middle block of Table VI. These results show asimilar observation to the large-scale generalization. VaFM †
+
+consistently outperforms Baseline ×1 on variants without TW. VaFM † achieves a 0.178% reduction in the average gap, while the two-decoder version shows a 0.715% increase. 
+
+3) Real-world Dataset: We evaluate 338 instances with diverse node distributions and demands. These instances are grouped into {A, B, E, F, M, P, X}, with a maximum scale of 500 customer nodes, and their average scores are reported at the bottom of Table VI. These results indicate that both versions of VaFM reduce the Gap in some groups but exhibit instability in others. The average scores show that the gap of the one-decoder version is reduced by 0.288%, while the two-decoder version results in a 0.805% increase. 
+
+4) Limitations and Future Work: As shown in Table VI, we observe that both VaFM and VaFM † exhibit a slightly larger gap on the N =200 TW tasks. We attribute it to the moderate discriminative capacity of a single color. When the training size N =50 scales to N =200 during testing, the TW differences among nodes become less significant, resulting in minimal color contrast. In future work, we plan to revise the image by using two colors ( e.g. , yellow for the largest TW and blue for the smallest) to mitigate this limitation. In addition, VaFM shows an increased average Gap on unseen constraints and the CVRPLib dataset compared to its baseline. While VaFM † can mitigate this issue, it still does not achieve consistent improvement across all individual tasks. In future work, we plan to integrate textual instructions into the images and develop a multi-modal large language model to enhance generalization performance. 
+
+TABLE VIII COMPARISON WITH THE NEW VERSION OF ROUTE FINDER . T HE BEST RESULTS ARE HIGHLIGHTED WITH GRAY SHADING .w/o MD w/ MD Task RF-TE VaFM-TE RF-TE VaFM-TE Gap ↓ Time ↓ Gap ↓ Time ↓ Gap ↓ Time ↓ Gap ↓ Time ↓                                                                                                                                
+
+> CVRP 1.274% 2.1s 1.285% 4.1s 56.968% 3.2s 35.873% 4.5s OVRP 2.687% 1.7s 2.735% 3.7s 29.061% 2.1s 23.189% 3.8s VRPB 2.989% 1.7s 2.971% 3.6s 60.980% 2.3s 48.303% 4.1s VRPL 1.502% 1.7s 1.489% 3.7s 57.386% 2.4s 42.997% 4.7s OVRPB 2.479% 1.8s 2.355% 3.8s 31.870% 2.2s 22.889% 4.0s OVRPL 2.721% 1.7s 2.693% 3.7s 28.944% 2.1s 22.910% 3.8s VRPBL 3.803% 1.8s 3.898% 3.7s 61.198% 2.5s 55.733% 4.8s VRPTW 2.077% 1.9s 2.047% 3.8s 48.943% 2.5s 33.720% 4.5s OVRPBL 2.508% 1.8s 2.420% 3.8s 31.759% 2.2s 23.032% 3.9s OVRPTW 1.326% 2.0s 1.352% 4.0s 34.903% 2.3s 28.642% 4.3s VRPBTW 1.676% 1.9s 1.606% 3.9s 37.347% 2.5s 33.002% 4.7s VRPLTW 2.454% 1.9s 2.407% 3.9s 51.254% 2.6s 35.331% 4.5s OVRPBTW 1.151% 2.0s 1.092% 4.1s 32.325% 2.4s 28.589% 4.5s OVRPLTW 1.340% 2.0s 1.351% 4.0s 34.716% 2.3s 28.498% 4.3s VRPBLTW 1.877% 1.9s 1.829% 4.0s 40.597% 2.7s 34.582% 4.9s OVRPBLTW 1.151% 2.0s 1.102% 4.1s 32.202% 2.4s 28.235% 4.5s
+
+B. Analysis of Model Complexity 
+
+Table VII presents the model complexity of both the baseline and our methods. "Time" refers to the cumulative training time, while "# Params" indicates the number of trainable model parameters. Regarding inference cost metrics, we consider the maximum memory usage and latency. All models are trained and evaluated on 16 VRP variants with 
+
+N =50 using an RTX 3090 GPU. These metrics are evaluated with a batch size of 150, and "Latency" refers to the average time across the 16 variants, each consisting of 1000 instances. The results show that VaFM requires a higher model cost to achieve a smaller gap. To ensure a fair comparison, we scale up the baseline by using a heavier encoder (HE), which increases the encoder’s feature dimension from 128 to 512, denoted as "Baseline ×2 + HE". Results in Table VII show that adding a heavy encoder even enlarges the gap (2.021% −→ 2.281%). In contrast, under the comparable training time, parameters, and latency with "Baseline ×2 + HE", VaFM achieves the smallest Gap of 1.819%. This confirms that the performance gain stems from the vision branch rather than model scaling. To further reduce computational cost, we incorporate FlashAttention [56] and optimize the matrix operations in Eq. 11, forming "VaFM + SpeedUp". As shown in Table VII, this variant achieves a 0.3s speedup and saves 11.9 GB of memory, which motivates us to develop more efficient implementations in the future. 
+
+C. Comparison with the New Version of RouteFinder 
+
+RouteFinder [13] has released a new version [37], which identifies RF-TE as the best-performing variant and extends it to the unseen multi-depot (MD) constraint in a zero-shot manner. This version evaluates newly generated instances with a different random seed, so a direct comparison between RF-TE and the results in Table I would be unfair. To address this, we integrate VaFM into the new variant and evaluate its performance on the newly generated test data. Table VIII reports the gap and inference time across all tasks, both with and without the MD constraint. We observe that VaFM-TE outperforms RF-TE in 11 out of 16 tasks without MD, and consistently surpasses it across tasks with MD. This indicates that VaFM is a plug-and-play method that can be integrated JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 14 
+
+into various graph-based VRP solvers, while achieving strong performance and good generalization ability. VII. C ONCLUSION 
+
+In this work, we propose a vision-assisted foundation model (VaFM) to address the challenges of solving multi-task VRPs with complex constraints. By integrating vision modality with graph-based models, VaFM captures patch-level semantics from the multi-task VRP image, providing spatial demand distributions or service time patterns to enhance node embeddings. Both the hybrid cross-attention fusion module and the constraint-aware auxiliary task contribute to enhancing the performance of VaFM. The hybrid cross-attention fusion module enables the model to adaptively adjust its receptive fields for different tasks, while the constraint-aware auxiliary task utilizes binary cross-entropy loss to balance constraint learning. Our experimental results demonstrate the superior performance of VaFM compared to existing SOTA methods, particularly for VRP variants with complex constraints. We further analyze the generalization ability and model com-plexity, identifying VaFM’s limitations in handling unseen constraints and real-world datasets. To address this issue, we provided the alternative one-decoder version of VaFM with better generalization. However, we plan to explore effective methods to exclusively enhance the original VaFM’s general-ization in the future. REFERENCES [1] P. Toth and D. Vigo, Vehicle routing: problems, methods, and applica-tions . SIAM, 2014. [2] C. K. Joshi, T. Laurent, and X. Bresson, “An efficient graph convo-lutional network technique for the travelling salesman problem,” arXiv preprint arXiv:1906.01227 , 2019. [3] W. Kool, H. Van Hoof, and M. Welling, “Attention, learn to solve routing problems!” arXiv preprint arXiv:1803.08475 , 2018. [4] Y.-D. Kwon, J. Choo, B. Kim, I. Yoon, Y. Gwon, and S. Min, “Pomo: Policy optimization with multiple optima for reinforcement learning,” Advances in Neural Information Processing Systems , vol. 33, pp. 21 188–21 198, 2020. [5] Y. Wu, W. Song, Z. Cao, J. Zhang, and A. Lim, “Learning improvement heuristics for solving routing problems,” IEEE Transactions on Neural Networks and Learning Systems , vol. 33, no. 9, pp. 5057–5069, 2021. [6] Y. Ma, Z. Cao, and Y. M. Chee, “Learning to search feasible and infeasible regions of routing problems with flexible neural k-opt,” 
+
+Advances in Neural Information Processing Systems , vol. 36, 2024. [7] Z. Sun and Y. Yang, “Difusco: Graph-based diffusion solvers for combinatorial optimization,” Advances in Neural Information Processing Systems , vol. 36, pp. 3706–3731, 2023. [8] F. Luo, X. Lin, F. Liu, Q. Zhang, and Z. Wang, “Neural combinatorial optimization with heavy decoder: Toward large scale generalization,” 
+
+Advances in Neural Information Processing Systems , vol. 36, pp. 8845– 8864, 2023. [9] T. Vidal, G. Laporte, and P. Matl, “A concise guide to existing and emerging vehicle routing problem variants,” European Journal of Oper-ational Research , vol. 286, no. 2, pp. 401–416, 2020. [10] K. Braekers, K. Ramaekers, and I. Van Nieuwenhuyse, “The vehicle routing problem: State of the art classification and review,” Computers & Industrial Engineering , vol. 99, pp. 300–313, 2016. [11] B. Li, G. Wu, Y. He, M. Fan, and W. Pedrycz, “An overview and experimental study of learning-based optimization algorithms for the vehicle routing problem,” IEEE/CAA Journal of Automatica Sinica ,vol. 9, no. 7, pp. 1115–1138, 2022. [12] F. Liu, X. Lin, Z. Wang, Q. Zhang, T. Xialiang, and M. Yuan, “Multi-task learning for routing problem with cross-problem zero-shot generalization,” in Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , 2024, pp. 1898–1908. [13] F. Berto, C. Hua, N. G. Zepeda, A. Hottung, N. Wouda, L. Lan, K. Tierney, and J. Park, “RouteFinder: Towards foundation models for vehicle routing problems,” in ICML 2024 Workshop on Foundation Models in the Wild (Oral) , 2024. [Online]. Available: https://openreview.net/forum?id=hCiaiZ6e4G [14] H. Liu, F. Jin, H. Zeng, H. Pu, and B. Fan, “Image enhancement guided object detection in visually degraded scenes,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 10, pp. 14 164– 14 177, 2024. [15] K. N. T. Nguyen, W. Zhang, K. Lu, Y.-H. Wu, X. Zheng, H. Li Tan, and L. Zhen, “A survey and evaluation of adversarial attacks in object de-tection,” IEEE Transactions on Neural Networks and Learning Systems ,vol. 36, no. 9, pp. 15 706–15 722, 2025. [16] Q. Ye, F. Wan, C. Liu, Q. Huang, and X. Ji, “Continuation multiple instance learning for weakly and fully supervised object detection,” IEEE Transactions on Neural Networks and Learning Systems , vol. 33, no. 10, pp. 5452–5466, 2021. [17] L. Liu, A. I. Aviles-Rivero, and C.-B. Schönlieb, “Contrastive registra-tion for unsupervised medical image segmentation,” IEEE Transactions on Neural Networks and Learning Systems , vol. 36, no. 1, pp. 147–159, 2025. [18] H. Du, J. Wang, M. Liu, Y. Wang, and E. Meijering, “Swinpa-net: Swin transformer-based multiscale feature pyramid aggregation network for medical image segmentation,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 4, pp. 5355–5366, 2022. [19] T. Wang, H. Li, Y. Zheng, and Q. Sun, “One-click-based perception for interactive image segmentation,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 10, pp. 13 975–13 989, 2024. [20] Z. Ling, X. Tao, Y. Zhang, and X. Chen, “Solving optimization problems through fully convolutional networks: An application to the traveling salesman problem,” IEEE Transactions on Systems, Man, and Cyber-netics: Systems , vol. 51, no. 12, pp. 7475–7485, 2020. [21] Z. Ling, Y. Zhang, and X. Chen, “A deep reinforcement learning based real-time solution policy for the traveling salesman problem,” IEEE Transactions on Intelligent Transportation Systems , vol. 24, no. 6, pp. 5871–5882, 2023. [22] A. Graikos, N. Malkin, N. Jojic, and D. Samaras, “Diffusion models as plug-and-play priors,” Advances in Neural Information Processing Systems , vol. 35, pp. 14 715–14 728, 2022. [23] M. Samizadeh and G. Tong, “Vn-solver: Vision-based neural solver for combinatorial optimization over graphs,” in Proceedings of the 32nd ACM International Conference on Information and Knowledge Management , 2023, pp. 4269–4273. [24] M. Nazari, A. Oroojlooy, L. Snyder, and M. Takác, “Reinforcement learning for solving the vehicle routing problem,” Advances in Neural Information Processing Systems , vol. 31, 2018. [25] O. Vinyals, M. Fortunato, and N. Jaitly, “Pointer networks,” Advances in Neural Information Processing Systems , vol. 28, 2015. [26] R. J. Williams, “Simple statistical gradient-following algorithms for connectionist reinforcement learning,” Machine Learning , vol. 8, pp. 229–256, 1992. [27] Y. Wang, Y.-H. Jia, W.-N. Chen, and Y. Mei, “Distance-aware attention reshaping for enhancing generalization of neural solvers,” IEEE Trans-actions on Neural Networks and Learning Systems , vol. 36, no. 10, pp. 18 900–18 914, 2025. [28] Z. Zong, M. Zheng, Y. Li, and D. Jin, “Mapdp: Cooperative multi-agent reinforcement learning to solve pickup and delivery problems,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 36, no. 9, 2022, pp. 9980–9988. [29] D. Kong, Y. Ma, Z. Cao, T. Yu, and J. Xiao, “Efficient neural collabo-rative search for pickup and delivery problems,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 12, pp. 11 019– 11 034, 2024. [30] R. Tyasnurita, E. Özcan, J. H. Drake, and S. Asta, “Constructing selection hyper-heuristics for open vehicle routing with time delay neural networks using multiple experts,” Knowledge-Based Systems , vol. 295, p. 111731, 2024. [31] S. N. Bezerra, S. R. de Souza, and M. J. F. Souza, “A general vns for the multi-depot open vehicle routing problem with time windows,” 
+
+Optimization Letters , vol. 17, no. 9, pp. 2033–2063, 2023. [32] B. Oliveira, A. Pessoa, and M. Roboredo, “Hybrid iterated local search algorithm for the vehicle routing problem with lockers,” Journal of Heuristics , vol. 31, no. 2, Apr. 2025. [33] R. Zhang, C. Zhang, Z. Cao, W. Song, P. S. Tan, J. Zhang, B. Wen, and J. Dauwels, “Learning to solve multiple-tsp with time window and rejections via deep reinforcement learning,” IEEE Transactions on Intelligent Transportation Systems , vol. 24, no. 1, pp. 1325–1336, 2022. JOURNAL OF L ATEX CLASS FILES, VOL. 18, NO. 9, JUNE 2026 15 
+
+[34] B. Lin, B. Ghaddar, and J. Nathwani, “Deep reinforcement learning for the electric vehicle routing problem with time windows,” IEEE Transactions on Intelligent Transportation Systems , vol. 23, no. 8, pp. 11 528–11 538, 2021. [35] Z. Lin, Y. Wu, B. Zhou, Z. Cao, W. Song, Y. Zhang, and S. Jayavelu, “Cross-problem learning for solving vehicle routing problems,” in Pro-ceedings of the Thirty-Third International Joint Conference on Artificial Intelligence , 2024, pp. 6958–6966. [36] J. Zhou, Z. Cao, Y. Wu, W. Song, Y. Ma, J. Zhang, and X. Chi, “MVMoE: Multi-task vehicle routing solver with mixture-of-experts,” in 
+
+Proceedings of the 41st International Conference on Machine Learning ,vol. 235. PMLR, 21–27 Jul 2024, pp. 61 804–61 824. [37] F. Berto, C. Hua, N. G. Zepeda, A. Hottung, N. Wouda, L. Lan, J. Park, K. Tierney, and J. Park, “Routefinder: Towards foundation models for vehicle routing problems,” Transactions on Machine Learning Research , 2025. [Online]. Available: https: //openreview.net/forum?id=QzGLoaOPiY [38] D. Drakuli´ c, S. Michel, and J.-M. Andreoli, “Goal: A generalist com-binatorial optimization agent learner,” in International Conference on Learning Representations , vol. 2025, 2025, pp. 52 465–52 488. [39] L. Smith and M. Gasser, “The development of embodied cognition: Six lessons from babies,” Artificial Life , vol. 11, no. 1-2, pp. 13–29, 2005. [40] D. Harwath, A. Torralba, and J. Glass, “Unsupervised learning of spoken language with visual context,” Advances in Neural Information Processing Systems , vol. 29, 2016. [41] L. Ye, M. Rochan, Z. Liu, and Y. Wang, “Cross-modal self-attention network for referring image segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2019, pp. 10 502–10 511. [42] H. Zhou, W. Huang, Y. Chen, T. He, G. Cong, and Y. S. Ong, “Road network representation learning with the third law of geography,” in 
+
+Advances in Neural Information Processing Systems , vol. 37. Curran Associates, Inc., 2024, pp. 11 789–11 813. [43] Y. Huang, C. Du, Z. Xue, X. Chen, H. Zhao, and L. Huang, “What makes multi-modal learning better than single (provably),” Advances in Neural Information Processing Systems , vol. 34, pp. 10 944–10 956, 2021. [44] B. Liu, X. Liu, Z. Yang, and C. C. Wang, “Concise and effective network for 3d human modeling from orthogonal silhouettes,” Journal of Computing and Information Science in Engineering , vol. 22, no. 5, p. 051004, 2022. [45] E. Shutova, D. Kiela, and J. Maillard, “Black holes and white rabbits: Metaphor identification with visual features,” in Proceedings of the 2016 conference of the North American chapter of the association for computational linguistics: Human language technologies , 2016, pp. 160–170. [46] A. Anastasopoulos, S. Kumar, and H. Liao, “Neural language modeling with visual features,” arXiv preprint arXiv:1903.02930 , 2019. [47] J.-M. Pérez-Rúa, V. Vielzeuf, S. Pateux, M. Baccouche, and F. Jurie, “Mfas: Multimodal fusion architecture search,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2019, pp. 6966–6975. [48] E. Morvant, A. Habrard, and S. Ayache, “Majority vote of diverse classifiers for late fusion,” in Structural, Syntactic, and Statistical Pattern Recognition: Joint IAPR International Workshop, S+ SSPR 2014, Joensuu, Finland, August 20-22, 2014. Proceedings . Springer, 2014, pp. 153–162. [49] C. Cui, H. Yang, Y. Wang, S. Zhao, Z. Asad, L. A. Coburn, K. T. Wilson, B. A. Landman, and Y. Huo, “Deep multimodal fusion of image and non-image data in disease diagnosis and prognosis: a review,” Progress in Biomedical Engineering , vol. 5, no. 2, p. 022001, 2023. [50] I. Goodfellow, Y. Bengio, A. Courville, and Y. Bengio, Deep learning .MIT press Cambridge, 2016, vol. 1, no. 2. [51] A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T. Killeen, Z. Lin, N. Gimelshein, L. Antiga, A. Desmaison, A. Kopf, E. Yang, Z. DeVito, M. Raison, A. Tejani, S. Chilamkurthy, B. Steiner, L. Fang, J. Bai, and S. Chintala, “Pytorch: an imperative style, high-performance deep learning library,” in Advances in Neural Information Processing Systems . Curran Associates, Inc., 2019, pp. 8024–8035. [52] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2016, pp. 770–778. [53] “Pyvrp: A high-performance vrp solver package,” INFORMS Journal on Computing , vol. 36, no. 4, pp. 943–955, 2024. [54] W. Fedus, J. Dean, and B. Zoph, “A review of sparse expert models in deep learning,” arXiv preprint arXiv:2209.01667 , 2022. [55] L. Van der Maaten and G. Hinton, “Visualizing data using t-sne.” Journal of Machine Learning Research , vol. 9, no. 11, 2008. [56] T. Dao, D. Fu, S. Ermon, A. Rudra, and C. Ré, “Flashattention: Fast and memory-efficient exact attention with io-awareness,” Advances in neural information processing systems , vol. 35, pp. 16 344–16 359, 2022.
