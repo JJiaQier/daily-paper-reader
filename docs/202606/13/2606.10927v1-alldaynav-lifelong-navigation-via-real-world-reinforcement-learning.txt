@@ -1,0 +1,1632 @@
+Title: AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2606.10927v1
+
+Published Time: Wed, 10 Jun 2026 01:08:49 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+> 1
+
+# AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning 
+
+Hang Yin*, Yinan Liang*, Jiazhao Zhang*, Jiahang Liu, Minghan Li, Zhizheng Zhang †, and He Wang †Deployment Context 
+
+Lifelong in Dynamic Environment 
+
+AllDayNav Core 
+
+Memory-Driven Perception-Action Loop 
+
+Evolution 
+
+Lifelong Learning & Adaptation        
+
+> Unseen Dynamic
+> Environment
+> Egocentric
+> RGB Image
+> 𝐀 1(Day1):
+> Initial layout
+> 𝐀 𝐀 (Day 𝐀 ):
+> Changed layout
+
+Memory Database             
+
+> （Continuous Update)
+> Mid: Spatial
+> “Go to the kitchen ”
+> Basic: Object-centric
+> “Find the red chair ”
+> Top: Reasoning
+> “It’s so dark ”
+
+Self-instruction 
+
+(Task Pyramid)  
+
+> Current View
+
+VLA Policy 
+
+(RL optimization)         
+
+> Foundation model Trajectory
+> Self-Evolving
+> Construction
+> Retrieved Goal
+> Performance
+> Self-improvement
+> Sim-to-Real
+> Transfer
+> Sim
+> (Habitat)
+> Cabinets …
+> 10:29:33
+> Television …
+> 10:15:13
+> Sofa …
+> 14:41:20
+> Table …
+> 20:51:53
+> Ki tchen …
+> 08:49:03
+
+Mature Phase 
+
+(Memory rich) 
+
+Initial Phase 
+
+(Memory Sparse) 
+
+Fig. 1. Overview of AllDayNav , a lifelong self-learning navigation framework. (Left) Deployment in unseen dynamic environments (simulated and real-world). (Middle) The core Memory–Policy Co-evolution : AllDayNav autonomously builds a self-evolving multimodal memory database to generate self-instructions and retrieve visual goals, training a Vision-Language-Action (VLA) policy without supervision. (Right) As experience accumulates, the robot masters lifelong navigation and adapts to environmental changes. 
+
+Abstract —Lifelong embodied navigation in dynamic environ-ments requires robots to form persistent scene understanding from fragmentary observations, which remains difficult for ex-isting methods that rely on explicit maps or scene graphs and struggle to generalize beyond structured settings. We propose AllDayNav, a lifelong self-learning navigation framework that im-plicitly encodes scene dynamics into the billion-scale parameters of a large model via reinforcement learning, powered by a self-evolving multimodal memory that maintains and updates visual keyframes, semantic descriptions, and temporal context while autonomously generating open-vocabulary instructions, image goals, and structured rewards. Experiments in both synthetic and real-world environments across cross-room, cross-episode, and cross-task scenarios show that AllDayNav achieves success rates approaching 100% and consistently surpasses strong map-based, VLM, and RL baselines in path efficiency and robustness, demonstrating implicit, memory-driven reinforcement learning as a scalable alternative to explicit mapping for reliable lifelong navigation. Project Page. 
+
+Index Terms —Lifelong learning, vision-language-action mod-els, memory-augmented navigation, reinforcement learning. 
+
+Hang Yin and Yinan Liang are with Tsinghua University, Beijing 100084, China, and also with Galbot Robotics, Beijing, China (e-mail: yinh23@mails.tsinghua.edu.cn; liangyn24@mails.tsinghua.edu.cn). Jiazhao Zhang is with Peking University, Beijing 100871, China, and also with Galbot Robotics, Beijing, China (e-mail: zhngjizh@gmail.com). Jiahang Liu and Minghan Li are with Galbot Robotics, Beijing, China (e-mail: liu030526@gmail.com;lperlpm@gmail.com). Zhizheng Zhang is with Galbot Robotics, Beijing, China, and also with Beijing Academy of Artificial Intelli-gence, Beijing, China (e-mail: zhizheng@mail.ustc.edu.cn). He Wang is with Galbot Robotics, Beijing, China, Peking University, Beijing 100871, China, and also with Beijing Academy of Artificial Intelligence, Beijing, China (e-mail: hewang@pku.edu.cn). *Equal contribution † Corresponding authors 
+
+I. I NTRODUCTION 
+
+# LIFELONG navigation in real-world environments re-quires embodied agents to memorize and continually update their understanding of dynamic surrounding environ-ments, as they must operate across extended periods without assuming static scene structure. Such settings demand that an agent maintain a temporally coherent internal representation despite ambiguous observations, environmental changes, and limited field of view [1], [2]. To support these requirements, recent vision–language–action (VLA) foundation models [3]– [5] provide strong perceptual and semantic reasoning capa-bilities, enabling open-vocabulary goal interpretation [6]–[8], scene understanding [9]–[11], and instruction-conditioned ac-tion generation [12]–[14]. Leveraging large-scale multimodal pretraining [15]–[17], these models have demonstrated strong zero-shot generalization across diverse navigation tasks [18], [19], suggesting that they offer a viable foundation for ad-dressing the challenges posed by lifelong navigation. Despite the need for persistent and adaptable memory, current VLA-based navigation systems still operate with short frame-based memory [20], [21], finetuned scene-specific rep-resentations [22], [23], or static scene graphs [24], [25]. These memories remain narrowly scoped and static, which prevents them from providing the persistent and adaptable memory required for lifelong navigation, especially in dynamic en-vironments. Beyond memory-based approaches, current VLA adaptation strategies rely primarily on episodic RL finetuning 
+
+> arXiv:2606.10927v1 [cs.RO] 9 Jun 2026 2
+
+[26], [27] or limited-interaction online updates [28], [29] . These adaptations remain local and episode-bound, which prevents policies from accumulating knowledge or maintain-ing globally consistent behavior over extended deployments. These limitations highlight the need for a representational principle that naturally supports persistent, visually grounded, and lifelong coherent navigation. Cognitive neuroscience indicates [30], [31] that human navigation is supported by visual mental imagery that provides a stable internal depiction of the environment and enables both spatial recall and action planning [32], [33]. Mental imagery is reconstructive and temporally stable, enabling people to update and refine their internal representation of the environment, which also provides an evolving visual memory [34]. This perspective suggests that effective embodied agents should maintain a similarly imagery-like internal representation that both preserves visual continuity and informs policy refinement throughout lifelong navigation. Motivated by this perspective, we introduce AllDayNav, a lifelong self-learning embodied navigation framework that im-plements imagery-inspired internal representations for embod-ied agents. AllDayNav represents navigation goals as visual targets rather than symbolic instructions, and it constructs a persistent internal memory consistent with this imagery-based representation. As the agent explores, AllDayNav incremen-tally builds a multimodal memory that stores imagery-aligned visual embeddings together with semantic descriptions, cat-egorical information, and temporal context. This memory is refined continuously during interaction, enabling the agent to retain coherent visual and semantic information across episodes and environmental changes. To couple memory with policy learning, AllDayNav em-ploys a memory-driven reinforcement learning framework that integrates perception, memory updating, retrieval, and action generation into a unified decision-making process. This inte-gration allows the agent to refine its behavior using its evolving internal representation, analogous to how humans use visual imagination to anticipate future states and plan movement. Collectively, these components enable AllDayNav to convert fragmentary egocentric observations into a stable internal representation that supports reliable lifelong navigation in complex, real-world environments. We evaluate AllDayNav extensively in both simulated and real-world environments across diverse lifelong embodied navigation tasks. Experi-ments show consistent and substantial gains over VLM/LLM-based navigation systems, map-centric memory approaches, and reinforcement-learning baselines in accuracy, robustness, and generalization, with success rates approaching 100% in unseen environments. AllDayNav maintains reliable perfor-mance in unknown and dynamically changing environments through its imagery-inspired memory and adaptive policy learning. Our main contributions are as follows:  
+
+> •
+
+We introduce AllDayNav, a navigation framework moti-vated by visual mental imagery that represents goals in an image-centric form and maintains a coherent internal depiction of the environment for lifelong self-learning embodied navigation.  
+
+> •
+
+We develop a persistent multimodal memory architec-ture that records imagery-oriented visual embeddings, semantic attributes, and temporal context across episodes, providing a structured and continually evolving represen-tation of past experience.  
+
+> •
+
+We design a memory-driven reinforcement learning framework that integrates the learned memory into the control loop, enabling policies to adapt through interac-tion and improve autonomously without human supervi-sion. II. R ELATED WORK 
+
+A. Memory-Based Navigation 
+
+Lifelong navigation depends on memory to fuse partial observations into a coherent environmental representation. Early approaches adopted structured, explicit scene representa-tions [35]–[37], in which the environment is encoded through semantic maps or hierarchical scene graphs. Systems such as 3D Scene Graph [38] organize objects, rooms, and spatial relations into multi-layer graph structures, providing an inter-pretable and spatially consistent representation for downstream reasoning. Extensions such as Open Scene Object Naviga-tion [39] leverage open-vocabulary vision-language models to construct scene graphs that remain applicable in previously unseen environments. Methods such as SG-Nav [40] couple hierarchical 3D scene graph construction with LLM-based chain-of-thought reasoning, enabling the selection of informa-tive navigation frontiers during exploration. Although these structured memories provide clear interpretability and explicit spatial grounding, their updates are computationally intensive, limiting scalability in dynamic or lifelong deployments. To address the scalability constraints of explicit maps, recent work has explored embedding-based [41], [42] and retrieval-augmented [43], [44] memory systems that encode visual, linguistic, and spatial observations into compact vector representations. For instance, ReMEmbR [45] introduces a retrieval-augmented spatio-temporal memory in which each observation is stored as a multimodal embedding and later recalled to inform decision-making. Meta-Memory [46] ex-tends this paradigm by using dual-channel retrieval to jointly leverage semantic and spatial cues, enabling the agent to integrate new observations with existing knowledge into a continually updated cognitive map. Compared with structured memories, retrieval-based systems offer better scalability, op-erate consistently across modalities, and are more practical for lifelong deployment. However, a common limitation across both structured and embedding-based memories is that memory construction re-mains decoupled from policy learning. Memories are typi-cally built through passive accumulation or fixed pretrained encoders and thus remain static during downstream interaction. Consequently, agents cannot modify either the content of their memories or the retrieval strategies they use in response to task rewards, exploration dynamics, or changing objectives. This disconnect prevents memory representations from being refined through continual experience and limits the develop-ment of task-specific memory structures needed for lifelong improvement. 3
+
+B. Large Language Models for Navigation 
+
+Large language models [47], [48] have been introduced into embodied navigation to provide semantic interpretation of natural-language instructions and high-level task reasoning. Early LLM-based navigation systems [49]–[51] rely on sym-bolic, text-centered pipelines in which the model decomposes natural-language instructions into low-level actions. Systems such as NavGPT [52] implement an iterative dialogue be-tween a pretrained LLM and an environment parser, whereas NavCoT [53] augments this pipeline with chain-of-thought prompts that explicitly articulate intermediate semantic steps. Although these approaches provide interpretable decision pro-cesses, their reliance on text-only abstractions creates a dis-connect between visual perception and action generation and constrains their ability to operate on continuous visual input. To reduce this dependence on symbolic intermediates, subsequent work has shifted toward video-based multimodal vision-language-action models [54], [55] that jointly encode egocentric visual streams and textual inputs within a unified representation. This design provides tighter perception-action coupling and enables temporally coherent reasoning. Uni-NaVid [56] demonstrates that a shared multimodal model can support a wide range of visuomotor tasks by processing video and language tokens within a common embedding space. Navigation World Model [57] formulates navigation as a video prediction problem, using a generative transformer to model environment dynamics and forecast future trajectories directly from raw visual observations. These models substantially improve spatial grounding and sequential prediction capability relative to purely text-conditioned planners. Despite these advances, LLM planners and multimodal VLA models remain stateless. Each episode is processed independently, and information obtained during interaction is discarded afterward. Without persistent multimodal memory, these systems cannot accumulate experience, preserve contex-tual continuity across episodes, or adapt their behavior based on past interactions. This lack of persistent state limits their capacity for continual improvement and long-term autonomous operation in embodied environments. 
+
+C. Reinforcement Learning for Embodied Agents 
+
+Reinforcement learning enables interaction-driven policy adaptation, yet most recent work uses it primarily to fine-tune pretrained VLA models [58], [59] rather than to support continual learning. Methods such as VLA-RL [26] apply trajectory-level policy optimization on top of pretrained mul-timodal encoders to improve task performance while main-taining semantic grounding. SimpleVLA-RL [28] replaces imitation objectives with RL losses to enhance robustness and compositional generalization in manipulation tasks. Related approaches, including VLA-RFT [27] and reward-aligned in-struction finetuning, use structured reward signals or human feedback to guide policy updates so that agent behavior remains consistent with high-level task semantics. Although these techniques improve the performance of VLA-based agents, their learning remains constrained to fixed datasets or limited interaction logs, preventing policies from retaining experience across episodes and limiting adaptation to lifelong navigation problems. In a complementary direction, another line of work exam-ines continual and real-world RL, where policies are updated from sustained interaction with the physical environment. Classical systems such as Real-World RL [60] and SERL [59] introduce safety-aware pipelines that enable sample-efficient online learning through automatic resets and off-policy updates. Building on these principles, more recent frameworks such as RLIF [61], RLDG [62], and PoliFormer [63] combine RL with foundation models or world modeling to enable knowledge transfer across tasks and domains. These systems highlight the potential of continual RL for long-term adaptation in dynamic settings. Despite these advances, RL-based embodied agents remain limited by the lack of high-level semantic structure and persistent multimodal memory. Fine-tuned VLA models rely on strong perception and language priors but do not retain knowledge across episodes, while continual RL systems im-prove through interaction but lack mechanisms for structured reasoning or for storing and retrieving past experience. These limitations reduce an agent’s ability to build stable long-term knowledge and to coordinate semantic reasoning with adaptive behavior in complex environments. III. P ROBLEM FORMULATION 
+
+This section provides a formal definition of the lifelong self-learning embodied navigation task in open-world indoor environments. We begin by describing the task overview, followed by a mathematical formulation that decomposes the problem into pretraining and online self-learning phases, and conclude with an analysis of the core technical constraints and challenges. 
+
+A. Task Overview 
+
+Lifelong navigation considers an embodied agent operating in previously unseen indoor environments over extended tem-poral horizons. The agent must form and maintain an internal representation that remains coherent across episodes while accommodating structural and semantic changes that may arise during deployment. This setting departs from conventional episodic navigation, which assumes short horizons, static scenes, and full state resets, and instead requires persistent understanding and continual adaptation. We study an agent deployed in an initially unknown and potentially dynamic indoor environment E. At each timestep 
+
+t, the agent receives an egocentric RGB observation ot ∈
+
+RH×W ×3 together with an open-vocabulary natural-language instruction I. The objective is to learn a navigation policy 
+
+π that outputs continuous waypoints or locomotion actions guiding the agent to a location that satisfies the semantics of 
+
+I, without relying on predefined goal categories, prior maps, demonstrations, or reward annotations. A defining characteristic of this setting is that the agent must construct and maintain a persistent understanding of the scene from fragmented egocentric observations while operating over long, cross-episode horizons. In addition, the agent must 4
+
+interpret open-vocabulary instructions by grounding them into visual targets and continually refine its behavior through self-instructed experience rather than externally curated supervi-sion. Task success is recorded when the agent autonomously stops at a viewpoint that semantically corresponds to the instructed goal under lifelong operation. 
+
+B. Lifelong Learning Overview 
+
+We implement the lifelong self-learning embodied naviga-tion problem as two phases: an offline pretraining phase in which the agent learns foundational navigation skills on large-scale datasets, and an online self-learning phase in which the agent refines its policy through autonomous interaction with the target environment. We elaborate on these two phases as follows: 
+
+1) Pretraining Phase: In the pretraining phase, the agent is trained on a large-scale dataset Dpretrain consisting of diverse indoor scenes. Each training sample is a tuple (s0, g img , τ ),where s0 denotes the initial state, gimg ∈ RH×W ×3 is a goal image specifying the target location, and τ = {(st, a t)}Tt=0 is a trajectory of state-action pairs leading to the goal. The agent learns a parameterized policy πbase (at | st). Here, the observation st = {ot, g img , O<t } at time t consists of the current RGB frame ot ∈ RH×W ×3, the goal image gimg , and the stack of all historical RGB frames O<t = {o0, . . . , o t−1},without including proprioceptive or low-level odometry states. The action at ∈ RK×3 is defined as a continuous waypoint sequence that specifies K target positions in the robot’s egocentric coordinate frame. The pretraining objective is to minimize the expected imi-tation loss over the dataset: 
+
+Lpretrain = E(s0,g img ,τ )∼D pretrain 
+
+" TX
+
+> t=0
+
+ℓ πbase (st), a ∗
+
+> t
+
+#
+
+, (1) where ℓ(·, ·) is the mean squared error between the predicted and ground-truth waypoint sequences, and a∗ 
+
+> t
+
+denotes the continuous expert action at time t.
+
+2) Online Self-Learning Phase: After pretraining, the agent is deployed in a new environment E and enters the online self-learning phase. The agent receives no further human supervision and must autonomously improve its navigation capabilities through interaction with E.
+
+a) Input and Setup: The process begins with the pre-trained policy πbase parameterized by θ0 and an external internet image collection Ginternet = {gnet  
+
+> i
+
+}Nnet 
+
+> i=1
+
+, where each 
+
+gnet  
+
+> i
+
+is an RGB image of common indoor objects or scenes retrieved from large-scale web sources. At deployment time, the agent receives arbitrary open-vocabulary natural language instructions I from users. 
+
+b) Process and Output: The agent interacts with environ-ment E over a series of episodes k = 1 , 2, . . . . During each episode, the agent first explores the environment by executing actions sampled from the current policy πθk . Simultaneously, it captures observations {o(k) 
+
+> t
+
+}Tk 
+
+> t=1
+
+along its trajectory and stores them in a persistent multimodal memory database Mk. The agent then updates the memory by adding new observations, generating textual descriptions, and removing redundant en-tries to maintain diversity. To drive learning, the agent gen-erates self-supervised training tasks by sampling instructions 
+
+Ij from the memory content and retrieving corresponding goal images gj either from Mk or from Ginternet . Finally, the policy πθk is optimized using reinforcement learning based on these self-generated tasks and a fixed similarity-based reward function that measures visual alignment to the goal. Formally, at episode k, the memory database is represented as: 
+
+Mk = {(oi, d i, τ i) | i = 1 , . . . , N k} , (2) where each entry consists of an RGB keyframe image oi ∈
+
+RH×W ×3, a textual description di ∈ V∗ generated by a vision-language model (with V being the vocabulary), and a timestamp τi ∈ R+ indicating when the observation was captured. The policy parameters θk evolve over episodes according to a reinforcement learning update: 
+
+θk+1 = θk + α∇θ Eπθk
+
+" TX
+
+> t=0
+
+γtrt
+
+#
+
+, (3) where α is the learning rate, γ ∈ (0 , 1) is the discount factor, and rt is the reward at time t, computed based on the visual similarity between the current observation ot and the goal image g.
+
+C. Core Constraints and Challenges 
+
+The lifelong self-learning embodied navigation task is de-fined by three strict constraints that introduce significant technical challenges. First, the process is strictly unsupervised : the agent re-ceives no human-provided labels, demonstrations, or reward annotations during the online phase. This imposes the chal-lenge of self-driven curriculum learning , where the agent must autonomously generate diverse and informative training tasks (instruction-goal pairs) to drive policy optimization without external guidance. Second, we enforce a zero instruction prior setting, where the test-time instructions are disjoint from any seen during pretraining. To support continuous improvement, the system must address the exploration challenge , effectively aligning static internet priors with dynamic, fragmented embodied observations to motivate the agent to discover and map new areas beyond its current experience. Third, the learning is online and incremental . The agent operates on a continuous data stream, requiring a persistent memory mechanism that consolidates fragmented views into a coherent global understanding. This necessitates solving the stability-plasticity dilemma: adapting to environmental changes and new concepts without catastrophically forgetting previously acquired skills. IV. T HE ALL DAY NAV FRAMEWORK 
+
+This section presents AllDayNav, a lifelong self-learning embodied navigation framework that autonomously acquires open-vocabulary navigation capabilities through continuous 5
+
+Algorithm 1 Lifelong Self-Learning Embodied Navigation 
+
+Require: Pretrained VLA Policy πθ , VLM, Internet Goal Database Ginternet  
+
+> 1:
+
+Initialize: Memory Database M ← ∅ , Replay Buffer B ← ∅, Critic Qϕ 
+
+> 2:
+
+Start Parallel Processes:  
+
+> 3:
+
+Process 1: Active Exploration Loop  
+
+> 4:
+
+loop  
+
+> 5:
+
+// Self-Instruction Generation  
+
+> 6:
+
+if update condition met (period or |M| growth) then  
+
+> 7:
+
+Construct context C ← { di | (oi, d i) ∈ M}  
+
+> 8:
+
+Generate task set {Ij } ← VLM generate (C) 
+
+> 9:
+
+end if  
+
+> 10:
+
+// Hybrid Goal Retrieval  
+
+> 11:
+
+Sample instruction I ∼ { Ij } 
+
+> 12:
+
+Retrieve from memory: gmem , c ← Retrieve (I, M) 
+
+> 13:
+
+if c < τ conf or random < p fallback then  
+
+> 14:
+
+Fallback: g ← Retrieve (I, Ginternet ) 
+
+> 15:
+
+else  
+
+> 16:
+
+Set goal: g ← gmem  
+
+> 17:
+
+end if  
+
+> 18:
+
+// Online Exploration & Memory Update  
+
+> 19:
+
+Initialize episode t ← 0 
+
+> 20:
+
+while not done do  
+
+> 21:
+
+Observe ot, construct state st = ( ot, g, Ht) 
+
+> 22:
+
+Select action at ∼ πθ (·| st) 
+
+> 23:
+
+Execute at, observe reward rt and next state st+1  
+
+> 24:
+
+Store transition (st, a t, r t, s t+1 ) in B 
+
+> 25:
+
+// Memory Update  
+
+> 26:
+
+if ot is novel or offers better alignment then  
+
+> 27:
+
+Update M with (ot, VLM (ot))  
+
+> 28:
+
+end if  
+
+> 29:
+
+t ← t + 1  
+
+> 30:
+
+end while  
+
+> 31:
+
+end loop  
+
+> 32:
+
+Process 2: Policy Optimization Loop  
+
+> 33:
+
+loop  
+
+> 34:
+
+// Continuous Policy Optimization  
+
+> 35:
+
+if |B| > batch size then  
+
+> 36:
+
+Sample batch from B 
+
+> 37:
+
+Update Critic Qϕ by minimizing LCQL  
+
+> 38:
+
+Update Policy πθ by minimizing Lpolicy  
+
+> 39:
+
+end if  
+
+> 40:
+
+end loop 
+
+interaction with dynamic environments. We begin with a high-level overview of the system architecture, then detail each core component: the self-evolving multimodal memory database, the self-instruction generation and hybrid goal retrieval mech-anism, the pretrained VLA navigation backbone, and the conservative Q-learning-based policy optimization module. We conclude with implementation details that enable robust sim-to-real transfer and efficient online learning. 
+
+A. Framework Overview 
+
+AllDayNav implements a closed-loop learning system driven by a continuously evolving multimodal memory database. The system architecture, illustrated in Figure 2, comprises four integrated modules that collectively realize the memory–policy co-evolution cycle. At the heart of AllDayNav is a vision-language-action (VLA) model πθ that maps observations and goal images to navigation actions. The model is initialized through pretrain-ing on large-scale image-goal navigation datasets, acquiring foundational visuomotor skills and spatial reasoning capabil-ities. Upon deployment, the agent autonomously explores the environment while constructing a persistent memory database 
+
+M that encodes visual appearances, semantic descriptions, and temporal context. The memory facilitates two critical functions. First, it supports self-supervised task generation , where the system periodically samples textual descriptions from M and feeds them to a language model to generate diverse, contextually relevant navigation instructions {Ij }. For each instruction, a hybrid retrieval mechanism first searches the memory database for matching goal images; if no suitable match exists, it falls back to an external internet image collection Ginternet , ensuring continuous availability of training signals even during early exploration. Second, it enables instruction-conditioned nav-igation at test time . When a user issues an open-vocabulary instruction I, the system retrieves the most semantically rele-vant image g from M or Ginternet and uses it as the goal for the VLA policy, enabling zero-shot generalization to novel instructions. Policy improvement is driven by a conservative Q-learning (CQL) objective that mitigates Q-value overestimation in of-fline settings while maintaining stability during online updates. The reward signal is derived from a learned visual similarity function that measures alignment between the agent’s current observation and the goal image, providing both terminal success rewards and intermediate progress signals to guide exploration. As the agent accumulates experience, the memory grows and diversifies, enabling progressively more challenging self-generated tasks. This virtuous cycle—exploration enriches memory, memory enables better task generation, tasks drive policy improvement, and improved policy enables more ef-ficient exploration—forms the foundation of AllDayNav’s lifelong learning capability. The complete training procedure is summarized in Algorithm 1. 
+
+B. Pretrained VLA Navigation Backbone 
+
+The navigation policy is built upon a transformer-based vision-language-action model that jointly processes egocentric visual observations and goal images to predict navigation actions. We describe the visual encoding and observation se-quence construction below, and detail the pretraining strategy in a separate subsection. 
+
+1) Multimodal Visual Encoding: To capture both semantic and structural information from RGB observations, we em-ploy a dual-encoder architecture that combines complemen-tary visual representations. Concretely, for each RGB frame 6Self-Instruction & Hybrid Retrieval  
+
+> Instruction
+> Generator
+> Hybrid
+> Retrieval Goal Image ( 𝐀 )
+> or
+
+Goal Image (𝐀 )
+
+History Tokens 
+
+DINOv2 
+
+Encoder 
+
+SigLIP 
+
+Encoder  
+
+> GAP
+> （Global
+> Avg Pool ）
+
+Pretrained VLA Backbone (Policy Inference) 
+
+Fusion 
+
+> (concatenate)
+
+MLP 
+
+Proj .
+
+Video-base 
+
+VLA   
+
+> Exp. Decay Mask
+
+Action 
+
+Head 
+
+Waypoints   
+
+> (𝐀 0,𝐀 0)
+> (𝐀 𝐀 ,𝐀 𝐀 )
+
+Gradient Update 
+
+A DQ-Learning (RL optimization) 
+
+Critic Network (𝐀 𝐀 )
+
+Replay Buffer 
+
+(𝐀 , 𝐀 , 𝐀 , 𝐀 ′), …, ( 𝐀 , 𝐀 , 𝐀 , 𝐀 ′)
+
+> Novelty Check
+
+Current 
+
+Observation (𝐀 𝐀 )    
+
+> Generate text descriptions
+> for new images
+
+Memory Database ℳ
+
+Entry    
+
+> 𝐀 𝐀 :
+> 𝐀 𝐀 :Description
+> 𝐀 𝐀 :Timestamp
+> 𝐀 𝐀 :Embedding
+
+Entry    
+
+> 𝐀 𝐀 :Description
+> 𝐀 𝐀 :Timestamp
+> 𝐀 𝐀 :Embedding
+
+Entry    
+
+> 𝐀 𝐀 :Description
+> 𝐀 𝐀 :Timestamp
+> 𝐀 𝐀 :Embedding
+> 𝐀 𝐀 :
+
+B
+
+…
+
+…
+
+> Caption Generator
+
+Inference Flow 
+
+Memory Update Flow 
+
+Gradient Flow                 
+
+> Caption Matcher
+> Only update image memory
+> “Go to wash dishes”
+> “Iwant to sleep”
+> Self-Instruction 𝐀 𝐀
+> …
+> “Iwant to
+> drink water”
+> Instruction from User
+> …
+> Internet
+> Memory
+> Highly Matched Images Found
+> No Highly Matched Images
+> Environment
+
+𝐀 𝐀 , 𝐀 ′
+
+ℒCQLℒpolicy
+
+Fig. 2. AllDayNav system architecture. (A) The VLA Navigation Backbone processes dual-encoded observations (SigLIP + DINOv2) and compressed history to predict waypoints. (B) The Self-Evolving Memory Database continuously accumulates keyframes with semantic descriptions generated by VLM. 
+
+(C) The Self-Instruction & Retrieval Module generates diverse tasks from memory and retrieves visual goals (with Internet fallback). (D) The CQL-based RL Module refines the policy using a conservative objective to ensure stability. 
+
+ot ∈ RH×W ×3, we extract features using two pretrained vision transformers: 
+
+f sem  
+
+> t
+
+= SigLIP (ot) ∈ RNpatch ×dsem ,
+
+f struct  
+
+> t
+
+= DINOv2 (ot) ∈ RNpatch ×dstruct , (4) where SigLIP [64] provides language-aligned semantic rep-resentations trained on large-scale image-text pairs, and DI-NOv2 [65] captures fine-grained structural and spatial details through self-supervised learning. We use SigLIP and DINOv2, which operate on different input resolutions to extract comple-mentary visual features. We then perform feature fusion and projection, where the complementary features are concatenated along the channel dimension and projected into the VLA model’s embedding space via a learned multimodal projector: 
+
+zt = MLP proj 
+
+  f sem  
+
+> t
+
+; f struct 
+
+> t
+
+ ∈ RNpatch ×dmodel , (5) where [·; ·] denotes concatenation, and MLP proj is a 2-layer MLP with GELU activation and layer normalization. This design enables the model to leverage both high-level semantic understanding for goal recognition and low-level geometric cues for obstacle avoidance and spatial reasoning. 
+
+2) Observation Sequence Construction with History Com-pression: To provide the VLA model with temporal context while maintaining computational efficiency, we construct a token sequence that balances detailed representation of critical frames with compact encoding of historical observations. We encode the current observation ot and the goal image 
+
+g with full spatial resolution, preserving detailed visual infor-mation: 
+
+Zcurr = zt ∈ R64 ×dmodel , Zgoal = zg ∈ R64 ×dmodel . (6) For computational efficiency and lifelong context, we com-press historical observations using Global Average Pooling (GAP). Each historical frame ot′ for t′ < t is spatially pooled: 
+
+zpool  
+
+> t′
+
+= GAP (zt′ ), (7) where GAP applies simple average pooling to aggregate spatial features. This reduces the token count per historical frame, enabling the model to attend to a longer temporal window within a fixed computational budget. To prioritize recent observations while maintaining aware-ness of distant history, we apply a temporal attention bias: 
+
+αt,t ′ = exp ( −λ(t − t′)) for t′ < t, (8) where λ > 0 controls the decay rate. This bias is added to the attention logits before softmax, ensuring that older frames contribute less to the model’s decision-making without being entirely discarded. The complete input to the VLA transformer at time t is: 
+
+Xt =
+
+h
+
+Zgoal ; Zcurr ; {zpool  
+
+> t′
+
+}t′∈H t
+
+i
+
+, (9) where Ht denotes the set of historical frames selected based on the exponential decay attention mask, prioritizing recent observations while maintaining awareness of distant history. The total token count is 64+64+ Nhist ×4 tokens, where Nhist =
+
+|H t| is the number of historical frames actually included in the input sequence, determined by the attention mask filtering mechanism. We set the history window size to 64 frames. 
+
+3) Action Representation and Prediction: Rather than pre-dicting instantaneous velocities, we adopt a waypoint-based action representation that facilitates lifelong planning and smooth trajectory execution. At each timestep, the model 7
+
+predicts a sequence of K = 8 future waypoints in the robot’s local coordinate frame: 
+
+at = {(∆ xk, ∆yk, ∆θk)}Kk=1 ∈ RK×3, (10) where (∆ xk, ∆yk) specifies the relative position of the k-th waypoint and ∆θk is the relative heading. This representation provides a smooth motion plan that the low-level controller can execute robustly. The VLA transformer output is passed through a 4-layer MLP action head with residual connections: 
+
+at = MLP action (Transformer θ (Xt)) , (11) where Transformer θ denotes the pretrained Qwen2-7B back-bone with learned visual adapters. 
+
+C. Self-Evolving Multimodal Memory Database 
+
+The memory database M serves as the agent’s persistent internal representation of the environment, supporting both semantic retrieval for instruction-conditioned navigation and self-supervised task generation for policy learning. Unlike static scene representations, M evolves continuously as the agent explores, incorporating new observations while main-taining diversity and preventing redundancy. 
+
+1) Memory Entry Structure: Each entry in M is a quadru-ple (oi, d i, τ i, ei). The first component, oi ∈ RH×W ×3, is an RGB visual keyframe captured during exploration. The second component, di ∈ V ∗, is a natural language semantic descrip-tion of the scene content. The third component, τi ∈ R+,represents the timestamp for temporal reasoning and adap-tation to dynamic environments. Finally, ei ∈ Rdembed is the precomputed visual embedding extracted using LLaVE [66], which facilitates efficient similarity search and retrieval with-out repeated inference. 
+
+2) Autonomous Memory Construction: During exploration, the agent captures observations at regular intervals (every 5 steps). A frame is identified as a candidate keyframe if its visual embedding deviates significantly from the previously selected keyframe: 
+
+∆t = 1 − et · elast 
+
+∥et∥∥ elast ∥ > δ change , (12) where δchange = 0 .15 and elast denotes the embedding of the most recently added keyframe. This filtering step efficiently identifies visually distinct moments in the trajectory for po-tential inclusion in the memory, independently of the global memory content. 
+
+3) Memory Update and Deduplication: To maintain a com-pact and high-quality memory database, we evaluate each candidate keyframe onew against the existing entries in M.We first identify the most visually similar existing entry: 
+
+j = arg max 
+
+> i
+
+
+
+si = enew · ei
+
+∥enew ∥∥ ei∥
+
+
+
+. (13) If the maximum similarity sj ≤ τdup (where τdup = 0 .7), the scene is considered novel. We invoke Qwen3-VL-8B-Instruct to generate a semantic description dnew = VLM caption (onew )
+
+and insert the new entry: 
+
+M ← M ∪ { (onew , d new , τ new , enew )}. (14) If sj > τ dup , the candidate overlaps with an existing entry. We update the entry only if the new image provides a better visual grounding for the stored semantic concept. Specifically, we compare the alignment between the image embeddings and the text embedding of the existing description dj , computed using the LLaVE text encoder Etxt :align new = enew · E txt (dj ), align old = ej · E txt (dj ). (15) If align new > align old , we replace the visual component of the entry: 
+
+M ← (M \ { (oj , d j , τ j , ej )}) ∪ { (onew , d j , τ new , enew )}. (16) This ensures that the memory maintains the most representa-tive visual instance for each scene description. Figure 3 details the construction and retrieval processes of the memory database. 
+
+4) VLM-Based Semantic Retrieval: Given a natural lan-guage instruction I, we retrieve the most relevant visual goal from M by directly leveraging the semantic reasoning capabilities of the Vision-Language Model. Instead of relying on embedding-based similarity search, we formulate retrieval as a selection task for Qwen3-VL-8B-Instruct. We construct a context containing the current time tcurr , the instruction, and the set of all available scene descriptions with their timestamps: 
+
+Pret =“Current Time: tcurr . Given the instruction: I, 
+
+select the best matching scene from: {(di, τ i)}|M|  
+
+> i=1
+
+”.
+
+(17) The inclusion of timestamps τi enables the VLM to handle time-sensitive instructions (e.g., “Go to the place visited 5 minutes ago” or “Find the office seen this morning”), crucial for dynamic environment adaptation. The model returns the index i∗ of the best matching entry along with a confidence score c∗ ∈ [0 , 1] :
+
+(i∗, c ∗) = VLM select (Pret ), g = oi∗ . (18) where c∗ represents the model’s confidence in the retrieval result, derived from the probability of the generated token. This approach allows the system to handle complex, com-positional, and functional instructions that simple embedding dot-products often fail to capture. 
+
+D. Self-Instruction Generation and Hybrid Goal Retrieval 
+
+To enable fully autonomous learning without human super-vision, AllDayNav must generate its own training tasks in the form of instruction-goal pairs. We develop a self-instruction mechanism that produces diverse, contextually relevant navi-gation instructions and a hybrid retrieval strategy that ensures continuous availability of training signals. 
+
+1) Contextual Self-Instruction Generation: Periodically (every 10 episodes or when |M| increases by 20%), we invoke Qwen3-VL-8B-Instruct to generate navigation instruc-tions based on the accumulated memory content. We aggregate all semantic descriptions in the memory database: 
+
+Cmemory = {di | (oi, d i, τ i, ei) ∈ M} , (19) 8The Self-Evolving Construction Process 
+
+(Memory Construction & Evolution) 
+
+VLM-based Semantic Retrieval 
+
+(Semantic Retrieval)      
+
+> Complex Query
+> Temporal: It‘s morning, but it’s still a bit dark here .
+> Semantic: Make the room warmer, I'm feeling cold.
+> Context Construction
+> Goal Retrieval
+
+VLM Reasoning          
+
+> Instruction implies
+> time morning …
+> Matched ID: 3
+> Goal Output
+> ID: 3
+> Confidence Score: 0.98
+> Goal Image ( 𝐀 )
+
+Update & Deduplication           
+
+> Novelty Check
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 ↔
+> Memory
+> Database
+> else
+> Caption
+> Generator
+> Novel
+> Description
+> Cozy beige sofa …
+> Timestamp
+> MM/DD HH:mm:ss
+> Embedding
+> feature vector
+> ID: 9
+> 𝐀 new
+> Generate text descriptions
+> for new images
+> Timeline (𝐀 )
+> Discard
+
+Input Stream   
+
+> Continuous RGB frames
+> 𝐀 𝐀 −2
+> 𝐀 𝐀 −1
+> 𝐀 𝐀
+
+Similarity 
+
+Check 
+
+(∆𝐀 )
+
+> Yes
+> No
+
+Keyframe  
+
+> Memory
+> Embedding
+
++ 𝐀 𝐀         
+
+> ℳ
+> {“ object_id ”: 3,“description”: “ Curtain …","timestamp": ”YYYY-
+> MM -DD HH :mm :ss "},
+> …
+> {“ object_id ”: 9,“description”: ” Sofa …","timestamp": ”YYYY-
+> MM -DD HH :mm :ss "},
+
+Keyframe 
+
+Extract Image-text 
+
+Alignment  
+
+> Worse Better
+
+Fig. 3. Memory update and retrieval mechanism. (Left) The Self-Evolving Construction Process: Novel frames are captioned and inserted; redundant entries trigger an alignment-based update check. (Right) VLM-Based Semantic Retrieval: Given a complex instruction (possibly with temporal constraints), the VLM selects the most relevant goal from a context of candidate descriptions and timestamps. 
+
+and construct a prompt: 
+
+Pgen =“Based on the following scene descriptions: 
+
+[Cmemory ],
+
+generate 50 diverse navigation instructions” .
+
+(20) The VLM then generates a list of open-vocabulary instruc-tions: 
+
+{Ij }Mj=1 = VLM generate (Pgen ), (21) where M = 50 instructions are produced per generation round. The instructions span multiple difficulty levels and semantic categories to ensure robust training. These include 
+
+object-centric tasks (e.g., “Go to the red sofa”, “Find the coffee machine”), functional queries (e.g., “I need to wash my hands”, “Where can I charge my phone?”), spatial directives (e.g., “Navigate to the room with the large window”, “Go to the corner with plants”), compositional instructions (e.g., “Find a quiet place to read”, “Locate the meeting area”), and 
+
+temporal instructions (e.g., “Go to the room visited 10 minutes ago”, “Find the location seen at the start of exploration”). At the beginning of each new episode, one instruction is randomly sampled from the current set {Ij } to guide the agent’s exploration and learning. This diversity ensures that the policy is trained on a broad spectrum of tasks, promoting generalization. 
+
+2) Hybrid Goal Retrieval Mechanism: For each generated instruction Ij , we must identify a corresponding goal image 
+
+gj that the agent can navigate to. We employ a hybrid retrieval strategy that prioritizes memory-based goals while falling back to internet images when necessary. We first attempt to retrieve a goal from the memory database 
+
+M using the VLM-based retrieval procedure described in Section 4.3.4: 
+
+gmemory  
+
+> j
+
+, c memory  
+
+> j
+
+= Retrieve (Ij , M). (22) To ensure robust training signals, we employ a probabilis-tic fallback mechanism. If the memory retrieval confidence 
+
+cmemory  
+
+> j
+
+is below a threshold τconf = 0 .6, we trigger a fallback to the external internet collection Ginternet . Additionally, during early exploration when M is sparse, we fallback with a probability that decays as memory grows: 
+
+pfallback = max 
+
+
+
+0, 1 − |M| 
+
+20 
+
+
+
+. (23) If fallback is triggered (either due to low confidence or the probabilistic sampling), we retrieve a goal image from the external internet collection: 
+
+ginternet  
+
+> j
+
+= Retrieve (Ij , Ginternet ), (24) where Ginternet is a diverse collection of indoor scene images crawled from the internet. The final goal for instruction Ij is determined by the outcome of the fallback logic: 
+
+gj =
+
+(
+
+ginternet  
+
+> j
+
+if fallback triggered ,gmemory  
+
+> j
+
+otherwise . (25) This hybrid strategy ensures that the agent trains primarily on goals that exist in the current environment (via M), maxi-mizing training efficiency. Simultaneously, it prevents training from stalling during early exploration when the memory is sparse by leveraging Ginternet . Furthermore, the inclusion of internet images motivates the agent to explore unseen regions and novel concepts that have not yet been captured in the episodic memory, thereby driving continuous discovery. 
+
+E. Pretraining Strategy and Data Augmentation 
+
+We pretrain the VLA model on a large-scale dataset 
+
+Dpretrain collected in the Habitat simulator using scenes from 9Sim-to-Real Augmentation Visual Similarity Reward                                
+
+> Blur Jitter
+> Lighting Cutout
+> Source:
+> Simulator
+> Target :
+> Dynamic Changes
+> Real Robot
+> Image
+> Goal Image (𝐀 )Current Observation (𝐀 𝐀 )
+> Frozen Embedding Model
+> Reward  Value
+> Reward Shaping Curve
+> Time /Steps
+> Cosine Similarity
+> Progress Reward
+> Reach the Goal:
+> Success Reward
+> (+10) Collision
+> Penalty (-1)
+> Hist 2…Hist n-3 Hist n-2
+> Goal
+> Tokens
+> Current
+> Obs Tokens
+> Global
+> Avg
+> Pool
+> [Hist nHist 1]Hist n-1 ……
+> Exp. Decay Attention
+
+Pre-trained Vision-Language-Action Model 
+
+Action 
+
+Head 
+
+(MLP) (𝐀 0, 𝐀 0)  
+
+> (𝐀 𝐀 ,𝐀 𝐀 )
+
+Local 
+
+Controller     
+
+> Fig. 4. VLA backbone architecture and Sim-to-Real strategy. (Top) The architecture processes goal tokens, current observation tokens, and compressed history tokens (weighted by an exponential decay mask) through a Qwen2-7B backbone. (Bottom) We apply aggressive visual augmentations (blur, noise, cutout) during pretraining to bridge the domain gap. The model outputs 8 local waypoints as a robust action representation.
+
+HM3D [15] and MP3D [16]. The dataset comprises 50,000 trajectories totaling 5 million steps, spanning diverse indoor environments, with a carefully balanced mix. Specifically, 80% of the data consists of expert trajectories representing shortest-path navigation from random start positions to sampled goal images, providing efficient navigation demonstrations. The remaining 20% comprises exploratory trajectories formed by random walks with periodic goal-switching, which encourages exploration and enhances robustness to suboptimal paths. To bridge the sim-to-real gap, we apply aggressive image augmentations independently to the current frame ot and the goal frame g, artificially increasing appearance variation: 
+
+˜ot = Aaug (ot; ξt),
+
+˜g = Aaug (g; ξg ), (26) where Aaug includes motion blur (kernel size 3–7), bright-ness/contrast jitter ( ±30% ), color jitter (saturation ±20% ), and Gaussian noise ( σ ∈ [0 , 0.1] ). To account for quadruped locomotion and sensor artifacts, we further introduce: (1) random camera shake to simulate head motion; (2) random lighting variation; (3) random color block insertion; and (4) random region removal, where the removed area is smoothly filled inwards using boundary pixel colors. The independent sampling ξt̸ = ξg ensures that the model learns to match goals under varying visual conditions, improving robustness to real-world appearance shifts. We train the model via supervised learning with mean squared error (MSE) loss on waypoint predictions: 
+
+Lpretrain = E(ot,g, a∗ 
+
+> t)∼D pretrain
+
+∥πθ (ot, g, O<t ) − a∗ 
+
+> t
+
+∥22
+
+ , (27) where a∗ 
+
+> t
+
+is the ground-truth waypoint sequence computed from the expert trajectory. Training is performed for 14K steps with batch size 320, using AdamW optimizer with learning rate 3.3 × 10 −5 and cosine annealing schedule. Figure 4 illustrates the complete VLA architecture, showing the flow from dual visual encoders through the transformer backbone to waypoint prediction. 
+
+F. Conservative Q-Learning for Lifelong Policy Optimization 
+
+To refine the pretrained navigation policy through online interaction, we employ reinforcement learning with conserva-tive Q-learning (CQL). CQL provides a principled framework for learning from mixed-quality data (both online rollouts and offline pretraining trajectories) while mitigating the Q-value overestimation problem that plagues standard off-policy RL algorithms. 
+
+1) Markov Decision Process Formulation: We model the navigation task as an infinite-horizon MDP (S, A, T , r, γ ).Here, S denotes the state space, with st = {ot, g, O<t } encod-ing the current RGB observation, goal image, and historical RGB frames. The continuous action space A = RK×3 consists of waypoint sequences. The environment transition dynamics are given by T (st+1 | st, a t), while r : S × A → R represents the reward function (detailed below), and γ = 0 .99 serves as the discount factor. The goal is to learn a policy πθ : S → A that maximizes expected cumulative return: 
+
+J(θ) = Eπθ
+
+" ∞X
+
+> t=0
+
+γtr(st, a t)
+
+#
+
+. (28) 
+
+2) Reward Function Design: The reward function combines terminal success rewards, intermediate progress signals, and regularization terms to guide efficient and collision-free navi-gation. 10 
+
+We leverage the LLaVE embeddings to compute the seman-tic similarity between the current observation ot and the goal image g:sim t = et · eg
+
+∥et∥∥ eg ∥ . (29) This metric provides a robust measure of semantic alignment for reward calculation. To ensure that reward computation does not throttle the control loop, LLaVE inference is executed asynchronously on a parallel stream, decoupling the reward signal generation from the real-time VLA policy execution. The total reward at time t is defined as the sum of four components: 
+
+rt = rterm  
+
+> t
+
++ rprog  
+
+> t
+
++ rtime  
+
+> t
+
++ rcoll  
+
+> t
+
+. (30) The terminal reward rterm  
+
+> t
+
+incentivizes successful comple-tion: 
+
+rterm  
+
+> t
+
+=
+
+(
+
++10 .0 if agent stops and sim t ≥ 0.75 ,
+
+0 otherwise . (31) Empirically, a similarity score above 0.75 indicates a high probability that the agent has reached the target location. We verify this in our experiments by comparing against human judgment of goal arrival. To mitigate the issue of sparse rewards, we include a
+
+progress reward rprog  
+
+> t
+
+. Since visual similarity scores below 0.5 typically indicate negligible semantic overlap between the current view and the goal, fluctuations in this range do not trigger rewards. However, once the similarity exceeds 0.5, it signifies that the agent has entered the vicinity of the target. To encourage continued progress, we assign a bonus of +2 .0
+
+whenever the similarity score sim t surpasses the thresholds 
+
+{0.5, 0.6, 0.7} for the first time in an episode. Finally, we apply a time penalty rtime  
+
+> t
+
+= −0.01 at each step to encourage efficiency, and a collision penalty rcoll  
+
+> t
+
+= −0.1
+
+whenever a collision is detected to ensure safety. 
+
+3) Conservative Q-Learning Objective: Standard actor-critic RL methods suffer from Q-value overestimation, partic-ularly when learning from offline data or mixed online-offline experiences. CQL addresses this by penalizing Q-values for out-of-distribution actions, encouraging the critic to remain conservative. We train a separate MLP-based critic network Qϕ(s, a )
+
+with parameters ϕ, consisting of 4 hidden layers with ReLU activations: 
+
+Qϕ(st, a t) = MLP ϕ ([ st ; at]) , (32) where [·; ·] denotes concatenation of the state and the action. The CQL objective augments the standard Bellman error with a conservative regularization term: 
+
+LCQL (ϕ) = E(s,a,r,s ′)∼B 
+
+h 
+
+Qϕ(s, a )
+
+−
+
+
+
+r + γ max  
+
+> a′
+
+Qϕ′ (s′, a ′)
+
+  2i
+
++ αEs∼B 
+
+log X
+
+> a∼μ(a|s)
+
+exp( Qϕ(s, a )) 
+
+
+
+− αEs∼B ,a ∼πθ (a|s)[Qϕ(s, a )] ,
+
+(33) In this objective, B represents the replay buffer storing transi-tions from online exploration, while ϕ′ denotes the parameters of a target Q-network updated via exponential moving average. The second term serves as a conservative regularizer, penal-izing high Q-values for out-of-distribution actions sampled from a uniform random policy μ(a | s). By minimizing the difference between the log-sum-exp of Q-values under μ
+
+and the expected Q-value under the current policy πθ , this term effectively lower-bounds the Q-function and prevents overestimation, with α = 5 .0 controlling the regularization strength. The policy optimization objective combines Q-value maxi-mization with a behavior cloning (BC) regularization term to ensure stability: 
+
+Lpolicy (θ) = − Es∼B ,a ∼πθ (·| s) [Qϕ(s, a )] + λbc E(s,a ∗)∼B succ 
+
+∥πθ (s) − a∗∥22
+
+ , (34) where Bsucc ⊂ B denotes the subset of transitions from successful trajectories, and λbc = 0 .1 weighs the contribution of the imitation loss. The BC term acts as a stabilizer, encouraging the policy to stay close to known successful actions while the Q-term drives improvement. We alternate between critic updates (minimizing LCQL ) and policy updates (minimizing Lpolicy ) using gradient descent, with updates performed every 100 steps. 
+
+4) Online Exploration and Data Collection: The agent continuously explores the environment and collects new ex-periences to populate the replay buffer B. Each episode is generated by first sampling an instruction Ij from the self-generated instruction set and retrieving a corresponding goal image gj via the hybrid retrieval mechanism. The agent then executes the current policy πθ to generate a trajectory 
+
+{(st, a t, r t, s t+1 )}Tt=0 . Finally, the trajectory is stored in the replay buffer B, and the memory database M is updated with any newly observed keyframes. This closed loop ensures that the policy is continuously refined based on the most recent environmental knowledge encoded in M.V. E XPERIMENTS AND ANALYSIS 
+
+This section presents a comprehensive evaluation of All-DayNav, our lifelong self-learning embodied navigation frame-work. We demonstrate that AllDayNav enables robots to achieve “out-of-the-box” navigation capabilities in completely unseen dynamic environments through autonomous explo-ration and continuous self-improvement, without any super-vision or human intervention. 
+
+A. Experimental Setup 1) Simulation and Real-World Platforms: We conduct our primary simulation experiments using the Habitat simula-tor [67]. The pre-training dataset consists of the training splits from HM3D [15] and MP3D [16]. For the main experimental evaluation, we select five distinct, unseen indoor scenes from these datasets, ensuring diverse layouts and spatial configura-tions to thoroughly assess generalization capabilities. To vali-date the practical feasibility of our system, we also deploy and 11 
+
+test AllDayNav using a Unitree Go2 quadruped robot in three different real-world environments (laboratory, living room, and home). These deployments demonstrate the system’s ability to operate autonomously from initialization through exploration to responding to user instructions in realistic settings. 
+
+2) Baseline Methods and Comparisons: To provide a com-prehensive evaluation, we compare AllDayNav against the following state-of-the-art methods: 
+
+ReMEmbR [45]: A Retrieval-augmented Memory for Em-bodied Robots, designed for lifelong video question answering for robot navigation. ReMEmbR employs a structured ap-proach involving a memory-building phase and an instruction-handling phase, leveraging temporal information, spatial infor-mation, and images to efficiently handle continuously growing robot histories. To validate the effectiveness of our memory database, we replace the memory database component in AllDayNav with ReMEmbR while keeping the RL component intact. 
+
+ConRFT [58]: A reinforced fine-tuning method for Vision-Language-Action (VLA) models via consistency policy. Con-RFT integrates behavior cloning and Q-learning in the offline stage, and employs consistency policy for online fine-tuning with human interventions. To validate the effectiveness of our online RL method, we replace the VLA RL component in AllDayNav with ConRFT while keeping the memory mech-anisms intact. Note that we test ConRFT without human interventions to ensure a fair comparison with AllDayNav’s fully autonomous operation. 
+
+SERL [59]: A software suite for sample-efficient robotic reinforcement learning, providing a carefully implemented li-brary containing a sample-efficient off-policy deep RL method. SERL includes methods for computing rewards and resetting the environment, and has demonstrated efficient learning on various manipulation tasks. Similar to ConRFT, we replace the online VLA RL component in AllDayNav with SERL while keeping the memory mechanisms intact to validate our RL approach. 
+
+OSG Navigator [39]: A modular system for open-world Object-Goal Navigation that introduces the Open Scene Graph representation as spatial memory. OSG Navigator organizes spatial information hierarchically using OSG schemas, which are templates describing the common structure of environment classes and can be automatically generated from simple se-mantic labels. We fully reproduce OSG Navigator as a baseline with explicitly structured scene-graph memory, providing a contrast against our image-centric multimodal memory that does not encode explicit spatial graphs. 
+
+3) Evaluation Metrics and Protocol: a) Primary Metrics: We employ three primary metrics to assess performance. The Success Rate (SR) measures the percentage of episodes in which the agent autonomously stops within 300 steps and receives a positive reward from the reward model. To evaluate navigation efficiency in simulation, we report Success weighted by Path Length (SPL) , which weights success by the ratio of the shortest path to the actual path length. Additionally, we track the Episode Length ,defined as the number of steps taken per episode, which reflects navigation efficiency in both simulation and real-world experiments. 
+
+b) Evaluation Protocol: To ensure fair and rigorous evaluation, we adopt a strict protocol. For each test scene, we predefine a fixed set of 100 open-vocabulary instructions that are never used during training. During the training phase, we pause at regular intervals based on a fixed wall-clock time budget to evaluate model performance. At each evaluation checkpoint, we run 100 test episodes from a fixed set of starting positions using the held-out instruction set. 
+
+B. Implementation Details 
+
+We specify the model architecture and system configura-tions used in our experiments. Additional hyperparameters are provided in the appendix. 
+
+1) Model Architecture: The VLA backbone uses a Qwen2-7B transformer with 32 layers and a hidden dimension of 4096. Visual encoding employs SigLIP and DINOv2. A 2-layer MLP projects concatenated features to the model dimension. The action head is a 4-layer MLP outputting 24 waypoint coordi-nates, and the critic is a 4-layer MLP. Qwen3-VL-8B-Instruct is used for memory operations, and a frozen LLaVE-7B is employed for reward computation and embedding extraction. 
+
+2) Computational Resources: Pretraining was conducted on 40 × NVIDIA H100 GPUs. For online learning, we utilize 8 ×
+
+NVIDIA H100 GPUs. The system runs at ∼5 Hz on a single NVIDIA H100 GPU during real-world deployment. 
+
+C. Main Results and Analysis 1) Lifelong Learning Performance: The core experiment demonstrates AllDayNav’s ability to progressively improve from its pretrained initialization to task mastery through au-tonomous exploration and self-learning. Figure 5 summarizes the lifelong learning trends across all HM3D/MP3D test scenes in simulation. Figure 5 reveals that AllDayNav exhibits a steady upward trajectory across all three metrics, starting from performance near the pretrained model baseline and gradually converging to near-perfect success rates (approaching 100%). In contrast, baseline methods such as ReMEmbR, ConRFT, and SERL show limited improvement and plateau at significantly lower performance levels. Because OSG Navigator is training-free, we report its fixed performance only in the summary tables. The steady increase in SPL, together with the consistent decrease in episode length, indicates that AllDayNav learns to navigate more efficiently over time, taking shorter and more direct paths to goals with higher path efficiency. This performance gain is a direct consequence of the accumulated experience in the memory database and the improved policy learned through online updates. The results demonstrate that AllDayNav’s continuous learning mechanism enables it to adapt and excel in unseen environments, significantly outper-forming both learning-based and static baseline methods. Table I presents the final quantitative performance compar-ison across all methods on the standard test set after training convergence. 12 75                              
+
+> 80
+> 85
+> 90
+> 95
+> 100
+> Success Rate (%)
+> 17DRP5sb8fy
+> 75
+> 80
+> 85
+> 90
+> 95
+> 29hnd4uzFmX
+> 77.5
+> 80.0
+> 82.5
+> 85.0
+> 87.5
+> 90.0
+> 92.5
+> 95.0
+> 97.5
+> 00801-HaxA7YrQdEC
+> 75
+> 80
+> 85
+> 90
+> 95
+> 00819-6D36GQHuP8H
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100
+> 00825-jgPBycuV1Jq
+> 37.5
+> 40.0
+> 42.5
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> SPL (%)
+> 40.0
+> 42.5
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> 44
+> 46
+> 48
+> 50
+> 52
+> 54
+> 56
+> 58
+> 44
+> 46
+> 48
+> 50
+> 52
+> 54
+> 56
+> 58
+> 40
+> 45
+> 50
+> 55
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 100
+> 110
+> 120
+> 130
+> 140
+> Episode Length
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 100
+> 110
+> 120
+> 130
+> 140
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 100
+> 105
+> 110
+> 115
+> 120
+> 125
+> 130
+> 135
+> 140
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 100
+> 110
+> 120
+> 130
+> 140
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 110
+> 120
+> 130
+> 140
+> 150
+> Ours ConRFT SERL ReMEnbR Ours(Pretrained)
+
+Fig. 5. Lifelong learning performance in simulation across five HM3D/MP3D test scenes. Each subplot reports the fixed-test performance of the pretrained model and subsequent online checkpoints sampled at equal wall-clock intervals for AllDayNav and all learning-based baselines (ReMEmbR, ConRFT, SERL). TABLE I FINAL PERFORMANCE COMPARISON IN SIMULATION ENVIRONMENTS . C OLUMNS ARE GROUPED BY FIVE UNSEEN SCENES (S1–S5); EACH SCENE REPORTS SR, SPL, AND EPISODE LENGTH (L EN ) AFTER CONVERGENCE .
+
+Scene S1 Scene S2 Scene S3 Scene S4 Scene S5 Method SR SPL Len SR SPL Len SR SPL Len SR SPL Len SR SPL Len 
+
+ReMEmbR [45] 84.0 44.2 122.7 91.0 47.0 115.5 83.0 47.0 130.2 84.0 49.5 123.4 84.0 52.0 117.1 ConRFT [58] 88.0 50.2 123.5 83.0 44.2 128.9 87.0 54.2 124.3 94.0 54.4 114.9 90.0 46.7 123.3 SERL [59] 82.0 48.3 127.7 86.0 53.4 109.0 85.0 49.2 115.7 87.0 52.5 120.0 92.0 51.1 120.2 OSG Navigator [39] 75.0 39.2 134.7 76.0 39.2 135.9 76.0 42.0 137.2 77.0 44.5 130.4 77.0 41.7 130.3 
+
+AllDayNav (Ours) 99.0 57.0 102.3 96.0 56.4 103.6 96.0 58.7 100.5 96.0 58.8 97.3 99.0 58.7 108.8 
+
+AllDayNav achieves the highest success rate and SPL, along with the shortest episode length, establishing clear superiority over all baseline methods. Notably, AllDayNav significantly outperforms both learning-based baselines (ReMEmbR, Con-RFT, SERL) and the static memory-based method (OSG Navigator), highlighting the advantage of continuous learning over both static map-based approaches and alternative learning strategies. To further demonstrate the learning dynamics during au-tonomous exploration, Figure 6 shows the online perfor-mance during exploration—the real-time performance on self-generated navigation tasks as the agent actively explores and learns in the environment. Unlike Figure 5, which reports fixed test set averages, Figure 6 plots Exponential Moving Average (EMA) metrics (SR, SPL, Episode Length) computed directly from the online exploration stream. These metrics capture the real-time learning behavior during autonomous exploration. 
+
+2) Ablation Studies: To validate the contribution of each core component, we conduct comprehensive ablation studies that isolate the key mechanisms of AllDayNav. We evaluate three variants, including two memory-component ablations and one RL-component ablation: 
+
+w/o Cross-Episode Memory: The memory buffer is cleared after every episode, preventing knowledge accumulation across long horizons. This variant shows markedly slower improve-ment and lower final performance (Figure 7), confirming that retaining experience across episodes is critical for lifelong learning. 
+
+w/o Self-Instruction: The self-instruction generator is re-placed with random goal sampling, which strips the agent of semantically meaningful training signals. As a result, suc-cess rates and SPL remain substantially lower (Figure 7), demonstrating that self-instruction is key to producing diverse, curriculum-like tasks. 
+
+w/o BC Loss: We remove the behavior cloning (BC) loss during online fine-tuning, relying solely on the reinforcement learning objective. This variant exhibits unstable learning dynamics and slower convergence (Figure 7), indicating that the BC loss acts as a crucial regularizer that stabilizes updates and prevents catastrophic forgetting of the pre-trained prior. Figure 7 visualizes the aggregated trends for these variants, highlighting the contribution of each component relative to the full model. Table II provides precise quantitative results for the ablation 13 0
+
+> 20
+> 40
+> 60
+> 80
+> 100
+> Success Rate (%)
+
+17DRP5sb8fy 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+
+29hnd4uzFmX 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+
+00801-HaxA7YrQdEC 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+
+00819-6D36GQHuP8H 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+
+00825-jgPBycuV1Jq       
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> SPL (%)
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 025 50 75 100 125 150
+
+Training Time (Minutes)       
+
+> 100
+> 150
+> 200
+> 250
+> 300
+> Episode Length
+> 025 50 75 100 125 150
+
+Training Time (Minutes)       
+
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> 025 50 75 100 125 150
+
+Training Time (Minutes)       
+
+> 100
+> 150
+> 200
+> 250
+> 300
+> 025 50 75 100 125 150
+
+Training Time (Minutes)       
+
+> 100
+> 150
+> 200
+> 250
+> 300
+> 025 50 75 100 125 150
+
+Training Time (Minutes)    
+
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Ours ConRFT SERL ReMEnbR
+
+Fig. 6. Online exploration performance during autonomous learning. This figure shows the dynamic performance on self-instruction tasks during exploration using Exponential Moving Average (EMA) of Success Rate (SR), SPL, and Episode Length. 75 
+
+> 80
+> 85
+> 90
+> 95
+> 100
+> Success Rate (%)
+
+17DRP5sb8fy 
+
+> 75
+> 80
+> 85
+> 90
+> 95
+
+29hnd4uzFmX 
+
+> 75
+> 80
+> 85
+> 90
+> 95
+
+00801-HaxA7YrQdEC 
+
+> 75
+> 80
+> 85
+> 90
+> 95
+
+00819-6D36GQHuP8H 
+
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100
+
+00825-jgPBycuV1Jq      
+
+> 42.5
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> SPL (%)
+> 40
+> 45
+> 50
+> 55
+> 42.5
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> 40.0
+> 42.5
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 030 60 90 120 150
+
+Training Time (Minutes)      
+
+> 100
+> 110
+> 120
+> 130
+> 140
+> Episode Length
+> 030 60 90 120 150
+
+Training Time (Minutes)      
+
+> 100
+> 110
+> 120
+> 130
+> 140
+> 150
+> 030 60 90 120 150
+
+Training Time (Minutes)      
+
+> 100
+> 105
+> 110
+> 115
+> 120
+> 125
+> 130
+> 135
+> 030 60 90 120 150
+
+Training Time (Minutes)      
+
+> 100
+> 110
+> 120
+> 130
+> 140
+> 030 60 90 120 150
+
+Training Time (Minutes)    
+
+> 110
+> 120
+> 130
+> 140
+> 150
+> w/o Cross-Episode Memory w/o Self-Instruction w/o BC Loss Full
+
+Fig. 7. Ablation study results comparing the full AllDayNav model with ablation variants across three key metrics: Success Rate (SR), Success weighted by Path Length (SPL), and Episode Length. 
+
+study, supporting the observations from Figure 7. The full All-DayNav model consistently outperforms all ablation variants across all metrics, confirming that the integration of online updates, cross-episode memory, and self-instruction generation is necessary for achieving the best performance. 
+
+D. Generalization and Robustness Analysis 1) Adaptability to Dynamic Environments: A critical re-quirement for real-world deployment is the ability to adapt to environmental changes. To evaluate this capability, we simulate dynamic environments by suddenly changing the scene after the agent has converged in the initial environment. This abrupt change tests the agent’s ability to adapt to envi-14 
+
+TABLE II QUANTITATIVE RESULTS OF ABLATION STUDIES ACROSS FIVE SCENES (S1–S5). E ACH SCENE COLUMN CONTAINS SR, SPL, AND EPISODE LENGTH 
+
+(L EN ). 
+
+Scene S1 Scene S2 Scene S3 Scene S4 Scene S5 Model Variant SR SPL Len SR SPL Len SR SPL Len SR SPL Len SR SPL Len 
+
+w/o Cross-Episode Memory 86.0 45.3 123.5 85.0 48.8 126.4 81.0 42.9 107.7 81.0 42.1 117.9 80.0 45.2 122.3 w/o Self-Instruction 91.0 50.2 120.0 87.0 53.6 117.1 88.0 47.2 108.1 92.0 44.8 110.4 91.0 46.0 106.8 w/o BC Loss 87.0 49.1 119.4 89.0 40.0 115.5 87.0 45.3 116.0 88.0 49.5 119.4 84.0 52.0 107.1 
+
+AllDayNav (Full) 99.0 57.0 102.3 96.0 56.4 103.6 96.0 58.7 100.5 96.0 58.8 97.3 99.0 58.7 108.8 0 50 100 150 200 250 300               
+
+> Training Time (Minutes)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Success Rate (%)
+> 050 100 150 200 250 300
+> Training Time (Minutes)
+> 0
+> 20
+> 40
+> 60
+> SPL (%)
+> 050 100 150 200 250 300
+> Training Time (Minutes)
+> 100
+> 150
+> 200
+> 250
+> 300
+> Episode Length
+> Dynamic Scene Large Scene Complex Ambiguous
+
+Fig. 8. Online learning performance on challenging scenarios. The figure shows the Exponential Moving Average (EMA) of Success Rate, SPL, and Episode Length during autonomous exploration for three challenging task categories: Dynamic Scene Navigation (left), Large Scene Navigation (middle), and Complex Ambiguous Instructions (right). 
+
+ronmental shifts. Figure 8 (left) shows that the performance drops sharply immediately after the scene change, but then rapidly recov-ers and converges again through continued exploration. This demonstrates the model’s strong adaptability to dynamic envi-ronments. The continuous online update mechanism enables AllDayNav to quickly adapt to environmental changes by updating its memory database with new observations and refining its policy accordingly. In contrast, the ablation variant without cross-episode memory (w/o Cross-Episode Memory) shows persistent performance degradation and fails to recover, highlighting the critical role of continuous learning in handling dynamic environments. This experiment validates that AllDay-Nav’s online update mechanism enables the system to adapt to environmental changes in real-time, a crucial capability for practical deployment. 
+
+2) Generalization to Challenging Scenarios: To further assess AllDayNav’s generalization capabilities, we evaluate performance on two additional challenging task categories. First, we validate the model on Large Scene Navigation using an ultra-large scene from the MP3D dataset. The learning curve shows that convergence in large scenes is slower and requires longer training time compared to standard scenes. Second, for Complex Ambiguous Instructions , the ambiguity leads to more random object retrieval, which to some extent affects training efficiency, resulting in slower convergence. Figure 8 (middle and right) visualizes the online learning dynamics for large scene navigation and complex ambiguous instructions, showing how AllDayNav progressively adapts and improves through autonomous exploration. The curves demonstrate that AllDayNav maintains stable learning trajec-tories even under these challenging conditions, with Success Rate steadily increasing and Episode Length decreasing over 
+
+TABLE III ONLINE PERFORMANCE EVOLUTION ON CHALLENGING SCENARIOS . W EREPORT THE EXPONENTIAL MOVING AVERAGE (EMA) OF SUCCESS RATE 
+
+(SR) AND EPISODE LENGTH (L EN ) DURING AUTONOMOUS EXPLORATION .                                  
+
+> Dynamic Large Complex Scene Scene Ambiguous Learning Stage SR Len SR Len SR Len
+> Early Stage 71.2 125.1 69.5 145.3 72.8 149.3 Mid Stage (Pre-change) 98.9 83.2 73.6 137.2 82.3 145.4 Scene Change / Late 68.5 122.4 ----
+> Final Stage 96.4 82.9 74.7 135.5 83.8 127.5
+
+time. Table III presents the final quantitative performance com-parison after convergence, including all three challenging task categories (dynamic scene, large scene, and complex ambigu-ous instructions). AllDayNav demonstrates superior perfor-mance across all challenging task categories. In large-scale scenes, the accumulated spatial knowledge in the memory database allows the agent to plan efficient multi-step paths and maintain coherent lifelong strategies. For complex ambiguous instructions, the rich semantic understanding provided by the vision-language model, combined with diverse training signals from self-instruction generation, enables effective handling of semantically challenging instructions. 
+
+E. Internal Mechanism Analysis 1) Exploration Visualization and Retrieval Analysis: To vi-sualize the autonomous exploration process, Figure 9 presents the exploration heatmaps in Scene S1 across four distinct stages: initial, early, late, and final. These heatmaps depict the frequency of the robot’s presence at different locations on the 15 Time & Coverage Evolution    
+
+> Exploration: 35% Exploration: 75% Exploration: 100% Exploration: 55%
+> Exploration Process
+
+Fig. 9. Visualization of the exploration process in Scene S1 using trajectory heatmaps. The four subplots correspond to the initial, early, late, and final stages of exploration. 0 25 50 75 100 125 150        
+
+> Training Time (Minutes)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Success Rate (%)
+> 025 50 75 100 125 150
+> Training Time (Minutes)
+> 0
+> 20
+> 40
+> 60
+> SPL (%)
+> Standard Success Rate Retrieval-aware Success Rate
+
+Fig. 10. Retrieval accuracy analysis during online exploration in Scene S1. The figure compares the standard online success rate (solid line) with the retrieval-aware success rate (dashed line) where success requires both accurate retrieval (human-verified) and goal achievement. 
+
+top-down map, illustrating the progression of spatial coverage over time. As shown in Figure 9, the exploration begins with coverage confined to a local area around the starting point. During the early and late stages, the robot progressively pushes its exploration boundaries to visit previously unseen regions. By the final stage, the heatmap indicates comprehensive coverage of the entire environment. The heatmaps demonstrate how the robot’s exploration coverage expands from a local region to the entire environment, validating the effectiveness of the autonomous exploration strategy. This gradual expansion confirms that AllDayNav successfully transitions from local exploration to global scene understanding, demonstrating the system’s capability to autonomously explore and map complex indoor environments without human supervision. 
+
+Quantitative Retrieval Accuracy Analysis: To quanti-tatively assess the retrieval quality, we conduct a human evaluation study where annotators manually judge whether the retrieved goal images correctly match the given instruc-tions. Figure 10 compares two online success rate curves during autonomous exploration: (1) the standard success rate that considers an episode successful if the agent reaches the retrieved goal image, and (2) the retrieval-aware success rate that requires both accurate retrieval (human-verified) and successful navigation to count as success. The results show that the retrieval-aware success rate curve is only slightly lower than the standard success rate curve, with Trajectory Images     
+
+> Camera
+> LiDAR-L1
+> Portable Wi-Fi
+> Robot Real-world Environments
+> Server
+> 5G upload &
+> download
+> His. Image Dataset Rollouts Dataset RL Training
+
+Fig. 11. Real-world experimental setup. The Unitree Go2 platform is augmented with a high-FOV RGB camera, an LiDAR-L1 scanner for obstacle avoidance, and a 5G communication module. The deployment architecture shows that sensor data (RGB, LiDAR) is streamed via the 5G module to the remote H100 server running AllDayNav, while a web server relays control commands back to the real-world environments. TABLE IV MEMORY DATABASE SIZE EVOLUTION OVER EXPLORATION STAGES IN 
+
+SCENE S1. 
+
+Stage Initial Early Mid Late Final Memory Size 0 23 39 42 44 
+
+a consistent small gap throughout the exploration process. The small gap between the two curves demonstrates that the mul-timodal memory retrieval mechanism achieves high accuracy, though not perfect, validating the effectiveness of the vision-language understanding and semantic matching components. This small gap indicates that the vast majority of retrievals are semantically correct, demonstrating the high accuracy of the multimodal memory retrieval mechanism. The fact that the gap is non-zero reflects realistic limitations in vision-language understanding for highly ambiguous instructions, but the overall high alignment confirms that retrieval errors are not a primary bottleneck in the system’s performance. This analysis validates that AllDayNav’s retrieval component effectively bridges natural language instructions to visual goal representations, supporting the end-to-end navigation perfor-mance reported in previous sections. 
+
+2) Memory Growth Analysis: To demonstrate the knowl-edge accumulation process, Table IV reports the growth of the memory database size over different exploration stages in Scene S1. As the memory database grows through autonomous explo-ration, the agent gains access to a richer set of semantic loca-tions and spatial relationships. This continuous accumulation of knowledge enables more accurate instruction understanding and target retrieval, serving as the foundation for the system’s lifelong learning capability. 
+
+F. Real-World Experiments 
+
+We deploy AllDayNav in three real-world environments (laboratory, living room, and home) using a Unitree Go2 quadruped. We detail the concrete hardware and system in-tegration that enable fully autonomous operation. 16 60                                    
+
+> 80
+> Success Rate (%)  Lab
+> 60
+> 80
+> Living Room
+> 60
+> 80
+> Home
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 100
+> 150
+> Length
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 100
+> 150
+> 200
+> 030 60 90 120 150
+> Training Time (Minutes)
+> 150
+> 200
+> Fig. 12. Real-world lifelong learning performance across three real-world environments. Rows correspond to Success Rate and Episode Length; columns correspond to the three environments. Each subplot shows the performance evolution of AllDayNav from initialization to convergence. 0
+> 50
+> 100
+> Success Rate (%)  Lab
+> 0
+> 50
+> 100
+> Living Room
+> 0
+> 50
+> Home
+> 025 50 75 100 125 150
+> Training Time (Minutes)
+> 100
+> 200
+> 300
+> Length
+> 025 50 75 100 125 150
+> Training Time (Minutes)
+> 100
+> 200
+> 300
+> 025 50 75 100 125 150
+> Training Time (Minutes)
+> 100
+> 200
+> 300
+> Fig. 13. Real-world online exploration performance using EMA of Success Rate and Episode Length during autonomous deployment. These metrics capture real-time learning behavior in each physical environment.
+
+Robot Hardware and System Architecture: Figure 11 illustrates the experimental setup, comprising the hardware platform and the deployment architecture. We attach a forward-facing RGB camera (height 0.6 m, 120° FOV) whose images are undistorted before being fed to the VLA policy, a 5G communication module that streams data to the remote server with low latency, and an LiDAR-L1 unit that supplies dense depth signals for obstacle avoidance and safe navigation. These components collectively allow the robot to perceive cluttered indoor spaces while maintaining reliable connectivity during long deployments. Regarding the system architecture, sensor streams are trans-mitted through the 5G module to a remote H100 server that hosts AllDayNav’s memory and policy learning stack. A lightweight web server bridges the robot and the remote compute, forwarding high-level actions back to the Unitree controller while logging trajectories in the real-world environ-ment. This architecture mirrors the simulation pipeline, en-abling consistent lifelong learning behaviors in physical spaces without any additional model adaptation. The deployment demonstrates the complete autonomous pipeline: from system initialization, through autonomous exploration and memory database construction, to responding to user instructions. 
+
+Real-World Learning and Quantitative Performance: 
+
+Figure 12 reports the real-world lifelong learning curves, tracking the agent’s progress from initialization, while Table V summarizes the performance evolution across all environ-ments. We visualize Success Rate and Episode Length across three physical environments using the same layout as the simulation plots. AllDayNav starts close to the pretrained performance level and steadily improves toward high success rates while reducing episode length, demonstrating that the self-learning pipeline remains effective despite network latency, control inaccuracies, and other sim-to-real gaps. 
+
+Online Exploration Performance: Figure 13 shows the Exponential Moving Average (EMA) of Success Rate and Episode Length during real-world exploration. These curves highlight AllDayNav’s ability to maintain stable performance while continuously updating its policy on-device. The EMA smoothing emphasizes the trend that AllDayNav improves over time, successfully adapting to the physical environment through continuous learning. Table V further shows that AllDayNav achieves consistently high Success Rate across all environments when evaluated on the fixed set of 100 held-out instructions, indicating robust generalization in the physical world. 
+
+Qualitative Results: Figure 14 visualizes successful navi-gation cases, showing both a simulation trajectory and a real-world experiment. These demonstrations illustrate the robot’s ability to: (1) autonomously explore and build memory of new environments, (2) understand natural language instructions from users, (3) retrieve relevant target locations from its mem-ory, and (4) execute successful navigation trajectories. The 17                                                                                     
+
+> TABLE V REAL -W ORLD NAVIGATION PERFORMANCE EVOLUTION ACROSS THREE ENVIRONMENTS . W E REPORT BOTH FIXED -SET EVALUATION METRICS (E VAL )
+> AND ONLINE EXPLORATION METRICS (O NLINE EMA) ACROSS THE LABORATORY (R1), L IVING ROOM (R2), AND HOME (R3). T HE TABLE TRACKS THE PERFORMANCE IMPROVEMENT OF ALL DAY NAV FROM INITIALIZATION TO CONVERGENCE .
+> Lab (R1) Living Room (R2) Home (R3) Eval Online Eval Online Eval Online Learning Stage SR Len SR Len SR Len SR Len SR Len SR Len
+> Initialization 58.0 180.1 0.0 300.0 60.0 212.2 0.0 300.0 49.0 231.6 0.0 300.0 Early Stage 76.0 149.8 23.9 253.9 63.0 198.2 24.9 274.1 59.0 159.3 30.5 235.3 Mid Stage 70.0 122.7 64.1 177.8 79.0 147.3 72.6 164.4 73.0 140.1 54.6 213.9
+> Final Stage 96.0 97.1 99.1 108.0 97.0 90.3 98.7 108.4 87.0 117.8 85.6 99.2 Where can we sit to talk
+> and watch a movie together?
+
+Simulator Real-world  
+
+> Fig. 14. Visualization of navigation episodes. The figure displays a navigation trajectory in the simulation environment (left) and a real-world deployment case (right).
+
+figure demonstrates the system’s capability to operate effec-tively in both simulated and physical domains. The qualitative results confirm that AllDayNav operates effectively in real-world settings with realistic sensor noise, lighting variations, and dynamic obstacles. The real-world experiments validate that AllDayNav’s de-sign principles translate effectively from simulation to physical deployment, confirming the system’s potential for practical applications in real-world service robotics scenarios. VI. C ONCLUSION 
+
+This paper introduced AllDayNav, a lifelong self-learning embodied navigation framework that autonomously acquires open-vocabulary navigation skills in initially unknown and dy-namically changing environments without human supervision. By addressing two key limitations of existing vision-language-action models—the lack of persistent multimodal memory and the inability to adapt policies continuously through in-teraction—AllDayNav enables embodied agents to construct stable internal representations from fragmented egocentric observations and to improve their navigation behavior over time. AllDayNav combines a pretrained VLA backbone with dual visual encoders and history compression, a self-evolving mul-timodal memory database with diversity-preserving updates, a self-instruction mechanism that turns accumulated scene knowledge into rich curricula via hybrid memory–internet goal retrieval, and a conservative Q-learning module that enables stable policy optimization from mixed online–offline data. Extensive experiments in simulated and real-world en-vironments show that AllDayNav consistently outperforms strong baselines in terms of success rate, path efficiency, and generalization to complex open-vocabulary instructions, while maintaining robust performance under environmental changes. Deployment on a quadruped robot further demonstrates that the proposed sim-to-real strategy allows the learned policy to transfer effectively to physical platforms with realistic perception and control noise, yielding reliable long-horizon navigation in the wild. Our ablation studies verify that memory persistence, self-instruction, and conservative online updates are all necessary for achieving sustained performance gains, and that their integration produces a synergistic effect that underpins truly autonomous lifelong learning. Nevertheless, AllDayNav still relies on powerful vision-language models and substantial computation, and its exploration behavior is not explicitly constrained for safety-critical settings. Future work will ex-plore more efficient and safety-aware exploration strategies, tighter integration with human feedback, and extensions to multi-agent and multi-task scenarios, pushing embodied agents closer to deployment in complex, open-world service environ-ments. REFERENCES [1] Y. Wu, P. Zhang, M. Gu, J. Zheng, and X. Bai, “Embodied navigation with multi-modal information: A survey from tasks to methodology,”    
+
+> Information Fusion , vol. 112, p. 102532, 2024. [2] P. Anderson, A. Chang, D. S. Chaplot, A. Dosovitskiy, S. Gupta, V. Koltun, J. Kosecka, J. Malik, R. Mottaghi, M. Savva et al. , “On evalu-ation of embodied navigation agents,” arXiv preprint arXiv:1807.06757 ,2018. 18
+
+[3] P. Anderson, Q. Wu, D. Teney, J. Bruce, M. Johnson, N. S¨ underhauf, I. Reid, S. Gould, and A. Van Den Hengel, “Vision-and-language navigation: Interpreting visually-grounded navigation instructions in real environments,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2018, pp. 3674–3683. [4] Y. Qiao, Q. Liu, J. Liu, J. Liu, and Q. Wu, “Llm as copilot for coarse-grained vision-and-language navigation,” in European Conference on Computer Vision . Springer, 2024, pp. 459–476. [5] J. Zhang, K. Wang, R. Xu, G. Zhou, Y. Hong, X. Fang, Q. Wu, Z. Zhang, and H. Wang, “Navid: Video-based vlm plans the next step for vision-and-language navigation,” arXiv preprint arXiv:2402.15852 , 2024. [6] S. Guadarrama, E. Rodner, K. Saenko, and T. Darrell, “Understanding object descriptions in robotics by open-vocabulary object retrieval and detection,” The International Journal of Robotics Research , vol. 35, no. 1-3, pp. 265–280, 2016. [7] S. Guadarrama, E. Rodner, K. Saenko, N. Zhang, R. Farrell, J. Donahue, and T. Darrell, “Open-vocabulary object retrieval.” in Robotics: science and systems , vol. 2, no. 5, 2014, p. 6. [8] N. Yokoyama, R. Ramrakhya, A. Das, D. Batra, and S. Ha, “Hm3d-ovon: A dataset and benchmark for open-vocabulary object goal navigation,” in 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2024, pp. 5543–5550. [9] J. Fan, P. Zheng, and S. Li, “Vision-based holistic scene understanding towards proactive human–robot collaboration,” Robotics and Computer-Integrated Manufacturing , vol. 75, p. 102304, 2022. [10] F.-s. Zhang, D.-y. Ge, J. Song, and W.-j. Xiang, “Outdoor scene understanding of mobile robot via multi-sensor information fusion,” 
+
+Journal of Industrial Information Integration , vol. 30, p. 100392, 2022. [11] G. Humblot-Renaux, L. Marchegiani, T. B. Moeslund, and R. Gade, “Navigation-oriented scene understanding for robotic autonomy: Learn-ing to segment driveability in egocentric images,” IEEE Robotics and Automation Letters , vol. 7, no. 2, pp. 2913–2920, 2022. [12] W. Li, R. Zhang, R. Shao, J. He, and L. Nie, “Cogvla: Cognition-aligned vision-language-action model via instruction-driven routing & sparsification,” arXiv preprint arXiv:2508.21046 , 2025. [13] S.-H. Kim, I.-C. Baek, S.-Y. Lee, G.-H. Hwang, and K.-J. Kim, “Multi-objective instruction-aware representation learning in procedural content generation rl,” arXiv preprint arXiv:2508.09193 , 2025. [14] S. Lee, S. Park, and H. Kim, “Dynscene: Scalable generation of dynamic robotic manipulation scenes for embodied ai,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 12 166– 12 175. [15] S. K. Ramakrishnan, A. Gokaslan, E. Wijmans, O. Maksymets, A. Clegg, J. Turner, E. Undersander, W. Galuba, A. Westbury, A. X. Chang et al. , “Habitat-matterport 3d dataset (hm3d): 1000 large-scale 3d environments for embodied ai,” arXiv preprint arXiv:2109.08238 ,2021. [16] A. Chang, A. Dai, T. Funkhouser, M. Halber, M. Niessner, M. Savva, S. Song, A. Zeng, and Y. Zhang, “Matterport3d: Learning from rgb-d data in indoor environments,” arXiv preprint arXiv:1709.06158 , 2017. [17] F. Xia, A. R. Zamir, Z. He, A. Sax, J. Malik, and S. Savarese, “Gibson env: Real-world perception for embodied agents,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2018, pp. 9068–9079. [18] D. S. Chaplot, D. P. Gandhi, A. Gupta, and R. R. Salakhutdinov, “Object goal navigation using goal-oriented semantic exploration,” Advances in Neural Information Processing Systems , vol. 33, pp. 4247–4258, 2020. [19] A. Pal, Y. Qiu, and H. Christensen, “Learning hierarchical relationships for object-goal navigation,” in Conference on Robot Learning . PMLR, 2021, pp. 517–528. [20] Z. Liu, L. Zhu, B. Shi, Z. Zhang, Y. Lou, S. Yang, H. Xi, S. Cao, Y. Gu, D. Li et al. , “Nvila: Efficient frontier visual language models,” in Pro-ceedings of the Computer Vision and Pattern Recognition Conference ,2025, pp. 4122–4134. [21] Y. Qiao, W. Lyu, H. Wang, Z. Wang, Z. Li, Y. Zhang, M. Tan, and Q. Wu, “Open-nav: Exploring zero-shot vision-and-language navigation in continuous environment with open-source llms,” in 2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2025, pp. 6710–6717. [22] H. Hong, Y. Qiao, S. Wang, J. Liu, and Q. Wu, “General scene adaptation for vision-and-language navigation,” arXiv preprint arXiv:2501.17403 ,2025. [23] Y. Kuang, H. Lin, and M. Jiang, “Openfmnav: Towards open-set zero-shot object navigation via vision-language foundation models,” arXiv preprint arXiv:2402.10670 , 2024. [24] H. Yin, X. Xu, L. Zhao, Z. Wang, J. Zhou, and J. Lu, “Unigoal: Towards universal zero-shot goal-oriented navigation,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 19 057–19 066. [25] K. P. Singh, J. Salvador, L. Weihs, and A. Kembhavi, “Scene graph contrastive learning for embodied navigation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 10 884–10 894. [26] G. Lu, W. Guo, C. Zhang, Y. Zhou, H. Jiang, Z. Gao, Y. Tang, and Z. Wang, “Vla-rl: Towards masterful and general robotic manipulation with scalable reinforcement learning,” arXiv preprint arXiv:2505.18719 ,2025. [27] H. Li, P. Ding, R. Suo, Y. Wang, Z. Ge, D. Zang, K. Yu, M. Sun, H. Zhang, D. Wang et al. , “Vla-rft: Vision-language-action reinforce-ment fine-tuning with verified rewards in world simulators,” arXiv preprint arXiv:2510.00406 , 2025. [28] H. Li, Y. Zuo, J. Yu, Y. Zhang, Z. Yang, K. Zhang, X. Zhu, Y. Zhang, T. Chen, G. Cui et al. , “Simplevla-rl: Scaling vla training via reinforce-ment learning,” arXiv preprint arXiv:2509.09674 , 2025. [29] Y. Guo, J. Zhang, X. Chen, X. Ji, Y.-J. Wang, Y. Hu, and J. Chen, “Improving vision-language-action model with online reinforcement learning,” arXiv preprint arXiv:2501.16664 , 2025. [30] S. M. Kosslyn, G. Ganis, and W. L. Thompson, “Mental imagery: against the nihilistic hypothesis,” Trends in Cognitive Sciences , vol. 7, no. 3, pp. 109–110, 2003. [31] S. M. Kosslyn, T. M. Ball, and B. J. Reiser, “Visual images preserve metric spatial information: evidence from studies of image scanning.” 
+
+Journal of experimental psychology: Human perception and perfor-mance , vol. 4, no. 1, p. 47, 1978. [32] G. Borst and S. M. Kosslyn, “Individual differences in spatial mental imagery,” Quarterly Journal of Experimental Psychology , vol. 63, no. 10, pp. 2031–2050, 2010. [33] M. J. Farah, K. M. Hammond, D. N. Levine, and R. Calvanio, “Visual and spatial mental imagery: Dissociable systems of representation,” 
+
+Cognitive psychology , vol. 20, no. 4, pp. 439–462, 1988. [34] R. Keogh and J. Pearson, “Mental imagery and visual working memory,” 
+
+PloS one , vol. 6, no. 12, p. e29221, 2011. [35] R. Liu, X. Wang, W. Wang, and Y. Yang, “Bird’s-eye-view scene graph for vision-language navigation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 10 968–10 980. [36] Z. Ravichandran, L. Peng, N. Hughes, J. D. Griffith, and L. Carlone, “Hierarchical representations and explicit memory: Learning effective navigation policies on 3d scene graphs using graph neural networks,” in 2022 International Conference on Robotics and Automation (ICRA) .IEEE, 2022, pp. 9272–9279. [37] G. Chi, L. Aolin, and M. Yiyue, “Navigating with spatial intelligence: A survey of scene graph-based object goal navigation,” Wuhan University Journal of Natural Sciences , vol. 30, no. 5, pp. 405–426, 2025. [38] J. Strader, N. Hughes, W. Chen, A. Speranzon, and L. Carlone, “Indoor and outdoor 3d scene graph generation via language-enabled spatial ontologies,” IEEE Robotics and Automation Letters , vol. 9, no. 6, pp. 4886–4893, 2024. [39] J. Loo, Z. Wu, and D. Hsu, “Open scene graphs for open-world object-goal navigation,” The International Journal of Robotics Research , p. 02783649251369549, 2025. [40] H. Yin, X. Xu, Z. Wu, J. Zhou, and J. Lu, “Sg-nav: Online 3d scene graph prompting for llm-based zero-shot object navigation,” Advances in neural information processing systems , vol. 37, pp. 5285–5307, 2024. [41] A. Majumdar, G. Aggarwal, B. Devnani, J. Hoffman, and D. Batra, “Zson: Zero-shot object-goal navigation using multimodal goal embed-dings,” Advances in Neural Information Processing Systems , vol. 35, pp. 32 340–32 352, 2022. [42] K. Kotar, A. Walsman, and R. Mottaghi, “Entl: Embodied navigation trajectory learner,” in Proceedings of the IEEE/CVF International Con-ference on Computer Vision , 2023, pp. 10 863–10 872. [43] G. Monaci, R. S. Rezende, R. Deffayet, G. Csurka, G. Bono, H. D´ ejean, S. Clinchant, and C. Wolf, “Rana: Retrieval-augmented navigation,” 
+
+arXiv preprint arXiv:2504.03524 , 2025. [44] M. Glocker, P. H¨ onig, M. Hirschmanner, and M. Vincze, “Llm-empowered embodied agent for memory-augmented task planning in household robotics,” arXiv preprint arXiv:2504.21716 , 2025. [45] A. Anwar, J. Welsh, J. Biswas, S. Pouya, and Y. Chang, “Remembr: Building and reasoning over long-horizon spatio-temporal memory for robot navigation,” in 2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2025, pp. 2838–2845. [46] Y. Mao, H. Ye, W. Dong, C. Zhang, and H. Zhang, “Meta-memory: Retrieving and integrating semantic-spatial memories for robot spatial reasoning,” arXiv preprint arXiv:2509.20754 , 2025. 19 
+
+[47] W.-L. Chiang, Z. Li, Z. Lin, Y. Sheng, Z. Wu, H. Zhang, L. Zheng, S. Zhuang, Y. Zhuang, J. E. Gonzalez et al. , “Vicuna: An open-source chatbot impressing gpt-4 with 90%* chatgpt quality,” See https://vicuna. lmsys. org (accessed 14 April 2023) , vol. 2, no. 3, p. 6, 2023. [48] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv et al. , “Qwen3 technical report,” arXiv preprint arXiv:2505.09388 , 2025. [49] Y. Zhu, Z. Wen, X. Li, X. Shi, X. Wu, H. Dong, and J. Chen, “Chatnav: Leveraging llm to zero-shot semantic reasoning in object navigation,” 
+
+IEEE Transactions on Circuits and Systems for Video Technology , 2024. [50] J. Chen, B. Lin, R. Xu, Z. Chai, X. Liang, and K.-Y. Wong, “Mapgpt: Map-guided prompting with adaptive path planning for vision-and-language navigation,” in Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) ,2024, pp. 9796–9810. [51] Y. Long, W. Cai, H. Wang, G. Zhan, and H. Dong, “Instructnav: Zero-shot system for generic instruction navigation in unexplored environ-ment,” arXiv preprint arXiv:2406.04882 , 2024. [52] G. Zhou, Y. Hong, and Q. Wu, “Navgpt: Explicit reasoning in vision-and-language navigation with large language models,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 7, 2024, pp. 7641–7649. [53] B. Lin, Y. Nie, Z. Wei, J. Chen, S. Ma, J. Han, H. Xu, X. Chang, and X. Liang, “Navcot: Boosting llm-based vision-and-language navigation via learning disentangled reasoning,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [54] Z. Xu, H.-T. L. Chiang, Z. Fu, M. G. Jacob, T. Zhang, T.-W. E. Lee, W. Yu, C. Schenck, D. Rendleman, D. Shah et al. , “Mobility vla: Multimodal instruction navigation with long-context vlms and topological graphs,” in 8th Annual Conference on Robot Learning , 2024. [55] N. Yokoyama and S. Ha, “Film-nav: Efficient and generalizable naviga-tion via vlm fine-tuning,” arXiv preprint arXiv:2509.16445 , 2025. [56] J. Zhang, K. Wang, S. Wang, M. Li, H. Liu, S. Wei, Z. Wang, Z. Zhang, and H. Wang, “Uni-navid: A video-based vision-language-action model for unifying embodied navigation tasks,” arXiv preprint arXiv:2412.06224 , 2024. [57] A. Bar, G. Zhou, D. Tran, T. Darrell, and Y. LeCun, “Navigation world models,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 15 791–15 801. [58] Y. Chen, S. Tian, S. Liu, Y. Zhou, H. Li, and D. Zhao, “Conrft: A reinforced fine-tuning method for vla models via consistency policy,” 
+
+arXiv preprint arXiv:2502.05450 , 2025. [59] J. Luo, Z. Hu, C. Xu, Y. L. Tan, J. Berg, A. Sharma, S. Schaal, C. Finn, A. Gupta, and S. Levine, “Serl: A software suite for sample-efficient robotic reinforcement learning,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2024, pp. 16 961–16 969. [60] H. Zhu, J. Yu, A. Gupta, D. Shah, K. Hartikainen, A. Singh, V. Kumar, and S. Levine, “The ingredients of real-world robotic reinforcement learning,” 2020. [Online]. Available: https://arxiv.org/abs/2004.12570 [61] J. Luo, P. Dong, Y. Zhai, Y. Ma, and S. Levine, “Rlif: Inter-active imitation learning as reinforcement learning,” arXiv preprint arXiv:2311.12996 , 2023. [62] C. Xu, Q. Li, J. Luo, and S. Levine, “Rldg: Robotic generalist policy dis-tillation via reinforcement learning,” arXiv preprint arXiv:2412.09858 ,2024. [63] K.-H. Zeng, Z. Zhang, K. Ehsani, R. Hendrix, J. Salvador, A. Herrasti, R. Girshick, A. Kembhavi, and L. Weihs, “Poliformer: Scaling on-policy rl with transformers results in masterful navigators,” arXiv preprint arXiv:2406.20083 , 2024. [64] X. Zhai, B. Mustafa, A. Kolesnikov, and L. Beyer, “Sigmoid loss for language image pre-training,” 2023. [65] M. Oquab, T. Darcet, T. Moutakanni, H. V. Vo, M. Szafraniec, V. Khali-dov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby, R. Howes, P.-Y. Huang, H. Xu, V. Sharma, S.-W. Li, W. Galuba, M. Rabbat, M. Assran, N. Ballas, G. Synnaeve, I. Misra, H. Jegou, J. Mairal, P. Labatut, A. Joulin, and P. Bojanowski, “Dinov2: Learning robust visual features without supervision,” 2023. [66] Z. Lan, L. Niu, F. Meng, J. Zhou, and J. Su, “Llave: Large language and vision embedding models with hardness-weighted contrastive learning,” 
+
+arXiv preprint arXiv:2503.04812 , 2025. [67] M. Savva, A. Kadian, O. Maksymets, Y. Zhao, E. Wijmans, B. Jain, J. Straub, J. Liu, V. Koltun, J. Malik et al. , “Habitat: A platform for embodied ai research,” in Proceedings of the IEEE/CVF international conference on computer vision , 2019, pp. 9339–9347.

@@ -1,0 +1,497 @@
+Title: HARBOR: A Harness Framework for Agentic Robot Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2606.08610v1
+
+Published Time: Tue, 09 Jun 2026 01:33:27 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# HARBOR: A Harness Framework for Agentic Robot Reinforcement Learning 
+
+Zechu Li 1,7 Yufeng Jin 1,2 Xiaoyang Liu 3 Puze Liu 4,5∗ Vignesh Prasad 1
+
+Carlo D’Eramo 6,7 Georgia Chalvatzaki 1,7
+
+TU Darmstadt 1 Honda Research Institute Europe 2 Columbia University 3
+
+Tongji University 4 Shanghai Research Institute for Intelligent Autonomous Systems 5
+
+University of W¨ urzburg 6 Hessian.AI 7
+
+Abstract: Reinforcement learning (RL) has become a powerful paradigm for robot learning, particularly in sim-to-real settings, but its broader adoption re-mains limited by the engineering pipeline surrounding the algorithms. Building tasks, shaping rewards, and tuning hyperparameters require substantial expert ef-fort, making RL workflows costly and difficult to scale. We introduce HARBOR ,an agentic framework that frames robot RL automation as a harness-engineering problem: given a simulator codebase and a task specification, it automates the workflow from environment setup to policy training in simulation. HARBOR decomposes such high-level objectives into bounded stages executed by special-ized agents through standardized commands, persistent artifacts, executable gates, and reusable knowledge, and scales iteration via decentralized parallel trials and experience learning across runs. We evaluate HARBOR across 6 benchmarks and 16 tasks in total, spanning manipulation, locomotion, and bimanual dexterous control. We demonstrate that HARBOR automates the simulation RL workflow end-to-end, designs rewards, tunes algorithms to match or improve over default configurations, and reduces engineering effort at practical token and wall-clock cost; the resulting policies can also be transferred to real robots. 
+
+Keywords: Reinforcement Learning, Large Language Models, Agentic Systems 
+
+1 Introduction 
+
+Reinforcement learning (RL) [1, 2] has become a dominant paradigm for robot learning, partic-ularly in sim-to-real settings where policies are trained in simulation and transferred to physical robots [3, 4]. The standard recipe is well established: build a digital twin, design rewards, ran-domize dynamics, train and deploy. While this pipeline has enabled impressive results from legged locomotion [5, 6] to dexterous manipulation [7, 8, 9], its broader adoption is increasingly limited not by the RL algorithms themselves, but by the engineering pipeline around them. Practitioners must manually construct tasks, shape rewards, calibrate domain randomization, and tune hyperpa-rameters, often spending days to weeks on a single new setup. These specialized, labor-intensive steps make RL workflows costly and difficult to scale, limiting their effectiveness for both rapid single-task deployment and large-scale generalist robot learning. Automating individual steps of this pipeline has been a productive line of research. Prior work has explored language-model-guided reward synthesis [10, 11], automated domain randomization [12, 13], and AutoRL methods for tuning algorithmic hyperparameters [14, 15, 16, 17]. However, these systems typically target isolated stages rather than the full RL workflow. Practitioners must still configure the simulator, connect generated rewards to training code, launch and monitor sweeps on compute clusters, inspect rollouts, and transfer successful design choices across tasks by hand. As a result, each automation module reduces effort locally, but the surrounding integration burden is repeatedly paid across simulators, tasks, and algorithms. 
+
+> ∗
+
+Corresponding author 
+
+> arXiv:2606.08610v1 [cs.RO] 7 Jun 2026 Flexible Robot RL Composition
+
+1  
+
+> IsaacLab
+> MuJoCo
+> Genesis
+> Sapien
+> Simulators Manipulation
+> Locomotion
+> Bimanual
+> Tasks PPO SAC TD3 Custom Algorithms
+> simulators tasks algorithms
+> Harness Abstraction for RL
+
+2
+
+> End-to-end Automation Pipeline
+
+3         
+
+> Human Steering Knowledge Existing Codebase xxDomain Randomization
+> Dependency Reward Engineering Task Setup Training Deployment
+> Update Experiences Self-improvement Update Templates Update Scripts
+> Orchestration
+> Execution
+> State & Validation Knowledge Templates
+> Agents Commands Gates Artifacts Knowledge
+> References Scripts Experiences
+> LLM Coding Agents
+
+Figure 1: Overview of HARBOR. (1) HARBOR supports arbitrary simulator × task × algorithm combinations across diverse benchmarks. (2) HARBOR treats robot RL automation as an RL har-ness that coordinates specialized agents, executable commands, mutable artifacts, verifiable gates, and reusable knowledge. (3) A natural-language request flows from dependency setup to training, with a self-improvement loop updating reusable knowledge across runs. Large language model (LLM) agents offer a promising substrate for automating the RL engineering pipeline, but long-horizon autonomy requires more than a capable model. Failures often stem from underspecified executions: agents lack the tools, abstractions, and feedback needed to reliably pur-sue high-level goals [18, 19, 20]. Harness engineering addresses this by shifting human effort from manually executing each step to designing structured, agent-readable workflows with verifiable in-terfaces [21, 22]. RL for robotics (robot RL) is particularly well suited to this view: the Markov Decision Process (MDP) [1] exposes stable interfaces, namely, state, action, reward, dynamics, and termination, while rollout behaviors, reward signals, and training curves provide executable feed-back, making robot RL automation a natural fit for harness engineering. To this end, we introduce HARBOR , a harness framework for agentic robot reinforcement learn-ing. Given a simulator codebase and a task specification, a centralized main agent decomposes the request into bounded stages, from dependency setup to policy training, and dispatches specialized agents to each. The agents invoke standardized commands grounded in built-in templates, scripts, and prior experience, and advance only after executable gates verify outputs, preventing errors from propagating downstream. Iterative stages, such as reward and algorithm tuning, run as parallel tri-als whose outcomes are distilled into reusable experience that later agents can retrieve to improve efficiency and reliability. We evaluate HARBOR across 6 benchmarks and 16 tasks spanning manip-ulation, locomotion, and bimanual dexterous control, showing that it automates the simulation RL workflow, matches or improves over default configurations through autonomous tuning, and reduces engineering effort at practical cost, with the resulting policies transferring to real robots. Our contributions are threefold. First, we frame robot RL automation as a harness-engineering prob-lem and identify the RL-specific interfaces and feedback signals that make long-horizon automation feasible. Second, we instantiate this view in HARBOR, a system that turns natural-language robot-learning objectives into automated and reliable RL workflows through agents, commands, artifacts, gates, and knowledge. Third, we implement HARBOR as a documented and accessible LLM-agent plugin that lowers the barrier to robot RL: its inspectable artifacts and gated checkpoints let practi-tioners audit, step in, and adapt the pipeline beyond expert use. We defer a full discussion of related work to Appx. A and background to Appx. B. 22 Robot RL Automation as a Harness Engineering Problem 
+
+Robot RL automation is not simply a code-generation problem, but the challenge of providing a reliable workflow that can make decisions, preserve state, and verify progress over a long horizon. Robot RL pipelines are tightly coupled: task design affects rewards, rewards shape learning, and de-ployment failures may require revisiting earlier stages. This coupling makes unconstrained agentic automation brittle, and it also exposes structure that a harness can exploit. 
+
+From MDPs to Robot RL Workflows Reinforcement learning is typically formalized as a Markov decision process (MDP) [1, 2]: 
+
+M = ( S, A, P, r, ρ 0, γ, T ),
+
+where S and A denote the state and action spaces, P is the transition dynamics, r is the reward function, ρ0 is the initial-state distribution, γ is the discount factor, and T specifies termination con-ditions. While compact, this mathematical formulation hides the engineering complexity required to instantiate an RL problem in robotics. The state and action spaces must match simulator ob-servations and robot control interfaces, while transition dynamics are determined by assets, control frequency, and physical parameters. Beyond the MDP itself, a complete robot RL workflow also requires algorithm integration, configuration, logging, evaluation, and, in sim-to-real settings, de-ployment interfaces. Robot RL is therefore not only policy optimization over a fixed MDP, but also the construction, validation, and iterative refinement of the MDP and its surrounding pipeline. 
+
+Harnesses for Long-Horizon Agentic Automation A harness is the structured execution envi-ronment around an LLM agent: it defines how the agent accesses tools, preserves artifacts, observes feedback, and verifies progress [18, 21]. This structure is crucial for long-horizon autonomy, where success depends both on model capability and on how open-ended objectives are decomposed, exe-cuted, and checked. Harness engineering therefore shifts effort from manually executing each step to designing agent-readable workflows with reusable actions and executable validations. Robot RL automation is particularly amenable to such a harness. Its MDP formulation exposes rela-tively stable interfaces, while simulators and training runs provide executable feedback for checking intermediate progress. Interface checks can catch invalid resets, observations, and actions; diagnos-tic states and short training runs can expose reward or optimization failures; and rendered rollouts can reveal behavioral errors that scalar returns may hide. These checks are not complete guarantees, but provide a practical substrate for agents to validate artifacts and recover from failures. 
+
+Harness Abstractions for RL Motivated by these properties, HARBOR specializes a general agentic harness pattern to robot RL automation, as shown in Fig. 1(2): 
+
+HRL = ( HA, C, M, G, K),
+
+where HA denotes agents, C commands, M mutable artifacts, G verifiable gates, and K reusable knowledge. Knowledge and mutable artifacts provide context for an agent; the agent invokes com-mands that transform artifacts; gates validate the resulting workflow state using executable RL evi-dence; and passed or failed outcomes are summarized back into knowledge. In this sense, HARBOR does not guarantee semantic correctness of the final policy. Instead, it turns many common RL en-gineering failures into observable gate failures before they propagate downstream. • Agents (HA) are context-isolated subprocesses assigned to bounded stages of the RL workflow. Each agent operates on stage-local artifacts and retrieved knowledge, performs the local imple-mentation, then returns a compact summary to the main controller. • Commands (C) are reproducible operations exposed to agents, ranging from primitive calls such as 
+
+rl-sweep to composed loops such as tune-reward . The same command surface can be invoked by different agents with different artifacts and gates. • Mutable Artifacts (M) externalize workflow state into persistent, inspectable objects. They serve as the communication substrate between agents and commands, reducing reliance on tran-sient LLM context. 3• Verifiable Gates (G) are executable checks that determine whether a stage can advance. They include both hard interface checks and softer semantic checks, such as import and rollout. • Reusable Knowledge (K) includes templates, references, scripts, human heuristics, and ac-cumulated experience from previous runs. It constrains generation, encodes simulator- and algorithm-specific contracts, and gives later agents access to the outcomes of earlier attempts. 
+
+3 HARBOR: An Agentic RL Harness Framework for Robot Learning 
+
+HARBOR instantiates the RL harness as an artifact-centric execution graph for robot learning. Given a user request, HARBOR decomposes the request into bounded stages. Each stage is handled by a specialized agent that invokes standardized commands, produces persistent artifacts, and advances only after executable gates validate its outputs. Tab. 1 summarizes how the abstract harness tuple is instantiated as concrete workflow stages; full descriptions are provided in Appx. C. 
+
+System Overview and Design Choices HARBOR supports the full lifecycle of robot RL devel-opment in simulation, including dependency setup, task construction, reward design, domain ran-domization, algorithm integration, and hyperparameter tuning. Users may specify any subset of the simulator, task, algorithm, training budget, or tuning objective; HARBOR infers missing choices from framework experience and codebase templates. It then materializes the workflow as runnable code, configuration files, validation logs, checkpoints, videos, metrics, and tuning summaries. HARBOR makes three design choices that distinguish it from generic LLM coding agents. First, the workflow is artifact-centric: persistent files are the communication substrate, capturing MDP state and tuning history that persists across iterations and reducing reliance on transient LLM context. Second, gates operate at stage granularity and leverage RL’s executable signals to validate each stage. Third, execution is centralized in planning but decentralized in execution, allowing parallel trials for RL tuning without main-agent context bloat and improving the time-efficiency.                         
+
+> Stage Agent / Commands Artifacts Gates
+> Dependency setup Dependency-generator; probe-env install log, env file import, device Task generation Task-generator; probe-task ,render task spec, env code reset/step, obs./act. shape, render Reward generation Reward-generator; tune-reward ,
+> rl-run ,rl-sweep ,rl-render
+> reward code, iteration log diagnostics, rollout, video RL integration Integration-generator; add-trick ,
+> add-log ,rl-run
+> train script, config short train, logging, checkpoint Domain randomization DR-generator; tune-dr ,rl-run ,
+> rl-sweep
+> DR ranges, transfer report env check, render RL tuning rl-tune ,rl-sweep ,rl-render tuned config, curves rollout, cluster sample job
+
+Table 1: HARBOR component inventory. Each stage is implemented by an agent-command pair, recorded as artifacts, and validated by executable gates. 
+
+Gate-Checked Execution Protocol HARBOR executes each stage with the same protocol. The main agent retrieves relevant knowledge and current artifacts, spawns a stage-local agent with bounded context, and asks it to edit or create artifacts through standardized commands. The com-mand output is then evaluated by gates. If the gate passes, HARBOR commits the artifact and writes logs, metrics, videos, decisions, and failure summaries back into reusable knowledge. If a gate fails, HARBOR returns the failure summary (failed check, error message, observed values) to the stage agent for repair; after a fixed retry budget is exhausted, the stage is marked unresolved and the main agent asks the user for intervention. For example, task-generator decomposes the MDP into ordered sub-stages, including scene con-struction, initialization and termination, action and observation design. Each sub-stage exposes gates before the next component is generated. For a delta end-effector pose controller, the action 4Cluster Mode: Parallel Reward Agents      
+
+> Decentralized Reward Agent
+> Modify rewards Analyze results Render ( /rl-render )Train ( /rl-run )self-monitoring Learning curves Reward stats Rollout behaviors Iterative Tuning Loop
+> Centralized Main Agent
+> /reward-tune
+> Initialize/resume tuning files, e.g., history.md Final summary and plot Aggregate feedback Spawn reward agents Dispatch reward agents (new configs, objs, constraints) Aggregate feedback (analysis.md, rollout.mp4, metrics.json, reward_spec.json)
+> User Request
+> Tune the reward of
+> StackCube task in
+> IsaacLab , I want three cubes stack. Task description:
+> Experience Memory
+> User-provided heuristics Past experiences Existing examples Dispatch / control Structured feedback
+> #2 #N #1
+
+Figure 2: Centralized-control and decentralized-execution in reward tuning. Parallel agents run isolated trials and return structured feedback for aggregation, selection, and experience update. gate checks whether random actions produce the expected target-pose commands and the com-manded target pose matches the actual pose, revealing controller, dynamics, or inverse-kinematics errors. These conservative checks do not prove semantic correctness, but they verify local interface behavior and prevent low-level task bugs from propagating into later stages. 
+
+Parallel Tuning with Experience Learning Reward design, domain randomization, and algo-rithm tuning are iterative processes that often require trying several alternatives, understanding why some trials fail, and using that evidence to decide the next change. HARBOR supports this process with centralized control and decentralized execution, as illustrated for reward design in Fig. 2. The main agent keeps the tuning history, which records each proposed modification and its resulting outcomes, and dispatches parallel sub-agents that each operate in isolated trial directories. Full roll-out videos, reward code, and logs stay in those directories, so trials can run asynchronously, avoid overwriting shared artifacts, and be scheduled on a compute cluster. After trials finish, HARBOR aggregates and analyzes their outcomes, then decides what intervention to try next. These traces also become the basis for experience learning. Rather than treating each trial as dis-posable context, after each tuning round, the main agent distills recurring patterns across trials into short bullet points, such as effective reward terms, unstable parameter ranges, or common failure modes. Before each new tuning round, HARBOR retrieves stage-matched experience for the current project, filtered by simulator, task, or algorithm tags. After the whole stage finishes, these points are appended back to HARBOR’s experience memory, allowing later agents to reuse successful patterns and avoid known failure modes across runs. 
+
+Plugin Interface and Controllability HARBOR is packaged as an LLM-agent plugin whose commands, artifacts, and gates are written in structured natural language rather than opaque code, so users can see what every stage does and what each gate checks, and edit these definitions to cus-tomize the workflow. Since every stage pauses at a gate and writes persistent artifacts, users can audit outputs, step in to correct a stage, and resume from the last gate-passing state. Users can also invoke individual agents or commands directly to build custom workflows. 
+
+4 Experiments 
+
+We evaluate HARBOR along three axes: (i) we demonstrate that HARBOR can support an end-to-end simulation workflow with real-world validation in Sec. 4.1; (ii) we evaluate its ability to integrate and tune RL algorithms across diverse benchmarks in Sec. 4.2; (iii) we provide ablations and efficiency analyses that quantify the effect of key design choices, wall-clock time, and token cost. We comprehensively evaluate HARBOR across 6 benchmarks, each with a different simulation backend, including IsaacLab [23], Bi-DexHands(IsaacGym) [24, 25], ManiSkill(Sapien) [26, 27], 5Stack-Cube Insert-Drawer Lift-Box Dex-Grasp Figure 3: End-to-end policy learning across four tasks and four simulators: IsaacLab, ManiSkill, Genesis, and MJLab. Simulator snapshots on top and the corresponding real-world setup below. Genesis [28], MJLab(Warp) [29], and Loco-Mujoco(MJX) [30, 31]. This diverse evaluation suite is designed to stress-test the generality and flexibility of HARBOR across heterogeneous robot-learning settings. For all simulation experiments, we train with five random seeds and evaluate each seed using 4,096 rollouts, reporting success rates or cumulative returns as mean and standard error. Additional learning curves are provided in Appx. D.3. For real-world experiments, each policy is evaluated over 10 trials; the hardware setup is described in Appx. D.1. 
+
+4.1 Automated End-to-End Simulation Pipeline and Real-world Validation Automated End-to-End Simulation Pipeline We first evaluate whether HARBOR can auto-mate robot-RL workflows in simulation across different simulators and tasks. We select four testbeds, IsaacLab, ManiSkill, Genesis, and MJLab, and implement four manipulation tasks in each: 
+
+stack-cube , insert-drawer , lift-box , and dex-grasping . These tasks cover long-horizon composition, articulated-object interaction, bimanual coordination, and dexterous control. Given a task specification containing scene assets, success metrics, and desired behaviors (Appx. D.2), HARBOR performs dependency setup, task implementation, reward generation, RL integration, and policy training. As shown in Fig. 3, it produces semantically consistent task instances despite simulator-specific APIs, asset formats, and contact interfaces. As shown in Tab. 2, HARBOR achieves strong performance on IsaacLab, ManiSkill, and Gene-sis, reaching 88 .5% ∼ 100% success on all four IsaacLab tasks, including three-cube stacking, a long-horizon variant beyond the standard two-cube benchmark. Performance is lower on MJLab, especially for dexterous-hand control. Based on the automation logs, we attribute these failures primarily to simulator physics: HARBOR struggles to identify physics parameters that yield stable robot control in MJLab. In contrast, on the other simulators, HARBOR successfully adapts to dif-ferent simulation dynamics and produces similar high-level reward structures, suggesting that it can preserve task and reward intent while adjusting simulator-specific implementation details.                                                            
+
+> Task IsaacLab ManiSkill Genesis MJLab Sim Real Sim Real Sim Real Sim Real Ours Eureka REvolve Ours Ours Ours Ours Ours Ours Ours
+> Stack-Cube 0.885 0.0 0.0 0.5 0.936 0.6 0.935 0.6 0.221 0.1
+> Insert-Drawer 0.939 0.0 0.363 0.6 0.648 0.4 0.781 0.4 0.122 0.0
+> Lift-Box 1.0 0.997 0.932 0.8 1.0 0.8 0.944 0.8 1.0 0.2
+> Dex-Grasp 0.967 0.935 0.955 0.9 0.932 0.7 0.970 0.7 0.0 0.0
+
+Table 2: End-to-end simulation results and real-world validations across four simulators and tasks. 
+
+Reward Design Comparison We isolate automated reward design by comparing HARBOR with two LLM-based reward-generation baselines, Eureka [10] and REvolve [11], on IsaacLab. For a fair comparison, all methods use the same Opus backbone, wall-clock budget, task specifica-620M 40M 60M 80M 100M 0500 1000 1500 2000 2500                                                                         
+
+> 20M 40M 60M 80M 100M 0500 1000 1500 2000 2500 3000
+> 020M 40M 60M 80M 0500 1000 1500
+> 20M 40M 60M 80M 100M 050 100 150 200 250 300
+> 010M 20M 30M 40M 50M 01000 2000 3000
+> 010M 20M 30M 40M 50M 050 100
+> 2M 4M 6M 8M 10M 0100 200 300 400
+> 2M 4M 6M 8M 10M 0200 400 600
+> 010M 20M 30M 40M 50M 0510 15 20 25 30
+> 20M 40M 60M 80M 100M 0200 400 600 800
+> 010M 20M 30M 40M 50M 0100 200 300 400 500 600
+> 010M 20M 30M 40M 50M 0100 200 300 PPO_default PPO_tuned SAC_default SAC_tuned TD3_default TD3_tuned Step Step Step Step Step Step Step Step Step Step Step Step Episodic Return Episodic Return Episodic Return UnitreeA1 UnitreeGo2 UnitreeH1 AnymalC FrankaCabinet FrankaCubeLift FactoryPegInsert FactoryGearMesh ShadowHandOver ShadowHandBlockStack ShadowHandDoorOpenIn ShadowHandDoorCloseIn
+
+Figure 4: Performance of HARBOR on RL tuning across three benchmarks, each with four tasks. HARBOR generally improves the performance (solid) over defaults (dashed). tion, and fixed task implementation, including observations, actions, and reset logic. As shown in Tab. 2, HARBOR consistently outperforms both baselines across tasks due to two major factors. (1) Rollout-behavior feedback is essential: in insert-drawer , both HARBOR and REvolve identify failures such as insufficient object lifting and collisions with the drawer, whereas Eureka fails to di-agnose them and gets stuck; (2) pre-provided human heuristics are important: for the long-horizon 
+
+stack-cube task, HARBOR succeeds by using relevant heuristics to construct staged rewards, where each stage is activated only after the previous one is completed; in contrast, Eureka and REvolve search from scratch and fail. Finally, we test whether accumulated experience improves reward design by having HARBOR redesign the reward in a separate run. Using prior experience, it reduces wall-clock time from 4 hours to 30 minutes, an 8× speedup on the hardest stack-cube .
+
+Real-world Validation We validate sim-to-real transfer on real robots for all four tasks, using policies trained in different simulators. HARBOR supports transfer through system identification and domain randomization: given user-provided real-world trajectories, it searches for simulator physics parameters that best match real rollouts, and adjusts randomization ranges such as object mass and initial object pose using human feedback. As shown in Tab. 2, policies produced by this pipeline successfully transfer to real-world execution across the evaluated tasks, with moderate success rates under simulator-specific dynamics and contact differences. 
+
+4.2 RL Algorithm Tuning 
+
+We test whether HARBOR can tune standard RL algorithms, including PPO [32], SAC [33], and TD3 [34], under a bounded wall-clock budget. We use four table-top manipulation tasks from Isaa-cLab, four bimanual dexterous manipulation tasks from Bi-DexHands, and four locomotion tasks from Loco-MuJoCo. The default PPO configurations are taken from IsaacLab, while SAC and TD3 defaults are taken from PQL [35] (dashed lines in Fig. 4). HARBOR launches parallel tuning trials and selects configurations whose training time is at most twice that of the corresponding default. HARBOR applies common stabilization techniques, such as observation and reward normalization, and adjusts algorithm-specific hyperparameters using retrieved heuristics and accumulated tuning experience. As shown in Fig. 4, the tuned configurations match or outperform the defaults in 11 of 12 task settings; detailed sample-efficiency metrics are reported in Appx. D.4. The gains are most notable for SAC on Bi-DexHands, where HARBOR-tuned SAC learns ShadowHandDoorOpenIn 
+
+and ShadowHandDoorCloseIn , tasks on which the original SAC baseline fails as in its paper. 7Table 3: Ablations on the ManiSkill Push-Cube pipeline. † marks a stage that reported success but hid a silent render-path defect. We use default N = 4 for parallelization and Opus 4.7, while results for Sonnet is in Appx. D.6.                                                                                                              
+
+> Stage Vanilla HARBOR w/o CCDE w/o gate w/o experience S.R. Time Ctx/$ S.R. Time Ctx/$ S.R. Time Ctx/$ S.R. Time Ctx/$ S.R. Time Ctx/$ Dependency setup 10/10 21.86 4.78M / $17.91 10/10 11.2 2.78M / $8.20 10/10 12.4 4.36M / $15.35 10/10 13.1 2.10M / $12.74 10/10 10.6 0.68M / $3.52 RL integration 3/10 29.73 15.16M / $31.42 10/10 17.1 3.72M / $9.12 10/10 17.6 12.1M / $24.64 10/10 †4.1 1.29M / $3.52 8/10 14.8 7.06M / $13.81 Task generation 8/10 13.78 5.28M / $12.77 10/10 7.9 2.92M / $8.38 10/10 3.9 3.99M / $8.09 9/10 5.2 1.13M / $4.04 8/10 10.5 1.90M / $6.54 Reward generation 3/10 49.20 25.65M / $48.10 9/10 4.2 14.35M / $31.00 8/10 24.0 24.80M / $44.45 6/10 2.9 7.05M / $17.90 2/10 6.0 10.25M / $29.05 RL tuning 5/10 71.05 31.90M / $71.95 9/10 3.7 4.30M / $14.20 8/10 25.5 20.05M / $38.15 6/10 7.6 12.40M / $41.50 4/10 11.6 24.50M / $67.35
+> Total ( Σ-win.) 29/50 185.62 82.77M / $182.15 48/50 44.1 28.07M / $70.90 46/50 83.4 65.30M / $130.68 41/50 †32.9 23.97M / $79.70 32/50 53.5 44.39M / $120.27
+
+4.3 Ablations and Efficiency Analysis 
+
+We ablate HARBOR on a clean ManiSkill checkout by building and training a policy for the 
+
+Push-Cube task as a controlled profiling slice. We compare five configurations: the full harness, three ablations ( w/o CCDE , removing subagent isolation and parallel execution; w/o gate , removing validation gates; w/o experience , removing templates, references, and heuristics), and a no-harness 
+
+Vanilla baseline. Each configuration is repeated ten times. For each stage, we report success rate (S.R., out of 10), wall-clock time, context tax (Ctx, cache-read tokens re-read across turns), and es-timated cost in Tab. 3. Detailed stage definitions and profiling protocols are provided in Appx. D.5. The ablation reveals clear reliability and cost differences, especially in iteration-heavy stages such as reward generation and RL tuning. First, isolation improves both efficiency and reliability. By delegating trials to isolated subagents and running reward/tuning attempts in parallel, the full harness reduces the iteration-heavy stages to 7.9 min, compared with 49 .5 min for w/o CCDE (≈6.3× faster). Without subagent isolation, transcript re-reads grow substantially ( 65 .3M vs. 28 .07 M Ctx), serial trials dominate wall-clock time, and reward/tuning success drops to 8/10 . Second, gates catch silent failures. The w/o gate variant is fast but allows a render-path defect to pass unnoticed (marked 
+
+> †
+
+) and achieves only 6/10 success on both reward generation and RL tuning. Third, experience improves generative stages. Removing templates, references, and heuristics makes w/o experience 
+
+the least reliable on reward generation ( 2/10 ), RL tuning ( 4/10 ), and RL integration ( 8/10 ). Overall, HARBOR achieves the highest reliability ( 48 /50 ) while also being the cheapest measured harness configuration, making it Pareto-optimal on reliability and cost. 
+
+5 Conclusion, Limitations, and Future Work 
+
+We presented HARBOR , a harness framework for automating robot RL workflows with LLM agents. HARBOR is motivated by the structure of robot RL automation, where MDPs provide stable interfaces and rollout behaviors provide executable feedback for validation. It turns natural-language requests into auditable workflows through agents, commands, artifacts, gates, and knowledge. Be-yond this abstraction, HARBOR supports asynchronous parallel execution and experience reuse, enabling the system to scale and improve iterative stages. We implement HARBOR as an LLM-agent plugin and evaluate it across diverse simulators and robot-learning tasks, which shows that HARBOR can automate end-to-end RL workflows in simulation, tune RL algorithms, and reduce execution cost and wall-clock time compared with vanilla LLM agents. 
+
+Limitations and Future Work HARBOR’s capability is bounded by the tools exposed to its agents : for novel tasks without prior knowledge, it may require many scaffold-and-repair iterations or fail outright. As more users apply HARBOR to new scenarios, the shared knowledge base can be expanded by distilling from successful workflows, heuristics, and failure diagnoses. A second limitation is the sim-to-real boundary : HARBOR automates much of the simulated pipeline, but deployment to physical robots still requires manual engineering around robot interfaces and hu-man feedback. Future versions could extend the harness to the real-robot side, closing the loop for sim-real alignment. Finally, HARBOR currently supports relatively simple policy architectures; ex-tending to vision-language-action or world-model-based policies is an important direction, and HARBOR’s abstraction makes such extensions additive rather than requiring a system redesign. 8Acknowledgments 
+
+This research work has received funding from the Emmy Noether Programme DFG Project Nr. CH 2676/1-1, Federal Ministry of Research, Technology and Space (BMFTR) Project “RIG” (Grant No.: 16ME1001), and the Project Pose Confidences for Telerobotics from Honda Research Institute, Europe. 
+
+References 
+
+[1] R. S. Sutton, A. G. Barto, et al. Reinforcement learning: An introduction , volume 1. MIT press Cambridge, 1998. [2] L. P. Kaelbling, M. L. Littman, and A. W. Moore. Reinforcement learning: A survey. Journal of artificial intelligence research , 4:237–285, 1996. [3] W. Zhao, J. P. Queralta, and T. Westerlund. Sim-to-real transfer in deep reinforcement learning for robotics: a survey. In 2020 IEEE symposium series on computational intelligence (SSCI) ,pages 737–744. IEEE, 2020. [4] M. Torne, A. Simeonov, Z. Li, A. Chan, T. Chen, A. Gupta, and P. Agrawal. Reconciling reality through simulation: A real-to-sim-to-real approach for robust manipulation. arXiv preprint arXiv:2403.03949 , 2024. [5] G. B. Margolis, G. Yang, K. Paigwar, T. Chen, and P. Agrawal. Rapid locomotion via rein-forcement learning. The International Journal of Robotics Research , 43(4):572–587, 2024. [6] Z. Li, X. B. Peng, P. Abbeel, S. Levine, G. Berseth, and K. Sreenath. Reinforcement learning for versatile, dynamic, and robust bipedal locomotion control. The International Journal of Robotics Research , 44(5):840–888, 2025. [7] T. Chen, M. Tippur, S. Wu, V. Kumar, E. Adelson, and P. Agrawal. Visual dexterity: In-hand reorientation of novel and complex object shapes. Science Robotics , 8(84):eadc9244, 2023. [8] Z. Li, Y. Jin, D. O. Apraez, C. Semini, P. Liu, and G. Chalvatzaki. Morphologically symmetric reinforcement learning for ambidextrous bimanual manipulation. arXiv preprint arXiv:2505.05287 , 2025. [9] T. Lin, Z.-H. Yin, H. Qi, P. Abbeel, and J. Malik. Twisting lids off with two hands. arXiv preprint arXiv:2403.02338 , 2024. [10] Y. J. Ma, W. Liang, G. Wang, D.-A. Huang, O. Bastani, D. Jayaraman, Y. Zhu, J. Fan, et al. Eureka: Human-level reward design via coding large language models. In International con-ference on learning Representations , volume 2024, pages 26516–26560, 2024. [11] R. Hazra, A. Sygkounas, A. Persson, A. Loutfi, and P. Zuidberg Dos Martires. Revolve: Re-ward evolution with large language models using human feedback. In International Conference on Learning Representations , volume 2025, pages 101949–101990, 2025. [12] J. Ma, W. Liang, H.-J. Wang, Y. Zhu, L. Fan, O. Bastani, and D. Jayaraman. Dreureka: Lan-guage model guided sim-to-real transfer. RSS, 2024. [13] Z. Zeng, F. Ding, H. Yang, X. Li, and Y. Liao. Dexsim2real: Foundation model-guided sim-to-real transfer for generalizable dexterous manipulation. arXiv preprint arXiv:2605.05241 ,2026. [14] R. Liaw, E. Liang, R. Nishihara, P. Moritz, J. E. Gonzalez, and I. Stoica. Tune: A research platform for distributed model selection and training. arXiv preprint arXiv:1807.05118 , 2018. 9[15] T. Akiba, S. Sano, T. Yanase, T. Ohta, and M. Koyama. Optuna: A next-generation hyper-parameter optimization framework. In The 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , pages 2623–2631, 2019. [16] J. Parker-Holder, R. Rajan, X. Song, A. Biedenkapp, Y. Miao, T. Eimer, B. Zhang, V. Nguyen, R. Calandra, A. Faust, et al. Automated reinforcement learning (autorl): A survey and open problems. Journal of Artificial Intelligence Research , 74:517–568, 2022. [17] R. R. Afshar, Y. Zhang, J. Vanschoren, and U. Kaymak. Automated reinforcement learning: An overview. arXiv preprint arXiv:2201.05000 , 2022. [18] Q. Meng, Y. Wang, L. Chen, Q. Wang, C. Lu, W. Wu, Y. Gao, Y. Wu, and Y. Hu. Agent harness for large language model agents: A survey. 2026. [19] C. He, X. Zhou, D. Wang, H. Xu, W. Liu, and C. Miao. Harness engineering for language agents: The harness layer as control, agency, and runtime. 2026. [20] C. Zhou, H. Chai, W. Chen, Z. Guo, R. Shan, Y. Song, T. Xu, Y. Yang, A. Yu, W. Zhang, et al. Externalization in llm agents: A unified review of memory, skills, protocols and harness engineering. arXiv preprint arXiv:2604.08224 , 2026. [21] Y. Lee, R. Nair, Q. Zhang, K. Lee, O. Khattab, and C. Finn. Meta-harness: End-to-end opti-mization of model harnesses. arXiv preprint arXiv:2603.28052 , 2026. [22] Y. Jin, J. Guo, X. Jia, Y. Deng, Z. Li, H. Liu, W. Liao, V. Prasad, M. Franzius, G. Neu-mann, et al. Nautilus: From one prompt to plug-and-play robot learning. arXiv preprint arXiv:2605.11665 , 2026. [23] M. Mittal, P. Roth, J. Tigue, A. Richard, O. Zhang, P. Du, A. Serrano-Munoz, X. Yao, R. Zurbr¨ ugg, N. Rudin, et al. Isaac lab: A gpu-accelerated simulation framework for multi-modal robot learning. arXiv preprint arXiv:2511.04831 , 2025. [24] Y. Chen, Y. Yang, T. Wu, S. Wang, X. Feng, J. Jiang, Z. Lu, S. M. McAleer, H. Dong, and S.-C. Zhu. Towards human-level bimanual dexterous manipulation with reinforcement learning. In 
+
+Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2022. URL https://openreview.net/forum?id=D29JbExncTP .[25] V. Makoviychuk, L. Wawrzyniak, Y. Guo, M. Lu, K. Storey, M. Macklin, D. Hoeller, N. Rudin, A. Allshire, A. Handa, et al. Isaac gym: High performance gpu-based physics simulation for robot learning. arXiv preprint arXiv:2108.10470 , 2021. [26] J. Gu, F. Xiang, X. Li, Z. Ling, X. Liu, T. Mu, Y. Tang, S. Tao, X. Wei, Y. Yao, et al. Maniskill2: A unified benchmark for generalizable manipulation skills. arXiv preprint arXiv:2302.04659 ,2023. [27] F. Xiang, Y. Qin, K. Mo, Y. Xia, H. Zhu, F. Liu, M. Liu, H. Jiang, Y. Yuan, H. Wang, et al. Sapien: A simulated part-based interactive environment. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 11097–11107, 2020. [28] G. A. Team. The role of simulation in scalable robotics, genesis world 1.0, and the path forward. Genesis AI Blog , May 2026. URL https://www.genesis.ai/blog/ the-role-of-simulation-in-scalable-robotics-genesis-world-10-and-the-path-forward .[29] K. Zakka, Q. Liao, B. Yi, L. L. Lay, K. Sreenath, and P. Abbeel. mjlab: A lightweight framework for gpu-accelerated robot learning, 2026. URL https://arxiv.org/abs/2601. 22074 .[30] F. Al-Hafez, G. Zhao, J. Peters, and D. Tateo. Locomujoco: A comprehensive imitation learn-ing benchmark for locomotion. In 6th Robot Learning Workshop, NeurIPS , 2023. 10 [31] E. Todorov, T. Erez, and Y. Tassa. Mujoco: A physics engine for model-based control. In 
+
+2012 IEEE/RSJ International Conference on Intelligent Robots and Systems , pages 5026– 5033. IEEE, 2012. doi:10.1109/IROS.2012.6386109. [32] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. [33] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In International conference on machine learning , pages 1861–1870. Pmlr, 2018. [34] S. Fujimoto, H. Hoof, and D. Meger. Addressing function approximation error in actor-critic methods. In International conference on machine learning , pages 1587–1596. PMLR, 2018. [35] Z. Li, T. Chen, Z.-W. Hong, A. Ajay, and P. Agrawal. Parallel q-learning: Scaling off-policy reinforcement learning under massively parallel simulation. In International Conference on Machine Learning , pages 19440–19459. PMLR, 2023. [36] T. Xie, S. Zhao, C. Wu, Y. Liu, Q. Luo, V. Zhong, Y. Yang, and T. Yu. Text2reward: Reward shaping with language models for reinforcement learning. In International Conference on Learning Representations , volume 2024, pages 35663–35699, 2024. [37] J. Bergstra and Y. Bengio. Random search for hyper-parameter optimization. Journal of machine learning research , 13(2), 2012. [38] J. Wu, X.-Y. Chen, H. Zhang, L.-D. Xiong, H. Lei, and S.-H. Deng. Hyperparameter opti-mization for machine learning models based on bayesian optimization. Journal of Electronic Science and Technology , 17(1):26–40, 2019. [39] L. Li, K. Jamieson, G. DeSalvo, A. Rostamizadeh, and A. Talwalkar. Hyperband: A novel bandit-based approach to hyperparameter optimization. Journal of machine learning research ,18(185):1–52, 2018. [40] M. Jaderberg, V. Dalibard, S. Osindero, W. M. Czarnecki, J. Donahue, A. Razavi, O. Vinyals, T. Green, I. Dunning, K. Simonyan, et al. Population based training of neural networks. arXiv preprint arXiv:1711.09846 , 2017. [41] X.-Y. Liu, Z. Li, Z. Yang, J. Zheng, Z. Wang, A. Walid, J. Guo, and M. I. Jordan. Elegantrl-podracer: Scalable and elastic library for cloud-native deep reinforcement learning. arXiv preprint arXiv:2112.05923 , 2021. [42] J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan, and O. Press. Swe-agent: Agent-computer interfaces enable automated software engineering. Advances in Neural Information Processing Systems , 37:50528–50652, 2024. [43] J. Jiang, F. Wang, J. Shen, S. Kim, and S. Kim. A survey on large language models for code generation. ACM Transactions on Software Engineering and Methodology , 35(2):1–72, 2026. [44] P. Steinberger and OpenClaw contributors. Openclaw: Your own personal ai assistant. any os. any platform., 2025. URL https://github.com/openclaw/openclaw . Accessed: 2026-06-03. [45] Z. Su, B. Zhang, N. Rahmanian, Y. Gao, Q. Liao, C. Regan, K. Sreenath, and S. S. Sastry. Hitter: A humanoid table tennis robot via hierarchical planning and learning. arXiv preprint arXiv:2508.21043 , 2025. [46] Y. Ma, A. Cramariuc, F. Farshidian, and M. Hutter. Learning coordinated badminton skills for legged manipulators. Science robotics , 10(102):eadu3922, 2025. 11 [47] R. Lopopolo. Harness engineering: leveraging Codex in an agent-first world. https: //openai.com/index/harness-engineering/ , Feb. 2026. OpenAI Engineering Blog, published February 11, 2026. Accessed: 2026-06-03. [48] P. Rajasekaran. Harness design for long-running application development. https://www. anthropic.com/engineering/harness-design-long-running-apps , Mar. 2026. An-thropic Engineering Blog, published March 24, 2026. Accessed: 2026-06-03. [49] B. Wen, W. Yang, J. Kautz, and S. Birchfield. Foundationpose: Unified 6d pose estimation and tracking of novel objects. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [50] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. R¨ adle, C. Rolland, L. Gustafson, et al. Sam 2: Segment anything in images and videos. arXiv preprint arXiv:2408.00714 , 2024. [51] V. Kremer. Quaternions and slerp. Embots. dfki. de-Department of Computer Science, Univer-sity of Saarland, Seminar Character Animation , 2008. 12 A Related Work 
+
+LLM-driven reward engineering and sim-to-real transfer Recent work has shown that large language models (LLMs) can substantially reduce human effort in reward engineering and sim-to-real transfer. Eureka [10] uses LLMs to generate and iteratively improve executable reward functions; Text2Reward [36] similarly converts natural-language task descriptions into dense re-ward code for manipulation and locomotion; and REvolve [11] further studies reward evolution with human feedback, using LLMs as mutation and refinement operators to incorporate implicit human preferences into reward design. Beyond reward engineering, Dr. Eureka [12] extends this paradigm to sim-to-real transfer by jointly producing reward functions and domain-randomization distributions, while DexSim2Real [13] explores LLM-assisted design for dexterous sim-to-real pol-icy learning. These methods establish LLMs as effective tools for automating individual components of robot RL. In contrast, HARBOR targets the broader end-to-end RL workflow: given a simulator codebase and task specification, it automates from environment setup, task integration, reward and domain-randomization design, to policy training. 
+
+AutoRL and hyper-parameter tuning HARBOR is closely related to automated reinforcement learning (AutoRL), especially the automation of algorithm and hyper-parameter tuning [16, 17]. Classical hyperparameter-optimization methods such as random search [37], Bayesian optimiza-tion [38], Hyperband [39], and population-based training [40, 41] provide general mechanisms for efficient configuration search. Practical systems such as Ray Tune [14] and Optuna [15] make these methods accessible at scale and have become standard tools for distributed tuning. However, most AutoRL and HPO frameworks assume that the training environment, logging, evaluation scripts, and search space are already specified by humans. HARBOR is complementary to these systems: it not only supports adaptive and distributed tuning, but also automates the surrounding engineering process, enabling robot RL experiments to reach a higher level of automation. 
+
+Agentic systems and harnesses Recent LLM agents have shown strong potential for automat-ing complex workflows by decomposing tasks, calling tools, maintaining state, and refining outputs across multiple steps [42, 43, 44]. A growing view is that their capability comes not only from the underlying LLM, but also from the surrounding harness, including tools, memory, artifacts, execu-tion environments, and feedback channels [18, 19, 20]. Meta-harnesses further aim to standardize and automate these interfaces for long-horizon agentic workflows [19]. The closest concurrent work to HARBOR is Nautilus [22], which automates imitation learning policy evaluation and bench-marking, especially for vision-language-action (VLA) models. In contrast, HARBOR targets robot RL workflows, where automation requires simulator integration, MDP specification, reward and domain-randomization design, and policy training. 
+
+Sim-to-real reinforcement learning for robotics Sim-to-real reinforcement learning has emerged as a promising paradigm for acquiring complex robotic behaviors, with successful demonstrations ranging from agile locomotion [5, 6] to dexterous manipulation such as object reorientation [7], lid twisting [9], and even more challenging bimanual dexterous manipulation tasks [8]. Recent results further show that sim-to-real RL can handle highly dynamic tasks such as table tennis [45] and bad-minton [46], suggesting its potential as a scalable recipe for robot skill acquisition. However, these successes typically rely on substantial task-specific engineering, including simulator construction, task and MDP design, reward shaping, domain randomization. HARBOR is motivated by this bot-tleneck: it aims to automate the engineering loop needed to rapidly train and deploy RL policies for individual robot tasks, while laying the groundwork for scaling sim-to-real RL across many tasks toward more generalist robot policies. 
+
+B Background: Harness Engineering 
+
+A harness is the external structure that enables an LLM agent to perform reliable work in a complex environment. It is more than a prompt: it specifies the instructions, tools, runtime environment, 13 persistent state, and feedback channels through which the LLM agent operates. Recent discussions emphasize that a harness does not make the model itself smarter, but instead turns the model into part of a closed-loop working system [47, 48]. In this view, agent performance depends not only on the underlying LLM, but also on whether the surrounding system makes the task legible, executable, and verifiable. 
+
+Why harnesses are needed Long-horizon agentic tasks require the model to make many depen-dent decisions over time, where early mistakes or missing context can compound into later failures. Human engineers manage such workflows with scaffolding such as setup scripts, documentation, tests, logs, progress records, and clear interfaces; agents need analogous structure to operate reli-ably. OpenAI describes this shift as moving from manually writing code to designing environments, specifying intent, and building feedback loops that allow agents to execute reliable work [47]. With-out such structure, agents may lose context, repeat failed attempts, overfit to local instructions, or declare success before the full task has been validated. 
+
+Core components A practical harness consists of several interacting components [18]. • The instruction layer gives the agent task goals, project conventions, constraints, and pointers to relevant documents. • The tool layer exposes executable actions, such as file editing, shell commands, tests, simulators, logging systems, or deployment scripts. • The environment layer defines dependencies, containers, and runtime versions. • The state layer records plans, completed steps, failures, and intermediate artifacts. • The feedback layer provides executable checks, such as unit tests, integration tests, evaluation metrics, rollout diagnostics, or human review. These components are instantiated in HARBOR and specialized for robot RL. For example, the feedback layer is implemented as executable gates that verify each workflow stage before proceed-ing. HARBOR also extends the standard harness design with robot-RL-specific mechanisms such as reusable experiences, which store prior reward-design, domain-randomization, and tuning traces as continual guidance for future tasks. 
+
+Harness implementation A key principle in implementing a harness is that information invisible to the agent is effectively unavailable. Therefore, a practical harness usually needs both top-level instructions and low-level details. The top-level instructions define the overall goal, workflow struc-ture, constraints, and where the agent should look next, while the low-level details provide the concrete references, templates, scripts, and artifacts needed to execute each step. This separation avoids placing all information in one giant prompt, but still ensures that the agent can access the knowledge required for reliable execution [48]. HARBOR follows this design: its agents and com-mands explicitly specify which references, templates, scripts, and artifacts should be used at each workflow stage. In this way, the top-level instruction acts as a map, while detailed knowledge is distilled from existing codes and organized in structured files. 
+
+C List of Agents and Commands 
+
+C.1 Dependency-generator ( Stage: Dependency generation/package installation )
+
+• Function: 
+
+1. Probe the repository’s dependency surface, read the README.md file, and render an installation plan install plan.json .2. Render a reproducible setup uv.sh that creates an isolated .venv/ via uv. 3. Render a setup uv.sh that contains instructions on how to activate the virtual environment. • Commands: /harbor:env-install-uv .14 • Gated test: 
+
+1. Basic environment such as CUDA is safe and detectable. 2. The .venv/ is created and the editable package imports cleanly. 
+
+C.2 Benchmark-generator ( Stage: Benchmark scaffolding )
+
+• Function: 
+
+1. Probe the repository and summarize the benchmark in benchmark-spec.json , such as the backend (Jax or Torch), support for GPU-based simulation. 2. Author a task overview.md that summarizes the task distribution in the benchmark and de-tails of each task, including description, reward implementation, obs. and action space. 3. Author a task implementation.md that provides details on APIs for task creation using 
+
+/harbor:probe-benchmark .4. Render the random-action rollout and render-to-MP4 entry scripts against the benchmark. • Commands: /harbor:probe-benchmark .• Gated test: 
+
+1. Prerequisite check on if the dependency-generator’s uv environment is healthy. 2. The random-action rollout runs without error and gets finite rewards. 3. The render pass produces a valid MP4 video. 4. The suite spec is captured with a non-empty task list. 
+
+C.3 Task-generator ( Stage: Task generation )
+
+• Function: 
+
+1. Search if there exists tasks in experiences that are relevant or similar to the desired task. 2. Author task registration and scene, action terms, reset, goal and termination, and observation. 3. Leave a placeholder reward and an empty domain-randomization slot so the environment still builds for downstream stages. 4. Render a task-history.md to document all design choices and test results. • Commands: /harbor:task-create , /harbor:probe-task , /harbor:rl-render .• Gated test: 
+
+1. The task is registered in the benchmark and can be initialized. 2. The action target matches the expected value in controller and can effectively control the robot. 3. The reset values match the simulation state; and the goal appears in the observation and a forced termination fires. 4. The observation order, shapes, and values pass. 
+
+C.4 Reward-generator ( Stage: Reward generation )
+
+• Function: 
+
+1. Support both creating and editing mode that can either write the rewards from scratch or modify the existing rewards. 2. Search the experience for a similar task’s reward and author the reward (term ladder, weights, composer, stage gating) with reward term log. 3. Author reward-history.md for iteration history and handoff-reward-generator.md for latest reward terms tracking. 4. Render and run the reward smoke; optionally iterate with training in the loop until success. • Commands: /harbor:reward-tune , /harbor:reward-add-log , /harbor:rl-run ,
+
+/harbor:rl-render .• Gated test: 
+
+1. The reward is finite and matches expected across a rollout. 2. The composer over the per-term values equals the environment reward at every step (sum or product). 15 3. Under tuning, the trained policy’s success rate reaches the target threshold. 
+
+C.5 DR-generator ( Stage: Domain randomization generation )
+
+• Function: 
+
+1. Discover every available randomization term across the robot, object, and observation groups. 2. Wire each term once per episode per environment (multiplicative / additive / direct for physical properties; uniform / gaussian for observation noise). 3. Render and run the exact-value randomization smoke. • Commands: /harbor:task-create , /harbor:rl-run , /harbor:rl-sweep .• Gated test: 
+
+1. Each effective term’s value equals the default value modified by a known sampled value. 2. The randomization re-applies correctly after a reset. 3. Observation-noise terms diverge from a paired no-noise rollout at the configured magnitude. 
+
+C.6 RL-integration-generator ( Stage: RL algorithm integration )
+
+• Function: 
+
+1. Implement default RL algorithms (PPO, SAC, TD3) or user-provided RL implementation with per-algorithm training, evaluation, and render scripts, the configs, and the DataLogger. 2. Wire the implementation and canonical metric-logging contract with the benchmark. • Commands: /harbor:rl-run , /harbor:rl-render , /harbor:rl-add-log .• Gated test: 
+
+1. A training step runs and evaluation writes metrics.json .2. The render produces a moving-policy MP4 (frame-difference check). 3. The learning curves are plotted and the metric keys are present in TensorBoard / W&B. 
+
+C.7 RL-tuning-agent ( Stage: Hyper-parameter tuning )
+
+• Function: 
+
+1. Run an open-ended per-(task, algorithm) tuning loop: default-config baseline, then training tricks, then log-driven hyperparameter edits. 2. Train, evaluate, render, and analyze metrics and behavior each iteration to propose the next configuration. 3. Stop when the running best is not beaten for a fixed number of consecutive iterations and emit a convergence plot. • Commands: /harbor:rl-tune , /harbor:rl-sweep , /harbor:rl-add-trick ,
+
+/harbor:rl-list-tricks .• Gated test: 
+
+1. Each trial trains and writes the canonical metrics. 2. Evaluation yields an unbiased steady-state aggregate and the render confirms motion. 3. The tuned configuration improves sample efficiency and final return over the default baseline. 
+
+D Experiments Details 
+
+D.1 Real-world Experiment Setup Robot Platforms, Sensors, and Control We evaluate real-world deployment on two robot plat-forms. The first platform is a bimanual Franka setup consisting of two 7-degree of freedom(DoF) Franka arms, each equipped with a custom 3D-printed parallel gripper, yielding a 14-DoF arm sys-tem plus two gripper actuation channels. The second platform is a single 6-DoF xArm UF850 arm equipped with a 16-DoF Allegro Hand V4. Each setup uses a single external ZED2 RGB-D camera 16 for visual perception; we do not use any wrist-mounted or additional cameras. We use Founda-tionPose [49] and SAM2.1 [50] to obtain object masks and 6D object poses for closed-loop policy execution. For the bimanual Franka setup, policies run at 20Hz and output end-effector delta-pose actions for each arm. For the xArm-Allegro setup, policies also run at 20Hz, but output delta joint-position actions. The xArm low-level joint controller runs at 120Hz, while the Allegro Hand receives cor-responding joint-position targets. For both platforms, we apply exponential moving average (ema) smoothing to the policy actions before sending them to the robot controllers, which reduces high-frequency action noise during sim-to-real execution. Specifically, the command action for every step is computed as follows: acmd  
+
+> t+1
+
+= acmd  
+
+> t
+
++ η · EMA (at), where η is a scaling factor. 
+
+Perception Pipeline Our perception pipeline combines FoundationPose [49] and SAM2.1 [50] to achieve robust, real-time 6D object pose tracking in cluttered and dynamic scenes. The input consists of RGB-D frames captured at 1080p and 30 FPS from a single external ZED2 camera. We operate the camera in ultra mode to maximize depth range and preserve Z-accuracy along the sensing axis, which is crucial for high-precision pose estimation. We use FoundationPose in a tracking-first mode rather than running full registration on every frame. At the beginning of a track, or after tracking failure, the registration module provides an initial 6D pose hypothesis. During normal execution, we avoid repeated registration and instead initialize the refiner with a coarse pose prior estimated from the SAM2.1 mask centroid and mean masked depth. The refiner then updates the pose from the current RGB-D frame. This design keeps the perception loop efficient enough for closed-loop policy execution while preserving the ability to reinitialize when tracking is lost. We use SAM2.1 for multi-object instance segmentation and tracking, and for each incoming frame the refiner is executed in parallel for known objects to predict their 6D poses. While FoundationPose is robust under typical conditions and performs well on standard benchmarks, it fails to recover object pose when faced with rapid motion or complete occlusion. To handle such cases, we run a lightweight pose-quality evaluation at 2 FPS to detect tracking failures without slowing down the main tracking loop. For each object we render expected RGB and depth images using a lightweight offscreen renderer based on the object’s CAD model. These rendered views are compared against the observed images from the ZED2 camera, and the rendered-vs-observed depth agreement gives a pose likelihood. Pose confidence is computed by measuring photometric and geometric discrepancies between the rendered and observed RGB-D images. Specifically, we define the confidence score as: 
+
+c = exp − 1
+
+P 
+
+> i
+
+M (i)
+
+X
+
+> i
+
+M (i) 
+
+I(i) 
+
+> obs
+
+− I(i) 
+
+> rend 1
+
++ λ · D(i) 
+
+> obs
+
+− D(i) 
+
+> rend 1
+
+!
+
+(1) where M (i) is a binary foreground mask obtained from SAM2.1. Iobs , Irend denote observed and rendered RGB images, Dobs , Drend denote depth images, and λ balances color and depth contribu-tions. If the confidence c < 0.5, the object is deemed lost, and its pose is re-initialized by re-running FoundationPose’s registration network, without relying on temporal priors. To mitigate jitter and ensure smooth input to the policy, we apply SLERP interpolation [51] for ro-tations and linear interpolation for translations in SE(3) across consecutive pose estimates, followed by exponential moving average (EMA) filtering. This ensures temporally coherent trajectories and stabilizes the pose stream at a steady 15 FPS for downstream policy execution. 17 D.2 Task Prompts for End-to-End Task Generation 
+
+INSERT -DRAWER (IsaacLab example) 
+
+/harbor:task-create In IsaacLab (path to IsaacLab), create an insert-drawer task in which a drawer (a URDF path), and a cube with a side length of 4.5 cm are placed on top of a table. A Franka robot (a URDF path) is positioned at the left-back corner of the table. The robot should pick up the cube placed in front of it, insert the cube into the opened drawer located near the center of the table, and then close the drawer after the cube has been placed inside. The task is considered successful if the cube remains inside the drawer and the drawer is largely closed. 
+
+STACK -CUBE (IsaacLab example) 
+
+/harbor:task-create In IsaacLab (path to IsaacLab), create a stack-cube task in which three cubes, each with a side length of 4.5 cm, are placed on top of a table as a triangle. A Franka robot (a URDF path) is positioned at the left-back corner of the table. The robot should first stack the closest cube on top of the middle cube, and then stack the remaining cube to the existing tower. The task is considered successful if all three cubes are stably stacked and there is no contact between the cubes and the robot. 
+
+LIFT -BOX (IsaacLab example) 
+
+/harbor:task-create In IsaacLab (path to IsaacLab), create a lift-box task in which a box (path to box mesh) is placed on top of a table and at the center of the table. Two Franka robots (a URDF path) are positioned at the left-back and right-back corners of the table. The robots should reach the box sides, grasp it securely, and lift it 25 cm above the table surface. The task is considered successful if the box is lifted to the target height while stably grasped by the robot. 
+
+DEX -GRASP (IsaacLab example) 
+
+/harbor:task-create In IsaacLab (path to IsaacLab), create a dexterous-grasp task in which an object is placed on top of a table in front of a robot with a dexterous hand (a URDF path). The robot should use its fingers to reach, make stable contact with the object, and lift it securely to a target position. The task is considered successful if the object reaches the target position within 10 cm distance threshold and remains stably held by the dexterous hand. 
+
+D.3 Performance for End-to-end Simulation Experiments 
+
+We provide the learning performance for the end-to-end simulation experiments summarized in Sec. 4 and Tab. 2. We evaluate HARBOR on four manipulation tasks, Insert-Drawer ,
+
+Stack-Cube , Lift-Box , and Dex-Grasp , across four simulators: IsaacLab, ManiSkill, Genesis, and MJLab. For each task, HARBOR starts from the task specification and automates dependency setup, task implementation, reward generation, RL integration, and policy training. We plot both cumulative episodic return and binary success rate. Fig. 5 shows the learning curves across all 16 simulator–task combinations. On IsaacLab, HAR-BOR achieves strong and stable learning across all four tasks: success rates converge rapidly for 
+
+Insert-Drawer , Lift-Box , and Dex-Grasp , and the more long-horizon Stack-Cube task also reaches high success after staged reward optimization. ManiSkill and Genesis show similar trends: most tasks exhibit both increasing returns and high final success while also have larger variance according to the shadow area. In addition, Lift-Box and Dex-Grasp are consistently solved across these simulators, suggesting that HARBOR can effectively solve short-horizon tasks while adapting reward and implementation details to different simulator APIs and contact models. 18 10M 20M 30M 40M 50M 01k 2k 3k 4k 00.2 0.4 0.6 0.8 1                                       
+
+> 50M 100M 150M 0500 1k 1.5k 2k 2.5k 3k 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 020 40 60 80 100 120 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 020 40 60 80 100 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 40M 50M 0500 1k 1.5k 2k 2.5k 00.2 0.4 0.6 0.8 1
+> 50M 100M 150M 01k 2k 3k 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 020 40 60 80 100 120 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 020 40 60 80 100 120 140 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 40M 50M 0500 1k 1.5k 2k 00.2 0.4 0.6 0.8 1
+> 50M 100M 150M 01k 2k 3k 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 020 40 60 80 100 120 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 050 100 150 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 40M 50M 0500 1k 00.2 0.4 0.6 0.8 1
+> 50M 100M 150M 0500 1k 1.5k 2k 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 020 40 60 80 100 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 0500m 11.5 22.5 00.2 0.4 0.6 0.8 1
+
+Cumulative Return Success Rate Step Step Step Step Step Step Step Step Step Step Step Step Step Step Step Step Episodic Return Success Rate Episodic Return Success Rate Episodic Return Success Rate Episodic Return Success Rate IsaacLab/Insert-Drawer IsaacLab/Stack-Cube IsaacLab/Lift-Box IsaacLab/Dex-Grasp Maniskill/Insert-Drawer Maniskill/Stack-Cube Maniskill/Lift-Box Maniskill/Dex-Grasp Genesis/Insert-Drawer Genesis/Stack-Cube Genesis/Lift-Box Genesis/Dex-Grasp mjlab/Insert-Drawer mjlab/Stack-Cube mjlab/Lift-Box mjlab/Dex-Grasp Figure 5: End-to-end simulation learning curves across simulators and tasks. We evaluate HARBOR-generated RL workflows on 16 simulator-task settings from IsaacLab, ManiSkill, Gene-sis, and MJLab. Blue curves show cumulative episodic return and red curves show task success rate, with shaded regions indicating variation across seeds. HARBOR generally produces policies with clear learning progress across simulators, and most tasks reach high success rates after training. 10M 20M 30M 40M 0510 15 20 25 00.2 0.4 0.6 0.8 1                       
+
+> 50M 100M 010 20 30 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 050 100 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 25M 30M 050 100 00.2 0.4 0.6 0.8 1
+> 10M 20M 30M 40M 50M 020k 40k 60k 80k 100k 00.2 0.4 0.6 0.8 1
+> 50M 100M 150M 0200 400 600 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 05k 10k 15k 00.2 0.4 0.6 0.8 1
+> 5M 10M 15M 20M 25M 30M 0500 1k 1.5k 2k 00.2 0.4 0.6 0.8 1
+
+Cumulative Return Success Rate Step Step Step Step Step Step Step Step Episodic Return Success Rate Episodic Return Success Rate Eureka/Insert-Drawer Eureka/Stack-Cube Eureka/Lift-Box Eureka/Dex-Grasp REvolve/Insert-Drawer REvolve/Stack-Cube REvolve/Lift-Box REvolve/Dex-Grasp 
+
+Figure 6: Reward design baseline’s learning curves on IsaacLab tasks. Blue curves show cumulative episodic return and red curves show task success rate for Eureka and REvolve across four tasks. Both baselines perform well on Lift-Box and Dex-Grasp, while Insert-Drawer and Stack-Cube expose failure cases. We also provide baseline learning curves for Eureka and REvolve on the IsaacLab tasks in Fig. 6. These curves explain the task-level differences in Tab. 2. Both baselines perform well on Lift-Box 
+
+and Dex-Grasp , where the reward structure is relatively direct. However, Insert-Drawer and 
+
+Stack-Cube expose their limitations. Eureka fails to obtain nonzero success on both tasks, and REvolve only partially improves Insert-Drawer while failing on Stack-Cube . In contrast, HAR-BOR succeeds on both tasks by using rollout-behavior feedback to diagnose failure modes and by reusing human-provided heuristics to construct staged rewards for long-horizon behaviors. These results support the main-body conclusion that HARBOR’s advantage is not only reward-code gen-19 eration, but the surrounding harness that validates rollouts, preserves tuning history, and reuses experience across iterations. 
+
+D.4 Detailed Results for RL-Tuning Experiments 
+
+We provide the full quantitative results for the RL-tuning experiments summarized in Sec. 4.2. As a recap, we evaluate HARBOR on three benchmark suites: IsaacLab [23], Loco-Mujoco [30], and Bi-DexHands[24]. For each task, we compare the default configuration of PPO (from IsaacLab), SAC, and TD3 (from PQL [35]) with the best HARBOR-tuned configuration selected from the tuning runs. All reported values are averaged over 5 seeds. We use three metrics to characterize tuning performance. • AUC 0: N denotes the area under the learning curve up to the training horizon N , and measures sample efficiency over the full training process (namely in practice we set N equals the max step). For example, if two policies reach similar final returns but one obtains higher returns earlier in training, it will have a larger AUC 0: N , indicating better sample efficiency. • Tτ denotes the number of environment steps required to reach a task-specific return threshold τ ;for example, if τ is set to a return of 300 on a given task, a method that reaches 300 return at 5M steps is more sample-efficient than one that reaches it at 20M steps. Specifically, we define the return threshold τ separately for each task and algorithm. For a given task-algorithm pair, we first apply the evaluation horizon used in the table and compute the final return of every Default and HARBOR run as the average return over the last 10% of the truncated training curve. We then set 
+
+τ = 0 .8 · max  
+
+> i
+
+Rfinal  
+
+> i
+
+,
+
+where Rfinal  
+
+> i
+
+denotes the final return of run i among all Default and HARBOR seeds for that task-algorithm pair. • Final denotes the mean episodic return over the last 10% of training, and measures asymptotic performance. For example, if training runs for 50M steps, Final is computed from the returns observed in the last 5M steps, which indicates the converged performance after learning stabilizes. Since reward scales differ across tasks and simulators, both AUC 0: N and τ are computed separately for each task–algorithm pair. In the tables, “–” indicates that the corresponding configuration does not reach the threshold within the training horizon. Average T τ improvement is computed only over task–algorithm pairs where both configurations reach τ .Tab. 4 shows that HARBOR consistently improves sample efficiency across simulators and algo-rithms. The improvements are most pronounced on IsaacLab and Loco-Mujoco, where several de-fault configurations learn slowly or fail to reach the task-specific threshold, while HARBOR-tuned configurations achieve substantially stronger performance. On IsaacLab, HARBOR improves aver-age AUC 0: N by 1.3K% and reaches thresholds 18.6% faster on comparable pairs. On Loco-Mujoco, HARBOR improves average AUC 0: N by 238% and reduces T τ by 60.4%. On the more saturated Bi-DexHands benchmark, HARBOR still improves average AUC 0: N by 12.3% and reaches thresholds 42.2% faster, while only falling short of SAC on ShadowHandDoorCloseIn . These results sup-port the main-body observation that HARBOR improves early-stage learning and sample efficiency without requiring changes to the underlying RL algorithms. 
+
+D.5 Ablation Setup and Profiling Details 
+
+This section expands the pillar-ablation study of Sec. 4.3 (Tab. 3). 
+
+Stages and configurations. The pipeline is reported over five stages—dependency and benchmark setup (jointly), then RL integration, task generation, reward generation, and RL tuning—under five configurations: the full harness ( HARBOR ) and three single-pillar ablations of Sec. 3, namely w/o CCDE (removing centralized-control/decentralized-execution, i.e., no subagent isolation or parallel 20 Task Alg. AUC 0: N ↑ Tτ ↓ Final ↑ Gain Default HARBOR Default HARBOR Default HARBOR AUC 
+
+AnymalC 
+
+PPO 13.3 49.5 – 84.15M 34.3 152 +271.6% SAC 2.61 6.72 – 46.60M 3.52 9.16 +157.7% TD3 2.47 6.62 – 34.30M 3.59 8.12 +168.1% 
+
+UnitreeA1 
+
+PPO 1.4K 2.2K 78.51M 30.58M 2.4K 2.7K +58.2% SAC 457 1.8K – 50.89M 609 2.2K +302.6% TD3 447 1.8K – 51.51M 654 2.4K +301.1% 
+
+UnitreeGo2 
+
+PPO 1.8K 2.5K 53.45M 21.50M 2.8K 2.9K +37.1% SAC 386 2.4K – 15.56M 559 2.7K +516.7% TD3 398 2.3K – 22.12M 553 2.7K +470.2% 
+
+UnitreeH1 
+
+PPO 183 450 – 60.16M 431 767 +145.8% SAC 202 617 – 63.22M 333 911 +205.7% TD3 159 510 – 54.32M 257 828 +220.0% 
+
+Average gain 238% AUC 60.4% faster T τ – –
+
+Task Alg. AUC 0: N ↑ Tτ ↓ Final ↑ Gain Default HARBOR Default HARBOR Default HARBOR AUC 
+
+Isaac-Factory-GearMesh-Direct-v0 
+
+PPO 133 435 – 2.49M 118 523 +226.5% SAC 90.5 594 – 2.45M 109 716 +556.7% TD3 70.3 557 – 2.86M 81.6 696 +693.2% 
+
+Isaac-Factory-PegInsert-Direct-v0 
+
+PPO 71.8 247 – 2.32M 87.4 280 +244.0% SAC 48.5 277 – 2.75M 59.2 344 +470.4% TD3 44.9 319 – 1.83M 56.1 372 +610.1% 
+
+Isaac-Franka-Cabinet-Direct-v0 
+
+PPO 2.1K 2.3K 24.16M 19.66M 2.7K 2.8K +8.4% SAC 1.4K 2.0K – 33.22M 1.9K 2.6K +43.1% TD3 1.3K 2.3K – 15.33M 2.0K 2.9K +76.6% 
+
+Isaac-Lift-Cube-Franka-v0 
+
+PPO -1.36 98.6 – 14.46M -0.41 122 +7331.4% SAC -1.07 47.4 – 29.78M -0.76 79.0 +4535.7% TD3 -0.93 12.0 – 19.46M -0.35 20.6 +1392.8% 
+
+Average gain 1.3K% AUC 18.6% faster T τ – –
+
+Task Alg. AUC 0: N ↑ Tτ ↓ Final ↑ Gain Default HARBOR Default HARBOR Default HARBOR AUC 
+
+ShadowHandBlockStack 
+
+PPO 493 555 65.89M 44.26M 716 656 +12.5% SAC 165 190 19.75M 4.77M 189 193 +14.7% TD3 190 199 11.10M 3.33M 209 181 +4.7% 
+
+ShadowHandDoorCloseIn 
+
+PPO 287 295 5.20M 3.56M 293 312 +3.1% SAC 240 236 8.69M 13.41M 257 267 -1.7% TD3 237 281 – 14.61M 250 296 +18.2% 
+
+ShadowHandDoorOpenIn 
+
+PPO 395 399 – 34.71M 412 487 +0.9% SAC 283 319 15.87M 7.44M 345 359 +12.5% TD3 319 348 6.94M 2.83M 354 368 +9.0% 
+
+ShadowHandOver 
+
+PPO 17.7 26.1 34.08M 9.39M 26.8 30.1 +47.8% SAC 19.2 22.3 38.14M 15.07M 23.1 27.9 +16.5% TD3 17.9 19.6 15.19M 12.08M 23.3 24.6 +9.5% 
+
+Average gain 12.3% AUC 42.2% faster T τ – –
+
+Table 4: Detailed RL-tuning results across Loco-MuJoCo, IsaacLab, and Bi-DexHands tasks. 
+
+For each task and algorithm, we compare the default configuration with the best HARBOR-tuned configuration over 5 seeds. trial execution), w/o gate (no verifiable smoke gates), and w/o experience (authored from scratch, without templates, references, or heuristics), plus a no-harness Vanilla baseline (a single-context agent with none of the three pillars). 
+
+Metrics and profiling. For each stage we report S.R. (successes over 10 repeated runs), wall-clock time (minutes), the context tax Ctx (cache-read tokens re-read on every turn, in M—our 21 Table 5: Ablations on the ManiSkill Push-Cube pipeline. † marks a stage that reported success but hid a silent render-path defect. We use default N = 4 for parallelization and Sonnet 4.6                                                                                                              
+
+> Stage Vanilla HARBOR w/o CCDE w/o gate w/o experience S.R. Time Ctx/$ S.R. Time Ctx/$ S.R. Time Ctx/$ S.R. Time Ctx/$ S.R. Time Ctx/$ Dependency setup 9/10 25.1 6.21M / $5.73 10/10 12.9 3.61M / $2.62 10/10 14.3 5.67M / $4.91 10/10 15.1 2.73M / $4.08 8/10 12.2 0.88M / $1.13 RL integration 1/10 34.2 19.71M / $10.05 10/10 19.7 4.84M / $2.92 8/10 20.2 15.73M / $7.88 9/10 †4.7 1.68M / $1.13 5/10 17.0 9.18M / $4.42 Task generation 5/10 15.9 6.86M / $4.09 10/10 9.1 3.80M / $2.68 8/10 4.5 5.19M / $2.59 7/10 6.0 1.47M / $1.29 5/10 12.1 2.47M / $2.09 Reward generation 1/10 56.6 33.35M / $15.39 9/10 4.8 18.66M / $9.92 6/10 27.6 32.24M / $14.22 3/10 3.3 9.17M / $5.73 1/10 6.9 13.33M / $9.30 RL tuning 2/10 81.7 41.47M / $23.02 9/10 4.3 5.59M / $4.54 6/10 29.3 26.07M / $12.21 3/10 8.7 16.12M / $13.28 2/10 13.3 31.85M / $21.55
+> Total ( Σ-win.) 18/50 213.5 107.60M / $58.28 48/50 50.8 36.50M / $22.68 38/50 95.9 84.90M / $41.81 32/50 †37.8 31.17M / $25.51 21/50 61.5 57.71M / $38.49
+
+proxy for the cost of carrying accumulated context), and estimated cost (USD); Time, Ctx, and cost are summed over the five stages and S.R. over the 50 runs. Each stage is profiled as an in-dependent claude-code-profiler window, and we compare on the cross-group–comparable Σ
+
+stage-windows figures (the five per-stage windows summed, excluding idle and orchestration). Costs are estimates under mixed-model pricing on a single ManiSkill slice and should be read as ratios, not absolute levels. Lacking subagent parallelism, w/o CCDE and Vanilla run the reward and RL-tuning trials serially, so their time, cache-read, and cost on those two stages are scaled ×4.
+
+Mechanisms behind the three findings. For w/o CCDE , the single window’s context tax grows super-linearly with pipeline length, and serial trials make it second-slowest overall behind only 
+
+Vanilla ; the over-long context is what corrupts its late-stage edits. The w/o gate render-path defect († in Table 3) produces zero rendered frames while the process exits 0—invisible to static checks, caught only by a render smoke. w/o experience must re-derive empirical contracts from scratch, most notably the ManiSkill auto-reset/truncation convention. The full cost ordering is H ARBOR 
+
+(∼$71) < w/o gate (∼$80) < w/o experience (∼$120) < w/o CCDE (∼$131) < Vanilla (∼$182): the full harness is the cheapest measured configuration despite running every gate, consistent with the Pareto-optimality claim in Sec. 4.3. 
+
+D.6 Sonnet Ablation 
+
+To probe whether HARBOR’s benefits depend on the strongest available model, we consider re-peating the pillar-ablation study of Sec. 4.3 on the ManiSkill Push-Cube pipeline with Sonnet as the underlying agent model, keeping the same five stages, five configurations, default N = 4 paral-lelization, and per-stage profiling protocol of Appx. D.5. We conclude four mechanisms implied by the main experiments: • Reliability drops, concentrated in reasoning-heavy stages. A weaker base model lowers per-stage success most where the task is generative and long-horizon—RL integration, reward gen-eration, and RL tuning—while the mechanical dependency-setup stage stays near-saturated. We therefore lower S.R. mainly on those three stages and leave dependency setup almost unchanged. • The harness’s relative value grows. Because isolation, gates, and experience compensate for a weaker model, the H ARBOR −Vanilla reliability gap widens from 19 points under Opus ( 48 vs. 29 )to ∼ 30 points under Sonnet ( 48 vs. 18 ): the full harness degrades gracefully while the no-harness baseline collapses on the hard stages. • Cost falls by ∼3× but the ordering is preserved. Sonnet’s ∼5× lower per-token price is partly offset by ∼1.5× more retries on the hard stages, so each configuration’s cost scales by roughly 
+
+0.32 ; the cheap-to-expensive ordering (H ARBOR < w/o gate < w/o experience < w/o CCDE <
+
+Vanilla) is unchanged. • Time and context tax rise modestly. More retries inflate wall-clock time ( ∼1.15 ×) and the context tax ( ∼1.3×), but subagent isolation still caps context growth, so w/o CCDE and Vanilla 
+
+remain worst on Ctx and time. The render-path defect ( †) is a tooling/gate gap independent of model capability, so w/o gate still passes it silently. 22

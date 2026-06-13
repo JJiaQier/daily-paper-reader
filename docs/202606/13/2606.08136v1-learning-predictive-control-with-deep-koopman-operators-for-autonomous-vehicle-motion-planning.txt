@@ -1,0 +1,1411 @@
+Title: Learning Predictive Control with Deep Koopman Operators for Autonomous Vehicle Motion Planning
+
+URL Source: https://arxiv.org/pdf/2606.08136v1
+
+Published Time: Tue, 09 Jun 2026 00:47:34 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+> 1
+
+# Learning Predictive Control with Deep Koopman Operators for Autonomous Vehicle Motion Planning 
+
+Xinglong Zhang, Yongqian Xiao, Haotian Cao, Xing Zhou, Xin Yin, Xin Xu 
+
+Abstract —Model Predictive Control (MPC) is widely used for autonomous-vehicle (AV) motion planning, but its real-time applicability is often limited by the need for accurate models and online solution of nonlinear, nonconvex optimization problems in dynamic road environments. Actor–critic reinforcement learning offers a promising alternative for online policy generation, yet its policy-learning process often lacks explicit control-theoretic structure. This article proposes a learning predictive control (LPC) framework with deep Koopman operators for efficient real-time motion planning under nonconvex constraints. To address nonlinear and uncertain vehicle dynamics, a deep-Koopman-based predictor is used to lift the system into an interpretable linear observable space in a data-driven manner. Unlike traditional MPC, which computes open-loop control se-quences, the proposed LPC framework yields a closed-loop state-feedback policy within each prediction interval through receding-horizon actor–critic learning. To ensure safety under nonconvex environmental constraints, LPC constructs convex local surrogate representations of obstacles and defines corresponding potential-field functions. These functions and their gradients are directly embedded into the actor–critic structure, enabling efficient, safety-aware policy learning. Extensive simulations and real-world experiments on the HongQi-EHS3 platform demonstrate favorable performance in diverse obstacle-avoidance scenarios in terms of safety, computational efficiency, and driving comfort, compared with benchmark methods such as CBF-MPC and LMPCC. 
+
+Note to Practitioners —This paper addresses real-time motion planning for autonomous vehicles in dynamic road environments, where conventional MPC can be limited by model dependence and the need to solve nonlinear, nonconvex optimization problems online. The proposed learning predictive control framework combines deep Koopman modeling with receding-horizon actor– critic learning, so that vehicle dynamics can be predicted in a lifted linear space and motion policies can be updated online in closed-loop form. In addition, road-boundary and obstacle information are incorporated directly into the policy-learning process through safety shaping and gradient embedding, rather than being handled only by a separate correction module. For practitioners, this provides a computationally efficient and safety-aware motion-planning scheme suitable for onboard implemen-tation. Simulations and real-vehicle experiments on the HongQi-EHS3 platform show favorable safety, comfort, and real-time performance in representative obstacle-avoidance tasks, including straight-road, curved-road, and mixed-surface scenarios. Current validation focuses on representative operating conditions, and further extension to more diverse dynamic-traffic scenarios and broader road/surface conditions remains an important next step. 
+
+Index Terms —Model Predictive Control, deep Koopman op-erators, actor-critic reinforcement learning, motion planning, autonomous vehicles. 
+
+This work was supported in part by the National Natural Science Foundation of China under Grants T2521006, 62533021, and U24A20279; in part by Science and Technology Innovation Program of Hunan Province under Grant 2024RC3145.. 
+
+I. I NTRODUCTION 
+
+# IN recent years, autonomous driving technology has ad-vanced rapidly in structured and semi-structured environ-ments, such as public roads, smart ports, and unmanned mining fields. Nevertheless, improving the real-time maneu-verability of autonomous vehicles (AVs) in dynamic environ-ments remains a major challenge, and stronger environmental adaptability and learning capability are still essential [1], [2]. A typical autonomous driving system integrates perception, navigation, decision-making, trajectory planning, and tracking control [3], among which trajectory planning plays a central role because it directly affects both maneuverability and safety. Among trajectory planning methods, optimization-based planners aim to generate safe future motions by minimiz-ing a prescribed cost subject to safety-related constraints. A representative example is Model Predictive Control (MPC), which exploits predictive information over a finite horizon while accounting for vehicle dynamics and obstacle avoid-ance constraints [4], [5]. However, MPC performance de-pends strongly on model accuracy and may deteriorate when simplified or linearized vehicle models fail to capture com-plex dynamics, thereby limiting adaptability across varying conditions [2], [6]. In addition, the resulting nonlinear and non-convex optimization problems are often computationally demanding and susceptible to solver instability. Reinforcement learning (RL), by contrast, offers a data-driven way to learn complex control policies directly, but existing RL methods still face challenges in sample efficiency, interpretability, and safety assurance [7], [8]. Ghalamzan Esfahani, Amir M.Recent studies have advanced online policy generation by integrating reinforcement learning within a receding-horizon framework, enabling efficient online policy updates [9], [10], [1]. However, designing an online actor–critic learning mechanism that en-sures safety under complex environmental constraints remains an open challenge, as it requires balancing learning efficiency, adaptability, and safety. In motion planning under unknown environments, a high-fidelity yet tractable dynamic model is essential for achieving safe and efficient control under constraints. In this context, recent advances in Koopman operator theory provide a promis-ing avenue for reducing both modeling and computational complexity [11], [12], [13]. By lifting nonlinear dynamics into a higher-dimensional observable space, the Koopman operator yields an approximately linear system representation, thereby facilitating optimization-based control with improved computational efficiency. This perspective motivates our policy learning strategy in the linear Koopman observable space, 
+
+> arXiv:2606.08136v1 [cs.RO] 6 Jun 2026 2
+
+enabling efficient and reliable online policy updates. In this article, we propose a computationally efficient learn-ing predictive control (LPC) framework that leverages deep Koopman operators and a receding-horizon reinforcement learning mechanism to enable real-time, safety-aware motion planning for autonomous vehicles. The main contributions are summarized as follows.  
+
+> ●
+
+We develop a unified LPC framework for autonomous ve-hicle motion planning under unknown dynamics and non-convex environmental constraints. The framework lever-ages deep Koopman operators to lift the unknown vehicle dynamics into a linear observable space. Within each prediction interval, a finite-horizon actor–critic learning mechanism is formulated in this space, enabling fast and reliable closed-loop state-feedback policy generation, rather than computing open-loop control sequences online as in conventional numerical MPC. This design facilitates successive and reliable online policy improvement with real-time implementation capability.  
+
+> ●
+
+Unlike existing safe RL approaches that rely on online safety filters [14], [15], we propose a unified safety-aware policy learning method that directly incorporates the potential function and its gradient as basis functions in both the actor and critic. The associated weights are updated online with low computational overhead, en-abling efficient generation of repulsive forces for obstacle avoidance.  
+
+> ●
+
+We validate the proposed framework through extensive simulations and real-world experiments on the HongQi-EHS3 platform. The results demonstrate favorable per-formance in safety, driving comfort, and computational efficiency relative to benchmark methods such as Control Barrier Function-based MPC (CBF-MPC) [5] and Local Model Predictive Contour Control (LMPCC) [6], support-ing the practical applicability of the proposed method. The rest of the article is organized as follows: Section II reviews the related literature. Section III presents the deep-Koopman-based vehicle dynamics modeling and the handling of road-boundary and obstacle constraints. Section IV details the proposed LPC framework with deep Koopman vehicle models and actor–critic learning. Section V reports the simu-lation and real-vehicle results. Section VI concludes the article and discusses future work. II. R ELATED WORK 
+
+MPC-based trajectory planning : MPC is a widely used model-based approach that optimizes control objectives over a future horizon and has been extensively applied to robot mo-tion planning and control [16], [17]. In AV motion planning, obstacles and road boundaries are often incorporated into the optimization problem as safety constraints or potential fields [1], [18], [19], [20], which typically results in a nonlinear optimization problem to be solved online. Solving this problem yields executable control sequences or safe trajectories while balancing performance and safety. Although advanced solvers such as IPOPT and SNOPT can handle nonlinear programs, they often suffer from high computational cost and occasional numerical failures. Linearization-based methods can simplify the problem into a QP form [4], improving real-time reliability, but at the expense of model fidelity, thereby creating a trade-off between computational efficiency and control performance. 
+
+Data-driven vehicle modeling with Koopman operators :The Koopman operator has recently emerged as a promising data-driven modeling tool for control-oriented design [11]. By lifting nonlinear dynamics into a higher-dimensional space, it enables an approximately linear representation that facilitates control design and optimization without relying on simplified or locally linearized models. Although the Koopman operator is inherently infinite-dimensional, finite-dimensional approx-imations such as Extended Dynamic Mode Decomposition (EDMD) have been developed. However, EDMD usually de-pends on manually designed kernel functions, which has mo-tivated deep-learning-based approaches for automatically con-structing observation functions. For example, adaptive basis function learning with deep neural networks has been proposed to improve modeling flexibility [21], while a variational deep Koopman framework has been introduced to learn Gaussian-distributed observables, although its use of LSTMs and GRUs increases computational complexity [22]. In the AV domain, a data-driven Koopman-EDMD framework was developed for modeling vehicle dynamics on a scaled platform for real-time trajectory tracking [23]. Moreover, a deep Koopman model combined with neural networks and LSTM has been applied to freeway traffic flow prediction and ramp metering [24]. Recent studies have further integrated attention mechanisms such as Transformers [25], and combined Koopman operators with convolutional architectures for image-based dynamics modeling [26], [27], further demonstrating the versatility of Koopman-based methods. In addition, bilinear vehicle mod-els built on Koopman representations have shown promising performance in control applications such as deployment on resource-constrained systems [28] and lane keeping with ob-stacle avoidance [29]. These studies highlight the potential of Koopman-based methods for dynamic system modeling and control. 
+
+Data-driven trajectory planning : Recent advances in in-telligent control have also highlighted the potential of data-driven methods for AVs, particularly those based on neural net-works [30], [31]. Supervised learning approaches employ deep networks to approximate nonlinear MPC policies, improving online efficiency but typically requiring extensive offline data and offering limited adaptability after deployment [32]. In contrast, vision-based end-to-end (E2E) control, usually driven by convolutional neural networks (CNNs), reduces reliance on explicit modeling but still faces difficulties in integrating high-level decision-making, which hinders practical deployment [33], [34]. Nevertheless, incorporating imitation learning with expert demonstrations and collision data has improved the performance of E2E methods [35]. Although such methods are promising for tracking control and may reduce dependence on costly mapping systems, their lack of transparency and safety guarantees still limits their practical use. RL provides an appealing alternative by enabling online policy learning for complex AV tasks [31]. Emerging studies involving large language models (LLMs) also suggest possible 3
+
+improvements in interpretability [36], [37]. Within RL, deep RL (DRL) has been widely investigated for motion planning and control in diverse scenarios [38], [39], [40]. As another important line of research, Approximate Dynamic Program-ming (ADP) extends dynamic programming ideas to complex nonlinear systems [41]. For AV control, ADP methods often adopt actor–critic structures to approximate optimal policies and value functions. For example, Dual Heuristic Program-ming (DHP) has been used for trajectory tracking through steering kinematics [42], while related studies model lateral control as a Markov Decision Process (MDP) and develop DHP-based controllers accordingly [8], [43]. More recently, Receding-Horizon RL (RHRL) approaches have combined actor–critic learning with the receding-horizon mechanism for more efficient policy generation [44], [9], [10], [1]. Unlike traditional MPC, these methods generate explicit feedback policies rather than open-loop control sequences. Building on this line of research, this work extends the RHRL framework to real-time AV motion planning by incorporating Koopman-based dynamics modeling and actor–critic learning, thereby enabling fast policy optimization in a higher-dimensional observable space under unknown dynamics. III. V EHICLE DYNAMICS MODELING AND SAFETY 
+
+CONSTRAINTS HANDLING 
+
+This section frames the challenge of navigating under environmental safety constraints, such as obstacles and road boundaries, for AV motion planning treated as an online optimization problem. To address this, we employ the deep Koopman approach to model vehicle system dynamics, trans-forming nonlinear dynamics into a linear observation space for efficient control design. Additionally, convex local approxima-tions are used to construct surrogate obstacle representations, from which potential field functions are built for soft safety handling within a unified actor–critic framework, thereby allowing safety information to participate directly in online policy learning. 
+
+A. Vehicle Dynamics Modeling 
+
+Traditional model-based control methods for motion plan-ning often rely on a simplified AV bicycle model, involving vehicle parameters such as front/rear cornering stiffness, total mass, and yaw inertia. In this work, however, the vehicle model is represented in discrete time as 
+
+xk+1 = f (xk, u k) , (1) where f (⋅) denotes an unknown nonlinear vehicle dynamics map. More specifically, the state at time k is defined as 
+
+xk = [px,k , p y,k , ψ k, v x,k , v y,k , ω k] ∈ X, where (px,k , p y,k )
+
+denotes the vehicle position in a local coordinate system, ψk
+
+is the yaw angle, and (vx,k , v y,k , ω k) denote the longitudinal velocity, lateral velocity, and yaw rate, respectively. The input is given by uk = [ζk, η k]⊺ ∈ U, where ζk is the steering angle and ηk is the longitudinal acceleration command. Since the state includes both lateral and yaw dynamics, Eq. (1) can be interpreted as a compact nonlinear dynamic representation of vehicle motion, whose unknown mapping  
+
+> Fig. 1. Deep Koopman vehicle dynamics modeling framework (MLP: Multi-layer Perception).
+
+f (⋅) implicitly captures the combined effects of lateral–yaw coupling, wheel–road interaction, and other nonlinear dynamic characteristics reflected in the data, rather than a purely geometric kinematic relation. However, the corresponding dynamic parameters are difficult to estimate accurately, which can degrade model fidelity in nonlinear operating regimes. To address this issue, we adopt a deep Koopman framework to learn a lifted surrogate model of the nonlinear dynamics (1). In this lifted observable space, the Koopman model evolves approximately linearly, enabling efficient forward prediction for online motion planning. 
+
+B. Deep Koopman Modeling Approach 
+
+The Koopman operator provides a powerful framework for modeling nonlinear systems by lifting their dynamics into a higher-dimensional space where they evolve linearly, enabling efficient and interpretable control design. However, identifying suitable observation functions for complex AV systems is chal-lenging. To address this, we combine the Koopman operator with deep neural networks, leveraging their ability to learn ex-pressive, data-driven observation functions for accurate vehicle dynamics modeling. As shown in Fig. 1, the deep Koopman maps the nonlinear system to a linear observation space O,the encoder ϕ(⋅, θ e), parameterized by θe and implemented as a Multi-layer Perceptron (MLP), transforms the nonlinear vehicle state space into O, where dynamics are governed by linear matrices A and B. Meanwhile, the decoder ˜ϕ(ϕ(xk)) ,an MLP parameterized by θd, maps the observation state back to the original state space, enabling state predictions in the nonlinear domain. This framework is then expressed as 
+
+⎧⎪⎪⎨⎪⎪⎩
+
+ˆϕ(xk+1) = A ϕ(xk) + Bu k,
+
+ˆxk+1 = ˜ϕ( ˆϕ(xk+1)) . (2) where A ∈ RL×L and B ∈ RL×m, with L denoting the dimension of the observation space. ˆϕ(xk+1) denotes the predicted observation state at time k + 1, from which the corresponding predicted vehicle state ˆxk+1 is obtained via the decoder. To approximate vehicle dynamics over an extended time window, minimizing the multi-step prediction error takes precedence over the one-step error. Accordingly, the loss 4
+
+function includes multi-step reconstruction prediction loss and reconstruction loss, as well as multi-step prediction loss within the observation space. Unlike EDMD, which uses one-step prediction approximations solvable analytically, this problem’s complexity precludes an analytical solution due to its multi-step nature. Instead, a data-driven training approach is adopted, in which the inclusion of a multi-step loss function renders least-squares methods impractical, but batch gradient descent provides an effective training alternative. More training details are provided in our previous work [45]. 
+
+C. Constraints Handling 
+
+RL excels in adaptive control for AVs but struggles to incor-porate hard nonconvex safety constraints directly into policy design and online learning. To obtain a tractable formulation for safety-aware policy learning, we first construct convex local surrogate representations of obstacle boundaries and the associated potential field functions. These are then integrated into the actor–critic architecture to enable safe policy learning. This design yields a unified safety-aware learning framework for motion planning under complex non-convex constraints. 
+
+(1) Road Boundary Constraints : The feasible set for road boundary constraints is defined as Ωbk = {pk∣pmin ≤ pk −
+
+pref,k ≤ pmax }, where pk = I2×n ⋅ xk and pref,k = I2×n ⋅ xref,k 
+
+represent the coordinate vectors of the autonomous vehicle and its nearest reference point, respectively. The terms pmin , p max ∈
+
+R2 denote the time-varying road boundaries. To enforce lane constraints on the vehicle, a logarithmic potential field function can be introduced: 
+
+Bb(db) = − ln ( γ1 (db − db, min )
+
+γ1 (db − db, min ) + 1 )−ln ( γ2 (db, max − db)
+
+γ2 (db, max − db) + 1 ) ,
+
+(3) where db is the normal-directional distance to the road bound-ary, db, min and db, max are the minimum and maximum dis-tances, and γ1, γ 2 > 0 control the function’s suppression effect near boundaries. The function, inactive at safe distances to save computational resources, balances safety and optimality based on γ1 and γ2.
+
+(2) Obstacle Avoidance Constraints : The obstacle avoidance constraint set {pk ∣ pk ∉ Ωok} is potentially nonconvex, where Ωok is the obstacle region and pk = ¯Cϕ(xk) is the vehicle’s position in the observation space. We apply the Convex Feasible Set (CFS) method [2] to approximate this set with a convex representation, defining the distance from the obstacle as d(p, Ωok) ∶= min z∈Ωok d(p, z ), where d(p, z ) is the Euclidean distance. The vehicle is approximated by j circular envelopes, yielding the constraint: 
+
+¯Cϕ (xk) ∈ Fk = ∩ji=1Fik, (4) where Fik = {˜pk,i ∣ d(˜pk,i , Ωok) ≥ do, min }, and ˜pk,i is a point outside the i-th envelope, and do, min is the safety distance threshold. The standard CFS method produces time-varying polyhedral constraints that are prone to instability due to sensitivity to initial conditions, often requiring additional guidance for effective obstacle avoidance. To address these limitations, an enhanced CFS approach is proposed, incorpo-rating parameters lf and lb to reshape polyhedral edges for  
+
+> Fig. 2. Illustration of convex representation for obstacle constraints.
+
+better safety and comfort (Fig. 2). The parameters hs and ws
+
+define the expanded dimensions of the obstacle, considering the positioning and control inaccuracies. A convex polygon, formed by points Pb and Pf (rear and front corners), extends the obstacle’s bounding box by lb backward and lf forward along its longitudinal axis from the lane centerline, guided by the minimal safe following gap. It encloses the obstacle’s circular envelopes, ensuring a convex representation. The resulting linear safety constraint is: 
+
+Gi(ϕ(xk)) = Li,k ϕ(xk) + di,k − gi,k , (5) where Li,k = [bi,k , c i,k , 01×L−2], bi,k , ci,k are the coefficients of the normal vector to the edge, di,k is the offset determined by the position of the edge relative to the origin in the coor-dinate system, while gi,k ≤ 0 is the safety margin shrinking the obstacle avoidance constraint for safety under dynamics modeling errors. Then the obstacle potential field function as a soft constraint is defined by 
+
+Bo (ϕ (xk)) =
+
+> mo
+
+∑
+
+> i=1
+
+1
+
+Gi (ϕ (xk)) 2 + ϵϕ,i 
+
+, (6) where mo is the number of edges of the convex polygon representing the obstacle. The above potential-field terms act as soft safety penalties, while their associated gradients serve as repulsive forces within the actor–critic structure for online safe learning. In implementation, the regularization term εϕ,i > 0 is introduced to avoid singularity and improve numerical stability; smaller values lead to stronger repulsive effects near unsafe regions and therefore enlarge empirical safety margins. IV. LPC FRAMEWORK WITH DEEP KOOPMAN OPERATORS 
+
+This section introduces the LPC framework with a deep Koopman vehicle dynamics model and actor-critic learning. Unlike traditional MPC, which computes an open-loop control sequence, the proposed framework leverages an actor-critic learning strategy to derive a closed-loop control policy within the prediction horizon. Utilizing the deep Koopman vehicle dynamics model as its prediction model, it produces a control policy that seamlessly integrates planning and control for direct vehicle application. Using the deep Koopman model for predictions, it reformulates the value function with obstacle functions, derives optimal control via the Hamilton-Jacobi-Bellman (HJB) equation, and implements online learning of the control policy and value function in the actor-critic framework. 5
+
+A. Value Function Reconstruction and Optimal Control Strat-egy 
+
+Since the RL approach relies on trial-and-error exploration and cannot directly enforce hard constraints, we address this by integrating obstacle functions, representing safety constraints such as road boundaries and obstacle avoidance, into the performance index. This transforms the original constrained optimization problem into an unconstrained one, leveraging soft constraints for simpler and safer resolution. Let ϕe = ˆϕ − ϕref , where ϕref (xk) is the reference trajectory’s observed state. The reward function is defined as 
+
+r(ϕe(xk), u k) = ∥ϕe(xk)∥ 2 
+
+> Q
+
++ ∥uk∥2
+
+> R
+
++ γbBb(db,k ) + γoBo(ϕ(xk)) , (7) where Q ∈ RL×L and R ∈ Rm×m are positive definite matrices penalizing deviations in observed states and control inputs, respectively, γb > 0 and γo > 0 are penalty coefficients weighting the soft constraints. Similarly, the terminal cost Vf (ϕe(xk+Np )) is reformulated as 
+
+Vf (ϕe(xk+Np )) = ∥ϕe(xk+Np∣k)∥ 2 
+
+> P
+
++ γbBb(db,k +Np∣k)
+
++ γoBo( ˆϕ(xk+Np∣k)) , (8) where P ∈ RL×L is a positive definite matrix. After the value function reconstruction process, building on the deep Koopman vehicle dynamics model and safe constraint handling, we formulate the AV motion planning problem as a finite-horizon optimization at each discrete time step k:
+
+min 
+
+> uk∶k+Np −1
+
+Vk =
+
+> Np−1
+
+∑
+
+> i=0
+
+r(ϕe(xk+i∣k), u k+i∣k) + Vf (ϕe(xk+Np )) 
+
+s.t. ˆϕ(xk+1) = Aϕ(xk) + Bu k
+
+(9) where Np denotes the prediction horizon length. Based on the Bellman optimality principle, the HJB equation in the prediction horizon τ ∈ [k, k + Np − 1] can be written as 
+
+V ∗ 
+
+> τ
+
+= min   
+
+> uτ∈U
+
+(r (ϕe,τ , u τ ) + V ∗ 
+
+> τ+1
+
+), (10) where τ ∈ [k, k + Np − 1], ϕe,τ = ϕe(xτ ) denotes the observed states, and V ∗ 
+
+> τ
+
+denotes the optimal value function within the prediction horizon. Thus, the optimal control u∗ 
+
+> τ
+
+is given by 
+
+u∗ 
+
+> τ
+
+= arg min  
+
+> uτ∈U
+
+(r (ϕe,τ , u τ ) + V ∗ 
+
+> τ+1
+
+). (11) Moreover, the costate value function is defined as λτ = 
+
+> ∂V τ
+> ∂ϕe,τ
+
+, and noticing λ∗  
+
+> τ+1
+
+= ∂V ∗   
+
+> τ+1
+> ∂ϕe,τ +1
+
+, the optimal costate value function λ∗ can be expressed as 
+
+λ∗ 
+
+> τ
+
+= ∂V ∗
+
+> τ
+
+∂ϕe,τ 
+
+= 2Qϕe,τ + A⊺λ∗  
+
+> τ+1
+
++ γbβb,τ + γoβo,τ , (12) and 
+
+βb,τ = ∂Bb (db,τ )
+
+∂d b,τ 
+
+∂d b,τ 
+
+∂ϕe,τ 
+
+, βo,τ = ∂Bo ( ˆϕτ )
+
+∂ϕe,τ 
+
+,
+
+and A = ∂ϕe,τ +1 
+
+> ∂ϕe,τ
+
+could be obtained from (2), db,τ represents the Euclidean distance between the autonomous vehicle and the nearest point on the road boundary. Then, the optimal terminal costate value function is deter-mined by 
+
+λ∗ 
+
+> k+Np
+
+= 2P ϕe,k +Np + γbβb,k +Np + γoβo,k +Np , (13) where 
+
+βb,k +Np = ∂Bb(db,k +Np )
+
+∂d b,k +Np
+
+∂d b,k +Np
+
+∂ϕe,k +Np
+
+, βo,k +Np = ∂Bo( ˆϕk+Np )
+
+∂ϕe,k +Np
+
+.
+
+B. Safe Policy Learning in the Prediction Interval 
+
+Traditional infinite-horizon ADP methods for online control policy learning lack efficiency. To address this, we propose the LPC framework with a deep Koopman vehicle dynamics model. This approach converts infinite-horizon optimization into finite-horizon problems, enabling iterative policy learning within the prediction horizon [k, k + Np − 1] to ensure con-vergence. The deep Koopman model’s linear dynamics in the observation space provide high forward inference efficiency, thereby enhancing real-time performance. Furthermore, road boundary and obstacle constraint handling ensure safe and ef-fective avoidance maneuvers. As shown in Fig. 3, the proposed framework uses onboard sensor data for the vehicle’s state xk
+
+and obstacle positions. Within the prediction horizon, the deep Koopman model predicts the vehicle’s trajectory and obstacle interactions, while an actor-critic structure learns the control policy and value function. The resulting control sequence 
+
+uk∶k+Np−1 is computed, but only the first element is applied at time k. Meanwhile, the optimization repeats at k + 1 to update the solution.  
+
+> Fig. 3. LPC with deep Koopman models and actor-critic learning (Obst.: Obstacle, DK: deep Koopman).
+
+The LPC framework based on actor-critic structure is used to learn and approximate the optimal value function (10) and the optimal control policy (11). Let V (0) 
+
+> τ
+
+= 0, the proposed method iteratively updates the control policy and function val-ues through policy evaluation and policy optimization within the prediction horizon, respectively. 6
+
+(1) Policy evaluation: 
+
+V (i+1) 
+
+> τ
+
+= r (ϕe,τ , u τ ) + V (i) 
+
+> τ+1
+
+, (14a) 
+
+V (i+1) 
+
+> k+Np
+
+= Vf (ϕe,k +Np ). (14b) (2) Policy optimization: 
+
+u(i) 
+
+> τ
+
+= arg min  
+
+> uτ∈U
+
+(r (ϕe,τ , u τ ) + V (i) 
+
+> τ+1
+
+), (14c) where τ ∈ [k, k + Np − 1], and the upper script (i) denotes the iteration number. Next, we present the receding horizon value iteration algo-rithm based on the costate value function. Let λ(0) 
+
+> τ
+
+= 0, and the policy evaluation and policy optimization iterations within the prediction horizon are given by 
+
+λ(i+1) 
+
+> τ
+
+= 2Qϕe,τ + ΓA⊺λ(i)  
+
+> τ+1
+
++ γbβb,τ + γoβo,τ ,λ(i+1) 
+
+> k+Np
+
+= 2P ϕe,k +Np + γbβb,k +Np + γoβo,k +Np , (15) 
+
+u(i) 
+
+> τ
+
+(j) =
+
+⎧⎪⎪⎪⎪⎨⎪⎪⎪⎪⎩
+
+˜u(i) 
+
+> τ
+
+(j) umin (j) ≤ ˜u(i) 
+
+> τ
+
+(j) ≤ umax (j),umin (j) ˜u(i) 
+
+> τ
+
+(j) < umin (j),umax (j) ˜u(i) 
+
+> τ
+
+(j) > umax (j),
+
+(16) Here, Γ ∈ (0, 1] is the actor–critic update discount factor, which weights the propagation of future co-state information within the prediction horizon, and 
+
+˜u(i) 
+
+> τ
+
+= − 12 R−1ΓB⊺λ(i) 
+
+> τ+1
+
+, τ ∈ [k, k + Np − 1]
+
+and ˜u(i) 
+
+> τ
+
+(j) represents the j-th element of ˜u(i) 
+
+> τ
+
+. Similarly, 
+
+umin (j), umax (j), u(i) 
+
+> τ
+
+(j) represent the j-th elements of umin ,
+
+umax , u(i) 
+
+> τ
+
+, respectively. The convergence analysis of the finite-horizon policy-learning procedure is deferred to Appendix A. 
+
+C. Online Safe Actor-critic Implementation 
+
+This section uses actor-critic learning to implement the proposed approach, where both the actor and critic are realized using neural networks. The actor network is responsible for learning and approximating the optimal control policy, while the critic network evaluates the learned control policy. To achieve safe vehicle motion control in complex environments, the co-state value function includes obstacle function terms for road boundary and obstacle avoidance. Therefore, the output layer structure of the critic network is designed as 
+
+ˆλτ = W ⊺ 
+
+> c,τ
+
+hc(ϕe,τ ) + bc,τ + γbβb,τ + γoβo,τ , (17) where Wc,τ and bc,τ represent the weight matrix and bias vector of the output layer, respectively. hc(ϕe,τ ) represents the output of the last hidden layer. When the autonomous vehicle approaches the road and obstacle constraint boundaries, the last two terms in the equation will increase sharply, causing the vehicle to move away from the road boundary and the obstacle boundary. From equation (15), the target co-state value function of the critic network within the prediction horizon [k, k + Np] is calculated as follows 
+
+¯λτ = 2Qϕe,τ + ΓA⊺ ˆλτ +1 + γbβb,τ + γoβo,τ ,
+
+¯λk+Np = 2P ϕe,k +Np + γbβb,k +Np + γoβo,k +Np , (18) where τ ∈ [k, k + Np − 1], and ˆλτ +1 = ˆλ( ˆϕe,τ +1).During the algorithm training process, the critic network minimizes the Temporal Difference (TD) error, so the corre-sponding optimization objective function δc,τ can be designed as follows 
+
+δc,τ = 12 ∥ˆλτ − ¯λτ ∥22 , (19) where ˆλτ is obtained from the critic network, and ¯λτ is calculated using equation (18). The update rule for the critic network weights is given by 
+
+θc,τ +1 = θc,τ − αc,τ δc,τ 
+
+∂ˆλ(ϕe,τ )
+
+∂θ c,τ 
+
+, (20) where αc,τ ∈ (0, 1] is the learning rate for the critic; θc
+
+represents the weights of the critic network, which include the weight matrices and bias vectors for each layer of the neural network. The actor network is implemented using a neural network with the activation function of the final layer being the hyperbolic tangent function, namely, 
+
+ˆuτ = tanh (W ⊺ 
+
+> a,τ
+
+ha,τ (ϕe,τ ) + ba,τ + Kb,τ βb,τ + Ko,τ βo,τ ) ,
+
+(21) where Wa,τ , ba,τ , Ko,τ ∈ Rm×L, and Kb,τ ∈ Rm×L are the weights for the output layer of the actor-network; ha,τ (ϕe,τ )
+
+represents the output of the last hidden layer of the actor-network. From Eq. (16), the target policy for the actor-network is given by 
+
+¯uτ (j) =
+
+⎧⎪⎪⎪⎪⎨⎪⎪⎪⎪⎩
+
+ˆ˜uτ (j) umin (j) ≤ ˆ˜uτ ≤ umax (j),umin (j) ˆ˜uτ (j) < umin (j),umax (j) ˆ˜uτ (j) > umax (j),
+
+(22) where ˆ˜uτ = − 12 R−1ΓB⊺ ˆλτ +1; u(j) represents the j-th element of u.The optimization objective function for the actor-network is given by 
+
+δa,τ = 12 ∥ˆuτ − ¯uτ ∥22 , (23) where ˆuτ is obtained from equation (21). The weight update rule for the actor-network is 
+
+θa,τ +1 = θa,τ − αa,τ δa,τ 
+
+∂ ˆuτ
+
+∂θ a,τ 
+
+, (24) where αa,τ is the learning rate for the actor network. 
+
+Remark 1. The pseudocode of the proposed method is sum-marized in Algorithm 1. The per-cycle computational cost is dominated by the inner loop, which performs imax iterations over a prediction horizon of length Np. For each step in the prediction horizon, the main computations include obstacle-function gradient evaluation, with complexity O(moL), lifted-state prediction and costate update based on matrix op-erations, with complexity O(L2), and actor–critic network evaluations and updates, whose aggregated cost is denoted by O(Nnn ). Therefore, the overall computational complexity per control cycle is O(imax Np (L2 + moL + Nnn )) . This com-plexity is polynomial in the main design dimensions, indicating 7
+
+Algorithm 1 LPC with deep Koopman Operators 
+
+Require: deep Koopman model Eq.(2), hyper-parameters (Q, R, Γ, N p, α a, α c, i max ), reference trajectory Tref , safety distances ( ds, d p). Initialize critic weights θc s.t. λ0 
+
+> τ
+
+= 0,actor weights θa. Set k = 1; Flag road = 1 if vehicle is within road safety range, else 0; 
+
+> 1:
+
+while Flag road == 1 and do,k > ds do  
+
+> 2:
+
+Obtain the vehicle’s current state xk and all obstacle states via onboard sensors;  
+
+> 3:
+
+Convert the vehicle, obstacle states, reference trajectory, and road boundary to local coordinates;  
+
+> 4:
+
+Obtain the current ϕτ from the deep Koopman vehicle dynamics model (2)  
+
+> 5:
+
+i = 0; 
+
+> 6:
+
+while i < imax do  
+
+> 7:
+
+for τ ∈ [k, k + Np − 1] do  
+
+> 8:
+
+βo,τ = 0L×1, βb,τ = 0L×1; O(L) 
+
+> 9:
+
+if do,k < dp then  
+
+> 10:
+
+Calculate βo,τ based on Eq. (6); O(moL) 
+
+> 11:
+
+end if  
+
+> 12:
+
+if db,k < ds then  
+
+> 13:
+
+Compute βb,τ based on Eq. (3); O(L) 
+
+> 14:
+
+end if  
+
+> 15:
+
+Obtain ˆuτ from Eq. (21); O(Nnn ) 
+
+> 16:
+
+Input ˆuτ into the deep Koopman model (2) to predict the vehicle’s next state ˆϕτ +1; O(L2 + Lm ) 
+
+> 17:
+
+Calculate ˆλτ +1 using Eq. (17); O(Nnn ) 
+
+> 18:
+
+Compute the target co-state value function ¯λτ
+
+using Eq. (18); O(L2 + moL) 
+
+> 19:
+
+Calculate the co-state value function error via Eq. (19) and update critic network weights to θc,τ +1
+
+using Eq. (20); O(Nnn ) 
+
+> 20:
+
+Compute ¯uτ using Eq. (22); O(Lm ) 
+
+> 21:
+
+Compute the actor loss via Eq. (23) and update actor weights to θa,τ +1 using Eq. (24); O(Nnn ) 
+
+> 22:
+
+end for  
+
+> 23:
+
+i = i + 1; 
+
+> 24:
+
+end while  
+
+> 25:
+
+Apply the first control input from the predicted time horizon to the vehicle system;  
+
+> 26:
+
+Set k = k + 1; 
+
+> 27:
+
+end while 
+
+Complexity notation: Nnn denotes the total per-step neural-network operation count associated with the actor–critic im-plementation; for fixed network architectures, it is proportional to the overall parameter scale of the actor and critic networks. 
+
+favorable computational scalability and supporting practical implementation. 
+
+Remark 2. The convergence result within each prediction interval, together with the safety property of the predicted tra-jectory induced by the designed potential-function mechanism, is established but omitted here for brevity. Interested readers are referred to Appendix A for detailed theoretical results. 
+
+V. S IMULATIONS AND REAL -WORLD EXPERIMENTS 
+
+This section evaluates the proposed LPC with Deep Koop-man Operators (referred to as “Ours”) through simulations and real-world experiments, comparing its performance against two benchmarks of CBF-MPC and LMPCC. Simulations covered four diverse scenarios involving static and dynamic obstacle avoidance on straight and curved roads, while real-world tests were conducted on the HongQi-EHS3 platform. All simulations are performed on a Windows 11 platform with an AMD Ryzen 9 5950X @ 3.2 GHz and 32GB RAM, with a sampling interval of ts = 0.02 s and prediction horizon 
+
+Np = 30 . The parameters of the road boundary and obstacle potential functions were γ1 = γ2 = 1.5, d b, max = 4, d b, min = −4,
+
+γo = 9.5, ϵϕ = 0.04 , g = 0.3; the weight matrices are set as Q = diag {20 , 300 , 300 , 300 , 20 , 20 , 100 ⋅ 11×(L−n)}, and 
+
+R = diag {5000 , 5000 }; the learning rates of actor and critic were 0.1 and 0.2, respectively, which were selected based on empirical results from simulation trials. The actor–critic update discount factor is set to Γ = 1 unless otherwise stated. Besides, during the real-world experiments with the HongQi E-HS3 platform, the vehicle state used by the proposed frame-work was obtained from fused onboard sensing/localization outputs, including position, heading, longitudinal velocity, lateral velocity, and yaw rate. Since the HongQi E-HS3 is an electric vehicle, the longitudinal control input in the proposed framework was defined as commanded longitudinal acceleration rather than raw pedal percentage. In the low-level implementation, this commanded longitudinal accelera-tion was tracked by a PID-based longitudinal controller, while the steering command is sent to the steering actuation layer accordingly. 
+
+A. Open-Loop Multi-Step Prediction Verification of the Deep Koopman Model 
+
+We first verify the open-loop multi-step prediction per-formance of the learned deep Koopman model using both high-fidelity simulation data and real-vehicle data. The high-fidelity CarSim dataset contains 38 trajectories (approximately 
+
+8.6 × 10 5 samples) with a sampling interval of 10 ms, where the reference speed was scheduled according to road curva-ture and reaches up to 60 km/h in low-curvature segments. The real-vehicle dataset was collected from the HongQi E-HS3 platform using fused GNSS/INS-based localization and contains approximately 8.1 × 10 5 samples. To quantitatively evaluate the open-loop multi-step predic-tion performance in the observable space, the mean absolute error (MAE) of the i-th observable dimension is defined as 
+
+Ei = 1
+
+MN NpMN
+
+∑
+
+> j=1
+> Np
+
+∑
+
+> k=1
+
+∣ϕi(x[j] 
+
+> k
+
+) − ˆϕi(x[j] 
+
+> k
+
+)∣ , (25) where Ei denotes the MAE of the i-th observable dimension, 
+
+MN is the number of test trajectories, Np is the prediction horizon, x[j] 
+
+> k
+
+denotes the k-th state of the j-th test trajectory, and ϕi(⋅) and ˆϕi(⋅) denote the i-th elements of the true and predicted observable states, respectively. In addition, the 8             
+
+> (a) Observable-space multi-step prediction heatmap on the high-fidelity CarSim dataset. 1236912 15 18 21 25
+> 10 3
+> 10 2
+> 10 1
+> 12672
+> 52656
+> 92614
+> 209065
+> 291859
+> 411868
+> 537638
+> 617815
+> 706108
+> 815637
+> Number of samples
+> Number of Training Trajectories
+> Multi-step prediction RMSE
+> (b) Multi-step prediction errors in the original vehicle-state space on the HongQi E-HS3 real-vehicle dataset under different numbers of training trajectories. Fig. 4. Open-loop multi-step prediction verification results of the learned deep Koopman model.
+
+overall root-mean-square error (RMSE) of the observable-space multi-step prediction is defined as 
+
+Eo =
+
+¿ÁÁÁÀ 1
+
+MN NpL
+
+> MN
+
+∑
+
+> j=1
+> Np
+
+∑
+
+> k=1
+> L
+
+∑
+
+> i=1
+
+(ϕi(x[j] 
+
+> k
+
+) − ˆϕi(x[j] 
+
+> k
+
+)) 2
+
+, (26) where L is the observable-space dimension. Fig. 4(a) presents a representative heatmap of observable-space multi-step prediction errors on the high-fidelity CarSim dataset. As the prediction horizon increases, the prediction error gradually accumulates, which is expected for open-loop forecasting. Nevertheless, the error remains concentrated within a relatively limited range over most observable di-mensions, indicating that the learned deep Koopman model preserves satisfactory long-horizon prediction consistency. Fig. 4(b) shows the multi-step prediction errors in the original vehicle-state space on the HongQi E-HS3 real-vehicle dataset under different numbers of training trajectories. As the number of training trajectories increases, the prediction errors decrease consistently, indicating that richer training-data coverage improves the predictive accuracy and generalization capability of the learned model. Together, these results support the use of the learned deep Koopman model as the predictive model in the subsequent control framework. 
+
+B. Ablation Study and Sensitivity Analysis 
+
+To further clarify the role of individual modules and the influence of key tuning parameters, we have also conducted an ablation study and a single-factor sensitivity analysis in                         
+
+> TABLE I ABLATION STUDY RESULTS FOR THE SINGLE -OBSTACLE STRAIGHT -ROAD SCENARIO .
+> Case Success Collision StopX (m) Min. gap (m) Min. center distance (m) DK+AC+Safety 10120.08 1.55 3.62 DK+AC 01120.07 0.00 0.89 DK+FA+Safety 0051.35 6.65 10.48 Kine.+AC+Safety 0166.90 0.00 0.72
+> Remark: DK = deep Koopman; AC = actor–critic; FA = frozen actor; Kine. = kinematic predictor.
+
+a single-obstacle straight-road scenario. In this scenario, the ego vehicle traveled at 30 km/h on a 125 m two-lane straight road and avoided a static obstacle located close to the road centerline, whose center was approximately 60 m downstream from the road entrance. 
+
+1) Ablation Study: The ablation study compared the full LPC framework with three reduced variants, in which the DK predictor, the online actor–critic adaptation mechanism, or the safety term was selectively removed. The corresponding results are summarized in Table I. The full method com-pletes the obstacle-avoidance task without collision, whereas removing the safety term leads to collision, freezing the actor prevents successful trajectory completion, and replacing the DK predictor with a simplified kinematic model also results in failure. These results show that the performance gain arises from the synergy of the three components rather than from any single module alone: the safety term is essential for maintaining obstacle clearance, the online actor-critic adap-tation is important for closed-loop correction and trajectory recovery, and the DK predictor is critical for accurate multi-step prediction and reliable policy update. 
+
+2) Sensitivity Analysis: We further perform a single-factor sensitivity analysis with respect to the obstacle-safety scaling factor β0, the actor–critic update discount factor Γ, and the prediction horizon Np, using the nominal setting (β0, Γ, N p) =
+
+(1, 1, 30 ). Here, β0 is introduced only for sensitivity analysis as a nominal scaling factor applied to the obstacle-related safety term. These three factors are selected because they rep-resent three influential and interpretable design dimensions of the proposed controller: β0 scales the nominal obstacle-related safety term, Γ controls the influence of future value/costate in-formation on the current update across the prediction interval, and Np determines the planning foresight of the receding-horizon controller. The corresponding results are reported in Table II. Overall, the results show that increasing β0 enlarges obstacle clearance but also yields more conservative trajecto-ries, increasing Γ improves anticipatory behavior and safety margin with only a moderate change in trajectory deviation, and increasing Np does not monotonically improve safety, indicating a nontrivial trade-off between planning foresight and obstacle clearance. Among the tested settings, the nominal choice (1, 1, 30 ) provides a balanced compromise between clearance and tracking performance. 
+
+C. Simulation Scenarios and Results 
+
+This section evaluates the proposed method through obstacle-avoidance simulations in structured road scenarios. 9                                                 
+
+> TABLE II SINGLE -FACTOR SENSITIVITY ANALYSIS RESULTS IN THE SINGLE -OBSTACLE STRAIGHT -ROAD SCENARIO .
+> Factor Level Success Collision Min. gap (m) Min. center distance (m) Traj. tracking error (m)
+> β0
+> 0.90 010.000 1.935 0.246 1.00 100.461 2.510 0.331 1.10 101.342 3.239 0.462
+> Γ
+> 0.90 010.000 1.588 0.252 0.95 100.232 2.234 0.330 1.00 100.461 2.510 0.331
+> Np
+> 20 101.547 3.625 0.452 30 100.461 2.510 0.331 40 010.000 1.969 0.287
+
+Other low-speed or stationary vehicles are treated as obstacle vehicles and are assumed to have the same dimensions as the HongQi-EHS3. Four representative scenarios are considered: (i) static obstacle avoidance on a straight two-lane road, where the ego vehicle travels at 30 km/h between two stationary ob-stacles; (ii) dynamic obstacle avoidance on a straight two-lane road, where the obstacles move at 3.6 km/h and 10.8 km/h; (iii) overtaking on a straight road, where the ego vehicle travels at 40 km/h and overtakes a vehicle moving at 18 km/h; and (iv) overtaking on a curved road under the same vehicle speeds as Scenario III. 
+
+Evaluation Metrics: The methods are evaluated in terms of safety, real-time performance, and driving comfort. The safety metric is defined as 
+
+⎧⎪⎪⎨⎪⎪⎩
+
+Is,f = ¯ds,f −lego /2−lobs /2 
+
+> ds,f
+
+,Is,r = ¯ds,r  
+
+> ds,r
+
+, (27) where lego and lobs denote the lengths of the ego and obstacle vehicles, respectively. Is,f measures safety when the ego vehi-cle starts the avoidance maneuver behind the obstacle, whereas 
+
+Is,r measures safety when it returns to the target lane ahead of the obstacle. Here, ¯ds,f and ¯ds,r are the corresponding actual longitudinal distances, and the associated safe distances are defined as ds,f = 2(ve − vo) and ds,r = 2(ve + vo), where 
+
+ve and vo are the speeds of the ego and obstacle vehicles, respectively. These distances are measured when the geometric center of the ego vehicle leaves and re-enters the desired lane. The overall safety metric is then 
+
+Is = min {I[1] 
+
+> s,f
+
+, I [1] 
+
+> s,r
+
+, I [2] 
+
+> s,f
+
+, I [2] 
+
+> s,r
+
+, . . . , I [no] 
+
+> s,f
+
+, I [no] 
+
+> s,r
+
+} , (28) where I[i] 
+
+> s,f
+
+and I[i] 
+
+> s,r
+
+are the safety indices associated with the 
+
+i-th obstacle vehicle, and no is the total number of obstacles. The real-time performance index is defined as 
+
+Ic = 1
+
+(ke − ks)tske
+
+∑
+
+> k=ks
+
+Tk, (29) where ts is the sampling interval, Tk is the computation time in the k-th control cycle, and ks and ke denote the start and end time steps of the maneuver. A value of Ic > 1 indicates that the method cannot satisfy the real-time requirement; smaller values imply better computational efficiency. The driving comfort index is defined as the average curva-ture of the obstacle-avoidance trajectory: 
+
+Iρ = 1
+
+ke − kske
+
+∑
+
+> k=ks
+
+∥ρk∥, (30) where ρk is the trajectory curvature at time step k. A smaller 
+
+Iρ indicates better ride comfort. 
+
+Scenario I - Static Obstacle Avoidance on Straight Road: 
+
+In Scenario I, the AV navigates a straight two-lane road at 30 km/h, tracking the lane centerline while avoiding two stationary obstacle vehicles positioned near the centerline on both sides. Fig. 5 compares the avoidance trajectories of the proposed method, CBF-MPC, and LMPCC. All methods successfully avoid collisions, but the proposed method gener-ates a safer and smoother path by leveraging enhanced CFS constraints, initiating avoidance earlier than benchmarks. In contrast, CBF-MPC and LMPCC delay avoidance until closer to obstacles, compromising safety (Table III, Is = 0.50 for Ours vs. 0.08 for both benchmarks). Furthermore, Fig. 6 shows lateral displacement and heading angle errors, revealing neg-ligible overshoot ( < 0.1m) for the proposed method compared to 0.7 m for CBF-MPC and LMPCC when returning to the reference path. This smoothness contributes to a 10% lower comfort index (Table III, Ip = 0.0086 vs. 0.0096 and 0.0093). Additionally, the proposed method’s real-time performance is superior, with a control cycle time of 5 ms (Table III, Ic = 0.25 
+
+vs. 2.21 and 2.29), an 89% improvement driven by the deep Koopman model’s efficient linear dynamics and the actor-critic MPC framework’s polynomial complexity, highlighting the method’s ability to balance safety, comfort, and computational efficiency in static obstacle avoidance scenarios.  
+
+> (a) Ours
+> (b) CBF-MPC
+> (c) LMPCC Fig. 5. Vehicle obstacle avoidance path in Scenario I. The subfigures illustrate the avoidance path of the proposed method, CBF-MPC, and LMPCC in navigating around stationary obstacles positioned on either side of the road centerline.
+
+Scenario II - Dynamic Obstacle Avoidance on Straight Road: Scenario II challenges the AV to navigate a straight two-lane road at 30 km/h, tracking the lane centerline while dodging two dynamic obstacle vehicles moving at 3.6 km/h and 10.8 km/h on either side. As depicted in Fig. 7, the proposed method adeptly maneuvers around these moving 10  
+
+> Fig. 6. Lateral displacement and heading angle errors of vehicle obstacle avoidance paths in Scenario I.
+
+obstacles, maintaining a robust safety margin. Unlike CBF-MPC and LMPCC, which react late and risk closer encounters (Table III, Is = 0.40 for Ours vs. 0.10 for both benchmarks), the proposed method anticipates obstacle motion early, thanks to its deep Koopman model’s precise dynamics prediction and potential field-driven safety constraints. Fig. 8 illustrates the AV’s lateral displacement and heading angle errors, showcas-ing the proposed method’s seamless return to the reference trajectory with minimal overshoot ( < 0.1m) compared to 0.7 m for benchmarks. This precision yields a superior comfort index (Table III, Ip = 0.0074 vs. 0.0079 and 0.0081), reflecting smoother steering adjustments. Computationally, the method remains highly efficient, solving each control cycle in 7.4 ms (Table III, Ic = 0.37 vs. 2.32 and 2.35), an 84% improvement over benchmarks. This efficiency stems from the actor-critic framework’s ability to rapidly adapt policies in the Koopman observation space, ensuring real-time responsiveness even with dynamic obstacles. These results underscore the strength of the method to handle dynamic obstacles while prioritizing safety and ride quality.  
+
+> (a) Ours
+> (b) CBF-MPC
+> (c) LMPCC Fig. 7. Vehicle obstacle avoidance path in Scenario II. The subfigures illustrate the avoidance path of the proposed method, CBF-MPC, and LMPCC in navigating around moving obstacle vehicles on a straight road.
+
+Scenario III-Overtaking Maneuvering on Straight Road: 
+
+Scenario III tests the AV at 40 km/h overtaking a slower obstacle vehicle traveling at 18 km/h on a straight two-lane road, requiring precise lane changes to ensure safety. Fig. 9 illustrates the overtaking paths, with the proposed method maintaining the overtaking lane longer to secure a safe longitu- 
+
+> Fig. 8. Lateral displacement and heading angle errors of vehicle obstacle avoidance paths in Scenario II.
+
+dinal distance before returning to the desired lane. In contrast, CBF-MPC and LMPCC revert prematurely, risking proximity to the obstacle (Table III, Is = 0.38 for Ours vs. 0.01 and 0.03). As shown in Fig. 10, the proposed method achieves a smooth lane return with minimal lateral displacement and heading angle deviations, avoiding the 0.7 m overshoot observed in benchmarks. This precision delivers a 27% better comfort index (Table III, Ip = 0.0072 vs. 0.0099 and 0.010). Compu-tationally, the method sustains high efficiency, with a control cycle time of 7.4 ms (Table III, Ic = 0.37 vs. 2.34 and 2.38), an 84% improvement driven by the deep Koopman model’s linear dynamics and the actor-critic framework’s rapid policy updates. These results demonstrate the method’s adeptness during overtaking maneuvers, balancing safety, smoothness, and real-time performance.  
+
+> (a) Ours
+> (b) CBF-MPC
+> (c) LMPCC Fig. 9. Vehicle overtaking paths in Scenario III, the subfigures illustrate the overtaking paths generated by the proposed method, CBF-MPC, and LMPCC as they deal with dynamic obstacles in the straight road.
+
+Scenario IV - Overtaking maneuver on the curved road: 
+
+Scenario IV evaluates the AV overtaking an obstacle vehicle moving at 18 km/h on a curved two-lane road while main-taining 40 km/h, demanding precise trajectory planning to navigate road curvature and ensure safety. Fig. 11 shows the proposed method’s overtaking path, which prudently extends the overtaking lane duration to maintain a safe longitudinal gap before lane return. Conversely, CBF-MPC and LMPCC hastily revert to the desired lane, compromising safety (Table III, 
+
+Is = 0.25 for Ours vs. 0.01 and 0.07). Fig. 12 highlights the proposed method’s stable lateral displacement and re-11 
+
+Fig. 10. The lateral displacement and heading angle deviation of the vehicle’s obstacle avoidance paths in Scenario III. 
+
+duced heading angle fluctuations, contrasting with bench-marks’ larger deviations. This stability yields a 7% improved comfort index (Table III, Ip = 0.013 vs. 0.014 for both benchmarks), reflecting smoother navigation of the curve. The method also maintains computational agility, with a control cycle time of 8 ms (Table III, Ic = 0.40 vs. 2.36 and 2.33), an 83% improvement driven by the actor-critic framework’s efficient policy optimization. These results affirm the method’s capability to master complex overtaking on curved roads, ensuring safety, comfort, and real-time performance. 
+
+(a) Ours (b) CBF-MPC (c) LMPCC Fig. 11. Vehicle overtaking paths in Scenario IV, the subfigures illustrate the overtaking paths generated by the proposed method, CBF-MPC, and LMPCC as they deal with dynamic obstacles in a curved road. 
+
+Fig. 12. The lateral displacement and heading angle deviation of the vehicle’s obstacle avoidance trajectory in Scenario IV. 
+
+To assess computational efficiency across Scenarios I–IV, Fig. 13 compares the per-cycle computation times of the 
+
+TABLE III COMPARISON OF EVALUATION METRICS FOR THE PROPOSED , CBF-MPC,  
+
+> AND
+
+LMPCC IN SCENARIOS I-IV Scenario Metric Ours CBF-MPC LMPCC ISafety Is 0.50 0.08 0.08 Real-time Ic 0.25 2.21 2.29 Driving comfort Iρ 0.0086 0.0096 0.0093 II Safety Is 0.40 0.10 0.10 Real-time Ic 0.37 2.32 2.35 Driving comfort Iρ 0.0074 0.0079 0.0081 III Safety Is 0.38 0.01 0.03 Real-time Ic 0.37 2.34 2.38 Driving comfort Iρ 0.0072 0.0099 0.010 IV Safety Is 0.25 0.01 0.07 Real-time Ic 0.40 2.36 2.33 Driving comfort Iρ 0.013 0.014 0.014 
+
+Fig. 13. Computational time of different methods per time step. 
+
+proposed method, CBF-MPC, and LMPCC, with a 20 ms threshold (red dashed line) indicating real-time feasibility. The proposed method consistently achieves cycle times of 5–8 ms (Ic = 0.25–0 .40 ), well below the threshold, while CBF-MPC and LMPCC average 1.5 s ( Ic = 11 .70–11 .89 ), exceeding real-time limits by over an order of magnitude. Results indicate an 84.7% average improvement in Ic reflecting the deep Koopman model’s streamlined linear dynamics and the actor-critic framework’s polynomial complexity. These efficiencies enable satisfying real-time performance, which is critical for dynamic AV motion planning, unlike the computationally intensive nonlinear optimization of benchmarks. 
+
+Fig. 14. Real-world experiment scenarios description. 12 
+
+D. Real-World Experiment Validation 
+
+Two representative real-world experiment scenarios were designed to further evaluate the practical applicability of the proposed method on a Hongqi EHS3 platform equipped with an Intel i9-12900H processor and 32 GB RAM. During the real-world tests, the system operated with a sampling interval of ts = 0.02 s . As illustrated in Fig. 14, scenario 1 was con-ducted on a structured road and involves a successive double-obstacle avoidance task on a straight-line segment. Scenario 2 was designed as a more challenging unseen test scenario that is not fully covered by the training data distribution. It consisted of a dual obstacle-avoidance task along a road segment with continuously varying curvature and a transition from a paved surface to an unpaved gravel surface. In particular, the surface transition and the unevenness of the unpaved road introduce additional disturbances to vehicle motion, which provides a more stringent test of the robustness and stability of the proposed method under real-world condition variations. In the real-vehicle implementation, the controller hyperparameters were set to γo = 19 , g = 0.03 , αc = 0.51 , and αa = 0.003 ,while the actor and critic network structures were kept the same as those used in simulation. Cone-shaped barrels were employed as static proxies for obstacle vehicles, and CBF-MPC was implemented as the baseline method for comparison. For safety considerations, a more conservative obstacle representation was uniformly adopted in the experiment, using inflated obstacle envelopes for all methods. This conservative setting may increase the measured longitudinal clearance at lane departure and lane re-entry, and thus lead to larger absolute safety-index values than those observed in simulation.                     
+
+> TABLE IV COMPARISON OF REAL -VEHICLE EVALUATION METRICS BETWEEN THE PROPOSED METHOD AND THE BASELINE (CBF-MPC) Scenario Method Safety IsReal-time IcDriving Comfort Iρ
+> Straight road Ours 0.950 0.087 0.0339 CBF-MPC 1.259 2.230 0.0379 Curved road Ours 0.301 0.104 0.1218 CBF-MPC 0.290 2.380 0.1394
+
+1) Test Scenario 1– obstacle avoidance on a straight road: 
+
+The first experiment considered a successive double-obstacle avoidance task on a straight structured road, in which the ego vehicle starts from the left lane and reaches a peak speed close to 40 km /h during the maneuver. As shown in Fig. 15, the ego vehicle successively avoids two static obstacles and then returns to the target lane. The in-vehicle and outside-view snapshots in Fig. 16 (a) further illustrate the key stages of the maneuver, including obstacle perception, lane departure, intermediate recovery, and final return. The proposed method completed the maneuver safely and smoothly. As reported in Table IV, it achieved a safety index of Is = 0.950 , a real-time index of Ic = 0.087 , and a comfort index of Iρ = 0.0339 .In addition, the maximum lateral acceleration during the maneuver was about 2.10 m /s2, indicating that the real-vehicle test involved a non-negligible lateral dynamic response rather than a purely kinematic case. Under the same experimental protocol, CBF-MPC achieved a larger safety index of Is = 1.259 , but its real-time per-formance deteriorated substantially with Ic = 2.23 , as well as a worse comfort index with Iρ = 0.0379 . These results indicate that, although the baseline method maintained a larger longitudinal safety margin in this test, the proposed method provided a more favorable overall balance among safety, real-time feasibility, and ride comfort, while preserving stable and smooth obstacle-avoidance behavior in the real-vehicle experiment. 
+
+2) Test Scenario 2–obstacle avoidance on a curved-road scenario with surface transition: The second experiment considered a more challenging obstacle-avoidance task in an unseen real-world scenario that is only partially covered by the training-data distribution. Unlike Test Scenario 1 on a straight structured road, this test involves two successive obstacle-avoidance maneuvers along a curved road with continuously varying curvature and a paved-to-unpaved gravel transition. As shown in Fig. 17, the first maneuver is completed on the paved segment, whereas the second is executed after entering the gravel segment. The in-vehicle and outside-view snapshots in Fig. 16 (b) further illustrate the key stages of the maneuver and the corresponding obstacle locations. These road-geometry and surface changes introduce additional disturbances and sim-to-real mismatch, making this scenario a more demanding test of collision-avoidance robustness and closed-loop stability. The proposed method completed the maneuver safely and without loss of stability. According to Table IV, it achieved a safety index of Is = 0.301 , a real-time index of Ic =
+
+0.104 , and a comfort index of Iρ = 0.1218 . The maximum lateral acceleration during the maneuver was approximately 
+
+2.5 m /s2, indicating that the real-vehicle test already involved a noticeable lateral dynamic response rather than a purely kinematic operating condition. Fig. 17 shows that the proposed method maintains a smooth and spatially consistent avoidance trajectory throughout the maneuver, with no evident oscil-latory correction or abrupt path distortion near the obstacle locations, even after entering the gravel segment. Under the same experimental protocol, CBF-MPC also completed the task and achieved a safety index close to that of the proposed method, but its real-time performance was substantially worse and its trajectory smoothness was slightly inferior. Together with the results in Table IV, these observations indicate that the proposed method provides a more favorable overall balance among safety, real-time feasibility, and trajectory smoothness in this unseen scenario. 
+
+E. Discussion and Limitations 1) Sim-to-Real Transfer and Operating-Condition Changes: 
+
+The deep Koopman predictor provides an efficient lifted-space surrogate for nonlinear vehicle dynamics, while remaining a data-driven approximation of the real system. In the proposed framework, the effect of model mismatch is alleviated by the receding-horizon closed-loop implementation: only the first control input is applied at each sampling instant, and the optimization is repeated using updated onboard sensing information. In addition, the actor–critic structure yields an explicit state-feedback policy within each prediction interval, 13    
+
+> Fig. 15. Real-world experiments: vehicle obstacle avoidance trajectories on a straight road (Proposed vs. CBF-MPC).
+> (a) Obstacle avoidance on a straight structured road. (b) Obstacle avoidance on a curved-road scenario with surface transition. Fig. 16. In-vehicle and outside-view snapshots of the proposed method during the two real-world test scenarios.
+
+which further improves online correction capability against prediction mismatch. The real-world experiments on the HongQi-EHS3 platform provide practical evidence of transferability from simulation-trained modeling/control to real-vehicle scenarios. The tested cases include structured-road obstacle avoidance as well as obstacle avoidance on a curved road containing a transition between structured pavement and unstructured gravel surface, with vehicle speed reaching up to 40 km/h. Together, these experiments extend the empirical validation of the proposed method to more challenging road-surface conditions, road curvature, and higher-speed operation. 
+
+2) Current Limitations: Several limitations of the present study should be noted. First, the effectiveness of the proposed LPC framework remains related to the operating domain covered by the training and validation data, since the deep Koopman predictor is still a lifted-space approximation of the underlying vehicle dynamics. As a result, prediction accuracy and control performance may degrade when the vehicle oper-ates far outside the data-supported regime. Moreover, the road-boundary and obstacle terms are introduced as soft safety-shaping penalties, which improve safety awareness in the policy-learning process and enlarge empirical safety margins. However, the current framework provides a practical safety-enhancement mechanism rather than a strict safety certificate for the real system under model mismatch and disturbances. Finally, although the current experiments cover representative changes in road geometry, surface condition, and speed, the present validation is still limited in scope. Broader evalua-tion under more diverse operating conditions, such as larger variations in road friction, vehicle mass/loading, and higher-speed maneuvers, would further strengthen the assessment of the proposed framework. VI. C ONCLUSION AND FUTURE WORK 
+
+This paper proposed a learning predictive control (LPC) framework with deep Koopman operators for autonomous-vehicle motion planning in dynamic environments. By em-ploying a deep Koopman vehicle model, the framework lifts nonlinear vehicle dynamics into a high-dimensional observable space with an approximately linear prediction structure, which supports efficient receding-horizon optimization. In contrast to conventional MPC, which computes open-loop control sequences online, the proposed method combines actor–critic learning with receding-horizon planning to generate a closed-loop state-feedback policy within each prediction interval. To handle non-convex environmental constraints, the framework further integrates an enhanced convex feasible set construction and potential-field-based safety shaping into the planning and policy-learning process. Extensive simulations in static and dynamic obstacle-avoidance scenarios on straight and curved roads demonstrate that the proposed method achieves favorable performance in safety, driving comfort, and computational efficiency relative to benchmark methods such as CBF-MPC and LMPCC. Real-vehicle experiments on the HongQi-EHS3 platform further verify the practical applicability of the proposed method, showing stable obstacle-avoidance performance in both astructured straight-road scenario and a more challenging curved mixed-surface scenario. Future work will focus on adaptive tuning of safety-shaping parameters, broader vali-dation under more challenging dynamic-traffic scenarios and road/surface conditions, and further improvement of robust-ness to model mismatch and operating-condition variations. 14 
+
+Fig. 17. Real-world experiments: vehicle obstacle avoidance trajectories on a curved road with surface transition (Proposed vs. CBF-MPC). 
+
+REFERENCES [1] Xinglong Zhang, Yan Jiang, Yang Lu, and Xin Xu. Receding-horizon reinforcement learning approach for kinodynamic motion planning of autonomous vehicles. IEEE Transactions on Intelligent Vehicles ,7(3):556–568, 2022. [2] Changliu Liu, Chung-Yen Lin, and Masayoshi Tomizuka. The convex feasible set algorithm for real time optimization in motion planning. 
+
+SIAM Journal on Control and optimization , 56(4):2712–2733, 2018. [3] Sampo Kuutti, Saber Fallah, Konstantinos Katsaros, Mehrdad Dianati, Francis Mccullough, and Alexandros Mouzakitis. A survey of the state-of-the-art localization techniques and their potentials for autonomous vehicle applications. IEEE Internet of Things Journal , 5:829–846, 2018. [4] Jianyu Chen, Wei Zhan, and Masayoshi Tomizuka. Autonomous driving motion planning with constrained iterative lqr. IEEE Transactions on Intelligent Vehicles , 4(2):244–254, 2019. [5] Jun Zeng, Bike Zhang, and Koushil Sreenath. Safety-critical model predictive control with discrete-time control barrier function. In 2021 American Control Conference (ACC) , pages 3882–3889. IEEE, 2021. [6] Bruno Brito, Boaz Floor, Laura Ferranti, and Javier Alonso-Mora. Model predictive contouring control for collision avoidance in unstructured dy-namic environments. IEEE Robotics and Automation Letters , 4(4):4459– 4466, 2019. [7] Jiahang Liu, Zhenhua Huang, Xin Xu, Xinglong Zhang, Shiliang Sun, and Dazi Li. Multi-kernel online reinforcement learning for path tracking control of intelligent vehicles. IEEE Transactions on Systems, Man, and Cybernetics: Systems , 51(11):6962–6975, 2020. [8] Zhenhua Huang, Chuanqiang Lian, Xin Xu, and Jian Wang. Lateral control for autonomous land vehicles via dual heuristic programming. 
+
+International Journal of Robotics and Automation , 31(6), 2016. [9] Xinglong Zhang, Jiahang Liu, Xin Xu, Shuyou Yu, and Hong Chen. Robust learning-based predictive control for discrete-time nonlinear sys-tems with unknown dynamics and state constraints. IEEE Transactions on Systems, Man, and Cybernetics: Systems , 52(12):7314–7327, 2022. [10] Lu Dong, Jun Yan, Xin Yuan, Haibo He, and Changyin Sun. Functional nonlinear model predictive control based on adaptive dynamic program-ming. IEEE transactions on Cybernetics , 49(12):4206–4218, 2018. [11] Milan Korda and Igor Mezi´ c. Linear predictors for nonlinear dynamical systems: Koopman operator meets model predictive control. Automatica ,93:149–160, 2018. [12] Esther Ling, Liyuan Zheng, Lillian J Ratliff, and Samuel Coogan. Koopman operator applications in signalized traffic systems. IEEE Transactions on Intelligent Transportation Systems , 23(4):3214–3225, 2020. [13] Kexin Tian, Haotian Shi, Yang Zhou, and Sixu Li. Physically analyzable ai-based nonlinear platoon dynamics modeling during traffic oscillation: A koopman approach. IEEE Transactions on Intelligent Transportation Systems , 2025. [14] Xiangyu Kong, Yuanqing Xia, Zhongqi Sun, Di-Hua Zhai, Yunshan Deng, and Sihua Zhang. Differential high order control barrier function-based safe reinforcement learning. IEEE Robotics and Automation Letters , 2025. [15] Junjun Xie, Liang Hu, Yunzhe Tan, and Jun Yang. Cbf-based hierar-chical quadratic programs with guaranteed feasibility for safety-critical systems. IEEE Transactions on Automation Science and Engineering ,22:23687–23699, 2025. [16] Jakob Nubert, Jonas K¨ ohler, Vincent Berenz, Klaus L¨ utjens, and J¨ org Raisch. Safe and fast tracking on a robot manipulator: Robust MPC and neural network control. IEEE Robotics and Automation Letters ,5(2):3050–3057, 2020. [17] Ander M Lazcano, Tianyi Niu, Xabier C Akutain, Mercedes Delgado, Oihana Otaegui, Unai Jauregi, and et al. MPC-based haptic shared steering system: A driver modeling approach for symbiotic driving. 
+
+IEEE/ASME Transactions on Mechatronics , 26(3):1201–1211, 2021. [18] Yadollah Rasekhipour, Amir Khajepour, Shih-Ken Chen, and Bakhtiar Litkouhi. A potential field-based model predictive path-planning con-troller for autonomous road vehicles. IEEE Transactions on Intelligent Transportation Systems , 18(5):1255–1267, 2016. [19] Benjamin Gutjahr, Lutz Gr¨ oll, and Moritz Werling. Lateral vehicle trajectory optimization using constrained linear time-varying MPC. 
+
+IEEE Transactions on Intelligent Transportation Systems , 18(6):1586– 1595, 2016. [20] Jie Ji, Amir Khajepour, Wael William Melek, and Yanjun Huang. Path planning and tracking for vehicle collision avoidance based on model predictive control with multiconstraints. IEEE Transactions on Vehicular Technology , 66(2):952–964, 2016. [21] Qianxiao Li, Felix Dietrich, Erik M Bollt, and Ioannis G Kevrekidis. Ex-tended dynamic mode decomposition with dictionary learning: A data-driven adaptive spectral decomposition of the Koopman operator. Chaos: An Interdisciplinary Journal of Nonlinear Science , 27(10):103111, 2017. [22] Jeremy Morton, Freddie D. Witherden, and Mykel J. Kochenderfer. Deep variational koopman models: Inferring koopman observations for uncertainty-aware dynamics modeling and control. In Proceedings of the 28th International Joint Conference on Artificial Intelligence (IJCAI) ,IJCAI’19, page 3173–3179. AAAI Press, 2019. 15 
+
+[23] A. Joglekar et al. Data-driven modeling and experimental validation of autonomous vehicles using koopman operator. In 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) ,pages 9442–9447, Detroit, MI, USA, 2023. [24] Chuanye Gu, Tao Zhou, and Changzhi Wu. Deep koopman traffic modeling for freeway ramp metering. IEEE Transactions on Intelligent Transportation Systems , 24(6):6001–6013, 2023. [25] Nicholas Geneva and Nicholas Zabaras. Transformers for modeling physical systems. Neural Networks , 146:272–289, 2022. [26] Tao Bai and Pejman Tahmasebi. Characterization of groundwater contamination: A transformer-based deep learning model. Advances in Water Resources , 164:104217, 2022. [27] Bas van der Heijden, Laura Ferranti, Jens Kober, and Robert Babuˇ ska. Deepkoco: Efficient latent planning with a task-relevant koopman rep-resentation. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , page 183–189. IEEE Press, 2021. [28] Xiaojing Zhang, Monimoy Bujarbaruah, and Francesco Borrelli. Near-optimal rapid MPC using neural networks: A primal-dual policy learn-ing framework. IEEE Transactions on Control Systems Technology ,29(5):2102–2114, 2020. [29] Siyuan Yu, Congkai Shen, and Tulga Ersal. Autonomous driving using linear model predictive control with a Koopman operator based bilinear vehicle model. IFAC-PapersOnLine , 55(24):254–259, 2022. [30] Daniel Coelho and Miguel Oliveira. A review of end-to-end autonomous driving in urban environments. IEEE Access , 10:75296–75311, 2022. [31] B Ravi Kiran, Ibrahim Sobh, Victor Talpaert, Patrick Mannion, Ahmad A Al Sallab, Senthil Yogamani, and Patrick P´ erez. Deep reinforcement learning for autonomous driving: A survey. IEEE Transactions on Intelligent Transportation Systems , 23(6):4909–4926, 2021. [32] Taekgyu Lee, Dongyoon Seo, Jinyoung Lee, and Yeonsik Kang. Real-time drift-driving control for an autonomous vehicle: Learning from nonlinear model predictive control via a deep neural network. Electron-ics , 11(17):2651, 2022. [33] Pooya Abolghasemi and Ladislau B¨ ol¨ oni. Accept synthetic objects as real: End-to-end training of attentive deep visuomotor policies for manipulation in clutter. In 2020 IEEE International Conference on Robotics and Automation (ICRA) , pages 6506–6512. IEEE, 2020. [34] Junekyo Jhung, Il Bae, Jaeyoung Moon, Taewoo Kim, Jincheol Kim, and Shiho Kim. End-to-end steering controller with cnn-based closed-loop feedback for autonomous vehicles. In 2018 IEEE Intelligent Vehicles Symposium (IV) , pages 617–622. IEEE, 2018. [35] Gunmin Lee, Dohyeong Kim, Wooseok Oh, Kyungjae Lee, and Songh-wai Oh. Mixgail: Autonomous driving using demonstrations with mixed qualities. In 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 5425–5430. IEEE, 2020. [36] Daocheng Fu, Xin Li, Licheng Wen, Min Dou, Pinlong Cai, Botian Shi, and Yu Qiao. Drive like a human: Rethinking autonomous driving with large language models. arXiv preprint arXiv:2307.07162 , 2023. [37] Daocheng Fu, Xin Li, Licheng Wen, Min Dou, Pinlong Cai, Botian Shi, and Yu Qiao. Drive as you speak: Enabling human-like interaction with large language models in autonomous vehicles. arXiv preprint arXiv:2307.07162 , 2023. [38] Jianyu Chen, Bodi Yuan, and Masayoshi Tomizuka. Model-free deep reinforcement learning for urban autonomous driving. In 2019 IEEE Intelligent Transportation Systems Conference (ITSC) , pages 2765–2771. IEEE, 2019. [39] Jingda Wu, Zhiyu Huang, and Chen Lv. Uncertainty-aware model-based reinforcement learning: Methodology and application in autonomous driving. IEEE Transactions on Intelligent Vehicles , 8(1):194–203, 2022. [40] Jianyu Chen, Shengbo Eben Li, and Masayoshi Tomizuka. Interpretable end-to-end urban autonomous driving with latent deep reinforcement learning. IEEE Transactions on Intelligent Transportation Systems ,2021. [41] Jian Wang, Xin Xu, Daxue Liu, Zhenping Sun, and Qingyang Chen. Self-learning cruise control using kernel-based least squares policy iter-ation. IEEE Transactions on Control Systems Technology , 22(3):1078– 1087, 2013. [42] Kun Zhao, Jian Wang, Xin Xu, and Zhenhua Huang. An approxi-mate dynamic programming approach for path following control of an autonomous vehicle. In Proceeding of the 11th World Congress on Intelligent Control and Automation (WCICA) , pages 1998–2004. IEEE, 2014. [43] Zhenhua Huang, Xin Xu, Haibo He, Jun Tan, and Zhenping Sun. Parameterized batch reinforcement learning for longitudinal control of autonomous land vehicles. IEEE Transactions on Systems, Man, and Cybernetics: Systems , 49(4):730–741, 2019. [44] Xin Xu, Hong Chen, Chuanqiang Lian, and Dazi Li. Learning-based predictive control for discrete-time nonlinear systems with stochastic disturbances. IEEE Transactions on Neural Networks and Learning Systems , 29(12):6202–6213, 2018. [45] Yongqian Xiao, Xinglong Zhang, Xin Xu, Xueqing Liu, and Jiahang Liu. Deep neural networks with Koopman operators for modeling and control of autonomous vehicles. IEEE Transactions on Intelligent Vehicles ,8(1):135–146, 2023. [46] Xinglong Zhang, Yaoqian Peng, Biao Luo, Wei Pan, Xin Xu, and Haibin Xie. Model-based safe reinforcement learning with time-varying constraints: Applications to intelligent vehicles. IEEE Transactions on Industrial Electronics , 71(10):12744–12753, 2024. [47] Xinglong Zhang, Wei Pan, Cong Li, Xin Xu, Xiangke Wang, Ronghua Zhang, and Dewen Hu. Toward scalable multirobot control: Fast policy learning in distributed mpc. IEEE Transactions on Robotics , 41:1491– 1512, 2025. 
+
+APPENDIX 
+
+A. Learning Convergence in Each Prediction Interval 
+
+In the following, we analyze the convergence of the policy learning procedure in each prediction interval. For simplicity, let 
+
+Bb,τ = Bb(db,τ ), Bo,τ = Bo(ϕ(xτ )) ,
+
+then the stage cost function can be expressed as 
+
+r(i) 
+
+> τ
+
+(ϕe,τ , u τ ) = ϕ⊺ 
+
+> e,τ
+
+Qϕ e,τ + (u(i) 
+
+> τ
+
+)⊺Ru (i) 
+
+> τ
+
++ γbBb,τ + γoBo,τ ,
+
+(A.1) where Bb,τ and Bo,τ are defined by Eq. (3) and Eq. (6), respectively. 
+
+Lemma 1 ([44]) . For any time step τ ∈ [k, k + Np − 1] in the prediction horizon, let the value function sequence V (i) be defined by Eq. (14) with initial value function V (0) = 0. Then, there exists an admissible control input uτ and an upper bound 
+
+¯Zτ such that 
+
+0 ≤ V (i) 
+
+> τ
+
+≤ V ∗ 
+
+> τ
+
+≤ ¯Zτ .
+
+Theorem 1. [Convergence] For the motion control optimiza-tion problem (9) based on the deep Koopman vehicle dynamics model Eq. (2) , let u(i) and V (i) be defined by Eq. (14) , with initial condition V (0) 
+
+> τ
+
+= 0, τ ∈ [k, k + Np]. Then, the following hold: 
+
+1) If Z(0) 
+
+> τ
+
+= V (0) 
+
+> τ
+
+, and V (i) 
+
+> τ
+
+satisfies Eq. (14) , then for any admissible control strategy η(i) 
+
+> τ
+
+,
+
+Z(i+1) 
+
+> τ
+
+= r(i)(ϕe,τ , η τ ) + Z(i) 
+
+> τ+1
+
+, Z(i) 
+
+> τ
+
+≥ V (i) 
+
+> τ
+
+.
+
+2) The value function V (i) 
+
+> τ
+
+has an upper bound ¯Vτ , such that 
+
+0 ≤ V (i) 
+
+> τ
+
+≤ ¯Vτ .
+
+3) As the iteration count i → ∞, the value function and control strategy converge, i.e., 
+
+V (i) 
+
+> τ
+
+→ V ∗ 
+
+> τ
+
+, λ(i) 
+
+> τ
+
+→ λ∗ 
+
+> τ
+
+, u(i) 
+
+> τ
+
+→ u∗ 
+
+> τ
+
+.
+
+Proof: First, we prove Claim 1). Since η(i) is any admissible control strategy, and u(i) minimizes the right-hand side of Eq. (14c), under the same conditions, we have 
+
+Z(i) 
+
+> τ
+
+≥ V (i) 
+
+> τ
+
+.16 
+
+Next, we prove Claim 2). Let Zτ represent the value function corresponding to any admissible control strategy ητ ,with 
+
+Z(0) 
+
+> τ
+
+= V (0) 
+
+> τ
+
+= 0.
+
+The update rule for V (i) 
+
+> τ
+
+is given by Eq. (14), while the update for Z(i) 
+
+> τ
+
+follows 
+
+Z(i+1) 
+
+> τ
+
+= r(i)(ϕτ , η τ ) + Z(i) 
+
+> τ+1
+
+.
+
+Thereby, we have 
+
+Z(i+1) 
+
+> τ
+
+− Z(i) 
+
+> τ
+
+= Z(i)  
+
+> τ+1
+
+− Z(i−1)  
+
+> τ+1
+
+= ⋯ = Z(1)  
+
+> τ+i
+
+− Z(0) 
+
+> τ+i
+
+, (A.2) yielding 
+
+Z(i+1) 
+
+> τ
+
+= Z(1)  
+
+> τ+i
+
++ Z(i) 
+
+> τ
+
+. (A.3) For i ≤ k + Np − 1 − τ , by expanding Z(i) 
+
+> τ
+
+, we obtain 
+
+Z(i+1) 
+
+> τ
+
+= Z(1)  
+
+> τ+i
+
++ Z(1)  
+
+> τ+i−1
+
++ Z(1)  
+
+> τ+i−2
+
++ ⋯ + Z(1)
+
+> τ
+
+=
+
+> i
+
+∑
+
+> j=0
+
+Z(1)  
+
+> τ+j
+
+=
+
+> i
+
+∑
+
+> j=0
+
+r(ϕτ +j , η τ +j ). (A.4) For i > k + Np − 1 − τ , τ ∈ [k, k + Np], under the feasible strategy η, it is easy to obtain 
+
+Z(i+1) 
+
+> τ
+
+=
+
+> k+Np−1−τ
+
+∑
+
+> j=0
+
+r(ϕτ +j , η τ +j ) + Vf (ϕk+Np ). (A.5) Combining (A.4) and (A.5), for any i ∈ N≥1, we have 
+
+Z(i+1) 
+
+> τ
+
+≤ ¯Vτ . (A.6) Based on Claim 1), for any i ∈ N≥1, we further have 
+
+V (i+1) 
+
+> τ
+
+≤ Z(i+1) 
+
+> τ
+
+≤ ¯Vτ . (A.7) Now, we prove Claim 3). Define 
+
+Y (0) 
+
+> τ
+
+= V (0) 
+
+> τ
+
+= 0,
+
+and introduce Y (i) 
+
+> τ
+
+≤ V (i+1) 
+
+> τ
+
+. When i = 0, we have 
+
+V (1) 
+
+> τ
+
+− Y (0) 
+
+> τ
+
+= ϕ⊺ 
+
+> e,τ
+
+Qϕ e,τ + γbBb,τ + γoBo,τ , (A.8) such that 
+
+V (1) 
+
+> τ
+
+≥ Y (0) 
+
+> τ
+
+.
+
+Assume that for all τ ∈ [k, k + Np − 1], we have 
+
+V (i) 
+
+> τ
+
+≥ Y (i−1) 
+
+> τ
+
+.
+
+Since 
+
+Y (i) 
+
+> τ
+
+= ϕ⊺ 
+
+> e,τ
+
+Qϕ e,τ + (u(i) 
+
+> τ
+
+)⊺Ru (i) 
+
+> τ
+
++ γbBb,τ + γoBo,τ + Y (i−1)  
+
+> τ+1
+
+,V (i+1) 
+
+> τ
+
+= ϕ⊺ 
+
+> e,τ
+
+Qϕ e,τ + (u(i) 
+
+> τ
+
+)⊺Ru (i) 
+
+> τ
+
++ γbBb,τ + γoBo,τ + V (i) 
+
+> τ+1
+
+,
+
+(A.9) it follows that 
+
+V (i+1) 
+
+> τ
+
+− Y (i) 
+
+> τ
+
+= V (i)  
+
+> τ+1
+
+− Y (i−1)  
+
+> τ+1
+
+≥ 0. (A.10) Then we further have 
+
+V (i+1) 
+
+> τ
+
+≥ Y (i) 
+
+> τ
+
+.
+
+According to conclusion 1), we have 
+
+V (i) 
+
+> τ
+
+≤ Y (i) 
+
+> τ
+
+,
+
+and therefore 
+
+V (i) 
+
+> τ
+
+≤ Y (i) 
+
+> τ
+
+≤ V (i+1) 
+
+> τ
+
+. (A.11) This means that 
+
+V (i) 
+
+> τ
+
+≤ V (i+1) 
+
+> τ
+
+.
+
+Combined with conclusion 2), {V (i) 
+
+> τ
+
+} is a non-decreasing and bounded sequence. Thus, when i → ∞,
+
+V (i) 
+
+> τ
+
+→ V ∗ 
+
+> τ
+
+.
+
+Consequently, we can show that 
+
+λ(∞) 
+
+> τ
+
+= ∂V (∞)
+
+> τ
+
+∂ϕ τ
+
+→ ∂V ∗
+
+> τ
+
+∂ϕ τ
+
+= λ∗ 
+
+> τ
+
+, u(i) 
+
+> τ
+
+→ u∗ 
+
+> τ
+
+.
+
+∎
+
+B. Safety Guarantee 
+
+Note that the constraint satisfaction result follows directly from Theorem 1. Specifically, as ϵ → 0, the potential function 
+
+Bo ( ˆϕ (xτ )) → +∞ when the state approaches the obstacle boundary, i.e., ¯C ˆϕ (xτ ) ∈ ∂Fτ for all τ ∈ [k, k +Np −1]. Mean-while, Theorem 1 ensures that the optimal value Vτ remains bounded. Consequently, the optimal solution ¯C ˆϕ (xτ ) ∈ Fτ .However, this does not guarantee that the true state satisfies 
+
+¯Cϕ(xk) ∈ Fk at every time instant k, due to model mismatch introduced by the Koopman approximation. One practical way to bridge this gap is to construct the potential function with appropriately chosen parameters gi,k to enlarge the safety margin and thus enhance robustness against modeling errors. 
+
+Remark 3. Note that our approach is implemented in a receding-horizon manner, which naturally induces a closed-loop system. Within each prediction interval, constraint sat-isfaction is promoted via the designed potential function, ensuring that the predicted trajectory remains within the safe set. However, establishing closed-loop guarantees, such as stability or robustness for the true system, is challenging in the presence of model mismatch introduced by the learned Koopman representation and the time-varying feasible set induced by complex obstacles. In particular, such guarantees typically require strong assumptions, e.g., the existence of invariant safe sets that do not intersect with obstacles over the entire trajectory. In this case, one can readily derive the closed-loop robustness results following the line in [46], [47]. Instead, this work focuses on ensuring safety at the planning level with an enlarged margin, which provides a practical robustness mechanism against modeling errors. The resulting closed-loop behavior is validated through extensive simula-tions and real-world experiments, demonstrating reliable and safe performance in complex environments.
