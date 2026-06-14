@@ -6,47 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-13
-- 运行时间：2026-06-13 23:02:27 UTC
+- 最新运行日期：2026-06-14
+- 运行时间：2026-06-14 23:25:46 UTC
 - 运行状态：成功
-- 本次总论文数：9
+- 本次总论文数：6
 - 精读区：1
-- 速读区：8
+- 速读区：5
 
 ### 今日简报（AI）
-今日推荐9篇论文，精读1篇，重点探索路径规划新方法。最值得关注精读《Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning》，速读中的深度Koopman预测控制和HARBOR机器人强化学习框架也具参考价值。建议优先精读结合强化学习的路径规划方法，并关注机器人学习框架的实践应用。
-- 详情：[/202606/13/README](/202606/13/README)
+1) 今日聚焦三边调度中的多智能体强化学习，最高分9.0，并速读路径规划与自主驾驶运动控制方法。
+2) 最值得关注：多智能体系统应对延迟市场反馈的权重自适应策略；强化学习与弧搜索内点法结合可提升路径规划效率。
+3) 建议优先精读高分论文，并对比速读中路径规划的两种优化思路，尝试将延迟反馈机制移植到你当前的多智能体任务中。
+- 详情：[/202606/14/README](/202606/14/README)
 
 ### 精读区论文标签
-1. [Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning](/202606/13/2606.07920v1-combining-reinforcement-learning-with-arc-search-interior-point-method-for-path-planning)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：结合强化学习与优化进行路径规划
+1. [Multi-Agent Reinforcement Learning from Delayed Marketplace Feedback for Objective-Weight Adaptation in Three-Sided Dispatch](/202606/14/2606.13604v1-multi-agent-reinforcement-learning-from-delayed-marketplace-feedback-for-objective-weight-adaptation-in-three-sided-dispatch)  
+   标签：评分：9.0/10、query:rl-last-mile
+   evidence：多智能体强化学习优化配送调度
 
 ### 速读区论文标签
-1. [Learning Predictive Control with Deep Koopman Operators for Autonomous Vehicle Motion Planning](/202606/13/2606.08136v1-learning-predictive-control-with-deep-koopman-operators-for-autonomous-vehicle-motion-planning)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：深度强化学习用于自动驾驶车辆运动规划
-2. [HARBOR: A Harness Framework for Agentic Robot Reinforcement Learning](/202606/13/2606.08610v1-harbor-a-harness-framework-for-agentic-robot-reinforcement-learning)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：用于自动化机器人强化学习工作流的智能体框架
-3. [Leveraging Structural Constraints for Diffusion-based Neural TSP Solvers](/202606/13/2606.09343v1-leveraging-structural-constraints-for-diffusion-based-neural-tsp-solvers)  
+1. [Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning](/202606/14/2606.07920v1-combining-reinforcement-learning-with-arc-search-interior-point-method-for-path-planning)  
    标签：评分：7.0/10、query:rl-last-mile
-   evidence：基于扩散模型和结构约束的神经TSP求解器
-4. [Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning](/202606/13/2606.07920v2-combining-reinforcement-learning-with-arc-search-interior-point-method-for-path-planning)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：强化学习在障碍环境路径规划，类似末端路径优化
-5. [Counterfactual Transport Flows for Offline Conservative Trajectory Refinement](/202606/13/2606.09115v1-counterfactual-transport-flows-for-offline-conservative-trajectory-refinement)  
+   evidence：将强化学习与弧搜索内点法结合用于路径规划
+2. [Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning](/202606/14/2606.07920v2-combining-reinforcement-learning-with-arc-search-interior-point-method-for-path-planning)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：将强化学习与弧搜索内点法结合用于路径规划
+3. [Learning Predictive Control with Deep Koopman Operators for Autonomous Vehicle Motion Planning](/202606/14/2606.08136v1-learning-predictive-control-with-deep-koopman-operators-for-autonomous-vehicle-motion-planning)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：离线强化学习轨迹精炼方法可用于路径优化
-6. [An Agency-Transferring Model-Free Policy Enhancement Technique](/202606/13/2606.09825v1-an-agency-transferring-model-free-policy-enhancement-technique)  
+   evidence：使用库普曼算子和强化学习的自动驾驶路径规划
+4. [Neuro-Symbolic Injection of LTLf Constraints in Autoregressive Reinforcement Learning Policies](/202606/14/2606.08312v1-neuro-symbolic-injection-of-ltlf-constraints-in-autoregressive-reinforcement-learning-policies)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：无模型RL策略增强技术，可应用于基于强化学习的路径优化
-7. [Fast and Highly Expressive Policy Learning for Offline Reinforcement Learning via Bootstrapped Flow Q-Learning](/202606/13/2606.10613v1-fast-and-highly-expressive-policy-learning-for-offline-reinforcement-learning-via-bootstrapped-flow-q-learning)  
+   evidence：神经符号强化学习用于时序逻辑约束
+5. [From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation](/202606/14/2606.12603v1-from-imitation-to-alignment-human-preference-flow-policies-for-long-horizon-sidewalk-navigation)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：离线RL方法实现单步动作生成，可应用于VRP
-8. [AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning](/202606/13/2606.10927v1-alldaynav-lifelong-navigation-via-real-world-reinforcement-learning)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：基于强化学习的机器人终身导航
+   evidence：使用人类偏好流策略的自主人行道导航，用于机器人食物递送（末端物流）
 
 
 <div class="dpr-home-promo-card">
