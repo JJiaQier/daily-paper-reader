@@ -6,40 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-14
-- 运行时间：2026-06-14 23:25:46 UTC
+- 最新运行日期：2026-06-16
+- 运行时间：2026-06-16 00:58:59 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：1
-- 速读区：5
+- 本次总论文数：1
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-1) 今日聚焦三边调度中的多智能体强化学习，最高分9.0，并速读路径规划与自主驾驶运动控制方法。
-2) 最值得关注：多智能体系统应对延迟市场反馈的权重自适应策略；强化学习与弧搜索内点法结合可提升路径规划效率。
-3) 建议优先精读高分论文，并对比速读中路径规划的两种优化思路，尝试将延迟反馈机制移植到你当前的多智能体任务中。
-- 详情：[/202606/14/README](/202606/14/README)
+1. 今日聚焦一篇关于终身导航的论文，采用真实世界强化学习方案。  
+2. 最值得关注：将强化学习应用于持续导航任务，在真实环境中验证了算法时效性。  
+3. 建议：对机器人长期自主导航感兴趣的读者可重点阅读本文的实地部署经验。
+- 详情：[/202606/16/README](/202606/16/README)
 
 ### 精读区论文标签
-1. [Multi-Agent Reinforcement Learning from Delayed Marketplace Feedback for Objective-Weight Adaptation in Three-Sided Dispatch](/202606/14/2606.13604v1-multi-agent-reinforcement-learning-from-delayed-marketplace-feedback-for-objective-weight-adaptation-in-three-sided-dispatch)  
-   标签：评分：9.0/10、query:rl-last-mile
-   evidence：多智能体强化学习优化配送调度
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning](/202606/14/2606.07920v1-combining-reinforcement-learning-with-arc-search-interior-point-method-for-path-planning)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：将强化学习与弧搜索内点法结合用于路径规划
-2. [Combining Reinforcement Learning with Arc-search Interior-Point Method for Path Planning](/202606/14/2606.07920v2-combining-reinforcement-learning-with-arc-search-interior-point-method-for-path-planning)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：将强化学习与弧搜索内点法结合用于路径规划
-3. [Learning Predictive Control with Deep Koopman Operators for Autonomous Vehicle Motion Planning](/202606/14/2606.08136v1-learning-predictive-control-with-deep-koopman-operators-for-autonomous-vehicle-motion-planning)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：使用库普曼算子和强化学习的自动驾驶路径规划
-4. [Neuro-Symbolic Injection of LTLf Constraints in Autoregressive Reinforcement Learning Policies](/202606/14/2606.08312v1-neuro-symbolic-injection-of-ltlf-constraints-in-autoregressive-reinforcement-learning-policies)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：神经符号强化学习用于时序逻辑约束
-5. [From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation](/202606/14/2606.12603v1-from-imitation-to-alignment-human-preference-flow-policies-for-long-horizon-sidewalk-navigation)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：使用人类偏好流策略的自主人行道导航，用于机器人食物递送（末端物流）
+1. [AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning](/202606/16/2606.10927v1-alldaynav-lifelong-navigation-via-real-world-reinforcement-learning)  
+   标签：评分：7.0/10、query:rl-path-opt
+   evidence：强化学习用于机器人终身导航，与机器人路径规划相关
 
 
 <div class="dpr-home-promo-card">

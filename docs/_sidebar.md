@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-06-16 <!--dpr-date:20260616-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/16/2606.10927v1-alldaynav-lifelong-navigation-via-real-world-reinforcement-learning" data-sidebar-item="{&quot;title&quot;: &quot;AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.10927v1-alldaynav-lifelong-navigation-via-real-world-reinforcement-learning&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;rl-path-opt&quot;}], &quot;evidence&quot;: &quot;强化学习用于机器人终身导航，与机器人路径规划相关&quot;}">AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning</a>
   * 2026-06-14 <!--dpr-date:20260614-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/14/2606.13604v1-multi-agent-reinforcement-learning-from-delayed-marketplace-feedback-for-objective-weight-adaptation-in-three-sided-dispatch" data-sidebar-item="{&quot;title&quot;: &quot;Multi-Agent Reinforcement Learning from Delayed Marketplace Feedback for Objective-Weight Adaptation in Three-Sided Dispatch&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.13604v1-multi-agent-reinforcement-learning-from-delayed-marketplace-feedback-for-objective-weight-adaptation-in-three-sided-dispatch&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;rl-last-mile&quot;}], &quot;evidence&quot;: &quot;多智能体强化学习优化配送调度&quot;}">Multi-Agent Reinforcement Learning from Delayed Marketplace Feedback for Objective-Weight Adaptation in Three-Sided Dispatch</a>
