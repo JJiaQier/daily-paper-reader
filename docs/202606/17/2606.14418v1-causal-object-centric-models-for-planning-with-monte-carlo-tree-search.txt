@@ -1,0 +1,419 @@
+Title: Causal Object-Centric Models for Planning with Monte Carlo Tree Search
+
+URL Source: https://arxiv.org/pdf/2606.14418v1
+
+Published Time: Mon, 15 Jun 2026 01:03:06 GMT
+
+Number of Pages: 51
+
+Markdown Content:
+# Causal Object-Centric Models for Planning with Monte Carlo Tree Search 
+
+Rodion Vakhitov 
+
+MIRAI Moscow, Russia 
+
+vakhitov.r@miriai.org 
+
+Leonid Ugadiarov 
+
+CogAILab & MIRAI Moscow, Russia 
+
+Alexey Skrynnik 
+
+CogAILab & MIRAI Moscow, Russia 
+
+Aleksandr Panov 
+
+CogAILab & MIRAI Moscow, Russia 
+
+## Abstract 
+
+We introduce COMET (Causal Object-centric Model for Efficient Tree search), a model-based reinforcement learning algorithm that performs Monte Carlo Tree Search in a slot-structured latent space. COMET pairs a frozen unsupervised object-centric encoder with a transformer-based world model, in which actions are bound to objects through a novel action–slot fusion mechanism that is used in slot transition prediction. Policy and value heads use object-causal attention, modulat-ing token interactions by learned per-slot relevance scores so that decision-making concentrates on task-relevant entities. COMET adds an explicit object-level induc-tive bias to MuZero-style latent planning. Across eight visually and dynamically diverse tasks from the Object-Centric Visual RL benchmark, ManiSkill, Robosuite, and VizDoom, COMET achieves a higher mean normalized score during the early stages of training compared to object-centric and monolithic baselines. 
+
+## 1 Introduction 
+
+Humans can reason about the consequences of their actions before acting by mentally simulating past experiences or possible future outcomes [ 36 ]. Motivated by this ability, world models have been introduced in reinforcement learning (RL) as a way to imitate the environment and improve learning efficiency [ 10 ]. In model-based reinforcement learning (MBRL), an agent learns a model of the environment dynamics and uses it to generate imagined experiences, thereby reducing the need for real-world interactions. MBRL methods have achieved strong performance across a wide range of tasks. Notable exam-ples include the Dreamer family of algorithms [ 11 – 13 ], which employ latent world models for long-horizon imagination, approaches based on Model Predictive Path Integral (MPPI) control for planning [ 15 , 14 ], and methods that integrate Monte-Carlo Tree Search (MCTS) [ 5, 33 ] with learned models [33]. Despite this progress, learning accurate world models remains difficult in environments that are high-dimensional, non-stationary, and composed of multiple interacting objects. One of the challenges for visual environments lies in representing observations effectively. Most existing approaches rely on convolutional neural network (CNN) encoders [ 21 ] that produce a single holistic representation of the input image. However, such representations may fail to capture object-level structure and interactions, which are often crucial for decision-making [ 32 ]. In complex scenes, small but task-relevant objects, dynamic backgrounds, or many irrelevant entities can significantly degrade agent performance [ 22 ]. 
+
+> Preprint.
+> arXiv:2606.14418v1 [cs.AI] 12 Jun 2026
+
+Ot Slot Encoder         
+
+> all slots ¯ st
+> ¯st
+> ˆ¯st+1
+> ˆ¯st+2
+> ˆ¯st+3
+> π0(a)fθ
+> α0
+> t
+> a1gθ,ˆr1
+> a2gθ,ˆr2
+> a3gθ,ˆr3
+> π1, v 1
+> N(¯ st, a )
+> pt
+> IMCTS
+> α⋆t
+
+Figure 1: Object-centric representations in COMET. Obser-vation Ot is transformed into a set of object representations 
+
+¯st, for which causality scores ¯αt are estimated. By focusing on the most relevant objects and their interactions, planning can concentrate on task-relevant elements of the scene during tree search. Humans, by contrast, perceive the world as composed of discrete enti-ties such as objects [ 39 ], which en-ables efficient reasoning and planning. Object-centric RL represents the envi-ronment as a set of object-level com-ponents, where each component corre-sponds to an individual object. When instance segmentation masks are avail-able, object representations can be ex-tracted using CNN encoders, alterna-tively, supervised segmentation mod-els [ 4 , 20 , 31 ] can be used, though they require annotated data. A large body of work instead focuses on unsu-pervised object-centric representation learning [ 18 , 23 , 24 , 8 , 37 , 38 , 35 , 48 ,25 , 7 ], which discovers structured rep-resentations directly from raw images, making it suitable for reinforcement learning without external supervision. Object-centric MBRL methods that maintain an object-level world model can explicitly represent object dynam-ics and interactions, enabling more focused and interpretable decision-making. Many real-world and sim-ulated environments are inherently object-oriented: scenes consist of mul-tiple objects whose interactions determine the reward. However, at any given time step, only a small subset of objects typically participates in interactions relevant to the current decision. For example, in robotic manipulation tasks, a robot often interacts with only one object at a time. As a result, actions usually affect the state of only a few objects, while the remaining objects are largely irrelevant for the immediate decision. Motivated by this observation, we hypothesize that explicitly modeling the importance of individual objects for decision-making can improve policy learning. To this end, we propose COMET, an object-centric MBRL algorithm based on MCTS. In COMET, the world model maintains disentangled latents for object-centric representations. The policy and value models use transformer-based architectures [ 43 ] over these latents, combined with object causal attention mech-anisms. Each network processes object tokens together with a dedicated target token for action or value prediction, while attention is modulated by learned causality scores to emphasize task-relevant objects. In summary, our main contributions are as follows: • We introduce COMET, an MCTS-based object-centric MBRL algorithm that combines frozen object-level representations with a transformer-based world model for planning in an object-structured latent space. • We propose a novel action-object binding mechanism, where actions are fused with object-centric slots, effectively implementing a learned binding between actions and objects within a unified transformer backbone, enabling object-centric world modeling as well as policy/value prediction. • We evaluate COMET across a diverse set of object-oriented visual control tasks, including object-centric benchmark environments and robotic manipulation tasks, and show that it shows consistent performance across tasks and, on average, achieves higher sample efficiency than both strong monolithic MCTS-based MBRL methods and object-centric RL baselines. 2Transformer Backbone                                                       
+
+> Otfrom replay buffer
+> Slots Extractor
+> s1
+> ts2
+> t••• snt
+> Shared MLP Projector
+> s1
+> tats2
+> tat••• sntat
+> action atfrom replay buffer
+> a1
+> ta2
+> t••• ant
+> h1
+> th2
+> t••• h3
+> tz1
+> tz2
+> t••• z3
+> t
+> Policy Transformer
+> Value Transformer
+> Shared Observation Head
+> Reward Head
+> πtvtrt
+> ˆs1
+> t+1 ˆs2
+> t+1 ••• ˆsnt+1
+> Ot+1 from replay buffer
+> Slots Extractor
+> s1
+> t+1 s2
+> t+1 ••• snt+1
+> Shared MLP Projector
+> s1
+> t+1 at+1 s2
+> t+1 at+1 ••• snt+1 at+1
+> action at+1 from replay buffer
+> a1
+> t+1 a2
+> t+1 ••• ant+1
+> h1
+> t+1 h2
+> t+1 ••• h3
+> t+1 z1
+> t+1 z2
+> t+1 ••• z3
+> t+1
+> Policy Transformer
+> Value Transformer
+> Shared Observation Head
+> Reward Head
+> πt+1 vt+1 rt+1
+> ˆs1
+> t+2 ˆs2
+> t+2 ••• ˆsnt+2
+
+Figure 2: Overview of COMET training. A frozen slot extractor maps observations into slots, which are processed by a transformer backbone to produce latent representations h1 
+
+> t
+
+, h 2 
+
+> t
+
+, . . . , h nt .These latents, together with a learnable target token, are fed into the policy and value transformers to predict the action distribution or value. Next, an action embedding is concatenated with each slot independently and passed through a shared MLP projector, producing slot-conditioned action embeddings a1 
+
+> t
+
+, a 2 
+
+> t
+
+, . . . , a nt . These are processed by a transformer backbone to obtain z1 
+
+> t
+
+, z 2 
+
+> t
+
+, . . . , z nt ,which are used to predict the next state (next slots) and reward. 
+
+## 2 Related Work 
+
+2.1 Object-Centric Representation Learning 
+
+A growing line of research focuses on learning structured object-centric representations directly from raw sensory inputs without manual annotations. Instead of encoding a scene into a single global vector, these methods decompose observations into sets of entities that can be processed independently. A key mechanism is Slot Attention [ 24 ], which iteratively assigns a fixed number of latent slots to different parts of the input via competitive cross-attention. Subsequent work extends this idea to sequential data. SAVi [ 19 ] and SAVi++ [ 8] introduce temporal consistency using motion cues such as optical flow and depth, enabling slots to persist across frames. Other approaches focus on improving reconstruction quality with more expressive generative models. SLATE and STEVE [ 38 ] combine discrete latent tokenization (dVAE [ 42 ]) with transformer-based decoders and Slot Attention-based grouping. In contrast, DINOSAUR [ 35 ] replaces pixel reconstruction with feature-level objectives using pretrained DINO [ 1] representations to learn semantically meaningful objects. More recent work Slot Contrast [ 25 ] enforces alignment between slots across time by contrasting corresponding object representations, resulting in more robust tracking and reduced slot ambiguity in dynamic scenes. Not all object-centric models rely on Slot Attention. Deep Latent Particles (DLP) [ 6] represent images as low-dimensional particles that decouple spatial position and appearance. In a different direction, Artificial Kuramoto Oscillatory Neurons (AKOrN) [ 26 ] introduce oscillatory neural dynamics, where synchronized neurons form coherent groups corresponding to objects or parts. 
+
+2.2 Object Centric Reinforcement Learning 
+
+Recent studies incorporate object-centric representations into model-based reinforcement learning to better capture the compositional structure of environments. COBRA [ 45 ] learns a transition model over latent slots obtained from MONet [ 3] and combines it with intrinsic motivation to improve data efficiency. FOCUS [ 9] uses an encoder-decoder architecture that segments scenes into object-specific latent variables via learned masks. OC-STORM [ 49 ] employs a spatiotemporal transformer 3to jointly reason over object-centric and pixel-level representations for dynamics modeling. COBRA is limited by the lack of explicit modeling of object interactions, restricting its ability to capture relational dynamics addressed by our method. In contrast, FOCUS and OC-STORM rely on annotated segmentation masks, limiting their applicability in fully unsupervised settings. Closer to our setting, STICA [ 28 ] proposes an object-centric model-based RL framework combining slot-based representations with transformer-based world models and decision modules with object causal attention. SOLD [ 27 ] learns object-centric latent dynamics directly from pixels without supervision via an action-conditioned slot-based dynamics model and a Slot Aggregation Transformer for policy and value learning. Object-Centric Dreamer [ 41 ] (OCDreamer) extends Dreamer by replacing the RSSM with an object-centric RSSM and incorporating GNNs to explicitly model object interactions during prediction and control. Beyond model-based approaches, object-centric representations are also used in model-free RL. OCRL [ 47 ] integrates a transformer-based object encoder into PPO [ 34 ], enabling flexible use of different object-centric features. Similarly, OC-CA and OC-SA [ 40 ] use Slot Attention as a feature extractor and study its generalization across environments. 
+
+## 3 COMET 
+
+Figure 3: Mean Normalized Score (6) versus normalized steps. Normalization parameters are listed in Appendix A. Left: normalized score averaged over all considered tasks–Object Goal, Object Interaction, Object Comparison, Property Comparison, Object Reaching, Block Lifting, Cube Pushing, and Defend The Line–for all algorithms except SOLD. Right: normalized score averaged over continuous-control tasks compatible with SOLD–Object Reaching, Block Lifting, and Cube Pushing. COMET is an MCTS-based object-centric model-based RL algorithm that performs planning in a slot-structured latent space. The method combines three components: a frozen object-centric encoder that maps visual observations to object slots, a transformer-based world model that predicts future slots and rewards, and policy/value heads equipped with object-causal attention. Our implementation builds on the LightZero framework [ 29 ] and follows the UniZero training pipeline [ 30 ]. Unlike UniZero, which operates on monolithic state embeddings, COMET represents each observation as a set of object-centric slots and performs both dynamics prediction and decision-making over these slots. This design introduces an explicit object-level inductive bias into MuZero-style latent planning, enabling the model to reason over individual entities and their interactions. As in UniZero, COMET uses the unified transformer backbone implemented using a nanoGPT-based architecture [17]. 
+
+3.1 Slots Extractor 
+
+The slots extractor maps an image observation ot into a set of object-centric latent representations. Specifically, it produces an unordered collection of vectors ¯st = {s1 
+
+> t
+
+, . . . , s nt }, where n is a fixed hyperparameter conventionally defined as the maximum number of objects in the scene plus one slot for the background. A key challenge of slot-based architectures, which are trained on static image observations, is that the ordering of slots is not guaranteed to be consistent across time steps due to the permutation-invariant 4and stochastic nature of slot attention. To mitigate this issue and ensure temporal consistency of object representations within an episode, we initialize the slot representations at time t + 1 using the slots obtained at time t. This encourages stable assignment of slots to underlying objects over time. In contrast, this issue does not arise in video-based object-centric models, where temporal consistency is directly modeled within the architecture. For example, in Slot Contrast, such consistency is handled within the learning pipeline, and no additional slot-initialization mechanism is required, as temporal correspondence is learned end-to-end through the model design. In our approach, slot extractors are pretrained on observations collected using a random policy and remain frozen during reinforcement learning. We experiment with different object-centric representation models depending on the task, including SLATE, DINOSAUR, and Slot Contrast. 
+
+3.2 Object-Centric Token Processing 
+
+UniZero uses a transformer backbone based on the nanoGPT architecture. It processes sequences of state and action embeddings arranged alternately in a single sequence. In discrete action spaces, actions are represented as learnable embedding vectors, while in continuous action spaces, actions are passed through a two-layer MLP to produce corresponding embeddings. The transformer processes the sequence in two stages. First, the state embedding zt is fed into the backbone, producing latent 
+
+hzt , which is then passed to the decision head to model policy and value. Next, the action embedding 
+
+at is processed by the same transformer backbone, yielding latent hat , which is passed through the dynamics head to predict the future state ˆzt+1 and reward ˆrt. UniZero employs standard causal attention masking and learnable absolute positional encodings, with the total sequence length bounded by the context size. 
+
+Figure 4: Illustration of the atten-tion mask used in the transformer backbone for a setting with two slots per block across three time steps. We adapt this architecture for object-centric representations. In object-centric settings, the state is represented as n slots, 
+
+¯st = {s1 
+
+> t
+
+, . . . , s nt }. In our approach these slots are fed into the backbone, producing latent representations {h1 
+
+> t
+
+, . . . , h nt },which are then passed to the policy and value networks im-plemented as transformer modules with causal attention, as described in Section 3.3. Predicting the next state ¯ˆst+1 =
+
+{ˆs1 
+
+> t
+
+, . . . , ˆsnt } is non-trivial. Generating n slots from a single action embedding at creates a bottleneck, as all object-centric latents must be compressed into a single vector. In our experi-ments, architectures using this approach perform poorly. To ad-dress this, we concatenate the action embedding with each slot, 
+
+at ⊕ s1 
+
+> t
+
+, . . . , a t ⊕ snt , and pass the resulting vectors through a shared MLP projector. This produces slot-conditioned action embeddings ¯at = {a1 
+
+> t
+
+, . . . , a nt }, which are fed into the trans-former backbone, yielding latents ¯zt = {z1 
+
+> t
+
+, . . . , z nt }. These latents are passed through a shared observation MLP head to predict the next-step object slots ¯ˆst+1 . For reward prediction, 
+
+¯zt are summed into a single vector, which is then processed by a reward head implemented as an MLP. The input to the transformer is the sequence of ¯st and ¯at, naturally decomposed into blocks, each corresponding to a single time step. As in UniZero, each block is augmented with a learnable absolute positional encoding, and the transformer’s context size defines the total number of timesteps processed. In our attention mask, each slot embedding attends to all slots within the same block, all slots from previous blocks, and the action embeddings associated with its position. Each action embedding attends to itself as well as to all slots in the current and preceding blocks. The attention mask for the transformer backbone is shown in Figure 4. We view our slot-conditioned action embeddings as closely related to the mechanism of soft action–object binding [ 2], where each slot is influenced by a version of the source action conditioned on the current object state. The overall training pipeline and architecture are illustrated in Figure 2. 
+
+3.3 Object-Causal Attention 
+
+The policy and value networks are implemented as a transformer with the modified attention mecha-nism introduced in STICA. Alongside the latent representations h1 
+
+> t
+
+, . . . , h nt , a learnable target token, 5specific to the policy or value head, is provided as input; its transformer output is decoded by an MLP to produce the corresponding prediction. To model causal structure, a causal graph is defined over three groups of objects: the target, causal objects, and non-causal objects: 
+
+G =
+
+"1 1 00 1 00 0 1
+
+#
+
+, (1) where Gi,j = 1 indicates that group j exerts a causal influence on group i. Thus, causal objects influence the target ( G1,2 = 1 ) and one another ( G2,2 = 1 ), while non-causal objects influence only themselves ( G3,3 = 1 ). Since object causality is not known a priori, a causality score αkt ∈ [0 , 1] is estimated for each latent hkt , denoting the probability that the corresponding object is relevant for the policy or value prediction. 
+
+Wt =
+
+
+
+1 0 00 α1 
+
+> t
+
+1 − α1
+
+> t
+
+... ... ...
+
+0 αnt 1 − αnt
+
+ , (2) whose first row corresponds to the target token and remaining rows to the latent object tokens. The product WtGW ⊤ 
+
+> t
+
+lifts G to token-level interactions, encoding the strength of causal influence between every pair of tokens, and is used to modulate scaled dot-product attention: 
+
+CA t = Norm 
+
+
+
+softmax 
+
+ QtK⊤
+
+> t
+
+√d
+
+
+
+⊙ WtGW ⊤
+
+> t
+
+
+
+Vt, (3) where Qt, Kt, Vt are the query, key, and value matrices, d is the key dimensionality, ⊙ is element-wise multiplication, and Norm( ·) denotes row-wise normalization. The mechanism thereby concentrates attention on objects that directly influence the target and suppresses irrelevant ones. Although we follow the terminology of STICA and refer to these quantities as causality scores, they should be interpreted as learned object-relevance weights rather than independently identified causal effects. 
+
+3.4 Policy and World Model Learning 
+
+MuZero-like methods learn a latent model for planning with MCTS rather than using the true environment dynamics [ 33 ]. The model consists of a representation function, a dynamics function, and a prediction function. The representation function encodes the observation history into a root latent state xt = hθ (o≤t, a <t ). The dynamics function predicts imagined transitions and rewards, ˆrt, x t+1 = gθ (xt, a t), and the prediction function outputs a policy prior and value estimate, 
+
+πt, ˆvt = fθ (xt). MCTS is then performed entirely in latent space. The learned dynamics expands candidate future trajectories, while the prediction function evaluates latent states and provides action priors. After a fixed number of simulations, the visit counts N (xt, a t) at the root are normalized to produce an improved policy target pt
+
+pt = N (xt, a t)1/T
+
+P 
+
+> bt
+
+N (xt, b t)1/T , (4) where T denotes the temperature, which modulates the extent of exploration, the visit count N (xt, a t)
+
+denotes the number of times action at was selected at the root latent state xt during MCTS. The denominator P 
+
+> bt
+
+N (xt, b t)1/T sums over all possible actions bt from the same state xt for discrete action spaces, or over sampled candidate actions in continuous-control tasks, where N (xt, b t) is the visit count for action bt. The model is trained end-to-end by unrolling the dynamics for K steps and optimizing policy, value, and reward prediction losses. This framework forms the basis of several MuZero-style algorithms [33, 16, 46, 44]. While standard MuZero-like methods represent the planning state as a monolithic latent vector or feature map, COMET represents it as a set of object-centric slots, enabling planning and prediction 6over slot-structured latent space. The joint optimization objective for COMET can be written as 
+
+LCOMET (θ) = E(ot,a t,r t,o t+1 ,p t)∼B 
+
+ H−1X
+
+> t=0
+
+
+
+βs
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∥ˆsit+1 − sit+1 ∥22
+
++βr CE(ˆ rt, r t) + βp CE( πt, p t) + βv CE(ˆ vt, v t)
+
+ 
+
+,
+
+(5) where B is a replay buffer that stores trajectories {ot, a t, r t, o t+1 , p t}. H denotes the training context length, which corresponds to the rollout length used during training. In COMET, H matches the context window of the transformer backbone. The coefficients βs, β r , β p, β v are constant coefficients used to balance different loss terms, corresponding to next-state prediction, reward prediction, policy prediction, and value prediction, respectively. CE denotes the cross-entropy loss function. Following UniZero, we formulate reward and value prediction as a discrete regression problem in a log-transformed space, optimized by minimizing cross-entropy using vt and rt as soft targets. ˆsit+1 
+
+denotes the predicted representation of the i-th slot, while sit+1 denotes the corresponding ground-truth slot obtained from a frozen pretrained object-centric encoder. vt denotes the bootstrapped n-step TD target, and rt denotes the target reward. 
+
+## 4 Experimental Setup 
+
+4.1 Environments 
+
+Figure 5: Visualization of observations and slot-wise attention maps across environments. In each row, the real observation is followed by attention maps for each slot produced by the corresponding model. From top to bottom: SLATE in Object Reaching Task, SLATE in an Object Goal Task, Slot Contrast in Cube Pushing Task, DINOSAUR in Block Lifting Task, and Slot Contrast in Defend The Line Task. We evaluate our approach on the Object-Centric Visual RL benchmark [ 47 ], which includes object-centric environments designed to test perception, interaction, and relational reasoning. The suite consists of Object Goal, Object Interaction, Object Comparison, Property Comparison, and Object Reaching tasks, featuring target objects with distractors and requiring different forms of goal-directed behavior. Across tasks, the agent must identify relevant objects, reason about their properties or relationships, and act under sparse rewards with either discrete or continuous action spaces. We further extend the evaluation to manipulation and control tasks from ManiSkill, Robosuite, and VizDoom. Figure 5 shows examples of observations from the considered environments. In the ManiSkill framework, we use the Cube Pushing task, where a cube is placed on a tabletop and its initial position is randomly sampled within a small region in front of the agent. The goal is to push 7the cube into a target region at a fixed offset from its initial position, indicated by a visual marker. The reward is dense and shaped, with pose-based components weighted by pose_reward_coef = 0 .01 
+
+and place_reward_coef = 0 .1. Episodes are limited to 50 steps. In Robosuite, we evaluate the Block Lifting task, where a single Panda arm operates in a tabletop environment. A cube is placed on the table at a fixed position, while the robot’s initial configuration is randomized at each episode. The objective is to grasp and lift the cube above a predefined height threshold. The task uses a dense reward that encourages gradual progress toward successful lifting, requiring stable grasping and vertical manipulation. Episodes are limited to 125 steps. Finally, in VizDoom we use the Defend the Line scenario, where the agent is placed on one side of a rectangular map, while melee and ranged monsters spawn on the opposite side and continuously move toward it. Monsters are eliminated with a single shot and respawn after a delay; over time they deal increasing damage. The agent has limited ammunition, and the episode ends when the agent dies. The reward is +1 for killing a monster and -1 for death. 
+
+Figure 6: Success rate averaged over 30 episodes and three seeds for COMET and baselines in tasks with discrete action space. Shaded areas indicate standard deviation. Exponential smoothing with coefficient 0.5 is applied. 
+
+Figure 7: Success rate averaged over 30 episodes and three seeds for COMET and baselines in tasks with continuous action space. Shaded areas indicate standard deviation. Exponential smoothing with coefficient 0.5 is applied. 
+
+4.2 Mean Normalized Score 
+
+The performance and sample efficiency of object-centric RL depend on the quality of learned rep-resentations, which are strongly affected by visual complexity. Although agents can sometimes compensate for imperfect representations, this usually reduces sample efficiency and final perfor-mance, and different architectures vary in their robustness across environments. Therefore, a key goal is to design object-centric RL agents that maintain stable performance across visually diverse tasks under limited interaction budgets. Our task suite spans environments with varying visual complexity, ranging from relatively simple settings (e.g., 2D shapes on a monochrome background) to more challenging ones (e.g., ManiSkill, 8Robosuite, and VizDoom). To quantify performance under a fixed interaction budget, we compute the average performance across environments. To this end, we introduce a normalized score that aggregates an agent’s performance across a set of visually and dynamically diverse tasks into a single interpretable metric. Because evaluation metrics (e.g., cumulative reward and success rate) differ in scale and nature across tasks, raw scores must be normalized prior to aggregation. We normalize each agent’s performance relative to the best-performing method in each environment. Let E denote the set of environments, Te the time-step budget for environment e ∈ E , M the set of RL agents (algorithms) we evaluate, τ = t/ Te ≤ 1 the normalized time step, and F (m, e ; t) the evaluation metric (success rate or cumulative reward) achieved by method m ∈ M on environment e after t training steps. We define the normalized score S(m, e ; τ ) for method m in environment e, and the mean normalized score ˆS(m; τ ) that aggregates performance across environments: 
+
+S(m, e ; τ ) = F (m, e ; t)max m′,t ′ F (m′, e ; t′) ≤ 1, ˆS(m; τ ) = 1
+
+|E| 
+
+X
+
+> e∈E
+
+S(m, e ; τ ). (6) 
+
+## 5 Experiments 
+
+We compare COMET against a model-free, object-centric PPO baseline OCRL [ 47 ] that uses a transformer encoder to pool object-centric representations. As object-centric MBRL baselines, we use OCDreamer and SOLD. OCDreamer is agnostic to the action space, whereas SOLD is implemented only for continuous action spaces. We experimented with a discrete-action variant by replacing the continuous actor with a categorical policy and optimizing imagined rollouts with a score-function estimator, but this variant failed to learn reliably in preliminary experiments. We therefore restrict SOLD comparisons to continuous-action tasks, where the original algorithm is directly applicable. For SOLD, we use the SAVi encoder from the original implementation; examples of its attention maps on continuous tasks are provided in Appendix J. For OCRL, OCDreamer, and COMET, we use SLATE on the Object Goal, Object Interaction, Property Comparison, Object Property, and Object Reaching tasks; DINOSAUR on Block Lifting; and Slot Contrast on Cube Pushing and Defend the Line. Examples of attention maps produced by these encoders are shown in Figure 5. Pre-trained SLATE is used as described in Appendix C, while all other encoders are trained on the collected data (Appendix B) and kept frozen thereafter. Hyperparameters for SLATE, Slot Contrast, and DINOSAUR are provided in Appendices C, E, and D, respectively. As a monolithic MBRL baseline, we use UniZero. For all baselines, we adopt the original hyperparameters specified in their respective publications and official repositories. Hyperparameters for COMET are provided in Appendix F. For the Cube Pushing task, we reduce discount_factor to 0.925 for both COMET and UniZero. True and predicted trajectory rollouts for all tasks are presented in Appendix H, and causality-score visualizations for the policy and value transformers across all tasks are presented in Appendix I. Figures 6 and 7 show the training curves of success rate and cumulative reward for COMET and the baselines across all tasks. The set of top-performing algorithms changes across tasks. COMET achieves faster convergence and higher final performance than the baselines on Object Comparison and Object Property, but does not outperform the competing methods on Block Lifting. To account for variability in task difficulty and performance scales, we normalize the results per task for each algorithm as described in Equation 6. The resulting normalized score, shown in Figure 3, demonstrates that COMET achieves higher mean normalized score across a visually diverse set of tasks. In visually simple tasks, such as Object Goal, Object Comparison, and Property Comparison, COMET leverages strong object-centric representations and a structure with a single target object and multiple distractors. Using object causal attention, which benefits from high-quality representations, COMET accurately identifies task-relevant objects by assigning them higher causality scores, as illustrated in Appendix I, enabling it to outperform the baselines. In more dynamically complex tasks, such as Defend the Line and Object Interaction, COMET achieves performance comparable to the baselines. We attribute this behavior to task-specific factors: in Defend the Line, most objects are relevant for prediction, while in Object Interaction, the agent must rely on object-pushing mechanics, so the goal is achieved indirectly through deeper causal chains than those captured by our causal object attention mechanism. For tasks that are challenging in both visual complexity and control, such as Block Lifting and Cube Pushing, COMET achieves moderate performance. This is likely due to limitations in the object-centric representation model, which sometimes merges the cube and the background 9into a single slot. OCDreamer demonstrates better performance on these tasks, indicating that it is more robust to imperfect representations in such settings. 
+
+## 6 Limitations & Future Work 
+
+Despite advances in unsupervised object-centric representation learning, current methods still struggle to reliably segment complex, cluttered real-world scenes, especially under occlusion or ambiguous boundaries, limiting their applicability in unconstrained settings. Additionally, transformer-based approaches scale poorly due to quadratic self-attention costs with increasing object slots, restricting scalability in multi-object scenes. Future work will focus on extending these methods to realistic, open-ended environments, such as household tasks, and on improving causal attention mechanisms that dynamically prioritize relevant objects. Enhancing these mechanisms for not only policy and value estimation but also transition dynamics could improve efficiency, relational reasoning, and scalability in complex, multi-object settings. 
+
+## 7 Conclusion 
+
+In this work, we introduced COMET, an MCTS-based object-centric model-based reinforcement learning method that combines structured object-centric representations with a transformer-based world model. COMET employs an action-slot binding mechanism that fuses object-centric slots with actions, enabling transition modeling for slots within a unified transformer backbone. By leveraging a causal attention mechanism, the policy and value models focus on task-relevant object representations, improving both the effectiveness and interpretability of decision-making. Experimental results across visually diverse discrete and continuous control tasks show that COMET achieves a higher mean normalized score during the early stages of training compared to object-centric and monolithic baselines. 
+
+## References 
+
+[1] Shir Amir, Yossi Gandelsman, Shai Bagon, and Tali Dekel. Deep vit features as dense visual descriptors. arXiv preprint arXiv:2112.05814 , 2021. [2] Ondrej Biza, Robert Platt, Jan-Willem van de Meent, Lawson LS Wong, and Thomas Kipf. Binding actions to objects in world models. arXiv preprint arXiv:2204.13022 , 2022. [3] Christopher P Burgess, Loic Matthey, Nicholas Watters, Rishabh Kabra, Irina Higgins, Matt Botvinick, and Alexander Lerchner. Monet: Unsupervised scene decomposition and representa-tion. arXiv preprint arXiv:1901.11390 , 2019. [4] Ho Kei Cheng, Seoung Wug Oh, Brian Price, Joon-Young Lee, and Alexander Schwing. Putting the object back into video object segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3151–3161, 2024. [5] Rémi Coulom. Efficient selectivity and backup operators in monte-carlo tree search. In 
+
+International conference on computers and games , pages 72–83. Springer, 2006. [6] Tal Daniel and Aviv Tamar. Unsupervised image representation learning with deep latent particles. In International Conference on Machine Learning , pages 4644–4665. PMLR, 2022. [7] Tal Daniel and Aviv Tamar. DDLP: Unsupervised object-centric video prediction with deep dynamic latent particles. Transactions on Machine Learning Research , 2024. ISSN 2835-8856. URL https://openreview.net/forum?id=Wqn8zirthg .[8] Gamaleldin Elsayed, Aravindh Mahendran, Sjoerd Van Steenkiste, Klaus Greff, Michael C Mozer, and Thomas Kipf. Savi++: Towards end-to-end object-centric learning from real-world videos. Advances in Neural Information Processing Systems , 35:28940–28954, 2022. [9] Stefano Ferraro, Pietro Mazzaglia, Tim Verbelen, and Bart Dhoedt. FOCUS: Object-centric world models for robotic manipulation. In Intrinsically-Motivated and Open-Ended Learning Workshop @NeurIPS2023 , 2023. 10 [10] David Ha and Jürgen Schmidhuber. World models. CoRR , abs/1803.10122, 2018. URL 
+
+http://arxiv.org/abs/1803.10122 .[11] Danijar Hafner, Timothy Lillicrap, Jimmy Ba, and Mohammad Norouzi. Dream to control: Learning behaviors by latent imagination. In International Conference on Learning Representa-tions , 2020. URL https://openreview.net/forum?id=S1lOTC4tDS .[12] Danijar Hafner, Timothy P Lillicrap, Mohammad Norouzi, and Jimmy Ba. Mastering atari with discrete world models. In International Conference on Learning Representations , 2021. URL 
+
+https://openreview.net/forum?id=0oabwyZbOu .[13] Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse control tasks through world models. Nature , 640(8059):647–653, 2025. [14] Nicklas Hansen, Hao Su, and Xiaolong Wang. TD-MPC2: Scalable, robust world models for continuous control. In The Twelfth International Conference on Learning Representations , 2024. URL https://openreview.net/forum?id=Oxh5CstDJU .[15] Nicklas A Hansen, Hao Su, and Xiaolong Wang. Temporal difference learning for model predictive control. In International Conference on Machine Learning , pages 8387–8406. PMLR, 2022. [16] Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Mohammadamin Barekatain, Simon Schmitt, and David Silver. Learning and planning in complex action spaces. In International Conference on Machine Learning , pages 4476–4486. PMLR, 2021. [17] Andrej Karpathy. nanogpt: The simplest, fastest repository for training/finetuning medium-sized gpts. https://github.com , 2023. [18] Thomas Kipf, Elise van der Pol, and Max Welling. Contrastive learning of structured world models. In International Conference on Learning Representations , 2020. URL https:// openreview.net/forum?id=H1gax6VtDB .[19] Thomas Kipf, Gamaleldin Fathy Elsayed, Aravindh Mahendran, Austin Stone, Sara Sabour, Georg Heigold, Rico Jonschkowski, Alexey Dosovitskiy, and Klaus Greff. Conditional object-centric learning from video. In International Conference on Learning Representations , 2022. [20] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al. Segment anything. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , pages 4015–4026, 2023. [21] Yann LeCun, Yoshua Bengio, and Geoffrey Hinton. Deep learning. Nature , 521(7553):436–444, May 2015. [22] Anthony Liang, Jesse Thomason, and Erdem Bıyık. Visarl: Visual reinforcement learning guided by human saliency. In 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 2907–2912. IEEE, 2024. [23] Zhixuan Lin, Yi-Fu Wu, Skand Vishwanath Peri, Weihao Sun, Gautam Singh, Fei Deng, Jindong Jiang, and Sungjin Ahn. Space: Unsupervised object-oriented scene representation via spatial attention and decomposition. In International Conference on Learning Representations , 2020. URL https://openreview.net/forum?id=rkl03ySYDH .[24] Francesco Locatello, Dirk Weissenborn, Thomas Unterthiner, Aravindh Mahendran, Georg Heigold, Jakob Uszkoreit, Alexey Dosovitskiy, and Thomas Kipf. Object-centric learning with slot attention. Advances in neural information processing systems , 33:11525–11538, 2020. [25] Anna Manasyan, Maximilian Seitzer, Filip Radovic, Georg Martius, and Andrii Zadaianchuk. Temporally consistent object-centric learning by contrasting slots. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 5401–5411, 2025. [26] Takeru Miyato, Sindy Löwe, Andreas Geiger, and Max Welling. Artificial kuramoto oscillatory neurons. In The Thirteenth International Conference on Learning Representations , 2025. URL 
+
+https://openreview.net/forum?id=nwDRD4AMoN .11 [27] Malte Mosbach, Jan Niklas Ewertz, Angel Villar-Corrales, and Sven Behnke. Sold: Rein-forcement learning with slot object-centric latent dynamics. arXiv preprint arXiv:2410.08822 ,2024. [28] Yosuke Nishimoto and Takashi Matsubara. Object-centric world models for causality-aware reinforcement learning. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 40, pages 24585–24593, 2026. [29] Yazhe Niu, Yuan Pu, Zhenjie Yang, Xueyan Li, Tong Zhou, Jiyuan Ren, Shuai Hu, Hongsheng Li, and Yu Liu. Lightzero: A unified benchmark for monte carlo tree search in general sequential decision scenarios. Advances in Neural Information Processing Systems , 36:37594–37635, 2023. [30] Yuan Pu, Yazhe Niu, Zhenjie Yang, Jiyuan Ren, Hongsheng Li, and Yu Liu. Unizero: Gen-eralized and efficient planning with scalable latent world models. Transactions on Machine Learning Research , 2025. [31] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollar, and Christoph Feichtenhofer. SAM 2: Segment anything in images and videos. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview. net/forum?id=Ha6RTeWMd0 .[32] Adam Santoro, David Raposo, David G Barrett, Mateusz Malinowski, Razvan Pascanu, Peter Battaglia, and Timothy Lillicrap. A simple neural network module for relational reasoning. 
+
+Advances in neural information processing systems , 30, 2017. [33] Julian Schrittwieser, Ioannis Antonoglou, Thomas Hubert, Karen Simonyan, Laurent Sifre, Si-mon Schmitt, Arthur Guez, Edward Lockhart, Demis Hassabis, Thore Graepel, et al. Mastering atari, go, chess and shogi by planning with a learned model. Nature , 588(7839):604–609, 2020. [34] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. [35] Maximilian Seitzer, Max Horn, Andrii Zadaianchuk, Dominik Zietlow, Tianjun Xiao, Carl-Johann Simon-Gabriel, Tong He, Zheng Zhang, Bernhard Schölkopf, Thomas Brox, and Francesco Locatello. Bridging the gap to real-world object-centric learning. In The Eleventh International Conference on Learning Representations , 2023. URL https://openreview. net/forum?id=b9tUk-f_aG .[36] Richard M. Shiffrin, Danielle S. Bassett, Nikolaus Kriegeskorte, and Joshua B. Tenenbaum. The brain produces mind by modeling. Proceedings of the National Academy of Sciences , 117 (47):29299–29301, 2020. doi: 10.1073/pnas.1912340117. URL https://www.pnas.org/ doi/abs/10.1073/pnas.1912340117 .[37] Gautam Singh, Fei Deng, and Sungjin Ahn. Illiterate DALL-e learns to compose. In Inter-national Conference on Learning Representations , 2022. URL https://openreview.net/ forum?id=h0OYV0We3oh .[38] Gautam Singh, Yi-Fu Wu, and Sungjin Ahn. Simple unsupervised object-centric learning for complex and naturalistic videos. Advances in Neural Information Processing Systems , 35: 18181–18196, 2022. [39] Elizabeth S Spelke and Katherine D Kinzler. Core knowledge. Dev. Sci. , 10(1):89–96, January 2007. [40] Aleksandar Stani´ c, Yujin Tang, David Ha, and Jürgen Schmidhuber. Learning to generalize with object-centric agents in the open world survival game crafter. IEEE Transactions on Games ,2023. [41] Leonid Ugadiarov, Vitaliy Vorobyov, and Aleksandr Panov. Object-centric dreamer. In Interna-tional Conference on Artificial Neural Networks , pages 153–165. Springer, 2025. 12 [42] Aaron Van Den Oord, Oriol Vinyals, et al. Neural discrete representation learning. Advances in neural information processing systems , 30, 2017. [43] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. [44] Shengjie Wang, Shaohuai Liu, Weirui Ye, Jiacheng You, and Yang Gao. Efficientzero v2: Mastering discrete and continuous control with limited data. In International Conference on Machine Learning , pages 51041–51062. PMLR, 2024. [45] Nicholas Watters, Loic Matthey, Matko Bosnjak, Christopher P Burgess, and Alexander Lerch-ner. Cobra: Data-efficient model-based rl through unsupervised object discovery and curiosity-driven exploration. arXiv preprint arXiv:1905.09275 , 2019. [46] Weirui Ye, Shaohuai Liu, Thanard Kurutach, Pieter Abbeel, and Yang Gao. Mastering atari games with limited data. Advances in neural information processing systems , 34:25476–25488, 2021. [47] Jaesik Yoon, Yi-Fu Wu, Heechul Bae, and Sungjin Ahn. An investigation into pre-training object-centric representations for reinforcement learning. In Proceedings of the 40th International Conference on Machine Learning , pages 40147–40174, 2023. [48] Andrii Zadaianchuk, Maximilian Seitzer, and Georg Martius. Object-centric learning for real-world videos by predicting temporal feature similarities. Advances in neural information processing systems , 36:61514–61545, 2023. [49] Weipu Zhang, Adam Jelley, Trevor McInroe, and Amos Storkey. Objects matter: object-centric world models improve reinforcement learning in visually complex environments. arXiv preprint arXiv:2501.16443 , 2025. 13 A Mean Normalized Score 
+
+Table 1: Normalization Parameters. Notation is consistent with Equation (6). 
+
+Task Metric, m Normalization Value, max m′,t ′ F (m′, e ; t′) Timestep Budget, Te
+
+Object Goal Success Rate 1 500 k Object Interaction Success Rate 1 2 M Object Comparison Success Rate 1 500 k Property Comparison Success Rate 1 500 k Object Reaching Success Rate 1 500 k Block Lifting Cumulative Reward 104.6 500 k Cube Pushing Success Rate 1 500 k Defend The Line Cumulative Reward 33.6 1 M 
+
+## B Datasets 
+
+We collect images to train object-centric representation models using a uniform random policy. Table 2: Parameters of the collected datasets. Task Dataset Size Source Image Resolution Block Lifting 300 k 256 × 256 
+
+Cube Pushing 300 k 224 × 224 
+
+Defend The Line 500 k 336 × 336 
+
+14 C SLATE‘s Hyperparameters 
+
+For Object Goal, Object Interaction, Object Comparison, Property Comparison, and Object Reaching tasks we used pre-trained SLATE models from the OCRL official repository https://github.com/ jsikyoon/OCRL .Table 3: Hyperparameters for the SLATE Learning Training dataset size 1000000 Temp. cooldown 1.0 to 0.1 Temp. cooldown steps 30000 LR for DVAE 0.0003 LR for CNN Encoder 0.0001 LR for Transformer Decoder 0.0003 LR warm-up steps 30000 LR half time 250000 Dropout 0.1 Clip 0.05 Batch size 32 Epochs 100 DVAE Vocabulary size 4096 CNN Encoder Hidden size 64 Slot Attention Iterations 3Slot heads 1Slot dim. 192 MLP hidden dim. 192 Transformer Decoder Layers 4Heads 4Hidden dim. 192 15 D DINOSAUR‘s Hyperparameters 
+
+Table 4: Hyperparameters for DINOSAUR Learning Training dataset size 300000 Training steps 500000 Batch size 64 LR warm-up steps 10000 Peak LR 0.0004 Exp. decay half-life 100000 ViT Architecture ViT-B Feature dim. 768 Patch size 8Gradient norm clipping 1.0 Image/Crop size 224 Cropping strategy Full Tokens 784 Decoder Type MLP Layers 4MLP hidden dim. 1024 Slot Attention Iterations 3Slots 5Slot dim. 64 MLP hidden dim. 512 
+
+## E Slot Contrast‘s Hyperparameters 
+
+Table 5: Hyperparameters for Slot Contrast Learning Training steps 100000 Batch size 64 Training segment length 4LR warm-up steps 2500 Optimizer Adam Peak LR 0.0004 Exp. decay half-life 100000 ViT Architecture DINOv2 Small Initialization FixedLearnedInit Patch size 14 Feature dim. 384 Gradient norm clipping 0.05 Image/Crop size 336 Cropping strategy Full Image tokens 576 Predictor Type Transformer Layers 1Heads 4Decoder Type MLP Slot Attention Iterations (first / other frames) 3 / 2 Slot dim. 64 Loss Parameters Slot-slot contrastive loss disabled 16 F COMET‘s Hyperparameters 
+
+Table 6: Hyperparameters for COMET Planning Number of MCTS Simulations (sim) 50 Number of Sampled Actions (K) 20 (Continuous tasks only) Inference Context Length 10 Temperature 0.25 Dirichlet Noise ( α) 0.3 Dirichlet Noise Weight 0.25 Coefficient c1 1.25 Coefficient c2 19652 Environment and Replay Buffer Replay Buffer Capacity 1,000,000 Sampling Strategy Uniform Reward Clipping True (Discrete only) Data Augmentation False Game Segment Length 400 (Discrete); 100 (Continuous) Architecture Number of Backbone Transformer Heads 8 (Discrete); 4 (Continuous) Number of Backbone Transformer Layers (N) 2Number of Policy/Value Transformer Heads 4Number of Policy/Value Transformer Layers (N) 1Dropout Rate (p) 0.1 Activation Function GELU Reward/Value Bins 101 (Continuous); 601 (Discrete) Optimization Training Context Length (H) 10 Replay Ratio 0.25 Buffer Reanalyze Frequency 0 (Discrete); 1/100000 (Continuous) Batch Size 64 Optimizer AdamW Learning Rate 1 × 10 −4
+
+Next Latent State Loss Coefficient 10 Reward Loss Coefficient 1 (Discrete); 0.1 (Continuous) Policy Loss Coefficient 1 (Discrete); 0.1 (Continuous) Value Loss Coefficient 0.5 (Discrete); 0.1 (Continuous) Policy Entropy Coefficient 1 × 10 −4
+
+Weight Decay 10 −4
+
+Max Gradient Norm 5Discount Factor 0.997 (0.925 in Cube Pushing Task) Soft Target Update Momentum 0.05 Hard Target Network Update Frequency 100 Temporal Difference (TD) Steps 5
+
+## G Compute Resources 
+
+In our setup, training COMET for 500k environment steps on a single NVIDIA H100 (80 GB) GPU takes approximately 18 hours on average across different tasks. 17 H COMET‘s trajectory rollouts 
+
+Figure 8: Trajectory rollout generated using COMET’s policy for the Object Goal Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 18 Figure 9: Trajectory rollout generated using a random policy for the Object Goal Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 19 Figure 10: Trajectory rollout generated using COMET’s policy for the Object Interaction Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations; however, near the end of the trajectory, when objects became spatially close, the model produced inaccurate predictions. Notably, the ground-truth slots in this situation also became inconsistent with those from previous steps. 20 Figure 11: Trajectory rollout generated using a random policy for the Object Interaction Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations; however, near the end of the trajectory, when objects became spatially close, the model produced inaccurate predictions. Notably, the ground-truth slots in this situation also became inconsistent with those from previous steps. 21 Figure 12: Trajectory rollout generated using COMET’s policy for the Object Comparison Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 22 Figure 13: Trajectory rollout generated using a random policy for the Object Comparison Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 23 Figure 14: Trajectory rollout generated using COMET’s policy for the Property Comparison Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 24 Figure 15: Trajectory rollout generated using a random policy for the Property Comparison Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 25 Figure 16: Trajectory rollout generated using COMET’s policy for the Object Reaching Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 26 Figure 17: Trajectory rollout generated using a random policy for the Object Reaching Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the SLATE model over each slot inferred by the SLATE model. The second row shows attention maps produced by the SLATE model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations. 27 Figure 18: Trajectory rollout generated using COMET’s policy for the Block Lifting Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the DINOSAUR model over each slot inferred by the DINOSAUR model. The second row shows attention maps produced by the DINOSAUR model for each slot predicted by COMET’s dynamics mode. COMET’s dynamics model correctly predicted object representations. COMET’s dynamics model correctly predicted object representations. 28 Figure 19: Trajectory rollout generated using a random policy for the Block Lifting Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the DINOSAUR model over each slot inferred by the DINOSAUR encoder. The second row shows attention maps produced by the DINOSAUR model for each slot predicted by COMET’s dynamics mode. COMET’s dynamics model correctly predicted object representations. 29 Figure 20: Trajectory rollout generated using COMET’s policy for the Cube Pushing Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the Slot Contrast model over each slot inferred by the Slot Contrast model. The second row shows attention maps produced by the Slot Contrast model for each slot predicted by COMET’s dynamics mode. COMET’s dynamics model correctly predicted object representations. 30 Figure 21: Trajectory rollout generated using a random policy for the Cube Pushing Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the Slot Contrast model over each slot inferred by the Slot Contrast model. The second row shows attention maps produced by the Slot Contrast model for each slot predicted by COMET’s dynamics mode. COMET’s dynamics model correctly predicted object representations. 31 Figure 22: Trajectory rollout generated using COMET’s policy for the Defend The Line Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the Slot Contrast model over each slot inferred by the Slot Contrast model. The second row shows attention maps produced by the Slot Contrast model for each slot predicted by COMET’s dynamics model. COMET’s dynamics model correctly predicted object representations, with prediction errors appearing near the end of the trajectory. 32 Figure 23: Trajectory rollout generated using a random policy for the Defend The Line Task. The first row at each time step shows the real observation from the environment along with attention maps produced by the Slot Contrast model over each slot inferred by the Slot Contrast model. The second row shows attention maps produced by the Slot Contrast model for each slot predicted by COMET’s dynamics mode. COMET’s dynamics model correctly predicted object representations. 33 I COMET‘s causality probabilities in policy and value models 
+
+Figure 24: Per-slot causality scores for the value transformer in the Object Goal Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. The causality score is highest for the agent object across all time steps. 34 Figure 25: Per-slot causality scores for the policy transformer in the Object Goal Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. The causality score is highest for the agent object across most time steps. 35 Figure 26: Per-slot causality scores for the value transformer in the Object interaction Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object, and green bounding boxes indicate auxiliary object. The agent and target objects generally receive high causality scores; however, near the end of the trajectory, the model incorrectly assigns a higher causality score to a background object and produces comparable causality scores for other irrelevant objects. 36 Figure 27: Per-slot causality scores for the policy transformer in the Object Interaction Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object, and green bounding boxes indicate auxiliary object. 37 Figure 28: Per-slot causality scores for the value transformer in the Object Comparison Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. The agent, auxiliary, and target objects receive higher causality scores compared to other objects across time steps. The causality score is highest for the target object across most time steps. Some other objects receive higher causality scores than the agent object. 38 Figure 29: Per-slot causality scores for the policy transformer in the Object Comparison Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. The causality score is highest for the target object across most time steps. Some other objects receive higher causality scores than the agent object. 39 Figure 30: Per-slot causality scores for the value transformer in the Property Comparison Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. In this case, the model incorrectly assigns causality scores to the agent and target objects relative to other objects. 40 Figure 31: Per-slot causality scores for the policy transformer in the Property Comparison Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. The causality score is highest for the target object across most time steps. 41 Figure 32: Per-slot causality scores for the value transformer in the Object Reaching Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Blue bounding boxes indicate target object. 
+
+Figure 33: Per-slot causality scores for the policy transformer in the Object Reaching Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the SLATE model for each slot inferred by the SLATE model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target object. The causality score is highest for the target object and and for agent‘s objects distributed across multiple slots. 42 Figure 34: Per-slot causality scores for the value transformer in the Block Lifting Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the DINOSAUR model for each slot inferred by the DINOSAUR model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Blue bounding boxes indicate target object. The causality score is highest for the target object and and for agent‘s objects distributed across multiple slots. The causality score is highest for the target and agent objects across most time steps. 43 Figure 35: Per-slot causality scores for the policy transformer in the Block Lifting Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the DINOSAUR model for each slot inferred by the DINOSAUR model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target objects. The causality score is highest for the target and agent objects across most time steps. 44 Figure 36: Per-slot causality scores for the value transformer in the Cube Pushing Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the Slot Contrast model for each slot inferred by the Slot Contrast model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target objects. The causality score is highest for the target and agent objects across most time steps. 45 Figure 37: Per-slot causality scores for the policy transformer in the Cube Pushing Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the Slot Contrast model for each slot inferred by the Slot Contrast model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related objects, blue bounding boxes indicate target objects. The causality score is highest for the target and agent objects across most time steps. 46 Figure 38: Per-slot causality scores for the value transformer in the Defend The Line Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the Slot Contrast model for each slot inferred by the Slot Contrast model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for value prediction. Red bounding boxes indicate agent-related object. All objects, including the agent and the monsters, receive high causality scores. However, the model incorrectly assigns a high causality score to a background object. 47 Figure 39: Per-slot causality scores for the policy transformer in the Defend The Line Task. Each row corresponds to a time step and shows the real observation from the environment together with attention maps produced by the Slot Contrast model for each slot inferred by the Slot Contrast model. The number above each slot denotes its causality score αit, indicating the probability that the corresponding object is causally relevant for policy prediction. Red bounding boxes indicate agent-related object. All objects, including the agent and the monsters, receive high causality scores. However, the model incorrectly assigns a high causality score to a background object. 48 J SAVI‘s visualizations for SOLD 
+
+Figure 40: Hard attention maps produced by the SAVI model in the Cube Pushing task. 49 Figure 41: Hard attention maps produced by the SAVI model in the Block Lifting task. 50 Figure 42: Hard attention maps produced by the SAVI model in the Object Reaching task. 51
