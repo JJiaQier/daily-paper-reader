@@ -10,15 +10,19 @@ https://jjiaqier.github.io/daily-paper-reader/#/20260619/2606.18514v1-nco2-neura
 N(CO)$^2$: Neural Combinatorial Optimization with Chance Constraints to Solve Stochastic Orienteering
 
 精读文章摘要：
-使用神经组合优化和强化学习解决随机定向问题（车辆路径问题变种）
+神经组合优化结合强化学习求解与车辆路径问题类似的随机定向问题
 
 速读文章1：
 OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization
-一句话摘要：深度强化学习用于包含交通系统的网络规划优化
+一句话摘要：深度强化学习框架用于网络规划优化，涵盖交通系统，可实现及时且近优的路径规划
 
 速读文章2：
-OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization
-一句话摘要：提出结合深度强化学习和混合整数规划的适应性框架，适用于交通网络规划
+Causal Object-Centric Models for Planning with Monte Carlo Tree Search
+一句话摘要：面向机器人的因果对象中心模型与MCTS规划
+
+速读文章3：
+QPILOTS: Efficient Test-Time Q-Steering for Flow Policies
+一句话摘要：测试时强化学习引导流策略，可用于机器人路径优化
 
 生成日期：
 2026-06-19

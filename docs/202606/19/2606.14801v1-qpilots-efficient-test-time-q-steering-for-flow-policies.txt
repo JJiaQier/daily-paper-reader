@@ -1,0 +1,2603 @@
+Title: QPILOTS: Efficient Test-Time Q-Steering for Flow Policies
+
+URL Source: https://arxiv.org/pdf/2606.14801v1
+
+Published Time: Tue, 16 Jun 2026 00:07:27 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# QPILOTS :Efficient Test-Time Q-Steering for Flow Policies 
+
+Yifan Ruan 1,2∗ Chenyang Cao 1 Andreas Burger 1,2
+
+Ali Pesaranghader 3 Kaveh Kamali 3 Jaehong Kim 3 Nandita Vijaykumar 1,2
+
+Alan Aspuru-Guzik 1,2 Igor Gilitschenski 1,2 Nicholas Rhinehart 11University of Toronto 2Vector Institute 3LG Electronics 
+
+Abstract 
+
+Flow-matching and diffusion policies are expressive action generators, but optimiz-ing them with temporal-difference reinforcement learning (RL) remains difficult. Effective policy extraction requires exploiting the critic’s action gradient, yet di-rectly backpropagating this signal through a multi-step denoising process can be numerically unstable. Existing methods work around this either by discarding gra-dient information, distilling the policy into a simpler one-step actor, or repeatedly fine-tuning the denoising policy as the critic improves. We propose QPILOTS , a method that leaves the original policy unmodified and steers the denoising process at inference time. At each denoising step, instead of evaluating the critic on the noisy intermediate action where critic predictions are unreliable, we first project that intermediate state to an estimate of the final clean action and compute the critic gradient there. We introduce two variants: QPILOTS-U uses a fast single-point approximation, while QPILOTS-M draws differentiable posterior samples via a learned auxiliary network. On a standard offline-to-online RL benchmark, 
+
+QPILOTS achieves the best aggregate performance, reaching an average success rate of 90% across 50 tasks. We also apply QPILOTS to steer a large, frozen, pretrained Vision-Language Action (VLA) foundation model, outperforming or matching prior inference-time approaches across six manipulation tasks in simulation. 
+
+1 Introduction 
+
+Flow-matching and diffusion policies have become the de facto standard way to represent complex, multi-modal action distributions in continuous control and vision-language-action models (VLAs) [ 2,3, 4] and there is sustained interest in improving these policies with downstream rewards [ 5, 6 , 7, 8]. Formally, this can be framed as behavior-constrained policy learning, where the agent is equipped with a base flow policy πβ (a|s) trained on an offline dataset D and improves it online with a learned critic, Q, without straying too far from the base policy. Recently, Park et al. [9] has shown that the main challenge is to extract this optimal policy from (πβ , Q ) rather than learning Q itself. We refer to this mapping from a base policy and critic to an improved action distribution as policy extraction .An extractor may either modify the policy during training or steer its samples at inference time. For simple reparameterized policies, the critic’s action gradient ∇aQ(s, a ) can guide policy updates. For flow policies, this same signal must pass through a multi-step generation, and backpropagation through the denoising process is often unstable or expensive [ 10 , 11 , 12 ]. To circumvent this instability, prior work distills the original flow policy into a one-step approximation [ 5, 8] or uses finetuning to target the optimal policy [ 13 , 14 , 8]. In practice, the former sacrifices expressivity, and the latter requires tuning policy parameters, hindering its scalability to large-capacity models due to                                 
+
+> ∗Corresponding author: yifan@cs.toronto.edu .Preprint.
+> arXiv:2606.14801v1 [cs.LG] 11 Jun 2026 ∇𝑎 𝑄 (𝑠 ,𝑎 )
+> 𝑣 𝜃
+> 𝑣 𝜃
+> ∗
+> Noise Action
+> (𝑡 ,𝑥 𝑡 )
+> ∇ො𝑎 1𝑄
+> (𝑡 ,𝑥 𝑡 )
+> 𝜖 1
+> 𝜖 2
+> ො𝑎 1=෠𝑋 0,1(𝜖 1;𝑡 ,𝑥 𝑡 )
+> ො𝑎 2=෠𝑋 0,1(𝜖 2;𝑡 ,𝑥 𝑡 )
+> ∇ො𝑎 2𝑄
+> ∇ො𝑎 1𝑄 ∇ො𝑎 2𝑄
+> Critic Gradient Estimation (Each Step)
+> Critic gradient added to base flow at each step
+> Samples from one -step conditional posterior fed into critic
+> Flow Policy Denoising
+> High 𝑄
+> Low 𝑄
+> 𝜋 ∗∝𝜋 𝛽 𝑒 𝜏𝑄
+> The critic gradients ∇ො𝑎 1𝑄 ,
+> ∇ො𝑎 2𝑄 computed from
+> conditional one -step prediction
+> added to base flow
+> 𝑣 𝜃
+> 𝑣 𝜃
+> 𝑣 𝜃
+> ∗𝑣 𝜃
+> ∗025 50 75 100
+> Aggregate Success Rate (%)
+> IFQL
+> CGQL-L
+> DSRL
+> CGQL-M
+> ReBRAC
+> FBRAC
+> CGQL
+> QAM
+> FEdit
+> FQL
+> QAM-E
+> −
+> −
+> 49
+> 58
+> 60
+> 64
+> 64
+> 64
+> 67
+> 70
+> 79
+> 82
+> 85
+> 89
+> 90
+> Offline-Online RL (50 tasks)
+
+Figure 1: QPILOTS turns policy extraction into flow-time tilted sampling. Left: For a base policy πβ and target critic Q, KL-regularized policy improvement yields the critic-tilted target 
+
+π∗(a|s) ∝ πβ (a|s) exp( τ Q (s, a )) . The Q function induces a log-tilt potential whose gradient gives a generation-time drift correction to the base policy’s flow estimator vθ . QPILOTS efficiently estimates this gradient to steer without updating the base policy. Right: Aggregated offline-to-online success rates on 50 OGBench tasks [1]. the prohibitive computational overhead. This motivates another class of methods to apply guidance during inference , forgoing the need for finetuning. However, in offline-online Reinforcement Learning (RL) benchmarks, they have thus far been outperformed by methods that use finetuning [ 8], and often have limited expressivity [ 7 ], high cost [ 15 ], or apply guidance at noisy actions where the critic is not calibrated [6, 8]. Addressing these limitations, we introduce QPILOTS (Q-guided Posterior Inference for Learning Off-policy and Test-time Steering). Our main method, QPILOTS-M , builds on Meta Flow Maps (MFM) [ 16 ] to construct an asymptotically unbiased estimator of clean-action Q-value gradients during flow sampling. This allows a standard off-policy critic to steer the base policy without evaluating the critic on noisy intermediate latents. In turn, QPILOTS-M recovers much of the useful gradient information available to training-time extractors without the instability of backpropagating through the full denoising chain or the expressivity loss of one-step distillation. Empirically, we find that QPILOTS achieves the best aggregate score among competitive training-time [ 10 , 5, 8] and inference-time baselines [ 15 , 6, 7] on the OGBench [ 1] offline/offline-to-online RL benchmark, establishing it as a powerful solution to policy extraction. We further apply QPILOTS to steer a state-of-the-art pretrained generalist π0.5 [ 17 ] without modifying the base flow, demonstrating that QPILOTS successfully learns from online interactions even with a behavior Q-value, surpassing or matching other inference-time approaches on 6 tasks from the LIBERO-90 suite [ 18 ]. Taken together, our contribution is an efficient inference-time steering recipe that applies RL to flow policies by leveraging clean-space Q-values to guide the intermediate generation process. 
+
+2 Related Work 
+
+Offline-to-Online Reinforcement Learning. Offline-to-online RL methods leverage offline datasets to pre-train policies and value functions, then fine-tune them through online interaction to improve sample efficiency [ 19 , 20 , 21 , 22 , 23 , 24 , 25 ]. A common recipe uses the same offline RL objective during both phases, with the offline dataset loaded into a replay buffer alongside newly collected transitions [ 26 ]. While purely online methods can treat the offline data as additional off-policy experience, offline pre-training tends to produce stronger results on challenging sparse-reward tasks [ 27 , 8]. We adopt this training setup for the critic and focus on the complementary challenge of policy extraction , that is selecting high-value actions with the policy while remaining close to the behavior support [ 28 , 29 , 22 ]. This emphasis follows the observation that policy extraction and test-time generalization can be the limiting factors in offline RL, even when the value function is 2well-trained [ 9]. It also affords our approach inherent deployment flexibility, allowing the same inference-time extractor to be used offline, online, or during fine-tuning. 
+
+RL with Diffusion and Flow Policies. Diffusion and flow-matching policies have become a dominant policy class in both imitation learning and RL due to their ability to represent complex, multi-modal action distributions [ 30 , 31 , 32 , 33 , 34 , 15 , 35 , 36 , 11 , 4]. A central challenge is optimizing these policies against a critic Q(s, a ) when the generation process involves a multi-step denoising chain. Unlike prior work that categorizes approaches by how the value function is used [ 8], we classify them according to how the base policy is treated during training and inference. Under this lens, existing approaches can be categorized into three strategies. 
+
+1. Back-Propagating Through Time (BPTT) offers a straightforward way to use value signals by differentiating the critic through the full denoising chain to maximize Q [ 10 , 33 , 37 ]. Related policy-gradient formulations instead make likelihoods or advantage ratios tractable for flow policies and updating the policy itself [ 12 , 38 ]. While conceptually simple, computing gradients through the long unrolled chain of many-step flows is highly prone to numerical instability [5]. 
+
+2. Policy Fine-Tuning without BPTT avoids full-chain gradients by changing the policy objective. Some methods distill the multi-step flow into a simplified one-step policy, improving stability but giving up part of the original model’s iterative expressivity [ 35 , 5, 39 , 40 ]. Other methods construct a step-wise training objective that uses critic information at intermediate denoising states. Methods like QAM [ 8 ], alongside other gradient-approximated or value-weighted variants [ 13 , 14 , 41 ], construct specialized losses where the critic gradient only passes through the base policy at isolated denoising steps. While these avoid the instability of backprop, they couple the base flow and the critic through a specialized loss and require re-training the policy whenever the critic changes. 
+
+3. Inference-time steering modifies the action-generation process at test time without impacting training. DSRL [ 42 , 6] trains a noise-space RL policy that perturbs the input latents of a frozen flow. Residual and edit policies [ 43 , 44 , 7, 45 ] train a separate corrector that acts on completed actions. Best-of-N [15 , 46 , 47 , 48 ] samples N candidates from the base policy and picks the highest-Q one, scaling poorly with action dimension. All of these consult the critic either after a full action has been produced or via a separately trained auxiliary policy. Our method instead injects a noiseless-action Q-gradient into the Euler integrator at every denoising step, guiding the trajectory mid-integration without training an edit policy or modifying the base flow weights. 
+
+Flow Steering and Guided Generation. Classifier guidance [ 49 , 50 ] steers generation by adding reward gradients to the diffusion drift. Evaluating the reward at noisy states, however, yields a biased estimator of the tilted target pθ ∝ pβ er , since rewards are typically calibrated only on terminal data [ 51 ]. Universal Guidance [ 51 , 48 ] mitigates this by evaluating the reward at the Tweedie denoised estimate ˆx1, but incurs posterior-mean bias when the conditional p1|t(· | xt) is multimodal. Thus existing guidance directions differ in whether they use the noisy-space gradient ∇Q(s, x t),a denoised-point gradient ∇Q(s, ˆx1), or the true posterior tilt gradient ∇xt log Ex1∼p1|t eτ Q (s,x 1).Particle methods such as SMC samplers [ 52 ], DynaGuide [ 53 ] reduce related guidance bias through resampling, noised-sample classifiers, or verification, but add particles, auxiliary training, or sample-selection cost. Meta Flow Maps [ 16 ] and related stochastic flow-map models [ 54 ] address the challenge of posterior-sampling by producing differentiable samples from p1|t, enabling Monte Carlo estimators of the log-tilt-potential gradient. We adapt this line of work to RL by using a learned Q-function as the tilt scalar and by applying the resulting noiseless-action posterior gradient during policy sampling. 
+
+3 Preliminaries and Background. 
+
+Reinforcement Learning. We consider a Markov Decision Process M = ( S, A, P, γ, R, μ ),where S is the state space, A = RA is a continuous action space, ∆X denotes the set of probability distributions over a set X , P : S × A → ∆S is the transition function, γ ∈ [0 , 1) is the discount factor, R : S × A → R is the reward function, and μ ∈ ∆S is the initial state distribution. We assume that we have access to an offline dataset D = {(si, a i, s ′
+
+> i
+
+, r i)}|D|  
+
+> i=1
+
+of transitions collected by a behavior policy πβ . The goal of offline RL is to learn a policy πθ : S → ∆A from D that maximizes 3the expected discounted return 
+
+Es0∼μ, a k ∼π(·| sk ), s k+1 ∼P (·| sk ,a k )
+
+" ∞X
+
+> k=0
+
+γkR(sk, a k)
+
+#
+
+. (1) 
+
+Flow Matching. A flow-matching generative model [ 2, 55 ] learns a time-dependent velocity field 
+
+vθ : Rd × [0 , 1] → Rd that transports a, typically Gaussian, noise distribution p0 = N (0 , I ) to a data distribution p1 via an ordinary differential equation (ODE) 
+
+˙xt = vθ (xt, t ), x0 ∼ p0. (2) Under the linear interpolant xt = (1 − t) x0 + t x 1, the velocity field is trained with 
+
+LFM (θ) = Et∼U [0 ,1] , x 0∼p0, x 1∼p1
+
+∥vθ (xt, t ) − (x1 − x0)∥2 , (3) known as the conditional flow matching objective . At inference, samples from p1 are generated by sampling noise from the base distribution x0 ∼ p0 and integrating the ODE via K Euler steps 
+
+xi+1 = xi + h · vθ (xi, t i), where h = 1 /K , ti = ih . To represent a state-conditioned policy πθ (· | s)
+
+in the RL setting, we condition the velocity field on the current state s, writing vθ (xt, t, s ), and treat the integrated endpoint x1 as the agent’s action. 
+
+Stochastic Formulation. The deterministic ODE maps each initial noise x0 to a unique endpoint 
+
+x1, leaving no room to “branch” toward higher-reward outcomes once an intermediate state xt
+
+has been produced. Replacing the ODE with a matching stochastic differential equation (SDE) gives a family of paths through any intermediate state, characterized by a conditional distribution 
+
+p1|t(x1 | xt) over endpoints reachable from xt. For any non-negative diffusion schedule {σt}t∈[0 ,1] 
+
+and Brownian motion Bt, the stochastic differential equation (SDE) 
+
+dX t =
+
+
+
+vθ (Xt, t ) + σ2
+
+> t
+
+2 ∇ log pt(Xt)
+
+
+
+dt + σt dB t, X0 ∼ p0, (4) produces the same marginal density pt as the ODE at every flow-time t [ 56 ]. We use the common choice σ2 
+
+> t
+
+= 2(1 − t)/t , that is associated with the linear interpolant [2]. 
+
+Exponentially Tilted Generative Sampling. We next review a generic recipe for steering a generative model toward high-scoring samples. This view is common in reward-guided generation, classifier guidance, and control-as-inference [ 56 , 16 , 57 ]. Let p1 denote the terminal distribution produced by a base generative model, and ψ : Rd → R be a scalar utility assigned to a completed sample. Exponentially tilted sampling seeks to sample from 
+
+pψ (x) ∝ p1(x) eψ(x) (5) Larger ψ(x) raises the probability of x under the tilted target. In our setting, the completed x1 is an action and ψ will be a critic-induced utility defined in Section 4. To realize this target with a stochastic process, define the log-tilt potential 
+
+Vt(xt) := log Ex1∼p1|t(x1|xt)
+
+h
+
+eψ(x1)i
+
+, (6) which measures how much high-score terminal probability is reachable from the intermediate state 
+
+xt. (Despite the symbol, Vt is not the RL value function of Section 3.) Adding a drift correction proportional to ∇Vt to the base SDE yields the steered probability-flow ODE [16] 
+
+˙x⋆t = vθ (x⋆t , t ) + σ2 
+
+> t
+> 2
+
+∇Vt(x⋆t ), x⋆ 
+
+> 0
+
+∼ p0, (7) whose endpoint distribution at t = 1 is exactly pψ . Our method will instantiate vθ with a base flow policy’s velocity network and ψ with a learned action-value function, so that the steered ODE generates Q-tilted actions. The challenge is estimating ∇Vt, since p1|t(x1 | xt) is generally not available in closed form. The next section describes the construction we use to overcome this. 4Meta Flow Maps. Drawing exactly from p1|t(· | xt) would normally require an inner ODE solve starting from xt, which is prohibitively expensive inside the outer Euler loop. A Meta Flow Map (MFM) [ 16 ] amortizes this posterior sampling problem over contexts (t, x ). For each context, it defines an auxiliary probability-flow ODE with drift ¯vu(·, t, x ) that transports exogenous noise ϵ ∼ p0
+
+to the endpoint posterior p1|t(· | x). Here u, w ∈ [0 , 1] are auxiliary MFM times, distinct from the outer flow time t and the RL state s. The MFM learns the solution operators of this family with a single amortized network ˆXu,w (¯ x, t, x ), parameterized in residual form 
+
+ˆXu,w (¯ x; t, x ) = ¯ x + ( w − u) ˆ vu,w (¯ x; t, x ), (8) where ˆvu,w predicts the average velocity of the auxiliary trajectory between times u and w. Setting 
+
+u = 0 and w = 1 gives the one-step posterior sampler 
+
+ˆX0,1(ϵ, t, x ) = ϵ + ˆ v0,1(ϵ; t, x ), ϵ ∼ p0.
+
+In the state-conditioned policy setting, we condition this sampler on the RL state and use 
+
+ˆX0,1(ϵ, t, x, s ) as an approximate sample from p1|t(· | x, s ).Training combines two losses. The diagonal loss anchors the instantaneous velocity ˆvu,u to the conditional flow matching target: 
+
+Ldiag = Et,u ∼U [0 ,1] 
+
+h
+
+ˆvu,u ( ¯Iu; t, I t) − ( ¯I1 − ¯I0) 2i
+
+, (9) where It = (1 − t)I0 + tI 1 and ¯Iu = (1 − u) ¯I0 + u ¯I1 are coupled interpolants sharing the data endpoint I1 = ¯I1 ∼ p1, with I0, ¯I0 ∼ p0 drawn independently. The consistency loss enforces the semigroup property ˆXu,w = ˆXm,w ◦ ˆXu,m for u < m < w :
+
+Lcons = Et, x, u<m<w, ¯x
+
+
+
+ˆXu,w (¯ x; t, x ) − ˆXm,w 
+
+ ˆXu,m (¯ x; t, x ); t, x 
+
+ 2
+
+. (10) 
+
+Efficient Gradient Estimation. With a trained MFM, the log-tilt-potential gradient can be estimated via the MFM-G estimator [16]: 
+
+\∇xt Vt(xt) = ∇xt log 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+exp 
+
+
+
+ψ
+
+ ˆX0,1(ϵn; t, x t)
+
+ 
+
+, ϵn ∼ p0, (11) where ˆX0,1(ϵn; t, x t) is an MFM sample from the conditional endpoint distribution p1|t(x1 | xt).Differentiation through ˆX0,1 with respect to xt is tractable because ˆX represents a single feedforward neural network evaluation. With an exact posterior sampler, as N → ∞ the average converges to the posterior expectation in Eq. (6), so the MFM-G estimator converges to ∇xt Vt(xt) under the assumptions of Potaptchik et al. [16] . Thus, MFM-G provides differentiable estimates of the steering direction without inner ODE integration. 
+
+4 QPILOTS : Q-Guided Posterior Inference for Learning Off-Policy and Test-Time Steering 
+
+We now present our approach for steering a base flow policy with a learned critic. Rather than coupling policy and critic through specialized training-time losses, QPILOTS treats the base flow πβ
+
+and critic as independent components, each obtained via their own standard objectives, and combines them only at action-generation time. The base flow can be trained from scratch alongside the critic or taken off-the-shelf as a frozen pretrained policy; either way, we add a Q-gradient steering term to the flow’s Euler integrator at inference. Because the base policy is never modified by the critic, any flow-matching policy can be plugged in unchanged, including pretrained policies learned on different data or tasks. We present two instantiations of QPILOTS that trade off bias and computational cost. QPILOTS-U is a Universal-Guidance variant that uses a Tweedie-denoised point estimate, while 
+
+QPILOTS-M uses Meta Flow Maps to estimate the posterior-tilt gradient from differentiable posterior samples. Algorithm 1 summarizes the shared inference-time procedure underlying both variants. 5Algorithm 1 QPILOTS : Inference-Time Q-Steering for Flow Policies 
+
+Require: Observation s, base velocity field vθ , critic ensemble {Qϕj }Jj=1 , log-tilt-potential gradient estimator G RAD V, steering coefficient α, flow steps K 
+
+> 1:
+
+h ← 1/K ; x0 ∼ N (0 , I ) 
+
+> 2:
+
+for i = 0 , . . . , K − 1 do  
+
+> 3:
+
+t ← i/K ; ˆv ← vθ (xi, t, s ) ▷ Base velocity  
+
+> 4:
+
+if i > 0 then  
+
+> 5:
+
+d∇V t ← GRAD V(xi, t, s ) ▷ QPILOTS-U : Eq. (15); QPILOTS-M : Eq. (16)  
+
+> 6:
+
+g ← ∥ˆv∥∥ d∇V t∥+ε
+
+d∇V t; ˆv ← ˆv + α · g ▷ Rescale gradient and compute steering direction  
+
+> 7:
+
+end if  
+
+> 8:
+
+xi+1 ← xi + h · ˆv ▷ Steer intermediate action  
+
+> 9:
+
+end for  
+
+> 10:
+
+return a = clip( xK , −1, 1) ▷ Final action 
+
+Inference-Time Q-Steering. Following standard relative-entropy policy search [ 58 , 59 , 60 , 5, 8], we cast critic-guided policy extraction as a KL-regularized improvement step. The goal is to maximize Ea∼π(·| s)[Q(s, a )] subject to DKL (π(·| s) ∥ πβ (·| s)) ≤ δ(s). The closed-form solution is the exponentially tilted policy π⋆(a|s) ∝ πβ (a|s) exp( τ (s)Q(s, a )) for an appropriate Lagrange multiplier τ (s) > 0. To curb overestimation we use a pessimistic ensemble critic 
+
+¯Q(s, a ) := 1
+
+> J
+
+PJj=1 Qϕj (s, a ) − ρ std j
+
+ Qϕj (s, a ) , (12) with ensemble size J and pessimism weight ρ matching Li and Levine [8] . Substituting ¯Q for Q
+
+above yields the objective π⋆(a|s) ∝ πβ (a|s) exp( τ ¯Q(s, a )) , which is exactly the tilted target of Section 3 with utility ψs(a) := τ ¯Q(s, a ). Plugging the state-conditioned base velocity vθ (·, t, s )
+
+into Eq. (7) as the drift, the controlled probability-flow ODE has marginal π⋆(·| s) at t = 1 . The state-conditioned log-tilt potential 
+
+Vt(xt; s) := log Ep1|t(x1|xt,s ) exp( ψs(x1)) (13) governs the steering term σ2 
+
+> t
+> 2
+
+∇xt Vt(xt; s). The remaining task now is estimating this gradient. 
+
+QPILOTS-U : Universal Guidance with the Tweedie Estimate. The simplest estimator replaces the intractable expectation in Eq. (13) with a point estimate at the posterior mean. For the linear-interpolant flow, Tweedie’s identity gives the minimum mean squared error (MMSE) denoiser [51] 
+
+E[X1 | Xt = xt, s ] ≈ xt + (1 − t) vθ (xt, t, s ) =: ˆ x1 (14) Approximating Vt(xt; s) ≈ ψs(ˆ x1) = τ ¯Q(s, ˆx1) yields our Universal Guidance estimator: 
+
+d∇V UG  
+
+> t
+
+(xt) = τ ∇xt
+
+¯Q(s, clip[ xt + (1 − t) vθ (xt, t, s ), −1, 1]) , (15) computed by a single additional forward-backward pass through the base velocity field and critic. The clip is applied straight-through during the backward pass. This adapts the Tweedie-denoised classifier-guidance construction of Bansal et al. [51] to the flow-matching setting, using a learned Q-function as the guidance signal. Attarian et al. [48] previously applied the same construction to diffusion BC policies, with a contrastive success classifier or a time-to-success estimator playing the role of the guidance signal, instead of an off-policy RL critic. While simple, the estimator introduces bias by (i) replacing the posterior log-expectation in Eq. (13) with a point estimate at the posterior mean (ii) the denoised endpoint estimate is exact only when the learned velocity equals the true conditional mean velocity. In exchange, it adds zero training time beyond the base flow and the critic. 
+
+QPILOTS-M : Estimating ∇Vt with Meta Flow Maps. To potentially improve on QPILOTS-U , we instantiate the MFM-G estimator in Eq. (11) with ψ(·) = τ ¯Q(s, ·) and condition the MFM on the state s:
+
+d∇V MFM  
+
+> t
+
+(xt) = ∇xt log 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+exp 
+
+
+
+τ ¯Q
+
+
+
+s, ˆX0,1(ϵn; t, x t, s )
+
+ 
+
+, ϵn
+
+> iid
+
+∼ N (0 , I ). (16) Compared with QPILOTS-U , this replaces the deterministic point estimate ˆx1 with a Monte Carlo log-sum-exp over posterior samples. If the MFM samples from the true endpoint posterior, the estimator is consistent for the posterior-tilt gradient as N → ∞ , at the cost of N forward passes through the MFM and critic per Euler step, plus one backward pass. 6Gradient Rescaling. The theoretical drift σ2 
+
+> t
+> 2
+
+∇Vt uses σ2 
+
+> t
+
+= 2(1 − t)/t , which diverges as t → 0
+
+and vanishes as t → 1. As is common in implementations with endpoint-singular schedules [ 61 ], we do not apply steering at t = 0 , where ∇V0 is uninformative since p1|0 equals the unconditional base-policy action distribution and therefore provides no state-dependent steering signal. For t > 0
+
+we follow Potaptchik et al. [16] in rescaling the gradient to match the base-drift magnitude 
+
+vsteered  
+
+> θ
+
+(xt, t, s ) = vθ (xt, t, s ) + α g t, gt = ∥vθ (xt, t, s )∥∥d∇V t(xt)∥ + ε
+
+d∇V t(xt), (17) with ε > 0 a small numerical-stability constant. vsteered  
+
+> θ
+
+is the practical, magnitude-rescaled surrogate for the theoretical optimal v⋆θ = vθ + ( σ2 
+
+> t
+
+/2) ∇Vt (analyzed in Section 4); both target π⋆(·| s). In practice we fix τ = 1 .
+
+Training Settings. Algorithm 1 treats the base flow trainer and the critic learner as black boxes. We instantiate it in two regimes. (i) From scratch (OGBench): vθ , the critic ensemble, and (for 
+
+QPILOTS-M ) the MFM are trained jointly on offline data and continue training on offline+online replay, using the standard conditional flow-matching loss (Eq. (3)), the MFM loss (Eq. (9) and Eq. (10)), and TD learning against a pessimistic target ensemble with next-actions drawn from the steered policy [ 8 ]. (ii) Frozen base policy (LIBERO): we keep the public π0.5-LIBERO checkpoint [ 17 ]frozen and learn only a task-specific critic online. QPILOTS-U queries vθ directly from the frozen base flow. QPILOTS-M additionally trains an MFM on LIBERO-90 demonstration data via the GLASS reparameterization of Potaptchik et al. [16] , with the frozen base flow as the conditional teacher. Unlike the original MFM setting, where the auxiliary network is trained on the same dataset that produced the base flow, we have access only to LIBERO-90 (a small subset of π0.5’s pretraining mixture, which is not public); the consequences of this mismatch are discussed in Section 5.2. Full procedures are in Appendix C. 
+
+Theoretical Guarantees. QPILOTS-M inherits the convergence guarantees of Potaptchik et al. [16] in the RL setting for the idealized sampler that uses exact posterior samples and the unrescaled σ2 
+
+> t
+
+/2
+
+drift. Under standard regularity on vθ , ¯Q, the exact posterior sampler, and σt (full assumptions and proof in Appendix B), the distribution ˆps 
+
+> 1
+
+produced by the the idealized version of Algorithm 1 with 
+
+K Euler steps and N MFM posterior samples per step satisfies 
+
+W2(ˆ ps
+
+> 1
+
+, π ⋆(·| s)) ≤ C
+
+ 1
+
+√K + 1
+
+√N
+
+
+
+, KL(ˆ ps 
+
+> 1
+
+∥ π⋆(·| s)) ≤ C
+
+ 1
+
+K + 1
+
+N
+
+
+
+,
+
+for some C > 0 independent of K and N . The two error sources, Euler-Maruyama time discretization and Monte Carlo gradient estimation, are controlled independently. QPILOTS-U , which replaces the log-expectation in Vt with the Tweedie posterior-mean estimate, is Bayes-optimal only when πβ is Gaussian; we do not claim a formal guarantee for it. 
+
+5 Experiments 
+
+5.1 OGBench: Offline and Offline-to-Online (All Components Trained from Scratch) Setup. We evaluate on the OGBench [ 1] single-task benchmark, which spans 10 continuous-control domains (5 navigation, 5 manipulation) with 5 tasks per domain, for a total of 50 tasks. Each method first trains for 10 6 offline gradient steps on the OGBench dataset, then performs 5 × 10 5 online steps that interleave environment interaction (one gradient update per one environment interaction) with gradient updates over the offline data and an online replay buffer. Manipulation domains use action chunking, navigation domains use single-step actions, per-domain (H, γ, ρ ) follow Li and Levine [8] (Appendix C.4). Critic pessimism is set to ρ = 0 .5 throughout, except on the humanoid-maze domains, where we follow Li and Levine [8] and use ρ = 0 . We report mean evaluation success rate at the end of training over 8 seeds and 50 evaluation episodes per seed, with 95% bootstrap CIs across seeds shown in brackets.    
+
+> 3All baseline numbers are reported directly from Li and Levine [8] ; only our methods ( QPILOTS-U ,QPILOTS-M ) were run from scratch.
+
+7al ag hm hl scene p33 p44 c2 c3 c4 all 
+
+5 tasks 5 tasks 5 tasks 5 tasks 5 tasks 5 tasks 5 tasks 5 tasks 5 tasks 5 tasks 50 tasks 
+
+GAUSSIAN 
+
+ReBRAC [94,95] [97,98] 
+
+94 → 98  
+
+> [53,60] [70,79]
+
+57 → 75  
+
+> [65,74] [52,64]
+
+69 → 58  
+
+> [15,20] [19,27]
+
+17 → 23  
+
+> [57,73] [98,99]
+
+65 → 99  
+
+> [72,85] [100,100]
+
+79 → 100  
+
+> [0,0] [0,0]
+
+0 → 0 
+
+> [8,10] [96,98]
+
+9 → 97  
+
+> [0,1] [9,19]
+
+1 → 14  
+
+> [6,11] [79,80]
+
+9 → 80  
+
+> [39,41] [63,65]
+
+40 → 64 
+
+BACKPROP 
+
+FBRAC [1,4] [82,95] 
+
+2 → 89  
+
+> [0,0] [71,88]
+
+0 → 81  
+
+> [37,41] [45,53]
+
+39 → 49  
+
+> [0,0] [3,4]
+
+0 → 4 
+
+> [41,60] [97,100]
+
+50 → 99  
+
+> [0,1] [89,100]
+
+0 → 95  
+
+> [11,20] [85,98]
+
+15 → 92  
+
+> [0,0] [76,83]
+
+0 → 79  
+
+> [0,1] [1,9]
+
+0 → 5 
+
+> [0,0] [46,57]
+
+0 → 51  
+
+> [10,12] [63,66]
+
+11 → 64 
+
+FINE -TUNING 
+
+FQL [72,79] [99,99] 
+
+76 → 99  
+
+> [0,0] [87,97]
+
+0 → 93  
+
+> [63,73] [83,91]
+
+68 → 87  
+
+> [7,11] [14,17]
+
+9 → 16  
+
+> [72,85] [87,96]
+
+79 → 91  
+
+> [59,80] [100,100]
+
+70 → 100  
+
+> [3,8] [100,100]
+
+5 → 100  
+
+> [43,49] [100,100]
+
+46 → 100  
+
+> [2,4] [54,64]
+
+3 → 60  
+
+> [1,4] [79,80]
+
+2 → 80  
+
+> [34,37] [82,83]
+
+36 → 82 QAM [78,84] [97,98] 
+
+81 → 98  
+
+> [14,22] [52,55]
+
+18 → 53  
+
+> [64,69] [78,87]
+
+67 → 83  
+
+> [9,14] [17,24]
+
+11 → 21  
+
+> [95,98] [100,100]
+
+97 → 100  
+
+> [99,100] [100,100]
+
+99 → 100  
+
+> [0,0] [0,8]
+
+0 → 3 
+
+> [62,66] [100,100]
+
+64 → 100  
+
+> [3,4] [63,76]
+
+3 → 70  
+
+> [2,4] [67,74]
+
+3 → 71  
+
+> [44,45] [68,71]
+
+44 → 70 QAM-E [80,86] [95,97] 
+
+83 → 96  
+
+> [0,3] [91,97]
+
+1 → 95  
+
+> [54,63] [75,90]
+
+59 → 83  
+
+> [1,3] [10,23]
+
+2 → 16  
+
+> [96,98] [100,100]
+
+97 → 100  
+
+> [100,100] [100,100]
+
+100 → 100  
+
+> [31,48] [97,100]
+
+39 → 99  
+
+> [63,68] [100,100]
+
+65 → 100  
+
+> [4,6] [79,80]
+
+5 → 79  
+
+> [4,9] [79,80]
+
+6 → 79  
+
+> [45,47] [84,86]
+
+46 → 85 
+
+STEERING 
+
+DSRL [56,66] [88,91] 
+
+61 → 90  
+
+> [1,4] [38,43]
+
+3 → 40  
+
+> [48,57] [70,82]
+
+53 → 77  
+
+> [2,5] [20,39]
+
+3 → 29  
+
+> [99,100] [100,100]
+
+99 → 100  
+
+> [78,95] [77,95]
+
+87 → 87  
+
+> [0,0] [0,0]
+
+0 → 0 
+
+> [72,76] [98,99]
+
+74 → 99  
+
+> [1,2] [0,0]
+
+1 → 0 
+
+> [2,3] [77,78]
+
+2 → 78  
+
+> [38,39] [59,61]
+
+38 → 60 IFQL [32,39] [72,80] 
+
+36 → 76  
+
+> [0,2] [16,18]
+
+1 → 17  
+
+> [85,87] [45,58]
+
+86 → 51  
+
+> [21,27] [6,9]
+
+24 → 7 
+
+> [80,88] [95,98]
+
+84 → 96  
+
+> [100,100] [99,100]
+
+100 → 100  
+
+> [0,0] [0,0]
+
+0 → 0 
+
+> [10,12] [79,80]
+
+11 → 79  
+
+> [0,0] [0,0]
+
+0 → 0 
+
+> [1,3] [59,63]
+
+2 → 61  
+
+> [34,35] [48,50]
+
+34 → 49 FEdit [53,62] [95,96] 
+
+58 → 96  
+
+> [1,3] [83,90]
+
+2 → 86  
+
+> [20,23] [69,90]
+
+22 → 80  
+
+> [2,3] [5,11]
+
+3 → 8 
+
+> [54,70] [98,99]
+
+62 → 99  
+
+> [98,100] [100,100]
+
+99 → 100  
+
+> [26,41] [100,100]
+
+34 → 100  
+
+> [37,43] [100,100]
+
+40 → 100  
+
+> [2,3] [33,46]
+
+2 → 40  
+
+> [3,7] [79,80]
+
+5 → 80  
+
+> [32,33] [77,80]
+
+33 → 79 CGQL [73,80] [94,95] 
+
+76 → 94  
+
+> [0,2] [82,88]
+
+0 → 85  
+
+> [57,62] [69,73]
+
+60 → 71  
+
+> [4,5] [4,6]
+
+5 → 5 
+
+> [28,49] [80,89]
+
+38 → 85  
+
+> [40,55] [100,100]
+
+48 → 100  
+
+> [16,34] [88,100]
+
+24 → 95  
+
+> [36,42] [95,98]
+
+38 → 97  
+
+> [7,9] [20,20]
+
+8 → 20  
+
+> [0,0] [10,17]
+
+0 → 14  
+
+> [28,31] [66,68]
+
+30 → 67 CGQL-M [68,73] [81,84] 
+
+71 → 82  
+
+> [1,8] [55,60]
+
+4 → 57  
+
+> [40,43] [86,97]
+
+42 → 92  
+
+> [3,8] [27,40]
+
+6 → 34  
+
+> [65,84] [89,95]
+
+74 → 92  
+
+> [100,100] [96,99]
+
+100 → 97  
+
+> [0,0] [19,39]
+
+0 → 29  
+
+> [39,43] [97,98]
+
+41 → 98  
+
+> [7,9] [20,20]
+
+8 → 20  
+
+> [0,1] [28,41]
+
+1 → 35  
+
+> [34,35] [62,65]
+
+35 → 64 CGQL-L [62,67] [77,80] 
+
+65 → 79  
+
+> [1,6] [55,59]
+
+3 → 57  
+
+> [57,67] [81,85]
+
+62 → 83  
+
+> [5,8] [7,10]
+
+6 → 8 
+
+> [84,92] [58,76]
+
+88 → 67  
+
+> [86,93] [100,100]
+
+90 → 100  
+
+> [0,0] [16,34]
+
+0 → 25  
+
+> [43,47] [99,100]
+
+45 → 99  
+
+> [7,9] [20,20]
+
+8 → 20  
+
+> [0,1] [38,46]
+
+0 → 42  
+
+> [36,38] [57,59]
+
+37 → 58 
+
+OURS 
+
+QPILOTS-U [76,88] [94,98] 
+
+82 → 96  
+
+> [0,4] [85,94]
+
+1 → 89  
+
+> [54,75] [98,100]
+
+63 → 99  
+
+> [2,14] [40,72]
+
+8 → 59  
+
+> [80,95] [96,100]
+
+89 → 98  
+
+> [100,100] [100,100]
+
+100 → 100  
+
+> [6,25] [100,100]
+
+16 → 100  
+
+> [71,80] [99,100]
+
+75 → 100  
+
+> [4,10] [57,74]
+
+7 → 69  
+
+> [0,6] [76,80]
+
+3 → 78  
+
+> [42,47] [87,90]
+
+44 → 89 
+
+QPILOTS-M [74,88] [93,98] 
+
+82 → 97  
+
+> [0,14] [85,95]
+
+10 → 90  
+
+> [64,75] [98,100]
+
+71 → 99  
+
+> [6,16] [38,70]
+
+12 → 60  
+
+> [91,98] [97,100]
+
+95 → 99  
+
+> [99,100] [100,100]
+
+100 → 100  
+
+> [2,27] [100,100]
+
+17 → 100  
+
+> [70,81] [99,100]
+
+75 → 100  
+
+> [5,9] [67,75]
+
+7 → 72  
+
+> [3,20] [78,80]
+
+10 → 79  
+
+> [46,50] [87,91]
+
+48 → 90 
+
+Table 1: OGBench: Offline → Online Success Rate. Each cell shows end-of-offline (gray) and end-of-online (colored) success rates with seed-level 95% bootstrap CIs in brackets. Bold marks the best offline and best online result per column. 3
+
+Baseline. We group baselines by how they extract a policy from (πβ , Q ): (i) Gaussian-policy baseline ReBRAC [ 23 ] (ii) the backprop-based flow extractor FBRAC [ 10 ], which differentiates through the denoising chain (iii) fine-tuning extractors that update the base flow with a critic-aware objective, including the one-step distillation FQL [ 5], and the adjoint-matching methods QAM and QAM-EDIT (QAM-E) of Li and Levine [8] (iv) inference-time steering methods that wrap a frozen flow, including DSRL [ 6] for latent-space policy steering, IFQL [ 15 ] for implicit Q-learning policy extraction with Best-of-N (N = 32 , following Li and Levine [8] ), FEdit [ 7, 45 ] for post-hoc action refinement via learned Gaussian edit policies, CGQL [ 49 ] for conditional generation via classifier guidance, and the CGQL-MSE/Linex (CGQL-M / CGQL-L) reward-shaping variants of CGQL following Li and Levine [8] . Per-domain hyperparameters for all baselines follow Li and Levine [8] .For our method, we evaluate both QPILOTS-U (Tweedie denoised estimate) and QPILOTS-M (MFM posterior). Both share the base flow, critic ensemble, and Adam optimizer of Li and Levine [8] .
+
+QPILOTS-M additionally trains the auxiliary meta flow map. The steering coefficient α is tuned per domain following Li and Levine [8] ’s protocol, using two tuning tasks per domain (tasks 1 and 4 for navigation, tasks 2 and 4 for manipulation), 4 seeds per configuration. The selected value is reused across all five tasks of that domain and evaluated on 8 fresh seeds. The sweep grid and selected values are in Appendix C.4. 
+
+Results. Both variants lead in aggregate online score ( QPILOTS-M at 90%, QPILOTS-U at 89%), and are especially performant on the humanoid tasks, improving by 25 absolute percentage points over the closest baseline on humanoid-large . QPILOTS-U is surprisingly effective online given its simplicity, beating much more elaborate methods such as QAM-E, though it slightly underperforms on certain tasks offline. QPILOTS-M closes this offline performance gap by replacing the point estimate with the MFM posterior (Eq. (16)). We hypothesize that accurate posterior estimates may matter more offline where the replay buffer’s action coverage is limited. QPILOTS significantly 81 2 3 4 5                            
+
+> 0.0
+> 0.5
+> 1.0
+> SR Task 26
+> 12345
+> Task 31
+> 12345
+> Task 38
+> 12345
+> Task 59
+> 12345
+> Task 60
+> 12345
+> Task 64
+> Training Steps ( ×10 5)
+> π0.5 DSRL SAC BoN EXPO CGQL-L −−
+
+Figure 2: LIBERO Online RL. Per-task success rate over training for the LIBERO benchmark. Curves are time-weighted EMA-smoothed means over 5 seeds; shaded bands show seed-level 95% 
+
+bootstrap CIs. Per-task descriptions, hyperparameters, and end-of-training numbers are in Section C.4. outperforms CGQL-Linex and DSRL, likely owing at least partially to our method’s ability to use a critic directly rather than distilling it into an auxiliary critic that operates over noised actions. Per-task learning curves across all 50 tasks are reported in Appendix C.4. 
+
+5.2 LIBERO: Online RL (Frozen Base Policy, Learned Critic Ensemble) Setup. We test whether both QPILOTS variants can steer a large frozen pretrained base policy, a regime where full fine-tuning is impractical because the base flow has billions of parameters. We use the official π0.5-LIBERO checkpoint of Black et al. [17] , pretrained on a large closed-source robotics mixture and then finetuned on LIBERO-40, as the frozen base flow. We evaluate on six tasks from the larger LIBERO-90 suite [ 18 ] on which π0.5’s zero-shot success rate is between 5 and 50 percent. Per-task descriptions are in Appendix C.4. For QPILOTS-M , we distill the auxiliary meta flow map on the public LIBERO-90 demonstrations (Section 4), keeping the π0.5-LIBERO weights frozen. Each method runs 5 × 10 5 online environment steps with action chunking matching the base policy. We report results over 5 seeds with 95% seed-level bootstrap confidence intervals. We follow DSRL’s [ 6] simulation setup, but switch to SARSA targets in place of Bellman targets. Constructing 
+
+a′ ∼ π⋆(·| s′) for the off-policy target would require sampling from π0.5 inside every critic update, which is prohibitive at 3B parameters. SARSA reuses the buffer’s stored a′ and avoids this cost. We also conduct a value learning ablation study (Appendix D.2) to show that SARSA outperforms other feasible approaches (e.g., IQL, Monte-Carlo, one-step distillation) in LIBERO. 
+
+Baselines and Hyperparameters. We compare both QPILOTS variants against DSRL [ 6] , Best-of-N (BoN, N = 5 ) action selection under the learned critic, EXPO [ 7], and CGQL-LinEx [ 5]. All baselines other than DSRL share the same SARSA critic for fairness. We tune one knob per method per task. For DSRL we sweep the action magnitude bW over {1, 2, 3}, matching Wagenmaker et al. [6] . For QPILOTS and CGQL-LinEx we tune the steering coefficient α over {0.1, 0.2, 0.3}. Selected per-task values are listed in Table 4. We also include SAC [ 62 ] as a from-scratch baseline; it achieves negligible performance within the 5 × 10 5-step online budget. 
+
+Results. Figure 2 shows per-task online learning curves at 5 × 10 5 steps. Per-task end-of-training detailed success rates are tabulated in Appendix C.4. QPILOTS-U improves over the frozen π0.5 base on all six tasks and is the best method on five of six (tasks 26, 31, 38, 60, 64), with the gap over the strongest baseline DSRL ranging from 4% on task 60 (within the seed-level bootstrap CIs) to 55% 
+
+on task 64. BoN, EXPO, and CGQL-LinEx, which either lack a directional gradient signal or steer in noise space, plateau well below the steering methods. QPILOTS-M tracks QPILOTS-U on most tasks and beats it on task 59, but does not improve over QPILOTS-U in aggregate on this benchmark. One likely reason is that MFM theory assumes the auxiliary network is distilled on the same data mixture that produced the base flow [ 16 ]. π0.5’s pretraining mixture is closed-source and the public LIBERO-90 demonstrations only partially overlaps with π0.5’s training data. The resulting distillation gap might explain why the simpler Tweedie estimate of QPILOTS-U is more performant here. 96 Discussion 
+
+We present QPILOTS , an inference-time recipe for applying RL to flow policies that injects a clean-action Q-gradient into the Euler integrator at every denoising step, leaving the base flow and the critic to be trained with off-the-shelf objectives. Our main variant, QPILOTS-M , uses a Meta Flow Map to draw differentiable posterior samples, yielding a posterior-gradient estimator that inherits the asymptotic convergence guarantees of Potaptchik et al. [16] under the true-posterior idealization. 
+
+QPILOTS-U provides a lightweight alternative by replacing posterior sampling with a Tweedie point estimate. On OGBench offline-to-online, both variants outperform training-time extractors and prior inference-time steering methods, reaching 90% aggregate success across 50 tasks; on LIBERO with the frozen π0.5 generalist, QPILOTS improves over the zero-shot base on every evaluated task and surpasses DSRL on average. 
+
+Limitations and Future Work. Similar to previous work, the steering coefficient α requires manual tuning per domain (or per task on LIBERO). The gradient rescaling in Eq. (17) avoids the singular 
+
+σ2 
+
+> t
+
+/2 schedule but does not eliminate the need to pick a magnitude, and an adaptive choice tied to local critic curvature is a natural next step. We also see two promising extensions. One is to train a residual edit-flow analogue of QPILOTS-M in the spirit of QAM-E to further push performance. The second is to bring offline-trained value functions to large VLAs, where an offline-pretrained Q would take advantage of our method’s critic-agnostic nature, which extends the online setting in this work. 10 Acknowledgments and Disclosure of Funding 
+
+This work was enabled in part by LG Electronics, Toronto AI Lab (Grant Ref No. 2025-2297), the Digital Research Alliance of Canada ( alliancecan.ca ), the NVIDIA Academic Grant Program, and Google TPU Research Cloud (TRC). 
+
+References 
+
+[1] Seohong Park, Kevin Frans, Benjamin Eysenbach, and Sergey Levine. OGBench: Benchmark-ing offline goal-conditioned RL. In International Conference on Learning Representations (ICLR) , 2025. [2] Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow matching for generative modeling. In International Conference on Learning Representations (ICLR) , 2023. [3] Kevin Black, Noah Brown, Danny Driess, Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo Fusai, Lachy Groom, Karol Hausman, Brian Ichter, et al. π0: A vision-language-action flow model for general robot control. arXiv preprint arXiv:2410.24164 , 2024. [4] Cheng Chi, Zhenjia Xu, Siyuan Feng, Eric Cousineau, Yilun Du, Benjamin Burchfiel, Russ Tedrake, and Shuran Song. Diffusion policy: Visuomotor policy learning via action diffusion. 
+
+International Journal of Robotics Research , 44:1684–1704, 2025. [5] Seohong Park, Qiyang Li, and Sergey Levine. Flow Q-learning. In International Conference on Machine Learning (ICML) , 2025. [6] Andrew Wagenmaker, Yunchu Zhang, Mitsuhiko Nakamoto, Seohong Park, Waleed Yagoub, Anusha Nagabandi, Abhishek Gupta, and Sergey Levine. Steering your diffusion policy with latent space reinforcement learning. In Conference on Robot Learning , pages 258–282. PMLR, 2025. [7] Perry Dong, Qiyang Li, Dorsa Sadigh, and Chelsea Finn. Expo: Stable reinforcement learning with expressive policies. arXiv preprint arXiv:2507.07986 , 2025. [8] Qiyang Li and Sergey Levine. Q-learning with adjoint matching. arXiv preprint arXiv:2601.14234 , 2026. [9] Seohong Park, Kevin Frans, Sergey Levine, and Aviral Kumar. Is value learning really the main bottleneck in offline RL? In Advances in Neural Information Processing Systems (NeurIPS) ,2024. [10] Zhendong Wang, Jonathan J. Hunt, and Mingyuan Zhou. Diffusion policies as an expressive policy class for offline reinforcement learning. In International Conference on Learning Representations (ICLR) , 2023. [11] Allen Z Ren, Justin Lidard, Lars Lien Ankile, Anthony Simeonov, Pulkit Agrawal, Anirudha Majumdar, Benjamin Burchfiel, Hongkai Dai, and Max Simchowitz. Diffusion policy policy optimization. In International Conference on Learning Representations (ICLR) , 2025. [12] David McAllister, Songwei Ge, Brent Yi, Chung Min Kim, Ethan Weber, Hongsuk Choi, Haiwen Feng, and Angjoo Kanazawa. Flow matching policy gradients. arXiv preprint arXiv:2507.21053 ,2025. [13] Michael Psenka, Alejandro Escontrela, Pieter Abbeel, and Yi Ma. Learning a diffusion model policy from rewards via Q-score matching. In International Conference on Machine Learning (ICML) , 2024. [14] Linjiajie Fang, Ruoxue Liu, Jing Zhang, Wenjia Wang, and Bingyi Jing. Diffusion actor-critic: Formulating constrained policy iteration as diffusion noise regression for offline reinforcement learning. In International Conference on Learning Representations (ICLR) , 2025. 11 [15] Philippe Hansen-Estruch, Ilya Kostrikov, Michael Janner, Jakub Grudzien Kuba, and Sergey Levine. Idql: Implicit q-learning as an actor-critic method with diffusion policies. arXiv preprint arXiv:2304.10573 , 2023. [16] Peter Potaptchik, Adhi Saravanan, Abbas Mammadov, Alvaro Prat, Michael S Albergo, and Yee Whye Teh. Meta flow maps enable scalable reward alignment. arXiv preprint arXiv:2601.14430 , 2026. [17] Kevin Black, Noah Brown, James Darpinian, Karan Dhabalia, Danny Driess, Adnan Esmail, Michael Robert Equi, Chelsea Finn, Niccolo Fusai, Manuel Y Galliker, et al. π0.5: a vision-language-action model with open-world generalization. In 9th Annual Conference on Robot Learning , 2025. [18] Bo Liu, Yifeng Zhu, Chongkai Gao, Yihao Feng, Qiang Liu, Yuke Zhu, and Peter Stone. Libero: Benchmarking knowledge transfer for lifelong robot learning. Advances in Neural Information Processing Systems , 36:44776–44791, 2023. [19] Tengyang Xie, Nan Jiang, Huan Wang, Caiming Xiong, and Yu Bai. Policy finetuning: Bridging sample-efficient offline and online reinforcement learning. Advances in Neural Information Processing Systems , 34:27395–27407, 2021. [20] Seunghyun Lee, Younggyo Seo, Kimin Lee, Pieter Abbeel, and Jinwoo Shin. Offline-to-online reinforcement learning via balanced replay and pessimistic q-ensemble. In Conference on Robot Learning , pages 1702–1712. PMLR, 2022. [21] Yuda Song, Yifei Zhou, Ayush Sekhari, Drew Bagnell, Akshay Krishnamurthy, and Wen Sun. Hybrid rl: Using both offline and online data can make rl efficient. In The Eleventh International Conference on Learning Representations , 2023. [22] Mitsuhiko Nakamoto, Simon Zhai, Anikait Singh, Max Sobol Mark, Yi Ma, Chelsea Finn, Aviral Kumar, and Sergey Levine. Cal-ql: Calibrated offline rl pre-training for efficient online fine-tuning. Advances in Neural Information Processing Systems , 36:62244–62269, 2023. [23] Denis Tarasov, Vladislav Kurenkov, Alexander Nikulin, and Sergey Kolesnikov. Revisiting the minimalist approach to offline reinforcement learning. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. [24] Zhiyuan Zhou, Andy Peng, Qiyang Li, Sergey Levine, and Aviral Kumar. Efficient online reinforcement learning fine-tuning need not retain offline data. In The Thirteenth International Conference on Learning Representations , 2024. [25] Lu Li, Tianwei Ni, Yihao Sun, and Pierre-Luc Bacon. The three regimes of offline-to-online reinforcement learning. arXiv preprint arXiv:2510.01460 , 2025. [26] Philip J. Ball, Laura Smith, Ilya Kostrikov, and Sergey Levine. Efficient online reinforcement learning with offline data. In International Conference on Machine Learning (ICML) , pages 1577–1594, 2023. [27] Qiyang Li, Zhiyuan Zhou, and Sergey Levine. Reinforcement learning with action chunking. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [28] Scott Fujimoto and Shixiang Shane Gu. A minimalist approach to offline reinforcement learning. In Advances in Neural Information Processing Systems (NeurIPS) , pages 20132–20145, 2021. [29] Ilya Kostrikov, Ashvin Nair, and Sergey Levine. Offline reinforcement learning with implicit Q-learning. In International Conference on Learning Representations (ICLR) , 2022. [30] Michael Janner, Yilun Du, Joshua Tenenbaum, and Sergey Levine. Planning with diffusion for flexible behavior synthesis. In International Conference on Machine Learning , pages 9902–9915. PMLR, 2022. [31] Anurag Ajay, Yilun Du, Abhi Gupta, Joshua B Tenenbaum, Tommi S Jaakkola, and Pulkit Agrawal. Is conditional generative modeling all you need for decision making? In The Eleventh International Conference on Learning Representations , 2023. 12 [32] Bingyi Kang, Xiao Ma, Chao Du, Tianyu Pang, and Shuicheng Yan. Efficient diffusion policies for offline reinforcement learning. Advances in Neural Information Processing Systems , 36: 67195–67212, 2023. [33] Longxiang He, Li Shen, Linrui Zhang, Junbo Tan, and Xueqian Wang. Diffcps: Diffusion model based constrained policy search for offline reinforcement learning. arXiv preprint arXiv:2310.05333 , 2023. [34] Cheng Lu, Huayu Chen, Jianfei Chen, Hang Su, Chongxuan Li, and Jun Zhu. Contrastive energy prediction for exact energy-guided diffusion sampling in offline reinforcement learning. In International Conference on Machine Learning , pages 22825–22855. PMLR, 2023. [35] Zihan Ding and Chi Jin. Consistency models as a rich and efficient policy class for reinforcement learning. In International Conference on Learning Representations (ICLR) , 2024. [36] Tianyu Chen, Zhendong Wang, and Mingyuan Zhou. Diffusion policies creating a trust region for offline reinforcement learning. Advances in Neural Information Processing Systems , 37: 50098–50125, 2024. [37] Ruoqi Zhang, Ziwei Luo, Jens Sjölund, Thomas B Schön, and Per Mattsson. Entropy-regularized diffusion policy with q-ensembles for offline reinforcement learning. Advances in neural information processing systems , 37:98871–98897, 2024. [38] Tonghe Zhang, Chao Yu, Sichang Su, and Yu Wang. Reinflow: Fine-tuning flow matching policy with online reinforcement learning. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [39] Nicolas Espinosa-Dice, Yiyi Zhang, Yiding Chen, Bradley Guo, Owen Oertell, Gokul Swamy, Kianté Brantley, and Wen Sun. Scaling offline rl via efficient and expressive shortcut models. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [40] Zeyuan Wang, Da Li, Yulin Chen, Ye Shi, Liang Bai, Tianyuan Yu, and Yanwei Fu. One-step generative policies with q-learning: A reformulation of meanflow. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pages 26751–26759, 2026. [41] Kevin Frans, Seohong Park, Pieter Abbeel, and Sergey Levine. Diffusion guidance is a controllable policy improvement operator. arXiv preprint arXiv:2505.23458 , 2025. [42] Avi Singh, Huihan Liu, Gaoyue Zhou, Albert Yu, Nicholas Rhinehart, and Sergey Levine. Parrot: Data-driven behavioral priors for reinforcement learning. In International Conference on Learning Representations (ICLR) , 2021. [43] Tobias Johannink, Shikhar Bahl, Ashvin Nair, Jianlan Luo, Avinash Kumar, Matthias Loskyll, Juan Aparicio Ojea, Eugen Solowjow, and Sergey Levine. Residual reinforcement learning for robot control. In 2019 international conference on robotics and automation (ICRA) , pages 6023–6029. IEEE, 2019. [44] Lars Ankile, Anthony Simeonov, Idan Shenfeld, Marcel Torne, and Pulkit Agrawal. From imitation to refinement-residual rl for precise assembly. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pages 01–08. IEEE, 2025. [45] Xiu Yuan, Tongzhou Mu, Stone Tao, Yunhao Fang, Mengke Zhang, and Hao Su. Policy decorator: Model-agnostic online refinement for large policy model. In International Conference on Learning Representations (ICLR) , 2025. [46] Mitsuhiko Nakamoto, Oier Mees, Aviral Kumar, and Sergey Levine. Steering your generalists: Improving robotic foundation models via value guidance. In Conference on Robot Learning (CoRL) , pages 4996–5013, 2024. [47] Max Sobol Mark, Tian Gao, Georgia Gabriela Sampaio, Mohan Kumar Srirama, Archit Sharma, Chelsea Finn, and Aviral Kumar. Policy agnostic rl: Offline rl and online rl fine-tuning of any class and backbone. arXiv preprint arXiv:2412.06685 , 2024. 13 [48] Maria Attarian, Ian Vyse, Claas Voelcker, Jasper Gerigk, Evgenii Opryshko, Anas Almasri, Sumeet Singh, Yilun Du, and Igor Gilitschenski. Update-free on-policy steering via verifiers. 
+
+arXiv preprint arXiv:2603.10282 , 2026. [49] Prafulla Dhariwal and Alexander Quinn Nichol. Diffusion models beat GANs on image synthesis. In Advances in Neural Information Processing Systems (NeurIPS) , pages 8780–8794, 2021. [50] Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 , 2022. [51] Arpit Bansal, Hong-Min Chu, Avi Schwarzschild, Soumyadip Sengupta, Micah Goldblum, Jonas Geiping, and Tom Goldstein. Universal guidance for diffusion models. In International Conference on Learning Representations (ICLR) , 2024. [52] Luhuan Wu, Brian L. Trippe, Christian A. Naesseth, David M. Blei, and John P. Cunningham. Practical and asymptotically exact conditional sampling in diffusion models. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. [53] Max Du and Shuran Song. Dynaguide: Steering diffusion polices with active dynamic guidance. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [54] Peter Holderrieth, Douglas Chen, Luca Eyring, Ishin Shah, Giri Anantharaman, Yutong He, Zeynep Akata, Tommi Jaakkola, Nicholas Matthew Boffi, and Max Simchowitz. Diamond maps: Efficient reward alignment via stochastic flow maps. arXiv preprint arXiv:2602.05993 ,2026. [55] Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. In International Conference on Learning Representations (ICLR) , 2023. [56] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In 
+
+International Conference on Learning Representations (ICLR) , 2021. [57] Oliver Mihatsch and Ralph Neuneier. Risk-sensitive reinforcement learning. Machine learning ,49(2):267–290, 2002. [58] Jan Peters, Katharina Mülling, and Yasemin Altün. Relative entropy policy search. In AAAI Conference on Artificial Intelligence , 2010. [59] Xue Bin Peng, Aviral Kumar, Grace Zhang, and Sergey Levine. Advantage-weighted regression: Simple and scalable off-policy reinforcement learning. In International Conference on Learning Representations , 2020. [60] Abbas Abdolmaleki, Jost Tobias Springenberg, Yuval Tassa, Rémi Munos, Nicolas Heess, and Martin Riedmiller. Maximum a posteriori policy optimisation. In International Conference on Learning Representations , 2018. [61] Yang Song, Conor Durkan, Iain Murray, and Stefano Ermon. Maximum likelihood training of score-based diffusion models. Advances in Neural Information Processing Systems , 34: 1415–1428, 2021. [62] Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In International Conference on Machine Learning (ICML) , pages 1856–1865, 2018. 14 A Contributions 
+
+Author Contributions: Y.R. and A.B. conceived the project. Y.R. developed the core method, ran OGBench experiments, QPILOTS-M LIBERO experiments and supported QPILOTS-U LIBERO experiments. C.C led QPILOTS-U in LIBERO, baselines in LIBERO, and the ablation study in LIBERO. Y.R. and C.C. made figures. N.R. provided high-level project guidance. Y.R. led paper writing with input from all authors. 
+
+B Proofs 
+
+We restate and prove Proposition 1 from Section 4. 
+
+Proposition 1 (Convergence of Q-steered MFM sampling) . Fix a state s ∈ S . Let ˆps 
+
+> 1
+
+denote the distribution over actions produced by Algorithm 1 (with the σ2 
+
+> t
+
+/2 formulation in place of gradient rescaling) using K uniform Euler steps and N independent MFM posterior samples per step. Suppose: 1. The tilt scalar τ ¯Q(s, ·) satisfies τ ¯Q(s, ·) ∈ C2(RA) with the function and its first two derivatives all bounded. In practice we obtain a bounded tilt scalar by clipping the (batch-normalized) Q-value to a fixed range; see remark below. 2. The MFM ˆX0,1(ϵ; t, x ) and the base velocity vθ (x, t, s ) are jointly C2 in (t, x ) on [0 , 1] ×RA,with all first- and second-order partial derivatives bounded. 3. The diffusion coefficient satisfies 0 < σ min ≤ σt ≤ σmax for all t ∈ [0 , 1] .Then the optimal steered velocity v⋆θ (x, t, s ) = vθ (x, t, s ) + σ2 
+
+> t
+> 2
+
+∇Vt(x, s ) is Lipschitz in x and Hölder continuous in t, and there exists a constant C > 0 independent of K and N such that 
+
+W2(ˆ ps
+
+> 1
+
+, π ⋆(·| s)) ≤ C
+
+ 1
+
+√K + 1
+
+√N
+
+
+
+, KL(ˆ ps 
+
+> 1
+
+∥ π⋆(·| s)) ≤ C
+
+ 1
+
+K + 1
+
+N
+
+
+
+. (18) 
+
+Proof. For brevity, write ψ(·) := τ ¯Q(s, ·) locally within this proof ; this is the tilt scalar of Potaptchik et al. [16] ’s framework instantiated to our setting, not the MDP reward of Section 3. The convergence rates follow from Proposition C.2 of Potaptchik et al. [16] by setting their tilt scalar to r. It suffices to verify their regularity conditions. Their assumption 1 ( r ∈ C1 with r and ∇r bounded) follows from our assumption 1, which additionally requires bounded second derivatives so that ∇Vt inherits a Lipschitz constant via the chain rule. Their assumption 2 (MFM C1 with bounded Jacobian) is immediate from our assumption 2. Their assumption 4 (bounded diffusion) is our assumption 3. Their assumption 3 requires the optimal steered velocity v⋆θ = vθ + σ2 
+
+> t
+> 2
+
+∇Vt to be L-Lipschitz in 
+
+x and 12 -Hölder in t. We show this follows from our assumptions 1-2. The log-tilt potential is 
+
+Vt(x) = log E[exp( ψ( ˆX0,1(ϵ; t, x )))] = log E[exp( τ ¯Q(s, ˆX0,1(ϵ; t, x )))] . Since ¯Q(s, ·) ∈ C2 with bounded derivatives and ˆX0,1(·; t, ·) ∈ C2 with bounded derivatives, the composition is C2 in x with bounded derivatives by the chain rule. Taking the logarithm of the expectation (a smooth, monotone operation on the cumulant generating function) preserves this regularity, so ∇Vt is Lipschitz in x.For Hölder continuity in t, assumption 2 gives bounded ∂t ˆX0,1 and ∂tvθ , and assumption 3 gives a bounded σ2 
+
+> t
+
+that is C1 in t (e.g. the standard schedule σ2 
+
+> t
+
+= 2(1 − t)/t on the truncated interval 
+
+[ε, 1 − ε]); differentiating Vt in t under the expectation (justified by dominated convergence, using assumption 1) yields a bounded ∂t∇Vt. Hence ∂tv⋆θ is bounded, so v⋆θ is Lipschitz in t on the truncated interval and a fortiori 12 -Hölder. The bound decomposes into two sources of error: time-discretization error ( 1/√K in W2, 1/K in KL), which is standard for Euler-Maruyama schemes, and Monte Carlo estimation error ( 1/√N in 
+
+W2, 1/N in KL), arising from approximating ∇Vt with finitely many posterior samples. Crucially, both errors are controlled independently. Increasing the number of posterior samples N improves the gradient estimate without requiring finer time discretization, and vice versa. 15 Assumptions in Practice. Assumption 2 holds for neural networks with smooth activations (e.g., GeLU, SiLU) and bounded weights, which is enforced by gradient clipping during training. As-sumption 1 is more delicate: a learned critic ¯Q(s, ·) is not bounded a priori, and ∥τ ¯Q(s, ·)∥∞ enters the constant C exponentially through the moment bounds in Proposition C.4 of Potaptchik et al. [16] . We satisfy the assumption operationally by batch-normalizing ¯Q across the minibatch before exponentiating and clipping τ · ¯Qnorm to a fixed interval (Section 4), which keeps the tilt scalar bounded with constants independent of the absolute Q-scale. Strictly speaking, batch normalization makes the tilt scalar depend on the empirical batch distribution and therefore non-stationary across training, which is outside the iid setting analyzed in Proposition C.4; we treat the resulting bound as a per-batch guarantee rather than a uniform one. Assumption 3 requires a bounded diffusion schedule; the theoretical schedule σ2 
+
+> t
+
+= 2(1 − t)/t violates the upper bound as t → 0 (where σt → ∞ ) and the lower bound as t → 1 (where σt → 0). We skip steering at t = 0 (Section 4) to control the upper end, and–following standard practice [ 16 ]–the formal result applies to the process stopped at t = 1 − ε to control the lower end. We note that the constant C depends on the Lipschitz constants of the critic and MFM and may scale exponentially with the action dimension [ 16 ]. The gradient rescaling used in our practical algorithm (Eq. (17)) replaces the σ2 
+
+> t
+
+/2 factor with a drift-magnitude-matching heuristic, which targets the same tilted distribution but falls outside the formal SDE analysis; we find it to be more stable empirically. 
+
+C Implementation Details 
+
+The per-step computational overhead of inference-time steering (Algorithm 1) is a single forward-backward through vθ and the critic for QPILOTS-U , and K forward passes through the MFM and critic plus one backward pass for QPILOTS-M –all single-step evaluations with no inner rollouts. 
+
+C.1 Architecture 
+
+In OGBench experiments, all networks are MLPs with hidden dimensions (512 , 512 , 512 , 512) and SiLU activations. The base velocity field vθ (xt, t, s ) is an ActorVectorField that concatenates 
+
+[s, x t, FF( t)] and outputs a velocity in RH·A, where FF( ·) is a 64-dim Fourier-feature embedding and H is the action-chunking horizon. The critic is a J=10 -ensemble of Value networks (Lay-erNorm enabled) with pessimism weight ρ (Section 4). The Meta Flow Map ˆvu,w (¯ x; t, x t, s ) is an MFMFlowMap : it concatenates [s, ¯x, x t, FF( t), FF( u), FF( w)] , with three independent Fourier embeddings for the outer time t and the auxiliary times (u, w ). LayerNorm is disabled inside the MFM and base velocity field; its conditioning-action input is passed through unchanged (no t-gating). We instantiate Polyak-averaged target networks for the critic, the base flow, and the MFM. In LIBERO experiments, the critic Q(s, a ) uses double-view (64 , 64) images from the global camera and the wrist camera as the pixel inputs. Its network consists of a 4-layer CNN encoder and MLPs with hidden dimensions (128 , 128 , 128) . We use the same 10-network Q-value ensemble as the critic in OGBench experiments. For baselines like DSRL or EXPO that require an additional Gaussian policy, we use the same structure as the critic and follow the hyperparameters used in OGBench. 
+
+C.2 Training 
+
+For OGBench, all parameters (base flow vθ , MFM ˆvξ , and critic ensemble {Qϕj }) are jointly optimized with a single Adam optimizer at learning rate 3 × 10 −4 and global gradient clipping at norm 1.0. No learning-rate schedule or warmup is used. Targets are updated by Polyak averaging with τcritic = τflow = τmfm = 0 .005 . Each gradient step samples a length-H sequence batch of size 
+
+256 from the offline dataset (offline phase) or from the union of offline data and online replay (online phase, one gradient update per one environment interaction, no balanced sampling). Cross-episode transitions are masked out via the valid mask of Li and Levine [8]. The total loss is 
+
+L = Lcritic 
+
+| {z } 
+
+> TD
+
++ LFM 
+
+|{z} 
+
+> base flow, Eq. (3)
+
++λdiag Ldiag + λcons Lcons ,
+
+with λdiag = 1 .0, λcons = 0 .5 for QPILOTS-M and λdiag = λcons = 0 for QPILOTS-U (no MFM is trained). Lcritic uses TD against the pessimistic ensemble target with the next action sampled from the steered policy ( critic_steered_targets ). Ldiag samples the outer time as t = u2, u ∼ U [0 , 1] 
+
+16 to bias supervision toward small t where the posterior is broader ( mfm_t_outer_power =2). Lcons 
+
+samples ordered times 0 ≤ u < m < w ≤ 1 by sorting two uniforms and taking m = u +
+
+γ(w − u) with γ ∼ U [0 , 1] , and supervises the direct map against the composed map computed under target parameters. Both MFM losses use the adaptive reweighting of Potaptchik et al. [16] (adaptive_loss =true) with pdiag = 0 .5, pcons = 1 .0, c = 0 .01 . We do not use the FT auxiliary loss in our experiments ( λft = 0 ). 
+
+LIBERO MFM Distillation. For LIBERO, the auxiliary meta flow map is pretrained offline against the frozen π0.5-LIBERO checkpoint and the critic is then trained online (the base flow is never updated). The MFM ˆvu,w uses a transformer-style architecture matching the π0.5 action expert: hidden width 512 , 8 blocks, and 8 attention heads ( mfm_width =512 , mfm_num_blocks =8,
+
+mfm_num_heads =8). Following Potaptchik et al. [16] , the MFM is initialized from the π0.5-LIBERO action-expert weights with the auxiliary-time gating zero-initialized, so that at the start of distillation the network reproduces the frozen base flow exactly and only learns the off-diagonal posterior structure. Distillation follows the GLASS reparameterization of Potaptchik et al. [16] : the frozen 
+
+π0.5 acts as the conditional teacher, supplying noisy-state/clean-action pairs from LIBERO-90 demonstrations, and the MFM is trained with the same diagonal and consistency objectives ( λdiag =1.0, λcons = 0 .5, adaptive reweighting on) and the same outer-time power-2 sampling as in OGBench. We use batch size 256 for 4×10 4 gradient steps, optimized with RAdam at learning rate 1×10 −4 with a linear warmup over 2000 steps and a constant schedule thereafter, and global gradient clipping at norm 1.5. The MFM target is updated by Polyak averaging with τmfm = 10 −4 (matching Potaptchik et al. [16] ’s reference value, which is more conservative than the OGBench setting since the MFM is updated against a frozen teacher). The critic uses a separate Adam optimizer at 3 × 10 −4 with a 
+
+500 -step warmup and cosine decay over 3 × 10 5 steps to 0.1× peak, with global gradient clipping at norm 1.0 and Polyak rate τcritic = 0 .005 .Algorithm 2 summarizes the resulting offline-to-online procedure for the OGBench experiments. 
+
+QPILOTS-U uses the same outer loop with λdiag = λcons = 0 and no MFM network, in which case the steered policy in Algorithm 1 replaces d∇V MFM  
+
+> t
+
+with the Tweedie estimator d∇V UG  
+
+> t
+
+of Eq. (15). 
+
+C.3 Inference 
+
+Action generation uses K=10 Euler steps and best-of-1 selection ( flow_steps =10 , best_of_n =1). For QPILOTS-M we draw N =8 posterior samples per Euler step ( num_mfm_samples =8) in OGBench and N =4 posterior samples per Euler step ( num_mfm_samples =4) in LIBERO. Both QPILOTS-M 
+
+and QPILOTS-U use gradient rescaling (Eq. (17)) rather than the σ2 
+
+> t
+
+/2 schedule, with steering skipped at t = 0 . For QPILOTS-M the steering gradient is computed against the online MFM and the target critic; for QPILOTS-U the gradient is computed against the target base flow and the target critic, which we found to be more stable for the biased Tweedie estimate. At inference each H-action chunk is executed open-loop in the environment. 
+
+C.4 Per-Domain Settings OGBench Per-Task Settings and Results. Domain-level hyperparameters follow Li and Levine [8] and are summarized in Table 2. The steering coefficient α was selected per domain by sweeping 
+
+{0.1, 0.2, 0.3, 0.5, 1.0, 2.0} on two tuning tasks per domain (tasks 1 and 4 for navigation, tasks 2 and 4 for manipulation) with 4 seeds per configuration, mirroring the protocol of Li and Levine [8] . The combined performance across the two tuning tasks selects α for the domain, which is then reused across all five tasks and evaluated on 8 fresh seeds. Per-domain sweep curves are shown in Fig. 4. The selected coefficients are: antmaze-large : 0.2, antmaze-giant : 0.3, humanoidmaze-medium :
+
+0.2, humanoidmaze-large : 0.2, cube-double : 0.3, cube-triple : 0.5, cube-quadruple : 0.5,
+
+scene-play-sparse : 0.2, puzzle-3x3-play-sparse : 0.3, puzzle-4x4-play-sparse : 2.0.Figure 5 reports per-task success rate across all 50 OGBench tasks for every method evaluated in Section 5.1. 
+
+LIBERO Per-Task Settings and Results. Table 4 lists the six evaluation tasks, the natural-language goal description supplied to π0.5, the zero-shot π0.5-LIBERO success rate, and the per-task selected steering coefficient α (used by QPILOTS-U , QPILOTS-M , and CGQL-LinEx) and DSRL action magnitude bW . Table 3 reports end-of-training success rate per task. The critic architecture is 17 Algorithm 2 QPILOTS-M : Offline-to-Online Training (OGBench) 
+
+Require: Offline data Doff , environment, offline steps Moff , online env steps Mon , batch size B,target rate τ , MFM weights λdiag , λ cons , steering coefficient α, action-chunk horizon H 
+
+> 1:
+
+Initialize base flow vθ , critic ensemble {Qϕj }Jj=1 , MFM ˆvξ (QPILOTS-M only), and target copies 
+
+(θ′, ϕ ′, ξ ′); replay R ← ∅  
+
+> 2:
+
+// Offline phase  
+
+> 3:
+
+for k = 1 , . . . , M off do  
+
+> 4:
+
+Sample length-H sequence batch B ∼ D off of size B; call U PDATE (B) 
+
+> 5:
+
+end for  
+
+> 6:
+
+// Online phase (one gradient step per environment step)  
+
+> 7:
+
+Reset environment: s ← s0 
+
+> 8:
+
+for k = 1 , . . . , M on do  
+
+> 9:
+
+Sample chunk a1: H ∼ πα(· | s) via Algorithm 1 ▷ Steered rollout  
+
+> 10:
+
+Execute a1: H open-loop; push transitions to R; advance s (reset on terminal)  
+
+> 11:
+
+Sample B ∼ D off ∪ R of size B; call U PDATE (B) 
+
+> 12:
+
+end for  
+
+> 13:
+
+return vθ , {Qϕj }Jj=1 , ˆvξ 
+
+> 14: 15:
+
+procedure UPDATE (B) 
+
+> 16:
+
+For each (s, a, r, s ′) ∈ B : sample a′ ∼ πα(· | s′) via Algorithm 1 using target nets  
+
+> 17:
+
+TD target: y = r + γ  1
+
+> J
+
+P 
+
+> j
+
+Qϕ′ 
+
+> j
+
+(s′, a ′) − ρ std j Qϕ′ 
+
+> j
+
+(s′, a ′) 
+
+> 18:
+
+Lcritic = 1
+
+> J
+
+P
+
+> j
+
+ Qϕj (s, a ) − sg( y)2 ▷ Pessimistic ensemble TD  
+
+> 19:
+
+LFM from Eq. (3); Ldiag , Lcons from Eqs. (9) and (10)  
+
+> 20:
+
+L = Lcritic + LFM + λdiag Ldiag + λcons Lcons  
+
+> 21:
+
+Joint Adam step on (θ, {ϕj }, ξ ) with global gradient clipping at norm 1.0 
+
+> 22:
+
+Polyak: θ′ ← (1 − τ )θ′ + τ θ (similarly for ϕ′ 
+
+> j
+
+and ξ′) 
+
+> 23:
+
+end procedure 
+
+Table 2: Per-domain hyperparameters: action-chunking horizon H, discount γ, critic pessimism ρ,and tuned steering coefficient α. All other hyperparameters (network sizes, optimizer, batch size, K,
+
+N , τ , λdiag , λcons ) are shared across domains. 
+
+Domain H γ ρ α
+
+antmaze-large-navigate 1 0.99 0.5 0.2 
+
+antmaze-giant-navigate 1 0.995 0.5 0.3 
+
+humanoidmaze-medium-navigate 1 0.995 0.0 0.2 
+
+humanoidmaze-large-navigate 1 0.995 0.0 0.2 
+
+cube-double-play 5 0.99 0.5 0.3 
+
+cube-triple-play 5 0.99 0.5 0.5 
+
+cube-quadruple-play 5 0.99 0.5 0.5 
+
+scene-play-sparse 5 0.99 0.5 0.2 
+
+puzzle-3x3-play-sparse 5 0.99 0.5 0.3 
+
+puzzle-4x4-play-sparse 5 0.99 0.5 2.0 
+
+described in Section C.1; the LIBERO setting is pure online RL with no offline phase, BoN uses 
+
+N = 5 , and reported success rates are EMA-smoothed (time-weighted, α = 0 .99 ) along the training axis before averaging across seeds. The action-chunking horizon is H = 10 , matching π0.5; the discount is γ = 0 .99 and critic pessimism is ρ = 0 .5 across all 6 tasks. 
+
+Compute. OGBench experiments use TPU v4-8 hosts. cube-quadruple-play and 
+
+puzzle-4x4-play-sparse additionally use the OGBench 100M datasets. A full 1.5 × 10 6-step run (offline + online) for one task and four seeds in parallel takes approximately 8 hours for QPILOTS-U 
+
+and 12 hours for QPILOTS-M , depending on the task (different domains differ widely in evaluation time requirements). In online RL on LIBERO tasks, 5 × 10 5 takes about 6 hours for QPILOTS-U and 8 hours for QPILOTS-M . Offline MFM distillation on LIBERO ( 4 × 10 4 gradient steps, batch size 
+
+256 ) takes approximately two days on a single NVIDIA H100 due to the cost of running the frozen 18 Table 3: LIBERO end-of-training success rate ( %). Mean over 5 seeds at 5 × 10 5 steps, EMA-smoothed (time-weighted, α = 0 .99 ) along the training axis prior to averaging. Bold marks the best mean per column; differences within bootstrap CIs occur on tasks 26 and 60 between QPILOTS-U 
+
+and DSRL.                                                           
+
+> Method Task 26 Task 31 Task 38 Task 59 Task 60 Task 64 Mean
+> π0.5(zero-shot) 614 32 19 50 36 26 DSRL 36 22 70 93 95 34 58 BoN ( N= 5 )10 19 53 35 66 57 40 EXPO 729 55 28 62 52 39 CGQL-LinEx 11 12 25 27 64 49 31
+> QPILOTS-U 43 55 91 82 99 89 76
+> QPILOTS-M 41 42 78 87 98 86 72
+
+Table 4: LIBERO-90 evaluation tasks. Zero-shot SR is the success rate of the frozen π0.5-LIBERO checkpoint without any online learning. α is the steering coefficient used by QPILOTS-U , QPILOTS-M ,and CGQL-LinEx; bW is DSRL’s action magnitude.                            
+
+> Task Description Zero-shot SR (%) αbW
+> 26 put the wine bottle in the bottom drawer of the cabinet 5.9 0.3 231 put the black bowl on top of the cabinet 13.8 0.3 338 put the right moka pot on the stove 31.5 0.1 159 pick up the tomato sauce and put it in the tray 19.2 0.3 260 pick up the black bowl on the left and put it in the tray 49.5 0.2 264 stack the right bowl on the left bowl and place them in the tray 35.9 0.2 1
+
+3B-parameter π0.5 teacher in every batch. This cost is paid once as we use the same MFM for all tasks. 
+
+D Additional Experiments 
+
+D.1 Latency Analysis 
+
+We conduct an inference-time latency analysis per time step using π0.5 model. Given that π0.5 is a 3B-parameter model, it inherently incurs a relatively high inference cost. When employing the Best-of-N , the repeated inference cycles lead to a surge in latency, making real-time control challenging. As shown in Table 5, we perform single-step inference on task 59 across methods running on a single NVIDIA RTX PRO 6000. Using N = 20 in Best-of-N results in 136 .9% performance improvement with 1.44 times slower inference, but QPILOTS-U gets +333 .8% with only 1.04 times overhead, even faster than Best-of-5. Furthermore, while QPILOTS-M achieves the best performance on this task, it still struggles with the high latency due to the computational cost of multiple posterior estimations. Table 5: Comparison of success rate after training 500k update steps, inference time, and computa-tional overhead. For the π0.5 model using Best-of-N , the inference time escalates with N .                          
+
+> Method NSuccess rate ( %)Inference-time Overhead
+> π0.5-19.2 112.7ms 1.0 ×
+> Best-of-N
+> 536.4 (+ 89 .5% )127.2ms 1.14 ×
+> 10 41.4 (+ 115 .6% )137.0ms 1.22 ×
+> 20 45.5 (+ 136 .9% )158.0ms 1.44 ×
+> QPILOTS-U -83.3 (+ 333 .8% )114.1ms 1.04 ×
+> QPILOTS-M -88.5 (+ 360 .9% )240.1ms 2.14 ×
+
+19 SARSA           
+
+> Monte Carlo
+> IQL
+> FQL
+> 12345
+> Training Steps ( ×10 5)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> SR Success Rate
+> 12345
+> Training Steps ( ×10 5)
+> 250
+> 300
+> 350
+> 400
+> Steps Avg Episode Length
+
+Figure 3: Value Learning Method Ablation. We compare SARSA with IQL, FQL, and Monte-Carlo on the LIBERO-90 task 64. It shows means over 5 seeds and shaded bands show seed-level 95% 
+
+bootstrap CIs. A lower average episode length indicates that the method can complete the task faster. 
+
+D.2 Value Learning Ablation 
+
+VLA’s slow inference makes standard Bellman target-based TD-learning almost infeasible, as each update requires querying the policy "batch_size" times. To find an alternative, we compare 4 value-learning objectives for the critic on LIBERO-90 task 64: SARSA (we choose for QPILOTS ), Monte Carlo (MC) returns, Implicit Q-Learning (IQL) [ 29 ], and Flow Q-Learning (FQL) [ 5]. Note that FQL is not used for policy learning. Instead, we still use the steered π0.5 for inference, but distill the steered π0.5 policy into a one-step policy for Q-learning next action query. As shown in Fig. 3, SARSA reaches a success rate of 90% at 5 × 10 5 training steps, outperforming the other 3 approaches. Despite being unbiased, the MC estimator regresses directly against discounted episode returns, which are dominated by large negative rewards in early training, leading to slower initial learning across seeds. IQL and FQL are originally designed for offline RL. However, under the non-stationary replay buffer of our online setting, both methods exhibit instability (high variance), suggesting that current offline value learning approaches still struggle with the continually shifting action distribution. In contrast, SARSA is shown as a pragmatic and effective choice for online critic training under a generalist policy. 
+
+D.3 Sensitivity Analysis 
+
+Fig. 4 reports the per-domain steering-coefficient sweep used to select α in Section C.4. For each OGBench domain, we run QPILOTS-U on the two tuning tasks (tasks 1 and 4 for navigation, tasks 2 and 4 for manipulation) over α ∈ { 0.1, 0.2, 0.3, 0.5, 1.0, 2.0} with 4 seeds per configuration, and pick the α with the strongest combined performance for that domain. Most domains peak between 0.1 and 
+
+0.5 and degrade gracefully on either side, indicating low sensitivity inside this range. The exception is puzzle-4x4-play-sparse , where success is essentially flat below 1.0 and only emerges at 
+
+α = 2 .0; we therefore extend the sweep to 2.0 on that domain only. 20 0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task4 
+
+Training Steps ( ×10 4)
+
+> Success Rate (%)
+
+α = 0.1 α = 0.2 α = 0.3 α = 0.5 α = 1.0 α = 2.0 Figure 4: Steering Coefficient α Sweep. Eval success on the two tuning tasks of each OGBench domain across α ∈ { 0.1, 0.2, 0.3, 0.5, 1.0, 2.0}. Curves show seed-bootstrap mean and 95% CI. We only sweep 2.0 on puzzle-4x4 since performance on others peaked well before 1.0.21 0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-triple-play-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-double-play-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+cube-quadruple-play-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-3x3-play-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+puzzle-4x4-play-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+scene-play-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-large-navigate-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+antmaze-giant-navigate-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-medium-navigate-singletask-task5 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task1 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task2 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task3 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task4 
+
+0 25 50 75 100 125 150 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+humanoidmaze-large-navigate-singletask-task5 
+
+Training Steps ( ×10 4)
+
+> Success Rate (%)
+
+QAM-E QAM FEdit IFQL FQL FBRAC ReBRAC DSRL CGQL CGQL-L CGQL-M − −Figure 5: OGBench: Per-Task Success Rate Across All 50 Tasks. 
+
+22 Figure 6: OGBench Domains. Top: cube tasks involve controlling a robot arm to achieve 5 different goal configurations per domain. Bottom: humanoid tasks involve controlling a 21-DoF humanoid to navigate to different goal locations, and is a particularly challenging long-horizon domain within the task-suite. [1]. 23 Figure 7: LIBERO Tasks. The LIBERO simulation task suite involves controlling a 7-DoF Franka arm to manipulate various household objects. Tasks vary in difficulty and length. [18]. 24
