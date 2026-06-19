@@ -6,35 +6,34 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-18
-- 运行时间：2026-06-18 00:50:57 UTC
+- 最新运行日期：2026-06-19
+- 运行时间：2026-06-19 00:36:42 UTC
 - 运行状态：成功
-- 本次总论文数：5
+- 本次总论文数：4
 - 精读区：2
-- 速读区：3
+- 速读区：2
 
 ### 今日简报（AI）
-今日推荐5篇论文，精读2篇、速读3篇，聚焦强化学习与网络优化。最值得关注精读论文：终身导航的在线强化学习方案，以及无人机网络的公平能效离线强化学习。建议普通读者可侧重关注强化学习在机器人导航与通信网络中的实际部署思路。
-- 详情：[/202606/18/README](/202606/18/README)
+1) 今日推荐4篇论文，精读聚焦随机组合优化与无人机群博弈规划。  
+2) 最值得看：神经组合优化结合机会约束求解随机定向问题（9.0分），以及多智能体强化学习用于低空无线网络群组轨迹规划（8.0分）。  
+3) 建议从随机优化与多智能体博弈的交汇点入手，尝试将此类方法应用到物流、通信等实际调度场景中。
+- 详情：[/202606/19/README](/202606/19/README)
 
 ### 精读区论文标签
-1. [AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning](/202606/18/2606.10927v1-alldaynav-lifelong-navigation-via-real-world-reinforcement-learning)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：在动态环境中使用强化学习进行终身导航；与机器人路径规划相关
-2. [Diffusion Offline Reinforcement Learning for Fair and Energy-Efficient UAV-Assisted Wireless Networks](/202606/18/2606.16331v1-diffusion-offline-reinforcement-learning-for-fair-and-energy-efficient-uav-assisted-wireless-networks)  
+1. [N(CO)$^2$: Neural Combinatorial Optimization with Chance Constraints to Solve Stochastic Orienteering](/202606/19/2606.18514v1-nco2-neural-combinatorial-optimization-with-chance-constraints-to-solve-stochastic-orienteering)  
+   标签：评分：9.0/10、query:rl-last-mile
+   evidence：使用神经组合优化和强化学习解决随机定向问题（车辆路径问题变种）
+2. [Game-Theoretic Multi-Agent Reinforcement Learning for Swarm Trajectory Planning in Low-Altitude Wireless Networks](/202606/19/2606.16386v1-game-theoretic-multi-agent-reinforcement-learning-for-swarm-trajectory-planning-in-low-altitude-wireless-networks)  
    标签：评分：8.0/10、query:rl-last-mile
-   evidence：扩散离线强化学习用于无人机轨迹优化；适用于末端配送路径规划
+   evidence：多智能体强化学习用于无人机群轨迹规划
 
 ### 速读区论文标签
-1. [OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization](/202606/18/2606.18105v1-omniplan-an-adaptive-framework-for-timely-and-near-optimal-network-planning-optimization)  
+1. [OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization](/202606/19/2606.18105v2-omniplan-an-adaptive-framework-for-timely-and-near-optimal-network-planning-optimization)  
    标签：评分：7.0/10、query:rl-last-mile
-   evidence：深度强化学习用于包含运输的网络规划
-2. [StarOR: Synergizing Tree Search and Test-Time Reinforcement Learning for Optimization Modeling](/202606/18/2606.15197v1-staror-synergizing-tree-search-and-test-time-reinforcement-learning-for-optimization-modeling)  
+   evidence：深度强化学习用于包含交通系统的网络规划优化
+2. [OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization](/202606/19/2606.18105v1-omniplan-an-adaptive-framework-for-timely-and-near-optimal-network-planning-optimization)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：协同树搜索与测试时强化学习用于优化建模，可应用于车辆路径问题
-3. [Performance-Driven Environment Abstraction with Multi-Timescale Learning](/202606/18/2606.17377v1-performance-driven-environment-abstraction-with-multi-timescale-learning)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：性能驱动的状态聚合方法可应用于配送区域划分
+   evidence：提出结合深度强化学习和混合整数规划的适应性框架，适用于交通网络规划
 
 
 <div class="dpr-home-promo-card">
