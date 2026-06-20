@@ -1,0 +1,309 @@
+Title: VOiLA: Vectorized Online Planning with Learned Diffusion Model for POMDP Agents
+
+URL Source: https://arxiv.org/pdf/2606.19729v1
+
+Published Time: Fri, 19 Jun 2026 00:24:02 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# VOiLA: Vectorized Online Planning with Learned Diffusion Model for POMDP Agents 
+
+Marcus Hoerger 1, Rishikesh Joshi 1, Rahul Shome 1, Ian Manchester 2, and Hanna Kurniawati 1 
+
+> 1
+
+Australian National University, Canberra, ACT, Australia, 
+
+{marcus.hoerger, rishikesh.joshi, rahul.shome, hanna.kurniawati }@anu.edu.au , 
+
+> 2
+
+The University of Sydney, Sydney, NSW, Australia. 
+
+ian.manchester@sydney.edu.au 
+
+Abstract. Planning under uncertainty is an essential capability for au-tonomous robots. The Partially Observable Markov Decision Process (POMDP) provides a powerful framework for such a capability. Although POMDP-based planning has advanced significantly, its application to real-world problems is often limited by the difficulty of obtaining faith-ful POMDP models. We present Vectorized Online planning wIth Learned diffusion model for POMDP Agents (VOiLA), a framework that learns task-agnostic POMDP models for online planning under uncertainty. VOiLA learns transition and observation samplers using conditional dif-fusion models and learns observation-likelihood models for particle-based belief updates. To enable efficient online planning, the diffusion sam-plers are distilled into compact feedforward generators and integrated with Vectorized Online POMDP Planner (VOPP), an online POMDP planner designed to leverage GPU parallelization. Experimental results indicate the distillation strategy reduces sampling cost by up to nearly three orders of magnitude, making learned generative POMDP models practical for online planning. Evaluation of VOiLA on three benchmark problems indicate that VOiLA achieves equal or better performance than Recurrent Soft Actor Critic while using less than 10% training data, and generalizes much better to unseen environment configurations. Physical robot evaluation indicates VOiLA uses the models learned using only simulated data and generates a policy that successfully accomplish the task in 10 of 10 runs. 
+
+Keywords: Planning under Uncertainty, Integrated Planning and Learn-ing, POMDPs, Partial Observability, Generalizable Learning, Sim2Real 
+
+# 1 Introduction 
+
+In the real world, robots must operate reliably despite imprecise actuators, noisy sensors, perception errors, and incomplete knowledge of their surroundings. Par-tially Observable Markov Decision Processes (POMDPs) provide a principled and unified framework for reasoning under various types of uncertainty, enabling robots to act effectively even when the outcomes of their actions, their own in-ternal state, and the state of the world are not fully known.  
+
+> arXiv:2606.19729v1 [cs.RO] 18 Jun 2026 2Marcus Hoerger et al.
+
+Although solving POMDPs exactly is computationally intractable [21], sub-stantial progress has been made in computing approximate solutions. These methods have largely evolved along two separate but complementary directions. The first is approximate POMDP solving [12], which today is often performed online and therefore avoids substantial offline pre-computation, but requires POMDP models to be available a priori. The second is reinforcement-learning-based approaches, starting with [6], which relax the need for explicit models but generally require large amounts of data and significant training time. Methods have been proposed to combine the strengths of planning and learn-ing. Some [4, 16, 18, 26] use search tree structures typical of planning and inte-grate them with learning of certain components of the POMDP models, heuris-tics, or estimates of the value functions. However, the planning components in these combinations are single-threaded. In this paper, we adopt this integrated planning-and-learning paradigm, but build on recent learning techniques and a recent online POMDP planner designed to be compatible with modern learning platforms, including the ability to exploit massive GPU parallelisation. Specifically, we propose an approximate POMDP solving framework, called 
+
+Vectorized Online planning wIth Learned diffusion model for POMDP Agents 
+
+(VOiLA). In POMDP planning, the required models include the transition mod-els, which capture the uncertainty of action outcomes as a conditional probability distribution function over possible next states, and observation models, which capture the likelihood of observations under different pairs of states and ac-tions. VOiLA learns samplers for the transition and observation models using expressive conditional diffusion models. To enable fast sampling, these samplers are distilled into compact feedforward generators. In addition, VOiLA learns a contrastive likelihood for belief update computation of the POMDP planner. VOiLA learned these models offline purely from simulated data. Once learned, the mentioned models are used by a modified VOPP [8] planner to compute a close to optimal POMDP policies on-line. VOPP is a recent ap-proximate online POMDP planner designed for vectorised computation, allowing it to naturally exploit the massive parallelisation capabilities of GPUs. We mod-ify the original VOPP to extend its applicability to problems with continuous observation spaces. By learning only the transition and observation models and then using them for planning, VOiLA can significantly reduce data requirements while improving generalisation across tasks and scenarios. We evaluate VOiLA on three domains: a simple POMDP benchmark intro-duced in [4], a simulated quadruped locomotion task in uncertain and previ-ously unseen environments, and a physical robot experiment on target finding in uncertain environment using a quadruped. The results of simulation experi-ments indicate VOiLA achieves comparable performance to Recurrent SAC [4] on trained scenarios while using only 10% of the training data, and exhibits stronger generalization in unseen scenarios. In a physical robot experiment, the simulation-trained model is used directly with an online POMDP planner to compute approximately optimal POMDP policies. The results indicate that the quadruped accomplish the task successfully in 10 of 10 runs. This indicates the VOiLA 3
+
+potential that models learned solely from simulation data can be directly used to generate good real-world strategies under the POMDP framework. 
+
+# 2 Background & Related Work 
+
+2.1 Partially Observable Markov Decision Process (POMDPs) 
+
+A POMDP problem is specified as a 7-tuple ⟨S , A, O, T, Z, R, γ ⟩, where S, A, and 
+
+O denote the state, action, and observation spaces. In this paper, S and O may be discrete, continuous, or hybrid, while A is discrete; for simplicity, we describe the background assuming all spaces are discrete. The transition function T is a conditional distribution, with T (s, a, s ′) = P (s′|s, a ) denoting the probability of next state s′ after performing action a in state s. The observation function Z is defined by Z(s′, a, o ) = P (o|s′, a ), and the reward function R : S × A → R is bounded, and γ ∈ (0 , 1) is a discount factor. Since the agent does not directly observe the true state, it maintains a belief 
+
+b ∈ B , i.e., a probability distribution over states, where B is the set of all possible beliefs. In almost all scalable approximate POMDP solvers, the agent starts from a given initial belief b0 ∈ B . Given belief b, action a, and observation o, the belief is updated according to b′(s′) = τ (b, a, o ) ∝ Z(s′, a, o ) P 
+
+> s∈S
+
+T (s, a, s ′)b(s), where τ (·) is the belief update operator. The expected immediate reward is 
+
+R(b, a ) = P 
+
+> s∈S
+
+R(s, a )b(s). The actions a POMDP agent takes at each time step is governed by a pol-icy π : B → A , which maps beliefs to actions. In this paper, we assume a deterministic policy, where a belief is mapped to an action, rather than a dis-tribution over the action space. Since beliefs are sufficient statistics of action-observation histories, this is equivalent to mapping histories to actions. Each policy π has value V π : B → R, defined as the expected discounted return 
+
+V π (b) := E[P∞ 
+
+> t=0
+
+γtR(b, a )], where the expectation is taken over trajectories in-duced by the policy, transition function, and observation function. The POMDP solution is an optimal policy π∗ with value V π∗
+
+(b) = sup ∀π V π (b) for all b ∈ B .
+
+2.2 Online POMDP Planning 
+
+Online POMDP planning interleave policy computation and policy execution by maintaining a belief and performing forward search from the current belief. Earlier approaches such as POMCP [27] use Monte Carlo Tree Search com-bined with particle beliefs to scale to large state spaces. Subsequent methods, including DESPOT [30] and ABT [13], improve efficiency through scenario-based planning and belief-tree reuse. More recent extensions such as POMCPOW and PFT-DPW [29] address continuous observation spaces using progressive widen-ing. While these methods have demonstrated strong planning performance, they were primarily designed around serial CPU-based simulation and do not fully ex-ploit modern parallel hardware such as GPUs. Although learned transition and observation models can be integrated into these solvers, their architectures do not efficiently leverage batched neural-network inference during online planning. 4 Marcus Hoerger et al. 
+
+Vectorized Online POMDP Planner (VOPP) [8] is a recently proposed mas-sively parallel online method based on the Partially Observable Reference Pol-icy Programming (PORPP) framework [11], which partially solves the POMDP value function analytically, leaving the numerical computation to be only estima-tion of expected total reward: V (b) = 1 
+
+> η
+
+log  P  
+
+> a∈A
+
+exp( ηΨ (b, a ))  := [ Lη Ψ ]( b), where η > 0 is a temperature parameter, balancing reward maximization with deviation from the reference policy, and Lη is the log-sum-exp operator [2]. The expression Ψ denotes preferences over belief-action pairs 
+
+Ψ (b, a ) = 1
+
+η log( π0(a | b)) + R(b, a ) + γ X
+
+> o∈O
+
+Z(b, a, o )[ Lη Ψ ]( τ (b, a, o )) , (1) where R(b, a ) is a Monte Carlo estimate of R 
+
+> s∈S
+
+R(s, a )b(s)d s. By removing the need to interleave numerical optimisation and estimation of expectation, the scheduling to parallelise POMDP solving can be substantially reduced. Building on this formulation, VOPP represents the entire belief tree using a collection of tensors storing belief nodes, action nodes, and action preferences. It incrementally constructs the belief tree by interleaving fully vectorized forward search with fully vectorized preference backup operations over tens of thousands of parallel simulations. Both operations are implemented entirely as tensor com-putations running on the GPU, enabling VOPP to achieve state-of-the-art com-putational efficiency in online POMDP planning. 
+
+2.3 Learning-Based Approaches in POMDPs 
+
+Learning approaches have been proposed to compute POMDP policies. One typ-ical approach is Recurrent model-free Reinforcement Learning. They augment policies with memory mechanisms such as recurrent neural networks [6, 9, 19] or transformers [22], allowing them to summarize action-observation histories with-out explicitly maintaining a belief state. Model-based Reinforcement Learning methods [15] and end-to-end learning [3, 10] for approximate POMDP solving have been proposed too. While effective on the training distribution, such ap-proaches typically require large amounts of task-specific training data. An alternative is to learn models for planning. Methods such as MuZero [26], Dreamer [5], and Visual Tree Search (VTS) [4] learn dynamics and/or observa-tion models that are used for planning, policy optimization, or belief updates. However, these methods primarily target task-specific learning and are therefore tightly coupled to the training objectives and environments used during learning. In contrast, VOiLA learns task-agnostic transition and observation models designed specifically for integration with a scalable online POMDP planner. The learned models can therefore be reused across tasks sharing the same environ-ment dynamics while supporting both online planning and particle-based belief updates. The highly scalable POMDP planner of VOiLA enables good policies to be inferred despite model errors, further reducing the data requirements. 
+
+# 3 Overview of VOiLA 
+
+We propose VOiLA, a sequential decision-making framework that combines the recently proposed massively parallel online POMDP planning VOPP with VOiLA 5Online Belief Space Planning with VOPP Learned POMDP Models   
+
+> Transition Sampler
+> Observation Sampler
+> Likelihood Model
+> Belief Action Nodes Observation Nodes
+> Offline Data Generation
+> Dataset
+> High-fidelity simulator (e.g. Isaac Sim)
+> Fully vectorized forward search with learned POMDP models
+> State Tensor Next State Tensor Action Tensor Observation Tensor
+> Roll out task-agnostic uniform policy
+> Execute action Update belief using and
+
+Fig. 1. Overview of VOiLA. Offline trajectories generated in a high-fidelity simulator using a task-agnostic policy are used to learn a transition sampler fT , an observa-tion sampler fZ , and a likelihood model ℓ. During online planning, these models are integrated into the vectorized POMDP planner VOPP, which performs belief-space planning through thousands of parallel simulations and belief updates. 
+
+learned neural-network parameterized POMDP models for scalable planning un-der uncertainty. VOiLA learns task-agnostic POMDP models purely from offline-generated simulation data and uses them with VOPP to enable efficient online belief-space planning. An overview of VOiLA is shown in Figure 1. In particular, our method learns three POMDP model components: (a) a transition sampler fT : S×A 7 → S to approximately sample next states according to the transition function T (s, a, s ′), (b) an observation sampler fZ : S × A 7 → O 
+
+that approximately samples observations according to Z(s′, a, o ), where high-dimensional observations are modeled in a learned latent observation space, and (c) a likelihood model ℓ : S ×A×O 7 → R which approximates the (unnormalized) POMDP observation density Z.A core requirement of the learned transition and observation samplers is that they must be sufficiently expressive to capture complex stochastic robot dynam-ics (e.g., legged locomotion) and high-dimensional observation distributions (e.g., images), while remaining efficient enough to serve as generative models during online POMDP planning. We achieve this by training both the transition and observation samplers in two stages. First, expressive conditional diffusion mod-els are trained to model the underlying transition and observation distributions. Second, the diffusion samplers are distilled into compact feedforward generators that closely approximate the original diffusion models while reducing sampling cost by up to nearly three orders of magnitude. Details on our model learning approach are provided in Section 4.2. 6 Marcus Hoerger et al. 
+
+The learned transition, observation, and likelihood models are integrated into VOPP for both online belief-space planning and particle-based belief updates. During planning, vectorized forward simulations are generated directly using the offline learned transition and observation samplers instead of relying on hand-crafted models. To support continuous observation spaces, we additionally ex-tend VOPP with a fully vectorized implementation of progressive widening [29]. After computing an action for the current belief, VOiLA executes the action in the environment and updates the belief based on the executed action and perceived observation. Beliefs are represented as sets of weighted particles and updated using a Sequential Importance Resampling (SIR) particle filter [1]. In particular, the transition sampler fT is used to sample proposal particles, while the likelihood model ℓ is used to compute particle weights from observations before resampling. Details on how the learned models are integrated into VOPP are provided in Section 4.3. 
+
+# 4 Details of VOiLA 
+
+4.1 Offline Data Generation 
+
+Training data for the learned POMDP models is generated entirely offline using high-fidelity robot simulators such as Isaac Sim [17]. To generate training data, we execute a task-independent data collection policy (a uniform policy in all experiments) in simulated environments and record trajectories consisting of POMDP states, actions, and observations. Formally, we construct an offline dataset D = {ξ(n)}Nn=1 , where each trajec-tory ξ(n) = {(s(n) 
+
+> i
+
+, a (n) 
+
+> i
+
+, o (n) 
+
+> i
+
+)}Ki=1 consists of a sequence of states, actions, and observations generated through interaction with the simulator. Here, N denotes the number of trajectories and K their maximum length. Because the data collection policy is independent of the downstream task and reward structure, the resulting dataset captures general dynamics and ob-servation structure rather than task-specific behaviors. The dataset D is then used to train the transition sampler, observation sampler, and likelihood model. 
+
+4.2 POMDP Model Learning Approach 
+
+Learning POMDP models for real-world robotic planning under uncertainty is challenging due to complex stochastic dynamics, high-dimensional observations, and the computational requirements of online belief-space planning. The learned models must not only accurately represent the underlying transition and obser-vation distributions, but also support efficient sampling during online planning. VOiLA learns three efficient model components for online planning: a tran-sition sampler fT that approximately samples successor states according to the transition distribution T (s, a, s ′), an observation sampler fZ that approximately samples observations according to the observation distribution Z(s′, a, o ), and a likelihood model ℓ(s′, a, o ) that approximates the (unnormalized) observation density Z. Details on how these model components are learned, including train-ing objectives and derivations, are presented in the following subsections. VOiLA 7
+
+Transition Sampler The transition sampler is modeled as 
+
+s′ = fT (s, a, ω T ), (2) where ωT ∼ N (0 , I ) is a latent noise variable that captures transition stochastic-ity. Real-world transition dynamics are often highly nonlinear and multimodal due to contact dynamics, actuation errors, and robot–environment interactions. Capturing such dynamics therefore requires expressive generative models. Motivated by their strong performance in modeling complex multimodal dis-tributions, we first train a conditional denoising diffusion model [7] on tran-sition tuples ( s, a, s ′) ∼ D using a v-prediction objective [25]. In particular, we construct a noise-corrupted next state xτ = √¯ατ s′ + √1 − ¯ατ ϵ, where ϵ ∼N (0 , I ), τ ∈ (0 , 1) denotes the diffusion time, and ¯ ατ ∈ (0 , 1) is the cumulative noise schedule (we use a cosine schedule) evaluated at τ . A conditional denoiser 
+
+vT (s, a, x τ , τ ) is then trained to predict the v-target v = √¯ατ ϵ − √1 − ¯ατ s′.While diffusion models are highly expressive and allow for modeling complex multimodal transition dynamics, their iterative sampling process is computation-ally too expensive for online POMDP planning, where large numbers of forward simulations must be generated. To enable efficient online planning, we distill an ODE-based diffusion sam-pler [28] into the compact model fT , which directly maps ( s, a, ω T ) to a next-state sample s′, such that s′ is approximately distributed according to T (s, a, s ′). We train fT to imitate the next-state samples generated by the ODE-based diffusion sampler. Specifically, we minimize the distillation loss 
+
+Ldist = E(s,a,s ′)∼D , ω T ∼N (0 ,I )
+
+
+
+ˆs′ − fT (s, a, ω T ) 22
+
+
+
+, (3) where ˆ s′ denotes the next-state sample generated by the ODE-based diffusion sampler using ( s, a, ω T ) and denoiser vT .The transition sampler fT closely approximates the ODE-based sampler, while reducing sampling cost by up to nearly three orders of magnitude. 
+
+Observation Sampler The observation sampler fZ is learned analogously to the transition sampler described in the previous paragraph. In particular, fZ
+
+is a compact distilled sampler that samples observations conditioned on ( s′, a )for efficient use during online planning. For low-dimensional observations, the observation sampler generates observations in the original observation space O
+
+directly. In this case, the same diffusion and distillation learning procedure de-scribed for the transition sampler is used to train fZ .However, for high-dimensional observations such as images, sampling obser-vations from the original observation space O can be computationally ineffi-cient during planning. In such cases, we instead introduce a lower-dimensional latent observation space Z with dim( Z) ≪ dim( O) using a conditional ob-servation autoencoder consisting of an encoder E and decoder D, such that 
+
+z = E(s′, a, o ) and o = D(s′, a, z ). The encoder and decoder are trained jointly on tuples ( s′, a, o ) ∼ D by minimizing the reconstruction objective 
+
+Lrec = E(s′,a,o )∼D 
+
+h
+
+∥o − D(s′, a, E (s′, a, o )) ∥22
+
+i
+
+. (4) 8 Marcus Hoerger et al. 
+
+Different encoder and decoder architectures can be used depending on the observation modality, including vector-valued, image-based, or mixed observa-tions. Once trained, the autoencoder weights are frozen and the encoder E is used to map observations into the latent observation space Z.We then train a conditional diffusion model in the latent observation space using tuples ( s′, a, z ), where z = E(s′, a, o ). Following the same diffusion and dis-tillation procedure used for the transition sampler, we finally distill the diffusion sampler into the compact feedforward observation sampler 
+
+z = fZ (s′, a, ω Z ), (5) where ωZ ∼ N (0 , I ) is latent noise. This enables efficient latent observation sampling during online planning. 
+
+Likelihood Model Online belief updates and planning with continuous obser-vation spaces require evaluating the observation density Z(s′, a, o ) for candidate next states. However, learning normalized observation densities is challenging in practice due to the intractability of the normalization constants [14]. Fortunately, particle-based belief updates only require relative particle weights, making un-normalized observation densities sufficient for online POMDP planning. We therefore learn an unnormalized likelihood model ℓ(s′, a, o ) whose expo-nentiated outputs approximate the observation density Z(s′, a, o ) up to a nor-malizing constant. The model ℓ is trained contrastively using an InfoNCE-style objective [20]: for a mini-batch of size B, i.e., {(s′
+
+> i
+
+, a i, o i)}Bi=1 ∼ D , the model is evaluated on all B × B state-action–observation combinations, where matching tuples ( s′
+
+> i
+
+, a i, o i) are treated as positive pairs and mismatched tuples ( s′
+
+> i
+
+, a i, o j )with i̸ = j serve as in-batch negatives. We then minimize the InfoNCE loss 
+
+Llikelihood = − 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+log exp( ℓ(s′
+
+> i
+
+, a i, o i)) 
+
+PBj=1 exp( ℓ(s′
+
+> i
+
+, a i, o j )) . (6) This objective encourages the likelihood model to assign higher values to match-ing ( s′, a, o ) tuples from the dataset than to mismatched tuples. The resulting model ℓ does not represent a normalized observation density. Instead, exponentiated likelihood values exp( ℓ(s′, a, o )/λ ) are used as relative particle weights during belief updates, which is sufficient for particle-based online POMDP planning. The parameter λ > 0 is a problem-dependent temperature parameter which controls the sharpness of the resulting particle weight distri-bution, with smaller values producing more concentrated particle weights and larger values yielding more uniform particle weights, thereby mitigating particle impoverishment during belief updates. In our experiments in Section 5, we use 
+
+λ ∈ { 1.0, 1.25 }, which we found to perform well. 
+
+4.3 Online belief-space planning with VOiLA 
+
+During online planning, VOiLA follows VOPP’s vectorized belief-space planning procedure. In the original VOPP algorithm, the belief tree T is expanded using a hand-crafted vectorized generative model G(s, a ) that samples successor states VOiLA 9      
+
+> (a) FloorPositioning (b) LeggedNavigation (c) TargetFinding
+> Fig. 2. Problem scenarios used to evaluate VOiLA.
+
+and observations during forward search. In VOiLA, we instead replace this gen-erative model with the learned transition and observation samplers introduced in Section 4.2. Given batched states and actions, the transition sampler fT (s, a )generates successor states s′, while the observation sampler fZ (s′, a ) samples corresponding observations o.To handle continuous observation spaces, we extend VOPP with a vector-ized implementation of Progressive Widening (PW) [29]. PW incrementally lim-its the number of observation branches associated with each action node in T .In particular, an action node a is expanded with a sampled observation when-ever |C(a)| < k oN (a)αo , where |C(a)| denotes the number of child observation branches associated with action node a, N (a) is the action-node visitation count, and ko, α o > 0 are widening hyperparameters. When the widening criterion is satisfied at action node a, a newly sampled observation is added as a new observa-tion branch by extending the observation nodes tensor data structure. Otherwise, the sampled successor state is associated with a previously existing observation branch of the same action node. The likelihood model ℓ(s′, a, o ) is then used to compute relative weights for successor states with respect to the observa-tion stored at the selected branch, after which successor states are resampled according to these weights. Importantly, parallel simulations are grouped by their parent action nodes, after which the above PW operations are performed for all action-node groups in parallel. This preserves VOPP’s massively parallel planning formulation, even in continuous observation spaces. 
+
+# 5 Experiments & Results 
+
+We tested VOiLA on three planning under uncertainty problems, detailed below. 
+
+5.1 Problem Scenarios FloorPositioning is a simple POMDP benchmark introduced in [4]. A robot operates in a 2 .0 × 1.0m rectangular environment containing internal walls that divide the space into an upper and lower floor, each associated with a different goal region. The continuous state space consists of the robot position, S = [0 , 2] ×
+
+[0 , 1]. The action space comprises motion in the eight compass directions with step size 0 .05m together with a STAY action ( |A| = 9). Actions are deterministic, and collisions with walls or environment boundaries leave the robot in its current state. Observations are four-dimensional continuous vectors ( O = R4) containing 10 Marcus Hoerger et al.    
+
+> Fig. 3. Wall configurations used for the LeggedNavigation environment. Different wall configurations induce different traversable routes, which must be inferred from onboard RGB observations. The green region represents the goal.
+
+the distances to the nearest wall or boundary in the four cardinal directions, corrupted by zero-mean Gaussian noise with standard deviation 0 .01. The initial x-position is uniformly distributed in [0 .8, 1.2], while the initial y-position is sampled from either [0 .1, 0.4] or [0 .6, 0.9], creating uncertainty about which floor the robot occupies. The correct goal is centered at (2 .0, 0.25) for states in the lower floor and at (0 .0, 0.75) for states in the upper floor. A goal is reached when the robot is within 0 .1m of the corresponding target. Reaching the correct goal yields a reward of 100, entering the incorrect goal incurs a penalty of 
+
+−100, and each non-terminal action incurs a penalty of −1. Episodes terminate upon reaching the correct goal, and the discount factor is 0 .99. 
+
+LeggedNavigation LeggedNavigation is a partially observable navigation task involving an ANYmal-C quadruped equipped with an onboard RGB camera operating in a cluttered 20 ×20m environment with rough terrain, obstacles, and two internal walls. Starting on the left-hand side of the scene, the robot must navigate to a goal region centered at (7 .5, −7.5)m (green sphere in Figure 2(b)). The two walls can occupy one of five predefined configurations shown in Figure 3, resulting in different traversable routes. Both the robot’s initial position and wall configuration are unknown and must be inferred from RGB observations. The state comprises the robot position, orientation (represented using a continuous 6D representation [31]), linear and angular velocities, joint posi-tions and velocities, and the positions of the two internal walls, resulting in 
+
+S = R39 × ENV 1, . . . , ENV 5. Observations are RGB images of resolution 32 × 32, yielding O = 0 , . . . , 255 3×32 ×32 . The action space consists of six discrete body-velocity commands (forward, slow forward, turn left/right, and forward arcs left/right), which are executed using a pre-trained locomotion controller. The initial position is sampled uniformly from a 2 .3×5.25m region on the left-hand side of the environment, while the wall configuration is sampled uniformly from the five layouts in Figure 3. The initial orientation and joint configuration are assumed known. The objective is to reach a circular goal region of radius 2m centered at (7 .5, −7.5)m while avoiding collisions. Reaching the goal yields a reward of +500, collisions incur a penalty of −500, and each timestep incurs a penalty of −1. Episodes terminate upon reaching the goal or collision. 
+
+TargetFinding TargetFinding is a partially observable object-search task designed to evaluate whether POMDP models learned entirely in simulation transfer to real-world robotic planning. A Unitree Go2 quadruped must locate and reach a target asset (a jerry can) using only lidar observations. VOiLA 11 
+
+The environment consists of a 4 .9×3.6m room containing static obstacles and two cardboard boxes whose positions are uncertain. The target asset is hidden behind one of the boxes and can occupy one of two locations, ( −1.65 , 0.92)m or ( −1.80 , −1.15)m. Because the boxes partially occlude the asset, the robot must actively gather information about both the asset and box locations while planning a collision-free path to the target. The state comprises the robot position and orientation, linear and angular velocities, joint positions and velocities, the asset position, and the positions of the two cardboard boxes, resulting in S = R45 . Observations are compact lidar scans obtained by transforming raw lidar returns into a robot-centered frame, restricting them to a front-facing field of view, and discretizing them into 36 azimuth bins. Each bin stores the minimum range measurement within the corresponding sector, normalized by the maximum sensor range of 2 .0m and clipped to [0 , 1], resulting in O = R36 . The same preprocessing pipeline is used in simulation and on the physical robot. The action space consists of six discrete body-velocity commands (forward, slow forward, turn left/right, and forward arcs left/right) executed using a pre-trained locomotion controller. The robot’s initial position is sampled uniformly from a 1 .5 × 1.0m region, and its initial heading is sampled within ±π/ 8rad of its nominal orientation. The asset location is sampled uniformly from the two candidate locations. The cardboard boxes are sampled around their nominal positions with uncertainties of up to ±0.5m longitudinally and ±0.25m laterally. Reaching the asset yields a reward of +100, collisions incur a penalty of −500, and each step incurs a penalty of −1. Episodes terminate when the robot reaches the asset or collides with a cardboard box or environment boundary. Unlike LeggedNavigation ,all models are trained entirely in simulation and deployed on the physical robot without additional real-world training data. 
+
+5.2 Experimental Setup 
+
+The purpose of our experiments is two-fold. First, we evaluate whether the learned POMDP models of VOiLA support effective online belief-space plan-ning and generalize to unseen environment configurations. To this end, we com-pare VOiLA against the model-based POMDP planning approach VTS [4] and a model-free reinforcement learning baseline based on recurrent SAC [19]. Second, we evaluate whether POMDP models learned entirely in simulation transfer to physical robotic planning problems without additional real-world training data. This is investigated in the TargetFinding problem, where models trained ex-clusively in simulation are deployed on a physical robot. For the LeggedNavigation and TargetFinding problems, actions corre-spond to desired body velocity commands rather than direct joint commands. A locomotion controller trained using off-the-shelf learning code in IsaacLab [24] converts desired body velocities into low-level joint commands and is shared across VOiLA, VTS, and recurrent SAC to ensure a fair comparison. Each high-level action is executed for 2 seconds and converted to low-level joint velocity commands by the locomotion controller. 12 Marcus Hoerger et al. 
+
+The above setting implies that the robot has 2s for computation in-between two high-level actions. VTS and VOiLA use 1s for planning (ie, planning time per step) in FloorPositioning and Legged Navigation and VOPP uses 1.5s for planning in TargetFinding, while the rest of the time is used for belief update and processing observations. In recurrent SAC, the policy is computed offline, and therefore during execution it only needs to infer the policy, which takes 0.01s. Recurrent SAC uses the rest of the time for processing observations. For each problem scenario, VOiLA generates an offline dataset of 50 , 000 transitions using a random policy. In LeggedNavigation , only the first two of the five environment configurations described in Section 5.1 are used during training, while all configurations are used during evaluation to assess generaliza-tion. The transition diffusion model uses an MLP with five hidden layers of width 1,024, while the distilled transition sampler uses four hidden layers of width 1,024. For image observations in LeggedNavigation , VOiLA uses the same convolutional encoder architecture as VTS, consisting of three ELU-activated convolutional layers with 16, 32, and 64 channels, followed by an MLP with two hidden layers of width 512 that maps observations to a 64-dimensional latent representation. The observation diffusion model uses a denoising MLP with five hidden layers of width 512. The distilled observation sampler uses four hidden layers of width 1,024, while the likelihood model uses three hidden layers of width 256 and a scalar output. For fairness, VTS and recurrent SAC use the same observation encoder as VOiLA. Since the publicly available VTS implementation does not support learn-ing transition models, we use the transition sampler learned by VOiLA. Recur-rent SAC is trained using the hyperparameters of [19] for 750,000 steps per prob-lem, while VTS is trained for 50,000 steps. Similar to VOiLA, both methods are trained only on the first two environment configurations in LeggedNavigation .For recurrent SAC and VTS, we use the official implementations 34 . VOiLA was implemented in Python using PyTorch [23]. All experiments were carried out on the same machine 5.
+
+5.3 Experimental Results 
+
+The results in Tables 1 to 3 show that VOiLA learns useful task-agnostic POMDP models from substantially less interaction data than Recurrent SAC and VTS. In 
+
+FloorPositioning , VOiLA requires only 50K transitions, compared to 2 .6M transitions for recurrent SAC and 32M transitions for VTS, while still achieving a 100% success rate. Similarly, in LeggedNavigation , VOiLA uses 50K tran-sitions, compared to 750K transitions for recurrent SAC, and achieves competi-tive or higher success rates across all tested environments. These results indicate that learning reusable transition, observation, and likelihood models for online planning can be considerably more data-efficient than learning a task-specific                                                                                                            
+
+> 3https://github.com/twni2016/pomdp-baselines/
+> 4https://github.com/michaelhlim/VisualTreeSearch
+> 5A laptop with one Intel Core Ultra 9 285HX CPU with 32GB of RAM and a NVIDIA RTX PRO 4000 Blackwell Generation Laptop GPU with 16GB of VRAM. VOiLA 13
+> Table 1. Results on the FloorPositioning problem averaged over 100 test runs. Lower is better for data collection, training, and planning time. For recurrent SAC, planning time refers to policy inference time. The best results are highlighted in bold .Metric VOiLA Recurrent SAC VTS Success Rate (%) 100 100 91 Avg. total disc. reward 57 .7±2.263 .8±1.034 .9±13 .7Num. transitions for training 50K 2.6M 32M Data Collection Time (s) 1.984 .2494 .1Training Time (s) 2,207 2,348 3,724
+> Table 2. Results on the LeggedNavigation problem for each environment in Fig-ure 3, averaged over 50 test runs. The best results are highlighted in bold .Environment. Method Success (%) Avg. total disc. reward 1 (trained in) VOiLA 92 .0279 .6±62 .8Recurrent SAC 92 .0342 .7±36 .9
+> VTS 32 .5−162 .6±68 .72 (trained in) VOiLA 92 .0315 .3±65 .4
+> Recurrent SAC 80 .0299 .8±55 .1VTS 36 .0−38 .4±89 .53VOiLA 74 .0196 .8±102 .8
+> Recurrent SAC 12 .0−22 .0±33 .0VTS 40 .011 .3±91 .84VOiLA 80 .0222 .3±87 .0Recurrent SAC 78 .0232 .4±78 .1
+> VTS 16 .0−143 .6±73 .25VOiLA 72 .0161 .9±100 .9
+> Recurrent SAC 10 .0−102 .0±58 .2VTS 20 .0−161 .5±82 .2
+
+recurrent policy, while avoiding the large data requirements of VTS in Floor-Positioning . Additionally, on the LeggedNavigation problem, the distilled transition and observation samplers achieved approximately 5 .9 × 10 4 samples per second, compared to 2 .1 × 10 2 and 7 .2 × 10 2 samples per second for the diffusion models, achieving up to 283 × higher sampling throughput. A key advantage of learning task-agnostic POMDP models is generalization to unseen environments. This is demonstrated in the LeggedNavigation prob-lem, where training data was collected only in environments 1 and 2. Although recurrent SAC achieves strong performance on the training environments, its suc-cess rate drops to 12% and 10% in unseen environments 3 and 5, respectively. Environment 4 and 5 are topologically similar to the trained environment 1 and 2, respectively, but Recurrent SAC performance in 4 and 5 are very different. Al-though environment 5 is topologically similar to environment 2, small geometric differences appear to change the required route-selection behavior, causing poor generalization to environment 5. In contrast, VOiLA maintains success rates be-tween 72% and 80% across all unseen environments and consistently achieves the highest average discounted return. These results suggest that the learned tran-14 Marcus Hoerger et al.             
+
+> Table 3. Training and computational requirements for the LeggedNavigation problem. Metric VOiLA Recurrent SAC VTS Num. transitions for training 50K 750K 50K
+> Data Collection Time (s) 1647 .62760 .81647 .6
+> Training Time (s) 6194 .08144 .26922 .0
+
+sition, observation, and likelihood models capture reusable aspects of the task dynamics, whereas the task-specific policy learned by recurrent SAC overfits to the training environments.       
+
+> Step 0 Step 1 Step 2 Step 3 Step 4 Step 5
+> Fig. 4. Real-world execution of the Unitree Go2 quadruped and corresponding belief evolution. The top row shows images caputed during execution. The bottom row shows beliefs over robot pose (blue particles), asset location (orange circles), and movable obstacle locations (green and red particles). As observations are incorporated, the belief progressively concentrates around the true environment state.
+
+Results on TargetFinding To see whether POMDP models learned in sim-ulation transfer to a real robot, we deployed VOiLA on the TargetFinding 
+
+problem. Similar to the previous benchmarks, the transition, observation, and likelihood models were trained using 50K transitions collected in simulation and were transferred to the real robot without further training. During deployment, online planning was performed with a planning time of 1 .5s per step. Across 10 real-world test runs, including five runs for each possible target location, VOiLA successfully completed the task in every trial. Figure 4 shows an example run of the problem, while the accompanying video shows a run when the robot ini-tially identifies a wrong target location, explores and finally finds the target. To introduce additional variability, the positions of the cardboard obstacles were manually changed between runs. These results suggest that the learned transi-tion, observation, and likelihood models are sufficiently robust to transfer from simulation to a physical robot. 
+
+# 6 Conclusion 
+
+We present VOiLA, a framework for approximate POMDP solving without a pri-ori models. VOiLA consists of two components: a task-agnostic POMDP model learning designed for online planning, and a scalable fully vectorised POMDP planner, VOPP. The model learning component combines diffusion-based gener-ative modeling with model distillation to learn task-agnostic transition and ob-servation samplers and observation-likelihood models that support both particle-based belief updates and online belief-space planning. VOiLA enables efficient belief-space planning while retaining the ability to represent complex transi-tion and high-dimensional observation functions. Experimental results on three benchmark problems demonstrate that VOiLA can learn efficient POMDP mod-els from relatively small amounts of training data, generalize to unseen environ-ment configurations, and transfer successfully from simulation to real-world plan-ning problems without additional training. These results suggest that combining reusable learned POMDP models with scalable online planning is a promising direction for robotic sequential decision making under uncertainty. 
+
+# Acknowledgements 
+
+> This work was supported by the ARC Research Hub in Intelligent Robotic Systems for Real-Time Asset Management (IH210100030), in collaboration with the University of Sydney and Nexxis Technology.
+
+# References 
+
+[1] Arulampalam, M., Maskell, S., Gordon, N., Clapp, T.: A tutorial on particle filters for online nonlinear/non-gaussian bayesian tracking. IEEE Transac-tions on Signal Processing 50 (2), 174–188 (2002). DOI 10.1109/78.978374 [2] Blanchard, P., Higham, D.J., Higham, N.J.: Accurately computing the log-sum-exp and softmax functions. IMA Journal of Numerical Analysis 41 (4), 2311–2330 (2021) [3] Collins, N., Kurniawati, H.: Locally-connected interrelated network: A for-ward propagation primitive. IJRR (2022) [4] Deglurkar, S., Lim, M.H., Tucker, J., Sunberg, Z.N., Faust, A., Tomlin, C.: Compositional learning-based planning for vision POMDPs. In: L4DC, pp. 469–482. PMLR (2023) [5] Hafner, D., Lillicrap, T., Ba, J., Norouzi, M.: Dream to control: Learning behaviors by latent imagination. In: ICLR (2020) [6] Hausknecht, M.J., Stone, P.: Deep Recurrent Q-Learning for Partially Ob-servable MDPs. In: AAAI fall symposia, vol. 45, p. 141 (2015) [7] Ho, J., Jain, A., Abbeel, P.: Denoising diffusion probabilistic models. Ad-vances in neural information processing systems 33 , 6840–6851 (2020) [8] Hoerger, M., Sudrajat, M., Kurniawati, H.: Vectorized online POMDP plan-ning. In: ICRA (to appear). IEEE, Vienna, Austria (2026) [9] Kapturowski, S., Ostrovski, G., Quan, J., Munos, R., Dabney, W.: Recurrent experience replay in distributed reinforcement learning. In: ICLR (2018) [10] Karkus, P., Hsu, D., Lee, W.S.: Qmdp-net: Deep learning for planning under partial observability. NeurIPS 30 (2017) [11] Kim, E., Kurniawati, H.: Partially Observable Reference Policy Program-ming: Approximately Solving POMDPs. In: IJCAI (2025) [12] Kurniawati, H.: Partially Observable Markov Decision Processes and Robotics. Annual Review of Control, Robotics, and Autonomous Systems 
+
+5(1) (2022) 16 Marcus Hoerger et al. 
+
+[13] Kurniawati, H., Yadav, V.: An online POMDP solver for uncertainty plan-ning in dynamic environment. In: ISRR, pp. 611–629. Springer (2016) [14] LeCun, Y., Chopra, S., Hadsell, R., Ranzato, M., Huang, F., et al.: A tuto-rial on energy-based learning. Predicting structured data 1(0) (2006) [15] Lee, A.X., Nagabandi, A., Abbeel, P., Levine, S.: Stochastic latent actor-critic: Deep reinforcement learning with a latent variable model. Advances in neural information processing systems 33 , 741–752 (2020) [16] Lee, Y., Cai, P., Hsu, D.: MAGIC: Learning Macro-Actions for Online POMDP Planning . In: Robotics: Science and Systems. Virtual (2021) [17] Mittal, M., Roth, P., Tigue, J., Richard, A., Zhang, O., Du, P., Serrano-Munoz, A., Yao, X., Zurbr¨ ugg, R., Rudin, N., et al.: Isaac lab: A gpu-accelerated simulation framework for multi-modal robot learning. arXiv preprint arXiv:2511.04831 (2025) [18] Moss, R.J., Corso, A., Caers, J., Kochenderfer, M.J.: BetaZero: Belief-State Planning for Long-Horizon POMDPs using Learned Approximations. In: Reinforcement Learning Conference (RLC) (2024) [19] Ni, T., Eysenbach, B., Salakhutdinov, R.: Recurrent model-free RL can be a strong baseline for many POMDPs. In: ICML, pp. 16,691–16,723 (2022) [20] Oord, A.v.d., Li, Y., Vinyals, O.: Representation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 (2018) [21] Papadimitriou, C.H., Tsitsiklis, J.N.: The complexity of Markov decision processes. Mathematics of Operations Research 12 (3), 441–450 (1987) [22] Parisotto, E., Song, F., Rae, J., Pascanu, R., Gulcehre, C., Jayakumar, S., Jaderberg, M., Kaufman, R.L., Clark, A., Noury, S., et al.: Stabilizing transformers for reinforcement learning. In: ICML, pp. 7487–7498 (2020) [23] Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al.: Pytorch: An im-perative style, high-performance deep learning library. NeurIPS 32 (2019) [24] Rudin, N., Hoeller, D., Reist, P., Hutter, M.: Learning to walk in minutes using massively parallel deep reinforcement learning. In: CoRL, pp. 91–100. PMLR (2022) [25] Salimans, T., Ho, J.: Progressive distillation for fast sampling of diffusion models. arXiv preprint arXiv:2202.00512 (2022) [26] Schrittwieser, J., Antonoglou, I., Hubert, T., Simonyan, K., Sifre, L., Schmitt, S., Guez, A., Lockhart, E., Hassabis, D., Graepel, T., et al.: Mas-tering atari, go, chess and shogi by planning with a learned model. Nature 
+
+588 (7839), 604–609 (2020) [27] Silver, D., Veness, J.: Monte Carlo planning in large POMDPs. In: NeurIPS, vol. 2, p. 2164–2172. Red Hook, New York (2010) [28] Song, J., Meng, C., Ermon, S.: Denoising diffusion implicit models. In: ICLR (2021) [29] Sunberg, Z., Kochenderfer, M.: Online algorithms for POMDPs with contin-uous state, action, and observation spaces. In: ICAPS, pp. 259–263 (2018) [30] Ye, N., Somani, A., Hsu, D., Lee, W.S.: DESPOT: Online POMDP planning with regularization. JAIR 58 , 231–266 (2017). DOI 10.1613/jair.5328 [31] Zhou, Y., Barnes, C., Lu, J., Yang, J., Li, H.: On the continuity of rotation representations in neural networks. In: CVPR, pp. 5745–5753 (2019)

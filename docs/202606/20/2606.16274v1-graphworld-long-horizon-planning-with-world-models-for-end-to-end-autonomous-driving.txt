@@ -1,0 +1,780 @@
+Title: GraphWorld: Long-Horizon Planning with World Models for End-to-End Autonomous Driving
+
+URL Source: https://arxiv.org/pdf/2606.16274v1
+
+Published Time: Tue, 16 Jun 2026 02:44:13 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 1
+
+# GraphWorld: Long-Horizon Planning with World Models for End-to-End Autonomous Driving 
+
+## Ziying Song, Caiyan Jia, Lin Liu, Lei Yang, Shengkai Zhang, Feiyang Jia, Fengda Zhao, Peiliang Wu, Shaoqing Xu, Chen Lv, Yadan Luo 
+
+Abstract —End-to-end autonomous driving has made significant progress by unifying perception, prediction, and planning within a single learning framework, achieving strong performance in short-horizon decision making. However, most existing E2E-AD methods remain confined to short-horizon planning and lack the ability to model long-term temporal dependencies, which severely limits their generalization and security in complex and highly interactive driving scenarios. In this work, we propose GraphWorld , an E2E-AD framework that explicitly enhances long-horizon planning through latent world modeling. We introduce an Ego-Centric Interaction Graph, which adaptively models critical neighboring agents based on spatial proximity, and propagates relational context to planning queries via cross-node cross-attention. We present a World-State-Conditioned Planning that learns ego-centric latent world representations by modeling interactions between an ego vehicle and surrounding agents. This latent world state captures key interaction dynamics and safety-relevant semantics, and serves as a conditioning signal to guide long-horizon, safety-aware trajectory planning. Extensive experiments on Bench2Drive, NAVSIMv1/2, and nuScenes demonstrate that GraphWorld significantly reduces collision rates and improves long-horizon planning performance, validating its effectiveness in complex driving environments. 
+
+Index Terms —Autonomous Driving, End-to-End Autonomous Driving, World Models. 
+
+## ✦
+
+## 1 INTRODUCTION 
+
+# ENd-to-end autonomous driving (E2E-AD) has made substantial progress [1, 2], unifying perception, pre-diction, and planning within a single framework. Among these tasks, planning serves as the core component of E2E-AD, directly governing the ego vehicle’s decision-making and generating future trajectory outputs for the controlled vehicle [3, 4, 5, 6]. E2E-AD has seen continuous innovation in trajectory planning task. Early E2E-AD methods such as UniAD [3], VAD [5], TransFuser [7]and UAD [8] primarily adopt single-modal trajectory outputs, while subsequent works including VADv2 [9], MomAD [4], SparseDrive [6], DiffusionDrive [10], and DIVER [11] extend this line of research toward multi-modal trajectory generation. And anchor-based multi-modal E2E-AD methods, Hydra-MDP [12], GTRS [13], GoalFlow [14], MindDrive [15], and GuideFlow [16] em-ploy more effective trajectory selection. Despite these ad-vances, as shown in Figure 2 (a), current E2E-AD methods remain fundamentally constrained by their limited long-horizon planning capability. Existing architectures typically process temporal information in a short-sighted manner, 
+
+Corresponding author: Caiyan Jia. 
+
+• Ziying Song is with the Beijing Key Laboratory of Traffic Data Mining and Embodied Intelligence, School of Computer Science and Technology, Beijing Jiaotong University, Beijing, China, and also with the School of Artificial Intelligence (School of Software), Yanshan University, Qin-huangdao, China. 
+
+• Caiyan Jia, Lin Liu, Shengkai Zhang, and Feiyang Jia are with Beijing Key Laboratory of Traffic Data Mining and Embodied Intelligence, School of Computer Science and Technology, Beijing Jiaotong University. 
+
+• Lei Yang and Chen Lv are with School of Mechanical and Aerospace Engineering, Nanyang Technological University, Singapore. 
+
+• Fengda Zhao and Peiliang Wu are with the School of Artificial Intelligence (School of Software), Yanshan University, Qinhuangdao, China. 
+
+• Shaoqing Xu is with University of Macau, China. 
+
+• Yadan Luo is with The University of Queensland, Australia. 0 10 20 30 40 50  
+
+> 84
+> 85
+> 86
+> 87
+> 88
+> 89
+> 90
+> Epona
+> LAW
+> World4Drive
+> WorldRFT
+> DIVER
+> DiffusionDrive
+> WoTE
+> Ours
+> FPS (higher is better)
+> PDMS on NAVSIMv1
+> TransFuser
+> GoalFlow
+> DriveSuprim
+> DriveVLA-W0
+> DriveLaW
+> DriveX-S
+> World Models
+> E2E-AD Methods
+
+Fig. 1: Performance comparison of SOTA methods on NAVSIMv1. Compared with representative world-model-based and end-to-end autonomous driving methods, our approach achieves a favorable balance between computa-tional efficiency and prediction accuracy. lacking mechanisms for modeling and reasoning over ex-tended temporal horizons. Long-horizon planning perfor-mance enables multi-step rollout execution at test time, thereby reducing the frequency of online inference and, consequently, lowering the required hardware compute. Parallel to these E2E-AD developments, world models [17, 18, 19] have rapidly progressed and demonstrated strong potential in learning environment dynamics and pre-dicting future states through imagination-based inference. Analogous to human cognitive processes, world models possess the ability to simulate and reconstruct possible future scenarios, offering a promising path toward long-horizon reasoning in autonomous driving. When combined  
+
+> arXiv:2606.16274v1 [cs.CV] 15 Jun 2026 SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 2
+
+(a) Existing E2E-AD  
+
+> Diffusion model Video Generation
+
+(b) World-Model-based E2E-AD 
+
+> TimeStamp
+
+(c)  GraphWorld (Ours)    
+
+> Final Plan ( Long-Horizon) World Model World State
+> at timestamp t+1
+> Ego-Centric Interaction Graph
+> at timestamp t
+
+High Inference Efficiency Short-Horizon Planning Long-Horizon Imagination Low Inference Efficiency High Inference Efficiency Long-Horizon Planning 
+
+Fig. 2: Motivation of GraphWorld. (a) E2E-AD methods are constrained by short-horizon reasoning, limiting long-term robustness. (b) World-model approaches enable long-horizon imagination but suffer from low efficiency. (c) GraphWorld 
+
+combines Ego-Centric Interaction Graph with latent world representations for efficient long-horizon planning .with E2E architectures, world models can provide richer temporal context, enhance spatiotemporal understanding, and strengthen anticipation of future events. However, as shown in Figure 2 (b), current methods [20, 21, 22, 23] that attempt to incorporate world models into E2E-AD largely rely on diffusion-based future scene generation, which is computationally intensive and unsuitable for real-time ap-plications. Moreover, some methods like WoTE [24] and LAW [25] focus primarily on pixel-level future prediction rather than long-horizon trajectory reasoning, leaving the long-range planning problem essentially underexplored. In this work, we propose GraphWorld , an E2E-AD framework that explicitly enhances long-horizon planning through latent world modeling. Instead of generating future scenes, GraphWorld, as shown in Figure 2 (c), learns com-pact ego-centric relational world representations by model-ing interactions between an ego vehicle and its surrounding agents. Importantly, rather than relying on explicit multi-step rollout, GraphWorld improves long-horizon planning by learning a latent world state that implicitly encodes future interaction dynamics and safety-relevant evolution. To this end, we introduce a dynamically constructed Ego-Centric Interaction Graph , which adaptively captures critical neighboring agents based on spatial proximity. By focusing on decision-relevant neighbors, ECIG filters out irrelevant interactions and produces a more informative and stable representation. Relational context is propagated to planning queries via cross-node cross-attention, enabling effective long-horizon reasoning. Furthermore, we propose a World-State-Conditioned Planning that leverages the inferred ego-centric latent world state to guide trajectory generation. The learned world state encodes key interaction dynamics and safety-relevant semantics, and is used to condition multi-modal trajectory queries through a learnable impor-tance network. This design allows the planner to empha-size safer and more consistent long-term behaviors while suppressing implausible trajectories. We first perform E2E pretraining to obtain a stable initialization, and then im-pose explicit temporal supervision on the world state to encourage temporally consistent and semantically meaning-ful latent dynamics. Extensive experiments on the closed-loop Bench2Drive benchmark and the open-loop nuScenes dataset demonstrate that GraphWorld significantly reduces long-range collision rates and consistently improves long-horizon planning performance, validating its effectiveness in complex environments. Our contributions are summa-rized as follows.  
+
+> •
+
+We introduce GraphWorld , a novel E2E-AD framework that shifts the paradigm from pixel-space generation to agent-centric relational graph imagination, specifically optimized for long-horizon E2E-AD.  
+
+> •
+
+We propose a dynamically constructed Ego-Centric Interaction Graph (ECIG) together with a World-State-Conditioned Planning (WSCP), which jointly ex-tract stable interaction cues and apply them to guide multi-modal trajectory planning via an importance-reweighting network.  
+
+> •
+
+We evaluate GraphWorld across a comprehensive SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 3
+
+collection of closed-loop (Bench2Drive, NAVSIM) and open-loop (nuScenes, Adv-nuScenes, nuScenes-C) benchmarks, achieving consistent gains in long-horizon planning and safety. Notably, on the nuScenes 6-second long-horizon planning task, it reduces the average collision rate by 19.5% over the latent world-model World4Drive [26]. Furthermore, it achieves 13.3% faster speed over DiffusionDrive [10] on the NAVSIMv1, highlighting its suitability for real-time deployment. 
+
+## 2 RELATED WORK 
+
+2.1 End-to-end Autonomous Driving 
+
+E2E-AD methods [3, 5, 6, 7, 8, 9, 10, 27] map raw sen-sor inputs to vehicle control commands or planned tra-jectories. UniAD[3] is a comprehensive framework that integrates full-stack driving tasks into a single network. VAD [5] presents a fully vectorized scene representation for end-to-end driving. MomAD [4] introduces trajectory and perception momentum to stabilize and refine trajectory outputs. DiffusionDrive [10] learns denoising transitions from an anchored Gaussian distribution to multi-modal action distributions. DIVER [11] combines reinforcement learning with diffusion-based generation to produce diverse and feasible trajectories. Hydra-MDP [12] employs a multi-teacher student paradigm. GTRS [13] proposes generalized trajectory scoring for coarse-to-fine trajectory evaluation. GoalFlow [14] constrains diffusion-generated trajectories through goal-point supervision to address trajectory diver-gence. GuideFlow [16] explicitly models the flow-matching process to mitigate mode collapse and enable flexible con-ditioning. Despite these advances, existing E2E-AD frame-works remain fundamentally constrained by limited long-horizon planning capability. 
+
+2.2 World Models for Autonomous Driving 
+
+The development of world models [18, 28, 29, 30, 31, 32] have been rapid. They are increasingly becoming a key component of autonomous driving, supporting mecha-nisms for scene dynamic modeling, future event prediction, and downstream decision-making. Driving world models [17, 18, 19, 33] have evolved into integrated processes that unify perception, world rule modeling, generation, recon-struction, and multi-task generalization. A major research direction is the world model optimized through explicit generation. DriveDreamer [22], Vista [20], UniFuture [34], Epona [35], and DriveX [36] are capable of high-fidelity video synthesis and controllable policy generation. Other methods [37, 38] focus on agent-level generation . Adap-tiveDriver [37] predicts the parameters of the agent’s motion controller, rather than directly predicting its spatiotemporal trajectory. Due to their efficiency and abstraction capability, latent world models [26, 39, 40] have attracted significant attention . However, most driving world models prioritize explicit generation or reconstruction, limiting their ability to capture spatial semantics and multi-modal driving in-tentions. Only a few E2E-AD works [24, 41] directly lever-age latent world models for planning, and their long-term reasoning capabilities are still an area that requires further investigation. 
+
+## 3 RETHINKING LONG -H ORIZON PLANNING 
+
+In practical autonomous driving systems, planning is typi-cally performed in a receding-horizon manner, where trajec-tories are iteratively updated at high frequency. At each time step t, the planner predicts a future trajectory τt, but only a short prefix is executed before replanning with updated observations. Therefore, long-horizon planning should not be interpreted as executing a fixed long trajectory, but rather as the ability to make foresighted decisions under iterative replanning. Formally, the planner solves 
+
+τ ∗ 
+
+> t
+
+= arg max 
+
+> τt
+
+p(τt | O ≤t), (1) where O≤t denotes historical observations. Although re-planning is frequent, the quality of τ ∗ 
+
+> t
+
+depends on whether the model can anticipate future interaction risks beyond im-mediate observations. A short-sighted planner may produce locally optimal but globally unsafe decisions under complex multi-agent interactions. In this work, we do not aim to extend the prediction horizon via explicit multi-step rollout. Instead, GraphWorld enhances long-horizon capability by learning a compact ego-centric latent world state 
+
+Wcur = fθ (O≤t), (2) which encodes interaction dynamics and future-relevant semantics. This latent representation enables the planner to reason about the long-term consequences of current actions, even under short-term replanning. To ensure that the learned representation focuses on decision-relevant structure, we construct an ego-centric in-teraction graph that selectively models neighboring agents: 
+
+N = i | ∥ pi − pego ∥2 < τ . (3) By filtering out irrelevant interactions, the resulting latent world state becomes more stable and informative, which is critical for robust long-horizon reasoning. Furthermore, instead of performing explicit multi-step prediction, we model world evolution in a latent space via a continuous transformation between current and target states: 
+
+W(t) = (1 − t)Wcur + tWtgt , t ∼ U (0 , 1) , (4) which avoids error accumulation commonly observed in autoregressive rollout while preserving future-aware struc-ture. Regarding evaluation, although we follow standard benchmarks with prediction horizons up to 6 seconds, per-formance at later timestamps (e.g., 5–6s) reflects robust-ness under compounding uncertainty. Improvements in this regime indicate stronger capability in handling long-term interactions and safety-critical scenarios. Overall, we argue that long-horizon planning should be understood as the ability to learn future-aware representa-tions that support robust decision-making under iterative replanning, rather than merely extending the prediction horizon. SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 4Ego-Centric Neighbor Selection      
+
+> Interaction-Aware
+> World Representation
+> Cross Attn.
+> Neighbor Features Token Ego Features Token
+> KV
+> World-State-Conditioned Planning
+> Image Encoder
+> Ego-Centric Interaction Graph
+> World-State-Conditioned Planning
+> Add & Norm.
+> Add & Norm. World State at Supervise
+> Instances Tokens Graph Tokens Motion Tokens
+> T+1 Branch
+> Motion Weight World-Conditioned Motion Queries
+> Multi-view  Input at Time
+> Multi-view Input at Time 𝑡
+> Perception (Map/Det)
+> MLP World State at
+> Q
+> T Branch
+> Ego-Centric Interaction Graph
+
+Long-Horizon Planning 
+
+> Image Encoder
+> Euler Update
+> Flow Matching
+> 1-
+
+Fig. 3: The proposed long-horizon E2E-AD Framework of GraphWorld. It first encodes sensor data into instance-level representations, and then constructs an ego-centric latent world model through a dynamically built ECIG that selectively captures critical neighboring agents and their interactions. Based on this interaction-aware world representation, GraphWorld further performs WSCP module by jointly modulating agent motion hypotheses and ego planning queries, enabling interaction-consistent and safety-aware trajectory generation. 
+
+## 4 METHOD 
+
+GraphWorld is an E2E-AD framework designed to enhance long-horizon planning through latent world modeling. As shown in Figure 3, GraphWorld constructs an ego-centric la-tent world representation from multi-agent instance features extracted from perception by dynamically modeling inter-actions between the ego vehicle and surrounding agents. The framework consists of two key components: (1) an Ego-Centric Interaction Graph (ECIG) that encodes ego–agent interactions in a structured relational space, and (2) a World-State-Conditioned Planning (WSCP) that leverages the inferred world state to enable long-horizon, safety-aware trajectory planning. 
+
+4.1 Ego-Centric Interaction Graph (ECIG) 
+
+We introduce an ECIG that explicitly encodes salient ego– agent interactions and injects structured relational context into ego planning queries via cross-attention, enabling ef-fective long-horizon reasoning. 
+
+Ego-centric Neighbor Selection. At each planning step, an ego vehicle and its surrounding agents are represented as graph nodes. Let F = {f1, . . . , fN , fego }, fi ∈ RC denote instance-level features at a single planning step for N se-lected agents and the ego vehicle. The ego node is explicitly included as the center of interaction modeling. To construct a sparse interaction graph, ECIG dynamically selects a fixed number of neighboring agents based on spatial proximity. Let pi ∈ R2 denote the predicted 2D center of agent i
+
+and pego the ego center. We define an ego-centric neighbor set N = i ∥pi − pego ∥2 < τ , where τ is a distance threshold. As the cardinality of the neighbor set may vary across scenes, we apply a P AD ORTRIM operation to obtain a fixed-size K-neighbor set: 
+
+NK = PAD ORTRIM (N , K ). (5) 
+
+Ego-centric Interaction Graph. The resulting interaction graph is defined as G = ( V, E) with V = {ego } ∪ N K ,where directed edges E connect each neighbor node to the ego node, forming an ego-centered star topology. Let 
+
+Qego ∈ RM ×C denote M multi-modal ego planning queries, and Fnbr = {fi | i ∈ NK } ∈ RK×C denote neighbor features. ECIG propagates interaction information through cross-attention: 
+
+˜Qego = CROSS ATTN (Qego , Fnbr , Fnbr ), (6) where ego queries attend to neighboring agent features, enabling each planning hypothesis to selectively aggregate interaction-aware context. 
+
+Interaction-aware World Representation. To construct a structured and temporally grounded latent world state, we condition world representation learning on multi-source contextual cues, including interaction structure, mo-tion history, and static map semantics. Specifically, given interaction-enhanced ego queries ˜Qego , neighbor features 
+
+Fnbr , historical ego-agent states Ht = {ht−L, . . . , ht} of L-step horizon, and local map embeddings M, we first model temporal dynamics using a recurrent world encoder: 
+
+st = GRU (st−1, CONCAT (Ht, M)) , (7) where Ht is constructed by temporally stacking the mo-tion states (e.g., position, velocity, and heading) of the ego vehicle and its neighbors over the past (L) frames, st
+
+denotes the temporally accumulated world context at time 
+
+t. Here, map features M are first pooled into a compact embedding before concatenation with the historical state sequence. We then integrate interaction-aware information via cross-attention: 
+
+cint = CROSS ATTN 
+
+
+
+st, ˜Qego ∪ Fnbr , ˜Qego ∪ Fnbr 
+
+
+
+. (8) Based on the resulting context, we update node-level latent world states through conditioned residual injection: 
+
+wi = fi + ϕint  
+
+> a
+
+(cint , ri), wego = fego + ϕint  
+
+> e
+
+(cint ), (9) SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 5
+
+where the ego-centric relational geometry of agent i is denoted by ri = MLP  [fi, pi − pego ], and lightweight con-ditional projection networks are ϕint  
+
+> a
+
+(·), ϕint  
+
+> e
+
+(·). The resulting latent world state W = {w1, . . . , wK , . . . , wN , wego } cap-tures temporally consistent ego-agent interaction dynamics under map constraints and conditions downstream long-horizon planning. Here, K denotes the number of selected neighbors and N denotes the total number of agent anchors (set to 900 in nuScenes); the anchors wK+1: N = 0 are zero-padded. 
+
+4.2 World-State-Conditioned Planning (WSCP) 
+
+Given the interaction-aware world representation inferred by ECIG, we propose a WSCP module to enable long-horizon, safety-aware trajectory generation. Instead of de-coding trajectories solely from planning queries, WSCP explicitly conditions both agent motion hypotheses and ego planning on the latent world dynamics, allowing interaction-consistent reasoning over extended horizons. 
+
+Flow-Matching for Dynamic World-State. To explic-itly model long-horizon world evolution in a principled continuous-time manner, we formulate world-state dy-namics using a conditional Flow-Matching framework [42]. Rather than performing discrete autoregressive updates or iterative diffusion sampling, Flow-Matching directly learns a time-dependent velocity field that transports latent world states along interaction-consistent trajectories. For clarity, we distinguish between a current latent world state Wcur inferred from present observations, and a conditioned target world state Wtgt constructed from fu-ture agent motion hypotheses, ego planning context, and static map semantics. The current world state is given by 
+
+Wcur = {w1, . . . , wN , wego }, as inferred by the ECIG. The target world state Wtgt is constructed by condition-ing on multi-modal agent motion hypotheses, ego planning context, and optional map embeddings, and is used solely as a supervision signal for world-state evolution rather than an explicit rollout target. Formally, we define 
+
+Wtgt = ϕtgt 
+
+ CONCAT 
+
+  ¯Qmotion , ¯Qego , M , (10) where the mode-aggregated agent motion latents and ego planning representations are denoted by ¯Qmotion =
+
+MEAN m(Qmotion ) and ¯Qego = MEAN m( ˜Qego ), respectively. 
+
+M denotes optional map embeddings, and ϕtgt (·) is alightweight projection network mapping contextual cues to the latent world space. We define a continuous interpolation between the cur-rent and target world states: 
+
+W(t) = (1 − t) Wcur + t Wtgt , t ∼ U (0 , 1) , (11) where t denotes a randomly sampled continuous time. The corresponding ground-truth velocity along this path is 
+
+v⋆(t) = dW(t)
+
+dt = Wtgt − Wcur . (12) We parameterize a conditional velocity field 
+
+vθ (t) = fθ
+
+ W(t), t, ¯Qego , ¯Fnbr , M , (13) where fθ (·) is a lightweight neural network, ¯Qego =
+
+MEAN m( ˜Qego ) aggregates multi-modal ego planning hy-potheses, ¯Fnbr = MEAN (Fnbr ) summarizes the surrounding agent context, and M denotes optional local map embed-dings. In this way, the learned flow is explicitly conditioned on ego–agent interactions and static scene constraints. Training is performed using the Flow-Matching objec-tive: 
+
+LFM = Et, Wcur ,Wtgt 
+
+h
+
+∥vθ (t) − v⋆(t)∥22
+
+i
+
+, (14) which enforces the predicted velocity field to match the true transport direction at arbitrary intermediate world states. At inference time, the learned velocity field defines a continuous-time dynamical system: 
+
+dW(t)
+
+dt = vθ (t), (15) which is approximated using a single-step Euler update: 
+
+Wt ← Wt + ∆ t · vθ (t). (16) This Flow-Matching formulation enables stable and interaction-consistent refinement of the latent world state, serving as a temporally grounded conditioning signal for long-horizon, safety-aware planning. And during genera-tion, the number of sampling steps is set to 2. 
+
+Importance Reweighting for Motion Modeling. 
+
+Let Wt = {W1: N , Wego } denote the refined latent world state at time t. To inject long-horizon world dynam-ics into trajectory hypotheses, we condition agent motion queries on the updated agent world state: 
+
+C = ϕc(W1: N ) ∈ RB×N ×C , (17) 
+
+Q′ 
+
+> motion
+
+= LN (Qmotion + C[: , :, None , :]) . (18) Long-horizon planning is sensitive to the reliability of surrounding-agent predictions. We therefore perform mode-wise importance re-weighting using ego-conditioned world dynamics. Specifically, 
+
+α = σ
+
+
+
+fimp 
+
+
+
+CONCAT 
+
+
+
+Q′ 
+
+> motion
+
++ W↑ 
+
+> 1: N
+
+, f ↑
+
+> ego
+
+ 
+
+, (19) where fimp (·) denotes a lightweight two-layer MLP, σ(·) is the sigmoid function and ↑ denotes broadcast along agent and mode dimensions. The re-weighted motion queries are 
+
+ˆQmotion = α ⊙ Q′
+
+> motion
+
+, (20) where α reflects the world-conditioned reliability of each motion mode. World-to-Ego Feedback for Planning Queries. The refined world state further conditions ego planning via residual modulation: 
+
+Q′ 
+
+> plan
+
+= Qplan + Wego . (21) 
+
+Multi-modal Motion and Ego Trajectory Decoding. Fi-nally, the re-weighted agent motion queries and world-conditioned ego planning queries are jointly decoded by task-specific heads: 
+
+
+
+{πn,m , ˆYn,m } = fmotion 
+
+ ˆQmotion 
+
+
+
+,
+
+{πego  
+
+> m
+
+, ˆYego  
+
+> m
+
+} = fplan 
+
+
+
+Q′
+
+> plan
+
+
+
+,
+
+(22) where ˆYn,m ∈ RT ×2 denotes the m-th predicted future trajectory of agent n, and πn,m is its corresponding mode probability. Similarly, ˆYego  
+
+> m
+
+∈ RT ×2 denotes the m-th ego trajectory hypothesis, with πego  
+
+> m
+
+indicating its corresponding confidence score. SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 6
+
+TABLE 1: Planning results for 6-second long-horizon planning on the nuScenes validation set.                                                                                                                           
+
+> Method L2 (m) ↓Col .Rate (%) ↓
+> 1s 2s 3s 4s 5s 6s Avg .1s 2s 3s 4s 5s 6s Avg .
+> UniAD [3] 0.47 0.91 1.35 1.91 2.47 3.07 1.70 0.25 0.36 0.61 0.99 1.64 2.51 1.06
+> SparseDrive [6] 0.43 0.87 1.23 1.75 2.32 2.95 1.59 0.19 0.31 0.56 0.87 1.54 2.33 0.97
+> MomAD [4] 0.41 0.85 1.13 1.67 1.98 2.45 1.42 0.17 0.30 0.54 0.83 1.43 2.13 0.90
+> LAW [41] 0.40 0.87 1.16 1.71 2.03 2.61 1.46 0.19 0.33 0.57 0.86 1.51 2.31 0.96
+> Epona [35] 0.39 0.91 1.17 1.73 2.02 2.75 1.50 0.14 0.18 0.45 0.74 1.48 2.23 0.87
+> World4Drive [26] 0.42 0.92 1.21 1.75 2.06 2.79 1.53 0.16 0.20 0.47 0.76 1.50 2.14 0.87
+> GraphWorld(Ours) 0.38 0.70 1.12 1.64 1.88 2.29 1.34 0.03 0.06 0.25 0.65 1.29 1.95 0.70
+
+4.3 Two-Stage Temporal World-State Supervision 
+
+To encourage the world state to learn a genuine representa-tion of future state evolution, we adopt a two-stage training strategy. In the first stage, we perform standard end-to-end training of the overall model. In the second stage, we apply explicit supervision to the world state of the world model. 
+
+Stage I: Single-step world state learning. In the first stage, the model is trained using inputs at time t only. Given multi-view observations at time t, GraphWorld infers a latent world state Wt through the ECIG and WSCP modules. The network is optimized with standard perception, motion prediction, and ego planning losses, allowing the world state to encode interaction-aware and safety-relevant scene semantics. 
+
+Stage II: Temporal world state consistency learning. In the second stage, we introduce temporal supervision by leveraging observations at time t+1 . Specifically, the model predicts the next-step world state Wt+1 from inputs at time 
+
+t+1 , while the world state inferred at time t is encouraged to be temporally consistent with Wt+1 . We enforce this consistency using an ℓ2 regression loss: 
+
+Lworld = ∥Wt − STOP GRAD (Wt+1 )∥22 , (23) where STOP GRAD (·) prevents gradient backpropagation through the t+1 branch. 
+
+Training objective. The final training loss is a weighted combination of task-specific losses and the temporal world-state consistency loss: 
+
+L = Lpercep + Lmotion + Lplan + λ Lworld , (24) where λ balances temporal consistency and task perfor-mance. 
+
+## 5 EXPERIMENTS 
+
+5.1 Dataset 
+
+Bench2Drive (Close-Loop). We conduct training and eval-uation of GraphWorld on the Bench2Drive [71], a closed-loop evaluation protocol based on the CARLA Leaderboard 2.0 [72] for E2E-AD. It provides a base training set of 1000 clips, with 950 used for training and 50 for open-loop validation. Each clip captures approximately 150 meters of continuous driving in a specific traffic scenario. For closed-loop evaluation, we use the official 220 routes, covering 44 interactive scenarios with 5 routes each. 
+
+NAVSIMv1/2 (Close-Loop). We conduct training and eval-uation of GraphWorld on the NAVSIMv1 [73] dataset. NAVSIMv1 is a real-world, planning-oriented dataset that builds upon OpenScene, a compact redistribution of nuPlan [74], the largest publicly available annotated driving dataset. It leverages eight cameras to achieve a full 360° field of view, along with a merged LiDAR point cloud derived from five sensors. Annotations are provided at 2 Hz and include both HD maps and object bounding boxes. The dataset is specifically designed to emphasize challenging driving scenarios involving dynamic changes in driving intentions, while deliberately excluding trivial cases such as stationary scenes or constant-speed cruising. 
+
+NuScenes (Open-Loop). We conduct extensive open-loop experiments on the nuScenes dataset [75], which consists of 1000 driving scenes (700 for training, 150 for validation and 150 for test). Each scene lasts 20 seconds and includes around 40 key-frames annotated at 2 Hz. Each sample contains six images from surround-view cameras (covering 360° FOV), and point clouds from both LiDAR and radar sensors. 
+
+Turning-nuScenes (Open-Loop). We conduct extensive open-loop experiments on the Turning-nuScenes dataset [4], a challenging subset of NuScenes proposed by MomAD [4] to evaluate trajectory consistency in non-trivial maneu-vers. While most planning tasks in the original nuScenes dataset primarily involve go-straight commands, Turning-nuScenes specifically focuses on turning scenarios to as-sess the temporal coherence of predicted trajectories. To construct this subset, samples are selected based on a dis-placement threshold of 25 meters between the predicted positions at 0.5s and 3.0s in the GT ego trajectory. The resulting validation set comprises 680 samples across 17 scenes, accounting for approximately one-tenth of the full nuScenes validation set. 
+
+Adv-nuSc (Open-Loop). To evaluate adversarial robustness, we conduct extensive open-loop experiments on the Adv-nuSc [76] dataset. It contains 156 scenes (6,115 samples) and is specifically crafted to challenge the ego vehicle by introducing adversarial traffic participants.It is built upon the validation split of the nuScenes dataset [75], which contains 150 scenes, each with 20 seconds of driving data. For each scene, we randomly select up to 10 background vehicles (if there are that many) that come close to the ego vehicle at any point in time and designate them as candidate adversarial agents. Challenger is then used to generate adversarial trajectories for these vehicles, creating diverse and challenging driving scenarios. 
+
+NuScenes-C (Open-Loop). NuScenes-C [77] is a corrupted benchmark derived from the nuScenes validation set, intro-ducing various types of noise to assess the robustness of planning models. It includes 27 corruption types applied at 5 severity levels. To evaluate robustness under adverse SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 7
+
+TABLE 2: Open-Loop , Closed-Loop results and Multi-Ability results on Bench2Drive (V0.0.3) under base training set. ‘mmt’ refers multi-mode trajectory variant of VAD and † denotes the re-implementation. * denotes expert feature distillation. ‘DS’ denotes Driving Score. ‘SR’ denotes Success Rate. ‘Effi’ denotes Efficiency. ‘Comf’ denotes Comfortness. ‘Merg.’ denotes Merging. ‘Overta.’ denotes Overtaking. ‘Emerge.’ denotes Emergency Brake.                                                                                                                                                                                                                    
+
+> Method Venue Open-loop Metric Closed-loop Metric Multi-Ability(%) ↑
+> Avg .L2 ↓DS ↑SR (%) ↑Effi ↑Comf ↑Merg .↑Overta .Emerge .Give WayTraffic SignMean
+> ThinkTwice* [43] CVPR2023 0.95 62.44 31.23 69.33 16.22 27.38 18.42 35.82 50.00 54.23 37.17 DriveAdapter* [44] ICCV2023 1.01 64.22 33.08 70.22 16.01 28.82 26.38 48.76 50.00 56.43 42.08 DriveDPO [45] NeurIPS2025 -62.02 30.62 --------Raw2Drive [46] NeurIPS2025 -71.36 50.24 --43.35 51.11 60.00 50.00 62.26 53.34
+> DriveTrans* [47] ICLR2025 0.62 63.46 35.01 100.64 20.78 17.57 35.00 48.36 40.00 52.10 38.60 WoTE* [24] ICCV2025 -61.71 31.36 --------
+> ThinkTwice mmt ∗† [43]CVPR2023 0.93 63.34 33.23 71.56 18.32 31.31 21.23 38.33 50.00 57.45 39.66
+> GraphWorld (Ours) 0.81 76.71 44.22 80.48 29.74 42.85 32.57 49.09 50.00 67.16 48.33 UniAD-Base [3] CVPR2023 0.73 45.81 16.36 129.21 43.58 14.10 17.78 21.67 10.00 14.21 15.55
+> VAD [5] ICCV2023 0.91 42.35 15.00 157.94 46.01 8.11 24.44 18.64 20.00 19.15 18.07 GenAD [48] ECCV2024 -44.81 15.90 --------
+> MomAD(SD) [4] CVPR2025 0.82 47.91 18.11 174.91 51.20 13.21 21.02 18.01 20.00 21.07 18.66
+> VAD mmt †[5] ICCV 2023 0.89 42.87 15.91 158.12 47.22 9.43 25.31 19.91 20.00 20.09 18.95
+> GraphWorld (Ours) 0.81 50.78 22.59 168.11 54.04 16.84 32.31 28.46 20.00 27.61 25.04
+> SparseDrive †[6] ICRA2025 0.87 44.54 16.71 170.21 48.63 12.18 23.19 17.91 20.00 20.98 18.85
+> GraphWorld (Ours) 0.79 51.55 25.47 181.12 56.59 18.74 31.66 25.30 20.00 26.66 24.47
+
+TABLE 3: Comparison on planning-oriented NAVSIMv1 
+
+navtest split with Closed-Loop metrics. ‘mmt’ refers multi-modal trajectory variant of TransFuser and ∗ denotes the re-implementation. 
+
+Method NC ↑ DAC ↑ TTC ↑ Conf. ↑ EP ↑ PDMS ↑
+
+E2E-based Methods 
+
+VADv2 [9] 97.2 89.1 91.6 100 76.0 80.9 TransFuser [7] 97.7 92.8 92.8 100 79.2 84.0 
+
+TransFuser mmt ∗ [7] 96.2 95.4 90.7 100 80.7 85.1 UniAD [3] 97.8 91.9 92.9 100 78.8 83.4 PARA-Drive [49] 97.9 92.4 93.0 99.8 79.3 84.0 DRAMA [50] 98.0 93.1 94.8 100 80.1 85.5 GoalFlow [14] 98.3 93.8 94.3 100 79.8 85.7 Hydra-MDP [12] 98.3 96.0 94.6 100 78.7 86.5 FUMP [51] 98.1 96.2 94.2 100 82.0 87.8 DiffusionDrive [10] 98.2 96.2 94.7 100 82.2 88.1 DIVER [11] 98.5 96.5 94.9 100 82.6 88.3 DriveSuprim [52] 97.8 97.3 93.6 100 86.7 89.9 GoalFlow [14] 98.4 98.3 94.6 100 85.0 90.3 ReCogDrive-IL[53] 98.1 94.7 94.2 100 80.9 86.5 
+
+VLA-based Methods 
+
+AutoVLA [54] 98.4 95.6 98.0 99.9 81.9 89.1 Recogdrive [53] 98.2 97.8 95.2 99.8 83.5 89.6 DriveVLA-W0 [55] 98.7 99.1 95.3 99.3 83.3 90.2 DriveWorld-VLA [56] 99.1 98.2 96.1 100 85.9 91.3 
+
+World-Model-based Methods 
+
+DrivingGPT[57] 98.9 90.7 94.9 95.6 79.7 82.4 Resim[58] – – – – – 86.6 DriveVLA-W0 [55] 98.4 95.3 95.2 100 80.9 87.2 PWM[59] 98.6 95.9 95.4 100 81.8 88.1 LAW [41] 96.4 95.4 88.7 99.9 81.7 84.6 World4Drive [26] 97.4 94.3 92.8 100 79.9 85.1 Epona [35] 97.9 95.1 93.8 99.9 80.4 86.2 WoTE [24] 98.5 96.8 94.9 99.9 81.9 88.3 WorldRFT [60] 97.8 96.8 94.0 100 81.7 87.8 DriveLaW [61] 99.0 97.1 96.7 100 81.3 89.1 DriveX-S[36] 97.5 94.0 93.0 100 79.7 84.5 
+
+GraphWorld (Ours) 99.0 97.1 95.5 100 83.2 90.1 
+
+weather conditions, we select three representative weather corruptions — Rain, Snow, and Fog — as our test scenarios. 
+
+5.2 Evaluation Metrics 
+
+Close-Loop (Bench2Drive). The Bench2Drive [71] includes five metrics for closed-loop evaluation: Driving Score (DS), Success Rate (SR), Efficiency, Comfortness, and Multi-Ability. The Success Rate quantifies the proportion of routes successfully completed within the allotted time. The Driv-ing Score follows CARLA [11], incorporating both route completion status and violation penalties, where infrac-tions reduce the score via discount factors. Efficiency and Comfortness are used to measure the speed performance and comfort of the autonomous driving system during the driving process, respectively. Multi-Ability measures 5 ad-vanced skills, including ‘Merging, Overtaking, Emergency Brake, Give Way, and Traffic Sign’, independently for urban driving. 
+
+Close-Loop (NAVSIMv1). NAVSIMv1[73] metrics include No at-fault Collision (NC), Drivable Area Compliance (DAC), Time-to-Collision (TTC), Comfort (C.), and Ego Progress (EP). NAVSIMv1 uses the Predictive Driver Model Score (PDMS) to evaluate model performance. 
+
+Close-Loop (NAVSIMv2). NAVSIMv2 [62] evaluates plan-ners using the Extended Predictive Driver Model Score (EPDMS), which aggregates penalties and weighted sub-scores including no at-fault collision (NC), drivable area compliance (DAC), driving direction compliance (DDC), traffic light compliance (TLC), ego progress (EP), time to collision (TTC), lane keeping (LK), history comfort (HC), and extended comfort (EC). It also introduces a Navhard 
+
+split with a two-stage protocol: (i) the planner is scored on real observations, and (ii) it is re-evaluated under perturbed future observations synthesized via 3D Gaussian Splatting around the stage-1 endpoint. The final EPDMS is obtained by Gaussian-weighted aggregation of the two-stage scores. 
+
+Open-Loop. For the nuScenes dataset [75], Adv-nuSc [76], Turning-nuScenes [4], and nuScenes-C [77], we employ conventional L2 error and CR (collision rate) as metrics, aligning with the computation method of SparseDrive [6]. SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 8
+
+TABLE 4: Comparison with SOTA methods on the NAVSIMv2 navhard split [62]. 
+
+Method Backbone Stage NC ↑ DAC ↑ DDC ↑ TL ↑ EP ↑ TTC ↑ LK ↑ HC ↑ EC ↑ EPDMS ↑
+
+E2E-based Methods 
+
+TransFuser [7] ResNet-34 Stage 1 96.2 79.5 99.1 99.5 84.1 95.1 94.2 97.5 79.1 23.1 Stage 2 77.7 70.2 84.2 98.0 85.1 75.6 45.4 95.7 75.9 DiffusionDrive [10] ResNet-34 Stage 1 96.0 79.7 97.4 99.5 81.3 93.1 90.8 96.8 73.8 24.2 Stage 2 82.1 72.2 88.5 98.7 85.1 78.8 49.2 89.3 71.2 GuideFlow [16] ResNet-34 Stage 1 96.6 80.5 96.3 99.3 82.3 94.9 91.5 97.7 67.8 27.1 Stage 2 87.3 76.7 88.8 99.2 84.3 85.1 49.7 93.1 44.5 RAP-DINO VIT Stage 1 97.1 94.4 98.8 99.8 83.9 96.9 94.7 96.4 66.2 36.9 Stage 2 83.2 83.9 87.4 98.0 86.9 80.4 52.3 95.2 52.4 DriveSuprim [52] V2-99 Stage 1 98.9 95.1 99.2 99.6 76.1 99.1 94.7 97.6 54.2 42.1 Stage 2 87.9 88.8 89.6 98.8 80.3 86.0 53.5 97.1 56.1 
+
+VLA-based Methods 
+
+SpanVLA [63] Qwen2.5-VL-3B Stage 1 98.4 94.3 97.8 99.9 85.7 97.2 94.2 97.6 72.1 40.1 Stage 2 86.9 84.3 87.1 98.2 85.5 82.7 62.3 96.8 67.4 DiffVLA [64] V2-99 + ViT-L/14 Stage 1 95.7 99.2 100.0 100.0 85.9 96.4 97.1 95.0 84.2 45.0 Stage 2 81.2 88.8 94.6 99.0 86.0 76.4 59.8 98.6 80.4 
+
+World-Model-based Methods 
+
+MindDrive [15] ResNet-34 Stage 1 96.1 86.0 98.8 99.3 83.3 95.6 94.4 97.6 74.7 30.9 Stage 2 82.6 79.1 86.4 98.0 85.3 79.4 49.2 96.5 71.0 World4Drive [26] ResNet-34 Stage 1 97.3 89.1 97.6 99.7 60.5 96.8 87.7 93.1 60.0 34.9 Stage 2 91.4 82.0 91.0 98.5 53.1 90.6 52.3 93.3 62.8 Stage 1 98.1 97.9 97.9 98.0 83.9 97.8 97.2 95.4 64.5 GraphWorld (Ours) ResNet-34 Stage 2 88.6 85.9 92.2 97.6 82.4 87.0 56.6 91.4 44.0 53 .653 .653 .6
+
+TABLE 5: Comparison with SOTA methods on the NAVSIMv2 navtest split [62]. EPDMS ∗ denotes results computed with the original NAVSIMv2 evaluation code before the human-behavior filtering fix, while EPDMS denotes the corrected official implementation. 
+
+Method NC ↑ DAC ↑ DDC ↑ TL ↑ EP ↑ TTC ↑ LK ↑ HC ↑ EC ↑ EPDMS ↑
+
+E2E-based Methods 
+
+TransFuser [7] 96.9 89.9 97.8 99.7 87.1 95.4 92.7 98.3 87.2 76.7 DiffusionDrive [10] 98.2 95.9 99.4 99.8 87.5 97.3 96.8 98.3 87.7 84.5 Hydra-MDP++ [65] 97.2 97.5 99.4 99.6 83.1 96.5 94.4 98.2 70.9 81.4 DriveSuprim [52] 97.5 96.5 99.4 99.6 88.4 96.6 95.5 98.3 77.0 83.1 DiffusionDriveV2 [66] 97.7 96.6 99.2 99.8 88.9 97.2 96.0 97.8 91.0 87.5 
+
+VLA-based Methods 
+
+DriveWorld-VLA [56] 98.6 99.1 99.6 99.8 87.4 97.9 97.0 97.8 78.6 86.8 DriveVLA-W0 [55] 98.5 99.1 98.0 99.7 86.4 98.1 93.2 97.9 58.9 86.1 Recogdrive [53] 98.3 95.2 98.3 99.8 87.1 97.5 96.6 99.5 86.5 83.6 
+
+World-Model-based Methods 
+
+Latent-WAM [67] 98.1 97.3 99.6 99.8 87.7 97.3 97.6 98.1 87.3 89.3 GraphWorld (Ours) 98.4 98.8 99.1 99.1 85.9 97.9 96.0 97.8 74.6 89.5 
+
+TABLE 6: Planning results for 3-second short-horizon plan-ning on the nuScenes validation set.                                                                                                                        
+
+> Method L2 (m) ↓Col .Rate (%) ↓
+> 1s 2s 3s Avg .1s 2s 3s Avg .
+> UniAD [3] 0.48 0.96 1.65 1.03 0.10 0.15 0.61 0.29
+> VAD [5] 0.41 0.70 1.05 0.72 0.11 0.24 0.42 0.26
+> DiffusionDrive [10] 0.29 0.58 0.96 0.61 0.02 0.05 0.22 0.09
+> DIVER [11] ----0.01 0.05 0.15 0.07
+> FocalAD [68] 0.27 0.57 0.96 0.60 0.00 0.04 0.24 0.09
+> SparseDrive [6] 0.30 0.58 0.96 0.61 0.01 0.05 0.23 0.10
+> LAW [41] 0.26 0.57 1.01 0.61 0.14 0.21 0.54 0.30
+> GenAD [48] 0.28 0.49 0.78 0.52 0.08 0.14 0.34 0.19
+> Drive-OccWorld [69] 0.25 0.44 0.72 0.47 0.03 0.08 0.22 0.11
+> SSR [70] 0.19 0.36 0.62 0.39 0.10 0.10 0.24 0.15
+> MomAD [4] 0.31 0.57 0.91 0.60 0.01 0.05 0.22 0.09
+> GraphWorld(Ours) 0.29 0.55 0.89 0.57 0.00 0.04 0.20 0.08
+
+5.3 Implementation Details 
+
+To demonstrate the generalization capability of Graph-World , we evaluate it against several strong E2E-AD base-TABLE 7: Motion prediction results on the nuScenes dataset. 
+
+Method minADE ↓ minFDE ↓ MR ↓ EPA ↑
+
+UniAD [3] 0.71 1.02 0.151 0.456 
+
+VAD [5] 0.68 0.88 0.083 -
+
+SparseDrive [6] 0.62 0.99 0.136 0.482 
+
+GraphWorld(Ours) 0.55 0.86 0.112 0.512 
+
+lines, including SparseDrive [6] and TransFuser [7]. On the Bench2Drive [71], nuScenes [75], and Adv-nuScenes [76] datasets, we compare GraphWorld with 
+
+SparseDrive . For nuScenes and Adv-nuScenes, we adopt a ResNet-50 [78] backbone with an input resolution of 
+
+256 × 704 . The detection module operates within a circular range of 55 meters, while the online mapping module covers a 60 × 30 meter area (longitudinal × lateral). The motion prediction module generates 6 trajectory modes. For Bench2Drive , we use a ResNet-50 backbone with 6 SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 9
+
+TABLE 8: Robustness study of planning performance on 
+
+Adv-nuSc under adversarial driving scenarios.                                    
+
+> Method Col .Rate (%) ↓
+> 1s 2s 3s Avg .
+> UniAD [3] 0.800 4.100 6.960 3.950
+> VAD [5] 4.460 7.590 9.080 7.050
+> SparseDrive [6] 0.029 0.618 2.430 1.026
+> DiffusionDrive [10] 0.068 1.299 3.646 1.671
+> DIVER [11] 0.033 0.423 1.798 0.752
+> GraphWorld (Ours) 0.028 0.420 1.780 0.742
+
+TABLE 9: Robustness study of planning performance on 
+
+nuScenes-C .                                                                                   
+
+> Scene Method Col .Rate (%) ↓
+> 1s 2s 3s Avg .
+> Clean SparseDrive [6] 0.01 0.05 0.18 0.08
+> MomAD [4] 0.01 0.05 0.22 0.09
+> DiffusionDrive [10] 0.03 0.05 0.16 0.08
+> GraphWorld (Ours) 0.00 0.04 0.20 0.08
+> Snow SparseDrive [6] 0.13 0.27 0.50 0.30
+> MomAD [4] 0.08 0.16 0.30 0.18
+> DiffusionDrive [10] 0.09 0.24 0.39 0.24
+> GraphWorld (Ours) 0.07 0.15 0.28 0.17
+> Rain SparseDrive [6] 0.11 0.27 0.55 0.31
+> MomAD [4] 0.06 0.17 0.31 0.18
+> DiffusionDrive [10] 0.07 0.18 0.35 0.20
+> GraphWorld (Ours) 0.05 0.15 0.29 0.16
+> Fog SparseDrive [6] 0.14 0.36 0.58 0.36
+> MomAD [4] 0.06 0.19 0.32 0.19
+> DiffusionDrive [10] 0.06 0.18 0.30 0.18
+> GraphWorld (Ours) 0.05 0.17 0.29 0.17
+
+decoder layers and an input resolution of 640 × 352 . We define fixed numbers of hybrid task queries, including 900 agent queries, 100 map queries, and 480 planning queries, following the standard benchmark configuration. On the NAVSIM [73] dataset, we adopt TransFuser 
+
+as the baseline and follow the official Navtrain split for training. For fair comparison, we use the same perception modules and a ResNet-34 backbone as in TransFuser. All experiments are conducted on 8 NVIDIA RTX 4090 GPUs. We use a batch size of 48 for nuScenes and Bench2Drive, and 64 for NAVSIM. The models are trained for 20 epochs on nuScenes (∼10.2h), 2 epochs on Bench2Drive ( ∼49.2h), and 100 epochs on NAVSIM ( ∼3.1h). We adopt the AdamW optimizer with a learning rate of 3 × 10 −4 and weight decay of 10 −3, to-gether with a cosine annealing schedule and linear warmup. The training objective consists of standard multi-task losses for detection, mapping, motion prediction, and planning. We apply common data augmentations, including resiz-ing, cropping, flipping, and photometric distortion, along with BEV-consistent transformations. Additional training techniques include gradient clipping (max norm 25), FP16 training, and a temporal queue length of 4. 
+
+5.4 Main Results 
+
+Long-Horizon Planning on nuScenes (Open-Loop). Table 1 reports open-loop long-horizon planning results on the nuScenes validation set. While existing E2E-AD methods perform competitively at short horizons, their errors and collision rates increase significantly as the planning horizon extends. In contrast, GraphWorld consistently outperforms TABLE 10: Robustness study of planning results on the 
+
+Turning-nuScenes [4] validation dataset. ∗ denotes the re-implementation.                          
+
+> Method Col .Rate (%) ↓
+> 1s 2s 3s Avg .
+> SparseDrive [6] 0.04 0.17 0.98 0.40
+> DiffusionDrive ∗[10] 0.03 0.14 0.85 0.34
+> MomAD [4] 0.03 0.13 0.79 0.32
+> GraphWorld (Ours) 0.03 0.12 0.72 0.28
+
+all baselines across all future timestamps, achieving the low-est average L2 error of 1.34m. More importantly, it reduces the average collision rate to 0.70%, corresponding to over 22% relative improvement over the strongest prior method. The advantage becomes more pronounced at longer hori-zons (5–6s), demonstrating GraphWorld’s superior long-term interaction modeling and safety-aware planning capa-bility. 
+
+Bench2Drive (Closed-Loop). Table 2 reports results on Bench2Drive. GraphWorld achieves the best closed-loop performance, significantly improving Driving Score (DS) and Success Rate (SR) over prior methods. Compared with SparseDrive, it increases DS from 44.54% to 51.55% and SR from 16.71% to 25.47%, while also improving efficiency and comfort, indicating more stable driving behavior. It further shows strong advantages in interaction-critical sce-narios such as merging, overtaking, and emergency brak-ing, demonstrating effective multi-agent interaction model-ing. Although open-loop improvements are moderate, the substantial closed-loop gains highlight the importance of interaction and long-horizon modeling beyond trajectory fitting. Overall, GraphWorld provides more balanced im-provements across accuracy, safety, and decision-making quality. 
+
+NAVSIMv1 navtest (Closed-Loop). Table 3 reports closed-loop planning results on the NAVSIM v1 navtest split. While recent E2E-based and VLA-based methods achieve strong performance, GraphWorld remains highly compet-itive across all metrics. In particular, it achieves 99.0 in NC and 97.1 in DAC, matching or surpassing most prior world-model-based approaches, while maintaining strong performance in safety-critical metrics such as TTC and EP. Compared with existing world-model-based methods, GraphWorld consistently improves interaction-related per-formance, achieving higher EP (83.2) and PDMS (90.1), indicating better decision quality and robustness in com-plex driving scenarios. Although some VLA-based meth-ods obtain slightly higher scores on individual metrics, GraphWorld provides a more balanced performance across safety, interaction, and planning stability. Overall, these results demonstrate that GraphWorld effectively captures multi-agent dynamics and enables robust closed-loop plan-ning, achieving competitive performance while maintaining strong generalization and consistency across metrics. 
+
+NAVSIMv2 navhard (Closed-Loop). Table 4 reports closed-loop results on the challenging NAVSIMv2 navhard split. While existing E2E-based and VLA-based methods achieve strong performance in Stage 1, their performance drops sig-nificantly in Stage 2, reflecting the difficulty of long-horizon and interaction-heavy scenarios. In contrast, GraphWorld SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 10 
+
+TABLE 11: Ablation study of different modules across nuScenes (open-loop), NAVSIMv1 (closed-loop), and Bench2Drive .                                                                   
+
+> nuScenes (Open-loop) NAVSIMv1 (Closed-loop) Bench2Drive
+> ECIG WSCP L2@4s ↓L2@5s ↓L2@6s ↓Col.@4s ↓Col.@5s ↓Col.@6s ↓NC ↑DAC ↑TTC ↑Comf. ↑EP ↑PDMS ↑DS ↑SR ↑Effi ↑Comf ↑
+> 1.75 2.32 2.95 0.87 1.54 2.33 96.2 95.4 90.7 100 80.7 85.1 44.54 16.71 170.21 48.63
+> ✓1.71 2.28 2.76 0.79 1.47 2.19 97.2 96.0 91.6 100 81.1 85.5 49.44 23.89 177.92 53.07
+> ✓✓1.64 1.88 2.29 0.65 1.29 1.95 99.0 97.1 95.5 100 83.2 90.1 51.55 25.47 181.12 56.59
+
+TABLE 12: Ablation study on different graph structures across NAVSIMv1 and nuScenes . Fully-connected denotes a dense graph, while ego →nbrs denotes an ego-centric star graph.                                      
+
+> NAVSIMv1 nuScenes
+> Structure NC ↑DAC ↑TTC ↑Comf. ↑EP ↑PDMS ↑L2@4s ↓L2@5s ↓L2@6s ↓Col.@4s ↓Col.@5s ↓Col.@6s ↓
+> Fully-connected 96.1 95.2 90.3 100 80.6 85.0 1.73 1.98 2.45 0.68 1.40 2.23 ego →nbrs 99.0 97.1 95.5 100 83.2 90.1 1.64 1.88 2.29 0.65 1.29 1.95
+
+TABLE 13: Comparison of Diffusion and Flow-Matching across different datasets.                                                    
+
+> Strategies nuScenes Bench2Drive NAVSIMv1
+> L2 (m) ↓Col. Rate (%) ↓DS ↑SR ↑Effi ↑Comf ↑NC ↑DAC ↑TTC ↑Comf ↑EP ↑PDMS ↑
+> 4s 5s 6s 4s 5s 6s Diffusion 1.79 2.07 2.46 0.75 1.45 2.23 73.22 40.74 77.92 25.81 98.0 96.6 94.8 100 82.6 88.1 Flow-Matching 1.64 1.88 2.29 0.65 1.29 1.95 76.71 44.22 80.48 29.74 99.0 97.1 95.5 100 83.2 90.1
+
+TABLE 14: Ablation study of different stages on the 
+
+nuScenes set. 
+
+Stage L2 (m) ↓ Col . Rate (%) ↓
+
+4s 5s 6s 4s 5s 6s One 1.68 1.96 2.40 0.68 1.35 2.04 Two 1.64 1.88 2.29 0.65 1.29 1.95 
+
+TABLE 15: Ablation study of neighbor selection strate-gies on the nuScenes validation set. The upper rows use distance-based selection, while the lower rows adopt Top-K
+
+neighbors. We use SparseDrive as the baseline. 
+
+H-Param L2 (m) ↓ Col . Rate (%) ↓
+
+4s 5s 6s 4s 5s 6s 5m 1.70 1.95 2.35 0.72 1.36 2.02 8m 1.68 1.91 2.33 0.68 1.33 1.98 10m 1.64 1.88 2.29 0.65 1.29 1.95 
+
+12m 1.65 1.90 2.31 0.67 1.32 1.96 15m 1.66 1.91 2.32 0.68 1.34 1.99 4 1.71 1.93 2.35 0.70 1.34 2.01 8 1.66 1.90 2.32 0.68 1.31 1.99 16 1.73 2.02 2.43 0.75 1.44 2.09 32 1.75 2.22 2.72 0.82 1.50 2.23 
+
+remains highly competitive and achieves the best overall performance with an EPDMS score of 53.6, outperforming all prior methods by a clear margin. More importantly, GraphWorld maintains strong performance across safety-critical and interaction-related metrics, including EP, TTC, and DAC, demonstrating its robustness in complex driving situations. Compared with prior world-model-based meth-ods, it consistently improves both stability and decision quality, especially under long-horizon closed-loop evalua-tion. The advantage becomes more pronounced in Stage 2, where accumulated errors and interaction complexity are more severe, highlighting the effectiveness of our agent-centric relational world modeling and flow-based refine-ment. These results demonstrate that GraphWorld enables more robust long-horizon planning and better handles com-TABLE 16: Ablation study of different times on the 
+
+nuScenes set. 
+
+Stage L2 (m) ↓ Col . Rate (%) ↓
+
+4s 5s 6s 4s 5s 6s 
+
+t + 1 1.64 1.88 2.29 0.65 1.29 1.95 
+
+t + 2 1.75 1.99 2.44 0.69 1.38 2.09 
+
+t + 3 1.81 2.06 2.57 0.74 1.47 2.26 
+
+TABLE 17: Ablation on sampling steps on NAVSIM .                                   
+
+> Steps NC ↑DAC ↑TTC ↑Comf. ↑EP ↑PDMS ↑FPS ↑
+> 198.6 96.7 94.9 100 82.4 88.3 51 299.0 97.1 95.5 100 83.2 90.1 51 399.1 97.2 95.6 100 83.3 89.2 46 499.1 97.2 95.7 100 83.3 89.3 42
+
+TABLE 18: Ablation on solver choice on NAVSIM .                     
+
+> Solver NC ↑DAC ↑TTC ↑Comf. ↑EP ↑PDMS ↑FPS ↑
+> Euler 99.0 97.1 95.5 100 83.2 90.1 51 Heun 99.1 97.2 95.6 100 83.3 89.2 46
+
+plex multi-agent interactions in challenging scenarios. 
+
+NAVSIMv2 navtest (Closed-Loop). Table 5 reports results on the NAVSIMv2 navtest split. While recent E2E-based and VLA-based methods achieve strong performance, Graph-World remains highly competitive and achieves the best overall performance with an EPDMS of 89.5. Compared with prior world-model-based methods, it slightly improves over Latent-WAM (89.3) while maintaining balanced per-formance across all metrics. Notably, GraphWorld achieves strong results on safety-critical and interaction-related met-rics such as DAC and TTC, demonstrating robust decision-making in complex driving scenarios. Although some meth-ods obtain higher scores on individual metrics, GraphWorld provides more consistent performance across safety, stabil-ity, and interaction dimensions. These results indicate that GraphWorld effectively captures multi-agent dynamics and enables reliable closed-loop planning. SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 11 
+
+Short-Horizon Planning on nuScenes (Open-Loop). Table 6 reports 3s open-loop planning results on nuScenes val. GraphWorld achieves competitive performance, with 0.57m average L2 error and a 0.08% collision rate, on par with SOTA methods. 
+
+Motion Results on NuScenes. In Table 7, GraphWorld achieves the best overall motion prediction performance on nuScenes, reducing minADE from 0.62 to 0.55 (11.3%) com-pared with SparseDrive. Although VAD yields the lowest miss rate, GraphWorld achieves the highest EPA, suggesting more interaction-aware multi-modal predictions. 
+
+5.5 Robustness Study 
+
+Adv-nuSc (Open-Loop). Table 8 reports robustness under adversarial driving scenarios. Compared to prior methods, GraphWorld consistently achieves the lowest collision rates across all horizons, reducing the average collision rate to 0.738%. These results demonstrate GraphWorld’s superior robustness and stability when facing aggressive and highly interactive driving behaviors. 
+
+NuScenes-C. We evaluate robustness on nuScenes-C [77], a corrupted benchmark derived from the nuScenes vali-dation set with 27 corruption types at 5 severity levels .Focusing on three representative adverse-weather corrup-tions ( Snow , Rain , and Fog ) in the open-loop setting (Ta-ble 9), GraphWorld achieves the best overall robustness, yielding the lowest average collision rates of 0.17/0.16/0.17 
+
+under Snow/Rain/Fog, respectively, substantially improv-ing over the SparseDrive baseline (Avg. 0.30/0.31/0.36 ). The advantage becomes more pronounced as the horizon in-creases, where GraphWorld maintains lower 3s collision rates ( 0.28/0.29/0.29 ) than all baselines, indicating stronger resistance to error accumulation under weather-induced perception degradation. Meanwhile, on the Clean split, GraphWorld remains competitive (Avg. 0.08 ) and achieves the best short-horizon safety (1s/2s: 0.00 /0.04 ), suggesting that the robustness gains under corruptions are obtained without sacrificing performance in normal conditions. 
+
+Turning-nuScenes. We further evaluate planning robust-ness on Turning-nuScenes [4], a challenging subset of nuScenes curated to emphasize non-trivial turning maneu-vers and trajectory temporal coherence. Unlike the original nuScenes validation set that is dominated by go-straight commands, Turning-nuScenes selects samples whose GT ego trajectory exhibits a large directional change, imple-mented via a 25 m displacement threshold between the GT positions at 0.5s and 3.0s . This yields a compact but difficult validation set with 680 samples across 17 scenes ,specifically designed to stress-test planners under high-curvature, interaction-heavy motions. As shown in Table 10, 
+
+GraphWorld achieves the lowest collision rate across all horizons and the best overall average ( 0.28 ), outperforming SparseDrive (Avg. 0.40), DiffusionDrive ∗ (Avg. 0.34), and MomAD (Avg. 0.32). Notably, the gain becomes increasingly significant at longer horizons, where GraphWorld reduces the 3s collision rate to 0.72 compared with 0.98/0.85/0.79 of the baselines, indicating stronger resistance to error accu-mulation in turning trajectories. These results suggest that explicitly modeling ego-centric interactions and maintaining temporally consistent world states benefits planning stabil-ity in turning-dominant scenarios, where one-shot predic-tion is more prone to drift and unstable control. 
+
+5.6 Ablation Study 
+
+Roles of Different Modules in GraphWorld. Table 11 shows that both ECIG and WSCP contribute consistently to performance improvements across all datasets. ECIG alone already improves both open-loop and closed-loop metrics, reducing long-horizon L2 errors and collision rates on nuScenes while increasing NAVSIMv1 PDMS and Bench2Drive scores. Further incorporating WSCP leads to the largest gains, achieving the best overall performance across all benchmarks. In particular, the full model attains the highest NAVSIMv1 PDMS (90.1) and significantly im-proves Bench2Drive DS and SR, demonstrating enhanced decision-making and stability. These results highlight the complementary roles of ECIG in interaction modeling and WSCP in world-state refinement. 
+
+Ablation on Different Graph Structures in ECIG. As shown in Table 12, the ego-centric star graph (ego →nbrs) consistently outperforms the fully-connected design across both NAVSIMv1 and nuScenes. It significantly improves NC from 96.1 to 99.0 and PDMS from 85.0 to 90.1, while also reducing long-horizon L2 errors and collision rates. These results suggest that focusing on ego-centered interactions effectively captures critical dependencies, while avoiding noisy neighbor–neighbor connections and improving over-all stability. 
+
+Ablation on Diffusion vs. Flow-Matching. Table 13 compares Diffusion and Flow-Matching across multiple datasets. Flow-Matching consistently outperforms Diffusion in both open-loop and closed-loop settings. On nuScenes, it reduces long-horizon L2 errors from 1.79 /2.07 /2.46 
+
+to 1.64 /1.88 /2.29 and lowers collision rates from 
+
+0.75 /1.45 /2.23 to 0.65 /1.29 /1.95 , with improvements maintained at longer horizons, indicating better stability against error accumulation. On Bench2Drive, it improves the driving score from 73 .22 to 76 .71 and success rate from 40 .74% to 44 .22 %, while also enhancing efficiency and comfort, suggesting safer and smoother behaviors in in-teractive scenarios. On NAVSIMv1, Flow-Matching further improves all key metrics, including NC ( 98 .0 → 99 .0), DAC (96 .6 → 97 .1), and PDMS ( 88 .1 → 90 .1). These consistent gains across diverse benchmarks demonstrate that Flow-Matching provides stronger robustness and generalization for trajectory generation. 
+
+Ablation on Neighbor Selection in ECIG. Table 15 shows that an ego-centric, distance-based neighbor selection with a moderate radius (5m) achieves the best trade-off, reduc-ing L2 error from 2.35m to 2.29m at 6s and collision rate from 2.02% to 1.95%. Both overly sparse and overly dense neighbor sets degrade long-horizon accuracy and safety. 
+
+Ablation on Training Stages for World-State Learning. 
+
+Table 14 shows that introducing the second training stage consistently reduces long-horizon L2 errors and collision rates on nuScenes, indicating that explicit temporal super-vision effectively improves the stability and quality of the learned world state. 
+
+Ablation Study of Different Times on the nuScenes Set. Table 16 investigates the impact of using different SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 12 tt+1 t+2 t+3    
+
+> Turn Right Turn Right Turn Right Turn Right
+
+Fig. 4: Visualization of GraphWorld’s 6-second long-horizon planning on the nuScenes dataset. GraphWorld (Ours)  World4Drive 
+
+Fig. 5: The visualization of GraphWorld on NAVSIMv1 dataset. 
+
+temporal stages ( t+1 , t+2 , t+3 ) for long-horizon planning on nuScenes. We observe a clear trend that earlier stages consistently achieve better planning quality and safety. Specifically, t+1 yields the lowest L2 errors at all horizons (1.64 /1.88 /2.29 at {4s, 5s, 6s}) and the lowest collision rates ( 0.65 /1.29 /1.95 ), while performance gradually de-grades as the stage shifts to t+2 and t+3 . This degradation is more evident for longer horizons (e.g., 6s L2: 2.29 → 2.44 →
+
+2.57 ; 6s collision: 1.95 → 2.09 → 2.26 ), indicating that later-stage rollouts suffer from increased uncertainty and error accumulation. Overall, these results suggest that leveraging earlier temporal information provides more accurate and safer trajectory generation for long-horizon planning. 
+
+Ablation on Sampling Steps. Table 17 shows that increas-ing sampling steps yields only marginal gains. PDMS im-proves slightly from 88.3 to 89.3, while performance largely saturates after 2 steps. In contrast, inference speed drops significantly (51 FPS to 42 FPS). Therefore, we adopt 2 steps as a better trade-off between accuracy and efficiency. 
+
+Ablation on Solver Choice. Table 18 shows that Heun provides only marginal improvements over Euler (e.g., PDMS: 90 .1 → 89 .2), while reducing inference speed (51 FPS to 46 FPS). This indicates that the learned dynamics are sufficiently smooth, making Euler a more efficient and practical choice. 
+
+5.7 Visualizations 
+
+Visualization of GraphWorld’s 6-second long-horizon planning on the nuScenes dataset. As shown in Fig. 4, on nuScenes we visualize 6-second long-horizon planning. GraphWorld produces longer-range and temporally coher-ent trajectories, maintaining stable headings and smooth curvature variations in complex segments such as turning maneuvers. This capability stems from the ECIG, which explicitly captures key relations between the ego vehicle and surrounding traffic participants, together with a consis-tent latent world state that encodes multi-agent dynamics, thereby providing more reliable conditioning information for 6-second planning. 
+
+Visualization of GraphWorld on NAVSIMv1 dataset. Us-ing the official implementation of the representative latent world model approach World4Drive, we visualize its behav-ior on NAVSIMv1 and conduct a qualitative comparison, as shown in Fig. 5. The results show that GraphWorld SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 13 
+
+maintains a more appropriate safety distance from leading vehicles, effectively reducing potential collision risks. Mean-while, its generated trajectories are better constrained within drivable areas. Overall, GraphWorld demonstrates stronger 
+
+long-horizon planning capability, enabling more stable and safety-aware decision-making over extended time horizons. 
+
+## 6 CONCLUSION 
+
+We propose GraphWorld , an end-to-end autonomous driv-ing framework that enhances long-horizon planning via ego-centric latent world modeling. By combining an ECIG with WSCP module and a two-stage temporal supervision strategy, GraphWorld enables efficient, interaction-aware, and safety-oriented trajectory generation. Extensive exper-iments on both open-loop and closed-loop benchmarks demonstrate consistent improvements in long-horizon ac-curacy and collision reduction, validating the effectiveness of ego-centric relational world modeling for robust au-tonomous driving. 
+
+Limitations and Future Work. While GraphWorld improves long-horizon planning, it relies on fixed neighbor selection and single-step world-state prediction. Future work will explore adaptive graph evolution and multi-step world modeling for more complex scenarios. 
+
+## ACKNOWLEDGMENTS 
+
+This work was supported by the National Natural Science Foundation of China (NSFC) under Grants No. 62536001 (Key Program) and No. 62576026. 
+
+## REFERENCES 
+
+[1] L. Chen, P. Wu, K. Chitta, B. Jaeger, A. Geiger, and H. Li, “End-to-end autonomous driving: Challenges and fron-tiers,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024. [2] Z. Song, L. Liu, F. Jia, Y. Luo, C. Jia, G. Zhang, L. Yang, and L. Wang, “Robustness-aware 3d object detection in autonomous driving: A review and outlook,” IEEE Trans-actions on Intelligent Transportation Systems , pp. 1–30, 2024. [3] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin, W. Wang, L. Lu, X. Jia, Q. Liu, J. Dai, Y. Qiao, and H. Li, “Planning-oriented autonomous driving,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 17 853– 17 862. [4] Z. Song, C. Jia, L. Liu, H. Pan, Y. Zhang, J. Wang, X. Zhang, S. Xu, L. Yang, and Y. Luo, “Don’t shake the wheel: Momentum-aware planning in end-to-end autonomous driving,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 22 432–22 441. [5] B. Jiang, S. Chen, Q. Xu, B. Liao, J. Chen, H. Zhou, Q. Zhang, W. Liu, C. Huang, and X. Wang, “Vad: Vector-ized scene representation for efficient autonomous driv-ing,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 8340–8350. [6] W. Sun, X. Lin, Y. Shi, C. Zhang, H. Wu, and S. Zheng, “Sparsedrive: End-to-end autonomous driving via sparse scene representation,” arXiv preprint arXiv:2405.19620 ,2024. [7] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger, “Transfuser: Imitation with transformer-based sensor fusion for autonomous driving,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 45, no. 11, pp. 12 878–12 895, 2023. [8] M. Guo, Z. Zhang, Y. He, K. Wang, L. Jing, and H. Ling, “End-to-end autonomous driving without costly modular-ization and 3d manual annotation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [9] S. Chen, B. Jiang, H. Gao, B. Liao, Q. Xu, Q. Zhang, C. Huang, W. Liu, and X. Wang, “Vadv2: End-to-end vec-torized autonomous driving via probabilistic planning,” 
+
+arXiv preprint arXiv:2402.13243 , 2024. [10] B. Liao, S. Chen, H. Yin, B. Jiang, C. Wang, S. Yan, X. Zhang, X. Li, Y. Zhang, Q. Zhang et al. , “Diffusiondrive: Truncated diffusion model for end-to-end autonomous driving,” arXiv preprint arXiv:2411.15139 , 2024. [11] Z. Song, L. Liu, H. Pan, B. Liao, M. Guo, L. Yang, Y. Zhang, S. Xu, C. Jia, and Y. Luo, “Breaking imitation bottlenecks: Reinforced diffusion powers diverse trajectory genera-tion,” arXiv preprint arXiv:2507.04049 , 2025. [12] Z. Li, K. Li, S. Wang, S. Lan, Z. Yu, Y. Ji, Z. Li, Z. Zhu, J. Kautz, Z. Wu et al. , “Hydra-mdp: End-to-end mul-timodal planning with multi-target hydra-distillation,” 
+
+arXiv preprint arXiv:2406.06978 , 2024. [13] Z. Li, W. Yao, Z. Wang, X. Sun, J. Chen, N. Chang, M. Shen, Z. Wu, S. Lan, and J. M. Alvarez, “Generalized trajectory scoring for end-to-end multimodal planning,” 
+
+arXiv preprint arXiv:2506.06664 , 2025. [14] Z. Xing, X. Zhang, Y. Hu, B. Jiang, T. He, Q. Zhang, X. Long, and W. Yin, “Goalflow: Goal-driven flow match-ing for multimodal trajectories generation in end-to-end autonomous driving,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 1602–1611. [15] B. Sun, Y. Cao, Y. Wang, R. Wang, J. Shang, X. Feng, J. Lu, J. Shi, S. Yang, X. Yan et al. , “Minddrive: An all-in-one framework bridging world models and vision-language model for end-to-end autonomous driving,” arXiv preprint arXiv:2512.04441 , 2025. [16] L. Liu, C. Jia, G. Yu, Z. Song, J. Li, F. Jia, P. Wu, X. Hao, and Y. Luo, “Guideflow: Constraint-guided flow matching for planning in end-to-end autonomous driving,” arXiv preprint arXiv:2511.18729 , 2025. [17] T. Feng, W. Wang, and Y. Yang, “A survey of world models for autonomous driving,” arXiv preprint arXiv:2501.11260 ,2025. [18] J. Ding, Y. Zhang, Y. Shang, Y. Zhang, Z. Zong, J. Feng, Y. Yuan, H. Su, N. Li, N. Sukiennik et al. , “Understanding world or predicting future? a comprehensive survey of world models,” ACM Computing Surveys , vol. 58, no. 3, pp. 1–38, 2025. [19] F. Jia, C. Jia, Z. Song, Z. Bao, L. Liu, S. Xu, Y. Gong, L. Yang, X. Zhang, B. Sun et al. , “Progressive robustness-aware world models in autonomous driving: A review and outlook,” Authorea Preprints , 2025. [20] S. Gao, J. Yang, L. Chen, K. Chitta, Y. Qiu, A. Geiger, J. Zhang, and H. Li, “Vista: A generalizable driving world model with high fidelity and versatile controllability,” 
+
+Advances in Neural Information Processing Systems , vol. 37, pp. 91 560–91 596, 2024. [21] A. Hu, L. Russell, H. Yeo, Z. Murez, G. Fedoseev, A. Kendall, J. Shotton, and G. Corrado, “Gaia-1: A genera-tive world model for autonomous driving,” arXiv preprint arXiv:2309.17080 , 2023. [22] X. Wang, Z. Zhu, G. Huang, X. Chen, J. Zhu, and J. Lu, “Drivedreamer: Towards real-world-drive world models for autonomous driving,” in European Conference on Com-puter Vision . Springer, 2024, pp. 55–72. [23] Y. Wang, J. He, L. Fan, H. Li, Y. Chen, and Z. Zhang, “Driving into the future: Multiview visual forecasting and planning with world model for autonomous driving,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 14 749–14 759. SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 14 
+
+[24] Y. Li, Y. Wang, Y. Liu, J. He, L. Fan, and Z. Zhang, “End-to-end driving with online trajectory evaluation via bev world model,” arXiv preprint arXiv:2504.01941 , 2025. [25] Y. Li, L. Fan, J. He, Y. Wang, Y. Chen, Z. Zhang, and T. Tan, “Enhancing end-to-end autonomous driving with latent world model,” arXiv preprint arXiv:2406.08481 , 2024. [26] Y. Zheng, P. Yang, Z. Xing, Q. Zhang, Y. Zheng, Y. Gao, P. Li, T. Zhang, Z. Xia, P. Jia et al. , “World4drive: End-to-end autonomous driving via intention-aware physical latent world model,” in Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , 2025, pp. 28 632– 28 642. [27] D. Xu, H. Li, Q. Wang, Z. Song, L. Chen, and H. Deng, “M2da: Multi-modal fusion transformer incorporating driver attention for autonomous driving,” arXiv preprint arXiv:2403.12552 , 2024. [28] Y. Liu, W. Chen, Y. Bai, X. Liang, G. Li, W. Gao, and L. Lin, “Aligning cyber space with physical world: A comprehensive survey on embodied ai,” arXiv preprint arXiv:2407.06886 , 2024. [29] D. Ha and J. Schmidhuber, “Recurrent world models fa-cilitate policy evolution,” Advances in neural information processing systems , vol. 31, 2018. [30] M. Lin, X. Wang, Y. Wang, S. Wang, F. Dai, P. Ding, C. Wang, Z. Zuo, N. Sang, S. Huang et al. , “Exploring the evolution of physics cognition in video generation: A survey,” arXiv preprint arXiv:2503.21765 , 2025. [31] D. Liu, J. Zhang, A.-D. Dinh, E. Park, S. Zhang, A. Mian, M. Shah, and C. Xu, “Generative physical ai in vision: A survey,” arXiv preprint arXiv:2501.10928 , 2025. [32] Y. LeCun, “A path towards autonomous machine intel-ligence version 0.9. 2, 2022-06-27,” Open Review , vol. 62, no. 1, pp. 1–62, 2022. [33] Y. Guan, H. Liao, Z. Li, J. Hu, R. Yuan, G. Zhang, and C. Xu, “World models for autonomous driving: An initial survey,” IEEE Transactions on Intelligent Vehicles , 2024. [34] D. Liang, D. Zhang, X. Zhou, S. Tu, T. Feng, X. Li, Y. Zhang, M. Du, X. Tan, and X. Bai, “Seeing the future, perceiving the future: A unified driving world model for future gen-eration and perception,” arXiv preprint arXiv:2503.13587 ,2025. [35] K. Zhang, Z. Tang, X. Hu, X. Pan, X. Guo, Y. Liu, J. Huang, L. Yuan, Q. Zhang, X.-X. Long et al. , “Epona: Autore-gressive diffusion world model for autonomous driving,” 
+
+arXiv preprint arXiv:2506.24113 , 2025. [36] C. Shi, S. Shi, K. Sheng, B. Zhang, and L. Jiang, “Drivex: Omni scene modeling for learning generalizable world knowledge in autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 28 599–28 609. [37] A. B. Vasudevan, N. Peri, J. Schneider, and D. Ramanan, “Planning with adaptive world models for autonomous driving,” arXiv preprint arXiv:2406.10714 , 2024. [38] G. Qiao, G. Quan, R. Qu, and G. Liu, “Modelling compet-itive behaviors in autonomous driving under generative world model,” in European Conference on Computer Vision .Springer, 2024, pp. 19–36. [39] A. Hu, G. Corrado, N. Griffiths, Z. Murez, C. Gurau, H. Yeo, A. Kendall, R. Cipolla, and J. Shotton, “Model-based imitation learning for urban driving,” Advances in Neural Information Processing Systems , vol. 35, pp. 20 703– 20 716, 2022. [40] Y. Li, Y. Wang, Y. Liu, J. He, L. Fan, and Z. Zhang, “End-to-end driving with online trajectory evaluation via bev world model,” arXiv preprint arXiv:2504.01941 , 2025. [41] Y. Li, L. Fan, J. He, Y. Wang, Y. Chen, Z. Zhang, and T. Tan, “Enhancing end-to-end autonomous driving with latent world model,” arXiv preprint arXiv:2406.08481 , 2024. [42] Y. Lipman, R. T. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” arXiv preprint arXiv:2210.02747 , 2022. [43] X. Jia, P. Wu, L. Chen, J. Xie, C. He, J. Yan, and H. Li, “Think twice before driving: Towards scalable decoders for end-to-end autonomous driving,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) , June 2023, pp. 21 983–21 994. [44] X. Jia, Y. Gao, L. Chen, J. Yan, P. L. Liu, and H. Li, “Driveadapter: Breaking the coupling barrier of percep-tion and planning in end-to-end autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 7953–7963. [45] S. Shang, Y. Chen, Y. Wang, Y. Li, and Z. Zhang, “Drivedpo: Policy learning via safety dpo for end-to-end autonomous driving,” arXiv preprint arXiv:2509.17940 ,2025. [46] Z. Yang, X. Jia, Q. Li, X. Yang, M. Yao, and J. Yan, “Raw2drive: Reinforcement learning with aligned world models for end-to-end autonomous driving (in carla v2),” 
+
+arXiv preprint arXiv:2505.16394 , 2025. [47] X. Jia, J. You, Z. Zhang, and J. Yan, “Drivetransformer: Unified transformer for scalable end-to-end autonomous driving,” arXiv preprint arXiv:2503.07656 , 2025. [48] W. Zheng, R. Song, X. Guo, and L. Chen, “Genad: Gen-erative end-to-end autonomous driving,” arXiv preprint arXiv:2402.11502 , 2024. [49] X. Weng, B. Ivanovic, Y. Wang, Y. Wang, and M. Pavone, “Para-drive: Parallelized architecture for real-time au-tonomous driving,” in Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , 2024, pp. 15 449–15 458. [50] C. Yuan, Z. Zhang, J. Sun, S. Sun, Z. Huang, C. D. W. Lee, D. Li, Y. Han, A. Wong, K. P. Tee et al. , “Drama: An efficient end-to-end motion planner for autonomous driving with mamba,” arXiv preprint arXiv:2408.03601 , 2024. [51] L. Liu, C. Jia, Z. Song, H. Pan, B. Liao, W. Sun, Y. Zhang, L. Yang, and Y. Luo, “Fully unified motion plan-ning for end-to-end autonomous driving,” arXiv preprint arXiv:2504.12667 , 2025. [52] W. Yao, Z. Li, S. Lan, Z. Wang, X. Sun, J. M. Alvarez, and Z. Wu, “Drivesuprim: Towards precise trajectory selection for end-to-end planning,” arXiv preprint arXiv:2506.06659 ,2025. [53] Y. Li, K. Xiong, X. Guo, F. Li, S. Yan, G. Xu, L. Zhou, L. Chen, H. Sun, B. Wang et al. , “Recogdrive: A rein-forced cognitive framework for end-to-end autonomous driving,” arXiv preprint arXiv:2506.08052 , 2025. [54] Z. Zhou, T. Cai, S. Z. Zhao, Y. Zhang, Z. Huang, B. Zhou, and J. Ma, “Autovla: A vision-language-action model for end-to-end autonomous driving with adaptive reasoning and reinforcement fine-tuning,” arXiv preprint arXiv:2506.13757 , 2025. [55] Y. Li, S. Shang, W. Liu, B. Zhan, H. Wang, Y. Wang, Y. Chen, X. Wang, Y. An, C. Tang et al. , “Drivevla-w0: World models amplify data scaling law in autonomous driving,” arXiv preprint arXiv:2510.12796 , 2025. [56] L. Liu, Z. Song, C. Jia, H. Ye, X. Hao, L. Chen et al. ,“Driveworld-vla: Unified latent-space world modeling with vision-language-action for autonomous driving,” 
+
+arXiv preprint arXiv:2602.06521 , 2026. [57] Y. Chen, Y. Wang, and Z. Zhang, “Drivinggpt: Unify-ing driving world modeling and planning with multi-modal autoregressive transformers,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 26 890–26 900. [58] J. Yang, K. Chitta, S. Gao, L. Chen, Y. Shao, X. Jia, H. Li, A. Geiger, X. Yue, and L. Chen, “Resim: Reliable world simulation for autonomous driving,” Advances in Neural Information Processing Systems , vol. 38, pp. 167 710–167 741, 2026. [59] I. Georgiev, V. Giridhar, N. Hansen, and A. Garg, “Pwm: SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 15 
+
+Policy learning with multi-task world models,” in Interna-tional Conference on Learning Representations , vol. 2025, 2025, pp. 13 737–13 757. [60] P. Yang, B. Lu, Z. Xia, C. Han, Y. Gao, T. Zhang, K. Zhan, X. Lang, Y. Zheng, and Q. Zhang, “Worldrft: Latent world model planning with reinforcement fine-tuning for au-tonomous driving,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 40, no. 14, 2026, pp. 11 649– 11 657. [61] T. Xia, Y. Li, L. Zhou, J. Yao, K. Xiong, H. Sun, B. Wang, K. Ma, G. Chen, H. Ye et al. , “Drivelaw: Unifying planning and video generation in a latent driving world,” arXiv preprint arXiv:2512.23421 , 2025. [62] W. Cao, M. Hallgarten, T. Li, D. Dauner, X. Gu, C. Wang, Y. Miron, M. Aiello, H. Li, I. Gilitschenski 
+
+et al. , “Pseudo-simulation for autonomous driving,” arXiv preprint arXiv:2506.04218 , 2025. [63] Z. Zhou, R. Yang, Y. Guo, S. X. Chen, T. Feng, K. Pis-tunova, Y. Shen, L. Su, J. Ma et al. , “Spanvla: Effi-cient action bridging and learning from negative-recovery samples for vision-language-action model,” arXiv preprint arXiv:2604.19710 , 2026. [64] A. Jiang, Y. Gao, Z. Sun, Y. Wang, J. Wang, J. Chai, Q. Cao, Y. Heng, H. Jiang, Y. Dong et al. , “Diffvla: Vision-language guided diffusion planning for autonomous driving,” arXiv preprint arXiv:2505.19381 , 2025. [65] K. Li, Z. Li, S. Lan, Y. Xie, Z. Zhang, J. Liu, Z. Wu, Z. Yu, and J. M. Alvarez, “Hydra-mdp++: Advancing end-to-end driving via expert-guided hydra-distillation,” arXiv preprint arXiv:2503.12820 , 2025. [66] J. Zou, S. Chen, B. Liao, Z. Zheng, Y. Song, L. Zhang, Q. Zhang, W. Liu, and X. Wang, “Diffusiondrivev2: Rein-forcement learning-constrained truncated diffusion mod-eling in end-to-end autonomous driving,” arXiv preprint arXiv:2512.07745 , 2025. [67] L. Wang, Y. Zheng, Q. Chen, S. Li, Y. Zhang, Z. Xing, Q. Zhang, X. Li, D. Qian et al. , “Latent-wam: Latent world action modeling for end-to-end autonomous driving,” 
+
+arXiv preprint arXiv:2603.24581 , 2026. [68] B. Sun, B. Zhang, J. Lu, X. Feng, J. Shang, R. Cao, M. Zheng, C. Wang, S. Yang, Y. Cao et al. , “Focalad: Local mo-tion planning for end-to-end autonomous driving,” arXiv preprint arXiv:2506.11419 , 2025. [69] W. Zheng, W. Chen, Y. Huang, B. Zhang, Y. Duan, and J. Lu, “Occworld: Learning a 3d occupancy world model for autonomous driving,” in European conference on com-puter vision . Springer, 2024, pp. 55–72. [70] P. Li and D. Cui, “Navigation-guided sparse scene repre-sentation for end-to-end autonomous driving,” in Interna-tional Conference on Learning Representations (ICLR) , 2025. [71] X. Jia, Z. Yang, Q. Li, Z. Zhang, and J. Yan, “Bench2drive: Towards multi-ability benchmarking of closed-loop end-to-end autonomous driving,” arXiv preprint arXiv:2406.03877 , 2024. [72] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun, “CARLA: An open urban driving simulator,” in Proceedings of the 1st Annual Conference on Robot Learning , ser. Proceedings of Machine Learning Research, S. Levine, V. Vanhoucke, and K. Goldberg, Eds., vol. 78. PMLR, 13–15 Nov 2017, pp. 1–16. [Online]. Available: https://proceedings.mlr.press/v78/dosovitskiy17a.html [73] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li, I. Gilitschenski, B. Ivanovic, M. Pavone 
+
+et al. , “Navsim: Data-driven non-reactive autonomous ve-hicle simulation and benchmarking,” Advances in Neural Information Processing Systems , vol. 37, pp. 28 706–28 719, 2024. [74] H. Caesar, J. Kabzan, K. S. Tan, W. K. Fong, E. Wolff, A. Lang, L. Fletcher, O. Beijbom, and S. Omari, “nu-plan: A closed-loop ml-based planning benchmark for au-tonomous vehicles,” arXiv preprint arXiv:2106.11810 , 2021. [75] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Krishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuscenes: A multimodal dataset for autonomous driv-ing,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 11 621–11 631. [76] Z. Xu, B. Li, H.-a. Gao, M. Gao, Y. Chen, M. Liu, C. Yan, H. Zhao, S. Feng, and H. Zhao, “Challenger: Afford-able adversarial driving video generation,” arXiv preprint arXiv:2505.15880 , 2025. [77] Y. Dong, C. Kang, J. Zhang, Z. Zhu, Y. Wang, X. Yang, H. Su, X. Wei, and J. Zhu, “Benchmarking robustness of 3d object detection to common corruptions,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 1022–1032. [78] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 770–778.                       
+
+> Ziying Song received the B.S. degree from Hebei Normal University of Science and Tech-nology, China, in 2019, the M.S. degree from Hebei University of Science and Technology, China, in 2022, and the Ph.D. degree in com-puter science and technology from Beijing Jiao-tong University, China, in March 2026. He is cur-rently an Assistant Professor with the School of Artificial Intelligence, Yanshan University, China. His research interests include autonomous driv-ing, end-to-end autonomous driving, world mod-els, embodied intelligence, and VLA models.
+> Caiyan Jia received the B.S. degree in math-ematics from Ningxia University in 1998, the M.S. degree in computational mathematics from Xiangtan University in 2001, and the Ph.D. de-gree in engineering from the Institute of Comput-ing Technology, Chinese Academy of Sciences, in 2004. She is currently a Professor with the School of Computer Science and Technology, Beijing Jiaotong University, Beijing, China.
+> Lin Liu was born in Jinzhou, Liaoning Province, in 2001. He received his bachelor’s degree from China University of Geosciences, Beijing in 2023, and is currently pursuing his master’s degree in Computer Science and Technology at Beijing Jiaotong University. Starting in Septem-ber 2026, he will join Dalian University of Tech-nology as a Ph.D. student, focusing his research on Embodied AI and Autonomous Driving.
+> Lei Yang (Member, IEEE) received the M.S. degree from the Robotics Institute, Beihang Uni-versity, China, in 2018, and the Ph.D. degree from the School of Vehicle and Mobility, Ts-inghua University, China, in 2024. From 2018 to 2020, he joined the Autonomous Driving R&D Department of JD.COM as an algorithm re-searcher. Currently, he is a research fellow with the School of Mechanical and Aerospace Engi-neering, Nanyang Technological University, Sin-gapore. His current research interests include autonomous driving, 3D scene understanding and world model. SUBMITTED TO IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 16
+
+Shengkai Zhang studied for the B.S. degree in Computer Science and Technology at Hebei Uni-versity, China, from 2022 to 2026. Since 2026, he has been pursuing the M.S. degree in Com-puter Science and Technology at Beijing Jiao-tong University, China. His research interests include computer vision. 
+
+Feiyang Jia was born in Yinchuan, Ningxia Province, China, in 1998. He received his B.S. degree from Beijing Jiaotong University (China) in 2020. He received a master’s degree from Bei-jing Technology and Business University (China) in 2023. He is now a Ph.D. student majoring in Computer Science and Technology at Beijing Jiaotong University (China), with research focus on Computer Vision. 
+
+Fengda Zhao was born in March 1976, received his Ph.D. in Computer Software and Theory from Yanshan University. He is currently the Dean of the School of Artificial Intelligence at Yanshan University, where he also serves as a Professor and Ph.D. Supervisor. He holds additional po-sitions as a Hebei Provincial Teaching Master, Vice Chairman of the Hebei Machine Learning Society, and a Senior Member of the China Computer Federation. His research interests in-clude artificial intelligence applications, natural human-computer interaction, and intelligent robotics. 
+
+Peiliang Wu received the B.Sc. and Ph.D. de-grees from Yanshan University, Qinhuangdao, China, in 2004 and 2010, respectively. He is currently a Professor and Doctor Advisor with Yanshan University. He is a Member of the Aca-demic Committee of Yanshan University, Mem-ber of the Standing Committee of the Youth Work Committee of the Chinese Artificial Intelligence Society, and the Vice Chairman of ACM Qin-huangdao. His research interests include robot learning and multi-agent systems. 
+
+Shaoqing Xu received his M.S. degree in trans-portation engineering from the School of Trans-portation Science and Engineering in Beihang University. He is currently working toward the Ph.D. degree in electromechanical engineer-ing with the State Key Laboratory of Internet of Things for Smart City, University of Macau, Macao SAR, China. His research interests in-clude 3D Space Intelligence, End2End, World-Model, VLA, and its applications in Autonomous Driving and Robotics. 
+
+Chen Lv (Senior Member, IEEE) received the Ph.D. degree from Tsinghua University, China, in 2016. He is currently a Nanyang Asso-ciate Professor at Nanyang Technological Uni-versity, Singapore, and Cluster Director of Fu-ture Mobility Solutions. His research interests in-clude intelligent vehicles, automated driving, hu-man–machine systems, and cyber-physical sys-tems. He has authored two books, published over 100 papers, and holds 12 granted patents. He serves as an Associate Editor for IEEE T-ITS, IEEE T-VT, and IEEE T-IV. 
+
+Yadan Luo (Member, IEEE) received the BS degree in computer science from the Univer-sity of Electronic Science and Technology of China, and the PhD degree from the University of Queensland. Her research interests include machine learning, computer vision, and multime-dia data analysis. She is now a senior lecturer and ARC DECRA at the University of Queens-land.

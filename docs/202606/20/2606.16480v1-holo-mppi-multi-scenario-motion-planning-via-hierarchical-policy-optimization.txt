@@ -1,0 +1,734 @@
+Title: HOLO-MPPI: Multi-Scenario Motion Planning via Hierarchical Policy Optimization
+
+URL Source: https://arxiv.org/pdf/2606.16480v1
+
+Published Time: Tue, 16 Jun 2026 02:00:46 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# HOLO-MPPI: Multi-Scenario Motion Planning via Hierarchical Policy Optimization 
+
+Youngjae Min 1∗ Jovin D’sa 2 Faizan M. Tariq 2 David Isele 2 Navid Azizan 1† Sangjae Bae 2†
+
+Abstract — Robots deployed in the real world must plan motions across diverse scenarios without per-scenario retuning. End-to-end reinforcement learning (RL) can generalize across scenarios but often becomes brittle under distribution shift, reward misspecification, and stochastic interactions. Model predictive path integral (MPPI) control enables strong real-time refinement without gradients, but its performance depends on a well-shaped sampling prior, while manually designing the priors does not scale to multi-scenario deployment. We present 
+
+HOLO-MPPI (High-level Offline, Low-level Online MPPI), a multi-scenario motion planning framework that combines high-level policy learning with low-level stochastic optimal control. Offline, we learn a high-level policy that proposes scenario-robust plans in an abstract action space, with a learned world model for online rollout. Online, the policy serves as a data-driven prior generator that parameterizes MPPI’s sampling distribution conditioned on the current observation and goal. MPPI then optimizes low-level control sequences around this prior in real time to adapt to local disturbances. We instantiate 
+
+HOLO-MPPI in autonomous driving by designing an effec-tive high-level action space and tailored model architectures. Our evaluation across diverse driving scenarios shows that 
+
+HOLO-MPPI improves upon MPPI and end-to-end RL baselines while maintaining real-time control. 
+
+I. I NTRODUCTION 
+
+Robots deployed in the wild must plan motions across a spectrum of scenarios (e.g., varying layouts, dynamics, and task objectives) without per-scenario retuning. This multi-scenario setting is particularly challenging because the distribution of states, constraints, and disturbances can shift dramatically across environments, while planners must still produce safe, real-time behavior. Reinforcement learning (RL) is an appealing approach to acquire policies directly from data, sidestepping the need to hand-engineer heuristics for each scenario. In principle, training on diverse environments can yield policies that generalize to unseen ones [1]. In practice, however, end-to-end RL policies often exhibit unstable performance across scenarios due to long-horizon credit assignment, reward mis-specification, and sensitivity to distribution shift and stochas-tic dynamics [2], [3]. These issues are exacerbated when learning directly in low-level action spaces (e.g., torques or fine-grained velocity commands), where policy-gradient variance is high [4]–[6].                    
+
+> ∗The research work was done in part during an internship at HRI.
+> †Contributed equally to advising.
+> 1Massachusetts Institute of Technology, Cambridge, MA 02139. (Email: yjm@mit.edu ,azizan@mit.edu )
+> 2Honda Research Institute, USA, San Jose, CA, 95134. (Email:
+> jovin dsa@honda-ri.com ,faizan tariq@honda-ri.com ,
+> disele@honda-ri.com ,sbae@honda-ri.com ). Multi -Scenario Dataset / Simulator
+> Action Conversion 𝑔
+> Offline
+> Online
+> Training
+
+𝜋 ! High -Level 
+
+> Policy
+> World
+> Model
+
+𝐹 "     
+
+> Agent
+> Prior
+> Generation
+> MPPI Refinement
+> 𝑥 #𝑈
+> 𝑈
+> #𝑈
+> 𝑢 !
+> 𝑥 ,𝑜
+> 𝑥 ,𝑜
+> Fig. 1. Schematic of HOLO-MPPI . Offline, a high-level policy and a world model are trained on multi-scenario data. Online, the high-level policy and world model produce intention-level actions that are converted into a nominal low-level control sequence. MPPI samples around this prior, evaluates rollouts, and executes the first control of the optimized sequence.
+
+Model predictive path integral (MPPI) control, in contrast, is a sample-based optimizer for online policy refinement [7]. MPPI handles nonlinear dynamics without requiring gradi-ents and exploits parallel sampling to meet real-time con-straints. Its effectiveness, however, depends critically on the sampling prior, i.e., the distribution from which candidate control sequences are drawn [8]. A well-shaped prior can dramatically improve sample efficiency and robustness, while a poor one wastes computation and degrades performance. Designing such priors by hand (e.g., scenario-specific trajec-tory libraries) does not scale to multi-scenario deployment. This paper advocates a complementary decomposition: let learning supply scenario-robust, data-driven priors, and let online stochastic optimal control supply precise, constraint-aware refinement (see Figure 1). Moreover, we perform learning in a high-level action space that enables learning robust priors across multiple complex scenarios. 
+
+Contributions . Our main contributions are as follows:  
+
+> •
+
+We introduce HOLO-MPPI , a hierarchical, multi-scenario motion-planning framework that couples RL and MPPI through a learned sampling prior: the RL pol-icy steers the search toward useful modes, while MPPI retains its exploration and constraint-aware refinement under the planner’s full cost. This also decouples the RL reward from the MPC cost, letting each component use the objective it is best suited to optimize.  
+
+> •
+
+We learn the policy in an abstract action space designed to expose intent shared across scenarios, allowing a single planner to generalize across them without per-
+
+> arXiv:2606.16480v1 [cs.RO] 15 Jun 2026
+
+scenario retuning or handcrafted priors.  
+
+> •
+
+We instantiate HOLO-MPPI in a multi-scenario highway-driving benchmark, jointly training the high-level policy with a lightweight world model for online rollout. The high-level policy is more scenario-robust than direct low-level RL, and HOLO-MPPI further out-performs vanilla MPPI, end-to-end SAC, and the prior alone, with smoother control at real-time rates. II. R ELATED WORK 
+
+A. Sampling-based MPC and MPPI 
+
+Sampling-based MPC methods such as MPPI and the cross-entropy method (CEM) have proven to be effective for nonlinear control under uncertainty [7], [9], [10]. MPPI updates a nominal control sequence using cost-weighted perturbations. Its practical performance depends heavily on the sampling distribution used to generate rollouts. Recent works improve MPPI via covariance shaping, adaptive con-trol, and learned dynamics models [8], [11]–[13]. Despite these advances, many approaches still rely on heuristic or scenario-specific priors, which limit scalability to diverse multi-scenario settings. 
+
+B. Learning-based priors and initializations for MPC 
+
+A growing body of work integrates learning with MPC. Learning has been used to accelerate or initialize trajectory optimization by imitating MPC solutions [14], warm-starting MPC solvers [15], or learning high-level decision variables that parameterize MPC problems [16]. Closer to our setting, recent work uses learned policies as MPPI sampling priors with learned value functions as terminal costs [17], [18]. 
+
+HOLO-MPPI differs in two key ways. First, it learns a high-level policy in an abstract action space designed to capture scenario-shared intent, enabling one planner to generalize across structurally distinct scenarios. Second, the learned policy is used only to shape the sampling distribution of MPPI, decoupling the RL reward from the MPC cost. Since RL typically needs reward shaping, an interpretable, constraint-aware MPC cost—often dictated by the problem— can be a poor RL reward; this decoupling lets each compo-nent use the objective it is best suited to optimize. 
+
+C. Combining RL and MPC at deployments 
+
+A separate line of work structurally combines RL and MPC at deployment. Some approaches place RL at the low level, training an RL policy to track or steer a model-based plan [19], [20]. Dual approaches place a learned high-level policy on top of a model-based low-level controller [21], or blend RL with MPC via a learned torque residual [22]. Hierarchical decomposition has also been explored at the semantic level via vision-language models [23]. 
+
+HOLO-MPPI most closely resembles the hierarchical pat-tern of high-level RL with low-level MPC, but differs in the high-level RL policy’s role. Rather than producing a refer-ence that the low-level controller deterministically tracks, the high-level policy parameterizes a sampling distribution over the low-level optimizer’s solutions, allowing MPPI to explore around the prior under the planner’s full cost. III. P RELIMINARIES 
+
+A. Problem setup: multi-scenario motion planning 
+
+We consider a family of scenarios S, where each scenario 
+
+s ∈ S specifies the type of environment (e.g., merging or roundabout in autonomous driving). Our goal is to deploy a single planner that performs well across scenarios from S.At each initial state x0 ∈ X of the agent and the initial observation (or episode state) o0 ∈ O , the planner solves a finite-horizon MPC problem for the control sequence U := 
+
+u0: H−1 := ( u0, u 1, . . . , u H−1) ∈ U H for planning horizon 
+
+H:
+
+arg min  
+
+> U∈U H
+
+Js(x0: H , o 0: H , U ) := 
+
+> H−1
+
+X
+
+> t=0
+
+ℓs(xt, o t, u t) + Φ s(xH , o H )
+
+s.t. xt+1 = f (xt, u t),ot+1 = Fs(xt, o t, u t), t = 0 , . . . , H −1,
+
+(1) where ℓs is the stage cost, Φs is the terminal cost, f is the dynamics of the agent, and Fs is the (unknown) world dynamics for each scenario s. In a receding-horizon fashion, only the first action of the solution is executed before replanning at the next time step. 
+
+B. Model Predictive Path Integral 
+
+MPPI approximately solves the finite-horizon control problem in (1) by evaluating control trajectories sampled around a nominal trajectory ˜U := ˜ u0: H−1 ∈ U H .It considers an optimal stochastic policy (i.e., a distribution over U ) for the following problem given covariance Σ [7]: 
+
+q∗ 
+
+> MPPI
+
+= arg min 
+
+> q
+
+EU ∼q Js(x0: H , o 0: H , U ) + λDKL (q|| q0,Σ),
+
+(2) which yields the analytical solution: 
+
+q∗
+
+> MPPI
+
+(U ) = 1
+
+η1
+
+exp 
+
+
+
+− 1
+
+λ Js(x0: H , o 0: H , U )
+
+
+
+q0,Σ(U ), (3) where η1 is the normalization factor, and qU, Σ := 
+
+N (·| U, I H ⊗ Σ) denotes a multivariate Gaussian over the sequence of H control inputs with mean U and constant covariance Σ at each timestep. Since the optimal distribution q∗ 
+
+> MPPI
+
+is not tractable, MPPI considers a controlled distribution qU, Σ and pushes it close to the optimal one by minimizing their distance: 
+
+U ∗ = arg min 
+
+> U
+
+DKL (q∗
+
+> MPPI
+
+|| qU, Σ) = EU ∼q∗ 
+
+> MPPI
+
+U. (4) Then, it computes U ∗ through importance sampling based on sampling distribution q ˜U , Σ around the nominal trajectory 
+
+˜U :
+
+U ∗ = EU ∼q∗ 
+
+> MPPI
+
+U = EU ∼q ˜U , Σ
+
+q∗
+
+> MPPI
+
+(U )
+
+q ˜U , Σ(U ) U = EU ∼q ˜U , Σ w(U )U, 
+
+(5) with weight: 
+
+w(U ) = 1
+
+η2
+
+exp 
+
+
+
+− 1
+
+λ Js(x0: H , o 0: H , U ) −
+
+> H−1
+
+X
+
+> t=0
+
+˜u⊤ 
+
+> t
+
+Σ−1ut
+
+
+
+,
+
+(6) where η2 is the normalization factor. In practice, MPPI ap-proximates the expectation by drawing K samples {U k}Kk=1 
+
+from the sampling distribution q ˜U , Σ:
+
+U ∗ ≃
+
+> K
+
+X
+
+> k=1
+
+w(U k)U k. (7) In a receding-horizon fashion, MPPI executes the first action and uses the (zero-padded) remainder as the next prior ˜U .IV. O VERVIEW OF HOLO-MPPI 
+
+HOLO-MPPI , shown in Figure 1, is a hierarchical motion-planning framework for robots to operate across diverse scenarios without scenario-specific retuning. The central idea is to separate planning into two complementary layers:  
+
+> •
+
+High-level offline policy learning : we learn a policy 
+
+πθ via reinforcement learning that produces an abstract, scenario-robust plan that captures task intent in a com-pact high-level action space Uhigh . 
+
+> •
+
+Low-level online policy optimization : we refine the high-level plan online in the original low-level action space U, enabling fast adaptation to local disturbances, model mismatch, and stochastic interactions. This decomposition combines the strengths of learning and online optimization: RL provides a data-driven prior that gen-eralizes across scenarios, while MPPI preserves the reactivity and constraint-awareness needed for real-time control. The motivation for this design is that directly learning a policy that outputs low-level control actions is often difficult in multi-scenario settings. Low-level actions must account for fine-grained dynamics, long-horizon credit assignment, and highly variable local interactions, which can make training brittle and reduce transfer across environments. In contrast, a high-level action space can encode more stable and seman-tically meaningful decisions, such as subgoals, waypoints, motion primitives, mode switches, or other intention-level commands appropriate to the robotics domain. Learning in such an abstract space allows the policy to focus on decisions that are shared across scenarios, while deferring precise execution to the online optimizer. Offline, HOLO-MPPI learns both the high-level policy 
+
+πθ : X × O → U high and the world model Fϕ : X ×O ×U → O from data collected across scenarios from simulation, logged experience, exploration, or demonstrations. The world model predicts observations needed to roll out the high-level policy during prior generation, while the high-level policy maximizes long-horizon return through reinforcement learning. Importantly, HOLO-MPPI does not require the high-level policy to be a perfect standalone controller. Its purpose is to generate a prior that places online optimization near useful solution modes across many scenarios. At each planning step, given the initial state x0 and observation o0, we roll out the high-level actions from the learned policy πθ and the learned model Fϕ. Then, we map the high-level actions into the original action space U through a known conversion function g : X × O × U high → U , which may correspond to a simple upsampling rule, a tracking 
+
+Algorithm 1 HOLO-MPPI 
+
+Input: Initial state x0; Initial observation o0
+
+Output: Action sequence U = ( u0, u 1, · · · , u H−1).                                                                                                      
+
+> Require: Planning horizon H; Number of samples K; Sampling covariance matrix Σ; stage cost ℓ; terminal cost Φ; dynamics
+> f; action-conversion model g; MPPI temperature scalar λ
+> Phase 0: High-level offline policy learning
+> 1: Learn high-level policy πθvia reinforcement learning
+> 2: Learn world model Fϕ
+> Phase 1: Low-level online policy optimization
+> (1.1 ) Roll out a nominal action prior using the high-level policy
+> 3: for t= 0 , . . . , H −1do
+> 4: uhigh ←πθ(xt, o t)
+> 5: ˜ut←g(xt, o t, u high )
+> 6: ot+1 ←Fϕ(xt, o t,˜ut)
+> (1.2 ) Sample and evaluate trajectories around the prior in parallel
+> 7: for k= 1 , . . . , K do
+> 8: Sample a control sequence Uk=uk
+> 0: H−1∼ N ( ˜U , I H⊗Σ)
+> 9: Jk←0
+> 10: for t= 0 , . . . , H −1do
+> 11: xt+1 ←f(xt, u kt)
+> 12: ot+1 ←Fϕ(xt, o t, u kt)
+> 13: Jk←Jk+ℓ(xt, o t, u kt) + λ˜uTtΣ−1ukt
+> 14: Jk←Jk+ Φ( xH, o H)
+> (1.3 ) Compute importance weights and update the action se-quence
+> 15: β←min kJk
+> 16: η←ΣKk=1 exp  −1
+> λ
+>  Jk−β
+> 17: for k= 1 , . . . , K do
+> 18: ωk←1
+> ηexp  −1
+> λ
+>  Jk−β
+> 19: return PKk=1 ωkUk
+
+controller for geometric references, or a structured controller that maps symbolic intent into dynamically feasible controls depending on the application. Given the converted rollout ˜U ∈ U H , MPPI performs real-time stochastic optimization in the low-level action space. Specifically, it samples candidate control sequences around the learned prior, U k ∼ N ( ˜U , I H ⊗ Σ) , evaluates the result-ing rollouts under the task cost, and computes an importance-weighted update as in (7). Crucially, the high-level policy steers MPPI toward promising regions of the control space, thereby improving sample efficiency and removing the need for handcrafted priors. Algorithm 1 summarizes the resulting procedure. At each control cycle, HOLO-MPPI first queries the high-level policy using the current observation and goal, then converts the pre-dicted abstract plan into a nominal low-level action sequence 
+
+˜U , and finally runs MPPI around this learned prior to produce the control that is executed on the robot. 
+
+HOLO-MPPI is a general framework: the same architec-ture admits different modeling choices depending on the robotic platform and available prior knowledge. In particular, it is compatible with both on-policy RL in simulation and off-policy RL from logged data. For rollout-based evalua-tion, it can incorporate analytic models, learned models, or hybrid combinations of the two. When accurate dynamics are available, the ego system can use the known model with Fig. 2. Four highway driving scenarios: Straight , Merge , Roundabout , and 
+
+> Intersection . The initial position of the ego vehicle and the goal position are randomly generated in the marked area. We randomize lane numbers, spawn/goal locations, and traffic behaviors.
+
+analytic or learned predictions for the surroundings. In the next section, we describe HOLO-MPPI in more detail, focusing on the prominent application of autonomous driving. We instantiate its task-dependent ingredients, such as the MPC formulation in (1), the design of the high-level action model with its corresponding action conversion mechanism, and the training process of the high-level policy and the world model. V. HOLO-MPPI IN AUTONOMOUS DRIVING 
+
+We instantiate HOLO-MPPI in a multi-scenario highway-driving benchmark that we built on the Highway-Env simula-tor [24]. Each episode samples one scenario from Straight ,
+
+Merge , Roundabout , and Intersection (see Figure 2), which exposes a common observation interface to both the learned policy and the online planner. In addition to vehicle states, BEV images, and the ego-frame goal, the planner has access to the local lane graph in the ego neighborhood, including lane center-lines and connectivity. This local map informa-tion is treated as part of the driving interface, as in standard map or perception-based autonomous driving stacks. It does not provide scenario labels, expert trajectories, or scenario specific tuning. The observation o ∈ O contains (i) kinematic states okin ∈ R10 ×7 for up to ten vehicles, with per-vehicle features [presence , x, y, v x, v y , cos ψ, sin ψ], (ii) an 80 × 80 
+
+grayscale bird’s-eye-view image oimg ∈ R80 ×80 , and (iii) the goal position ogoal ∈ R2 expressed in the ego frame. The online planner operates on low-level actions ut = [ at, δ t],where at is longitudinal acceleration and δt is steering angle. 
+
+A. MPC formulation 
+
+At test time, MPPI optimizes a horizon-H sequence of low-level controls around a learned prior. The state of the ego vehicle is propagated with a kinematic bicycle model with control period ∆t = 0 .2s. Writing the ego state as 
+
+xt = [ px,t , p y,t , ψ t, v t], the dynamics f is represented as 
+
+f (xt) = 
+
+
+
+px,t +1 
+
+py,t +1 
+
+ψt+1 
+
+vt+1 
+
+ =
+
+
+
+px,t 
+
+py,t 
+
+ψt
+
+vt
+
+ +
+
+
+
+vt cos( ψt + βt)
+
+vt sin( ψt + βt)
+
+vt sin βt
+
+lat
+
+ ∆t, (8) where βt = arctan   tan δt
+
+> 2
+
+ is the slip angle, and l is the half length of the ego vehicle used by the simulator. For the objective optimized by the planner, we use the same cost across all scenarios: 
+
+ℓ(xt, o t, u t) = wv (vt − v⋆)2 + waa2 
+
+> t
+
++ wδ δ2 
+
+> t
+
++ wlat dlat (xt)2
+
++ woff 1[offroad( xt)] + wcol 1[collision( xt)] ,
+
+(9) where v⋆ = 9 m/s is the desired cruising speed and dlat (xt)
+
+is the lateral offset from the closest valid lane centerline. A rollout is terminated early when the ego reaches the goal, collides, or leaves the road; in the code, the arrival threshold is 1.5 m from the goal. The terminal cost is configurable and includes the options 
+
+Φ( xH , o H ) ∈
+
+
+
+wterm ∥gH ∥2, w term 
+
+100 ∥gH ∥2
+
+10 + ∥gH ∥2
+
+
+
+, (10) where gH is the goal vector in the ego frame. In our exper-iments, we use wv = wa = wδ = wlat = 0 .1, w off = wcol =100 , and wterm ∈ { 1, 5, 10 }. For MPPI hyperparameters, we use H = 8 with K = 1000 samples, sampling covariance 
+
+Σ = diag (0 .82, 0.157 2) and temperature λ = 0 .01 .
+
+B. High-level action model 
+
+We construct a compact high-level action space Uhigh by adapting the simulator’s discrete meta-action model [24] to preserve the Markov property needed for reinforce-ment learning. At each decision step, the policy se-lects one semantic driving command from Uhigh =
+
+{IDLE , FASTER , SLOWER , LANE LEFT , LANE RIGHT }. Each high-level action h ∈ U high is then converted into a low-level acceleration and steering action, 
+
+g(x, o, h ) = 
+
+ a(x, h )
+
+δ(x, o, h )
+
+
+
+, (11) for the ego state x = [ px, p y , ψ, v ] ∈ X and observation 
+
+o ∈ O .For longitudinal control, the current speed v is first mapped to the nearest target speed in a discrete grid V =(vi)Mi=1 = (0 , 4.5, 9) . The FASTER and SLOWER actions in-crease or decrease the target-speed index by one, while all other commands keep the current target-speed index unchanged: 
+
+i∗(v, h ) = clip  
+
+> [1 ,M ]
+
+arg min  
+
+> i∈[1 ,M ]
+
+|vi − v| + ∆( h)
+
+!
+
+, (12) where ∆( h) := 1[h = FASTER ] − 1[h = SLOWER ] is the index shift, and clip [1 ,M ] z := min ( M, max(0 , z )) . The resulting target speed v∗(v, h ) = vi∗(v,h ) is then tracked by a proportional controller: 
+
+a(x, h ) = clip 
+
+> [−amax ,a max ]
+
+Ka
+
+ v∗(v, h ) − v, (13) where Ka = 1 /0.6 and amax = 5 m /s2.For lateral control, LEFT LANE and RIGHT LANE select the closest feasible adjacent lane in the commanded direction using the local lane graph available to the planner. This conversion utilizes the local lane graph introduced above without any scenario-specific controller parameters or ma-neuver libraries. The lane selection respects lane boundaries and road connectivity. If no feasible adjacent lane exists, the target lane remains the current lane. Non-lane-change actions also keep the current lane as the target. The target lane is tracked with a cascaded lateral con-troller for smooth and bounded steering commands. Let 
+
+(sℓ(p), d ℓ(p)) be the local longitudinal and lateral coordi-nates of the ego position p = [ px, p y ] in lane ℓ, and let θℓ(s)
+
+be the lane heading at longitudinal coordinate s. For the selected target lane ℓtar , we use a short lookahead heading 
+
+θfut = θℓtar 
+
+ sℓtar (p) + vτ p
+
+ with τp = 0 .1s. The controller then converts lane-tracking error into steering through three steps. First, the lateral offset to the target lane is converted into a desired lateral velocity vlat = −Klat dℓtar (p) with 
+
+Klat = 0 .5. Then, this velocity is converted into a bounded heading correction relative to the lookahead lane heading: 
+
+ψref = θfut + clip   
+
+> [−¯ψ, ¯ψ]
+
+sin −1 clip 
+
+> [−1,1]
+
+vlat 
+
+nz( v)
+
+!
+
+, (14) where ¯ψ = π/ 4, and nz( v) := sign( v) max( |v|, 10 −2)
+
+avoids division by zero. Third, the resulting heading error is converted into a desired yaw rate and then into a steering command through the bicycle-model geometry: 
+
+˙ψcmd = Kψ wrap 
+
+> [−π,π ]
+
+(ψref − ψ), γ = sin −1 clip 
+
+> [−1,1]
+
+l
+
+nz( v) ˙ψcmd 
+
+!
+
+,δ(x, o, h ) = clip 
+
+> [−δmax ,δ max ]
+
+tan −1 2 tan clip 
+
+> [−π/ 2+ ϵ,π/ 2−ϵ]
+
+γ
+
+!! 
+
+,
+
+where Kψ = 3 .0, δ max = π/ 3, and ϵ = 10 −3 prevents numerical singularities of evaluating tan( ·) at ±π/ 2.This action model exposes a small set of interpretable driving intentions to the high-level policy while guaran-teeing bounded, dynamically meaningful low-level controls. Because the target speed and target lane are deterministic functions of the current state, observation, action, and local lane graph, the resulting high-level decision process remains Markov with respect to the planner’s available information. 
+
+C. Reinforcement learning of high-level policy 
+
+We train the high-level policy with DQN across all driving scenarios. We use a dense reward that encourages fast goal reaching while penalizing accidents (collisions or off-road events), lane deviation, and control effort: 
+
+r = 10 1{arriv }− 51{accid }+0 .02 rspeed −0.01( rlane +rcontrol )Vehicles states      
+
+> CNN
+> MLP
+> High -level action
+> 𝑢 !"#!
+> State 𝑥 ,Obs 𝑜
+> MLP Goal pos
+> Attention
+> BEV image
+> High -Level Policy 𝜋 $
+> Fig. 3. Architecture of the high-level policy model. A permutation-invariant attention-based vehicle-state encoder, a BEV image encoder, and a goal encoder are fused to generate a high-level driving intention that can be mapped to a nominal low-level action.
+
+where 1{·} is the indicator function for an event, and rspeed =
+
+clip   v−4.54.5 , −1, 1, r lane = min   d2 
+
+> lane
+> 5
+
+, 1, r control = ( a 
+
+> 5
+
+)2 +( δπ/ 3 )2. Episodes terminate on goal reaching, collision, off-road departure, or timeout. The policy network follows the architecture in Fig. 3. We utilize an ego-centric attention module as in [25] to reflect the permutation-invariant structure of the vehicles’ states. Separate embeddings are applied for the ego and neighboring vehicles, followed by two-head attention over the set of observed vehicles. The BEV image is encoded by a three-layer convolutional network, and the goal vector is encoded by a small multilayer perceptron. These three embeddings are concatenated and passed to the MLP head. In the configuration used in our experiments, the kinematic, image, and goal branches output 64, 64, and 16 features, respectively, followed by a [128 , 64] multilayer head. We train with 40 parallel environments for 7M environment steps, replay-buffer size 0.5M, batch size 1024, learning rate 
+
+3 × 10 −4, discount factor 0.99 , and an ϵ-greedy schedule with exploration fraction 0.2 and final ϵ = 0 .05 .
+
+D. World model 
+
+Our online rollout model is hybrid rather than fully learned. Ego kinematics are propagated analytically with the bicycle model above, while neighboring vehicles follow a constant-velocity model in the world frame for simplicity and speed. Learning the behavior of neighboring vehicles as part of the world model is a natural extension for more accurate prediction in complex settings such as urban driving, where interactive and less structured behaviors are more prevalent. We additionally train a learned predictor for the next BEV image. Given the current observation and low-level action, the current image is first shifted through a map T according to the ego translation, and the network F img  
+
+> ϕ
+
+predicts only the residual correction: 
+
+oimg  
+
+> t+1
+
+= T (xt, o t, u t) + F img  
+
+> ϕ
+
+(xt, o t, u t). (15) The predictor uses the same kinematic, image, and goal encoders as the policy, adds an action encoder, and decodes the fused latent through a skip-connected deconvolutional network. Training data are drawn directly from the replay buffer used for RL, augmented with the executed low-level actions. The loss is a weighted pixelwise reconstruction objective over multi-step rollouts: 
+
+Limg =
+
+P 
+
+> t,p
+
+wt,p ∥oimg  
+
+> t
+
+(p) − otrue  
+
+> t
+
+(p)∥1
+
+P 
+
+> t,p
+
+wt,p 
+
+, (16) where the per-pixel weights increase on foreground and edge: 
+
+wt,p = 1+ λfg 1[otrue  
+
+> t
+
+(p) > τ fg ]+ λedge 1[∥∇ otrue  
+
+> t
+
+(p)∥ > τ edge ].
+
+In our implementation, λfg = 4 .0, λedge = 2 .0, τfg = 0 .55 ,and τedge = 0 .08 . We train with Adam with a learning rate 
+
+3×10 −4, batch size 512, four-step rollout loss, and a teacher-forcing ratio linearly decayed from 1.0 to 0.25 .At planning time, image prediction is only needed for gen-erating the nominal action prior. Once the prior is generated, the planner rolls out only the kinematic branches analytically and skips image prediction entirely for evaluating the sample control sequences around the prior. 
+
+E. Collision evaluation 
+
+We check collision by testing pairwise overlap between the ego vehicle and each neighboring vehicle using the separating axis theorem (SAT) [26]. SAT guarantees that two convex polygons do not intersect if there exists an axis along which their projections are disjoint. Vehicles are modeled as oriented rectangles. For each ego–neighbor pair, the algorithm evaluates the ego longitudinal and lateral axes together with the neighbor longitudinal and lateral axes. Let T ∈ R2 denote the center displacement and let 
+
+v1, w 1, v 2, w 2 ∈ R2 be the two body-fixed axes of the ego and neighbor vehicles. Each ego–neighbor pair is declared separated if any of the four projections satisfy 
+
+∃a ∈ { v1, w 1, v 2, w 2} s.t. |T ⊤a| > r ego (a) + rneighbor (a),
+
+where r(·)(a) is the projected half-extent on axis a. Other-wise, the pair intersects. We evaluate all MPPI samples and neighbors in parallel, enabling real-time planning. VI. E XPERIMENTS 
+
+A. Experimental setup 
+
+We evaluate HOLO-MPPI on the benchmark introduced in Section V across all four scenarios. Each method is tested over 400 episodes (100 per scenario) We compare HOLO-MPPI against the following baselines.  
+
+> •
+
+SAC : RL policy trained via SAC acting directly in the original low-level action space U. 
+
+> •
+
+Prior : Our high-level policy trained via DQN that is used as a sampling-prior generator for HOLO-MPPI . 
+
+> •
+
+FHP : Filtered high-level policy instances. Since the high-level policy is trained offline, collapsed training runs can be identified and excluded before deployment.  
+
+> •
+
+MPPI : Generic MPPI employing the previous plan as a prior (the initial prior is zero).  
+
+> •
+
+SAC/FHP + MPPI : MPPI with a prior generated by SAC or FHP as an ablation study.  
+
+> Fig. 4. Learning curves over 10 training runs for low-level (SAC) and the high-level policy (Prior). The top row shows episode reward and average success rate over training, while the bottom row breaks down success rate by scenario. Among the 10 high-level-policy runs, 3 collapsed during offline training and are reported separately as FHP.
+
+We report the success rate (goal reached without collisions or going off-road) along with per-step control effort and comfort, defined as the squared sum of control action and its first-order difference, respectively. 
+
+B. Reinforcement learning of high-level priors 
+
+Figure 4 compares the learning dynamics of the low-level policy (SAC) and the high-level policy (Prior) that is later used to parameterize MPPI’s sampling distribution. SAC improves more rapidly during the early stage of training, suggesting that it quickly exploits the easier modes of the scenario distribution. However, the per-scenario curves on the lower left plot show that its performance is highly un-even: SAC achieves strong results on the simpler ( Straight 
+
+and Merge ) scenarios, but remains much weaker on the more complex ( Intersection and Roundabout ) scenarios. In contrast, the high-level policy improves more gradually, yet ultimately attains a higher overall reward and average success rate while exhibiting a substantially more balanced performance profile across scenarios. This distinction is important for HOLO-MPPI . The learned policy is not the final controller, but it is used as a sampling-prior generator for the downstream MPPI planner. In this role, broad competence across the scenarios is more valuable than near-optimal performance on only a subset of tasks. A prior that is consistently reasonable across scenarios provides a better warm start for MPPI and reduces the likelihood that online optimization begins from a poor mode. We therefore use our designed high-level policy as the nominal prior generator in the downstream HOLO-MPPI experiments. 
+
+C. Main results 
+
+Table I summarizes performance across the four scenar-ios. Overall, HOLO-MPPI achieves the highest success rate while maintaining competitive control smoothness. Vanilla TABLE I PERFORMANCE EVALUATED OVER 400 EPISODES (100 PER SCENARIO ) 
+
+> WITH MEAN
+
+± STD OVER 10 TRAINED RL MODELS . HOLO-MPPI 
+
+> ACHIEVES THE HIGHEST OVERALL SUCCESS RATE WHILE MAINTAINING SMOOTHER CONTROL
+
+.
+
+Scenario Method Success (%) ↑ Ctrl Effort ↓ Ctrl Comfort ↓
+
+Overall MPPI 57.8 0.43 ± 0.27 0.17 ± 0.08 
+
+SAC 56 .2± 7.6 9.04 ± 3.89 8.67 ± 6.02 
+
+Prior 64 .9± 8.0 1.64 ± 2.83 3.31 ± 6.22 
+
+SAC + MPPI 56 .6± 6.9 7.98 ± 2.62 8.42 ± 4.02 
+
+HOLO-MPPI 68 .0± 7.2 1.27 ± 1.94 2.20 ± 3.74 
+
+Straight MPPI 85.0 0.33 ± 0.10 0.14 ± 0.04 
+
+SAC 97 .5± 2.5 7.96 ± 3.75 7.79 ± 6.38 
+
+Prior 77 .3± 17 .0 1.40 ± 2.95 3.36 ± 7.63 
+
+SAC + MPPI 96 .6± 2.3 7.46 ± 2.53 8.45 ± 4.26 
+
+HOLO-MPPI 78 .9± 14 .8 0.98 ± 1.79 2.02 ± 4.27 
+
+Merge MPPI 59.0 0.44 ± 0.19 0.17 ± 0.05 
+
+SAC 87 .9± 3.9 9.19 ± 3.36 8.91 ± 5.91 
+
+Prior 73 .7± 12 .6 1.38 ± 2.31 3.06 ± 5.44 
+
+SAC + MPPI 89 .6± 4.2 8.02 ± 2.31 8.45 ± 4.07 
+
+HOLO-MPPI 74 .1± 13 .5 1.15 ± 1.57 2.11 ± 3.20 
+
+Intersection MPPI 31.0 0.45 ± 0.15 0.18 ± 0.05 
+
+SAC 22 .9± 21 .9 10 .21 ± 3.22 9.65 ± 3.69 
+
+Prior 68 .9± 6.5 1.99 ± 3.17 3.39 ± 5.78 
+
+SAC + MPPI 22 .9± 21 .3 8.39 ± 2.33 8.10 ± 2.81 
+
+HOLO-MPPI 68 .3± 6.4 1.58 ± 2.31 2.44 ± 3.89 
+
+Roundabout MPPI 56 .0 0.57 ± 0.45 0.21 ± 0.13 
+
+SAC 16 .6± 7.8 13 .04 ± 4.83 11 .25 ± 5.92 
+
+Prior 39 .6± 5.5 1.97 ± 2.77 3.53 ± 5.11 
+
+SAC + MPPI 17 .1± 6.1 10 .13 ± 3.62 8.49 ± 3.81 
+
+HOLO-MPPI 50 .7± 7.4 1.49 ± 2.04 2.28 ± 3.37 
+
+MPPI attains the lowest control effort, but this is unsur-prising: without a learned prior, it tends to produce con-servative, low-magnitude actions that fail to make progress when more aggressive motion is required, as seen in the 
+
+Intersection scenario where turning maneuvers are neces-sary. The learned high-level policy alone (Prior) is already competitive, confirming that the abstract action space cap-tures useful scenario-level intent. Coupling it with online MPPI further improves both success rate and control smooth-ness. We note that although these gaps appear to fall within the error bounds, the comparison is paired: MPPI is applied to the same models on the same episodes, so the gaps reflect a genuine gain from planning rather than evaluation noise. The per-scenario breakdown reveals a complementary pattern. On the simpler scenarios ( Straight and Merge ), SAC and SAC + MPPI achieve the highest success rates, consistent with their tendency to overfit to easier modes of the scenario distribution. However, these gains come at the cost of substantially harsher control than HOLO-MPPI .Moreover, they collapse on the more challenging scenarios (Intersection and Roundabout ), where success rates drop below 25%, while HOLO-MPPI maintains success rates above 50%. Table II shows that this advantage persists across terminal-cost settings and how it develops as the high-level policy is trained. When the high-level policy is only partially trained (3.5M steps), HOLO-MPPI is competitive but not yet uniformly dominant, suggesting that MPPI cannot fully compensate for an immature prior. As the prior improves, 
+
+TABLE II SUCCESS RATE (%) EVALUATED OVER 400 EPISODES (100 PER SCENARIO ) WITH MEAN ± STD OVER 10 TRAINED RL MODELS FROM THREE DIFFERENT TRAIN STEPS . F OR THE METHODS WITH MPPI 
+
+> REFINEMENTS
+
+, WE REPORT THE MEAN AND BEST PERFORMANCES ACROSS THE SIX TERMINAL COST SETTINGS IN (10). 
+
+Method Train Step 3.5M 4.5M 7M 
+
+MPPI (mean) 44 .3 44 .3 44 .3
+
+MPPI (best) 58 .0 58 .0 58 .0
+
+SAC 50 .1± 10 .9 50 .6± 11 .2 56 .2± 7.6
+
+SAC + MPPI (mean) 51 .1± 10 .6 51 .9± 10 .5 56 .9± 7.4
+
+SAC + MPPI (best) 52 .2± 10 .8 53 .2± 10 .7 57 .9± 7.2
+
+FHP 48 .9± 7.4 43 .2± 15 .9 31 .5± 9.5
+
+FHP + MPPI (mean) 55 .3± 6.5 49 .8± 17 .0 41 .8± 8.8
+
+FHP + MPPI (best) 56 .9± 7.4 52 .0± 17 .4 43 .5± 9.1
+
+Prior 42 .4± 15 .9 53 .3± 12 .6 64 .9± 8.0
+
+HOLO-MPPI (mean) 49 .8± 13 .7 57 .1± 13 .2 67 .3± 6.9
+
+HOLO-MPPI (best) 51 .6± 13 .6 58 .6± 13 .3 69 .1± 6.5
+
+TABLE III PLANNING TIME COMPARISON . A LL METHODS ARE REAL -TIME CAPABLE WITH 5H Z OPERATION .
+
+Method SAC Prior MPPI SAC + MPPI HOLO-MPPI 
+
+Time (ms) 1.96 ± 0.29 1.64 ± 0.18 130 ± 16 157 ± 16 169 ± 28 
+
+however, the benefits of the hierarchical decomposition be-come more pronounced. At 7M steps, HOLO-MPPI clearly outperforms all baselines and remains robust to cost tuning. The qualitative results are consistent with these quantita-tive trends. In Figure 5, vanilla MPPI and the SAC-based variants select poor turning modes in the intersection exam-ple and go off-road, whereas the learned high-level policy captures the correct maneuver. HOLO-MPPI then refines that intention into a trajectory that stays closer to the lane geometry and reaches the goal more cleanly than the prior alone. Figure 6 further shows that the learned world model preserves the coarse scene structure well enough to support rollout-based evaluation, although visible drift remains over longer rollouts. Finally, Table III shows that the additional computation for prior generation and action conversion still leaves runtime compatible with 5Hz real-time control. VII. C ONCLUSION 
+
+We presented HOLO-MPPI , a hierarchical framework for multi-scenario motion planning that pairs a high-level learned prior with low-level online MPPI refinement. By learning in an abstract action space and refining in the original control space at test time, HOLO-MPPI achieves robust performance across diverse scenarios without per-scenario retuning. In our autonomous-driving experiments, this combination improves the success rate over vanilla MPPI and end-to-end RL baselines while maintaining smooth, real-time control. Several directions remain for future work. Extending the world model to learn neighbor behavior could improve rollouts in interactive, less structured environments such as Fig. 5. 20-step (10 s) trajectory comparison in an intersection scenario. Starting from the same initial state, vanilla MPPI and SAC-based variants select poor turning modes and go off-road, whereas the learned high-level policy indentifies the correct maneuver. HOLO-MPPI further refines this high-level intention via online MPPI, yielding a lower-cost trajectory that reaches the goal more efficiently while executing a smoother, lower-curvature turn. 
+
+urban driving. Scaling to a broader set of scenarios and evaluating on held-out scenario types would further test the generalization of the learned prior. End-to-end training with differentiable MPPI in the loop could align the high-level policy more directly with downstream refinement. Finally, applying HOLO-MPPI to other robotic domains would test the generality of the hierarchical design. REFERENCES [1] K. Cobbe, O. Klimov, C. Hesse, T. Kim, and J. Schulman, “Quan-tifying generalization in reinforcement learning,” in International conference on machine learning . PMLR, 2019, pp. 1282–1289. [2] D. Hadfield-Menell, S. Milli, P. Abbeel, S. J. Russell, and A. Dragan, “Inverse reward design,” Advances in neural information processing systems , vol. 30, 2017. [3] G. Dulac-Arnold, N. Levine, D. J. Mankowitz, J. Li, C. Paduraru, S. Gowal, and T. Hester, “Challenges of real-world reinforcement learning: definitions, benchmarks and analysis,” Machine Learning ,vol. 110, no. 9, pp. 2419–2468, 2021. [4] R. S. Sutton, D. Precup, and S. Singh, “Between mdps and semi-mdps: A framework for temporal abstraction in reinforcement learning,” 
+
+Artificial intelligence , vol. 112, no. 1-2, pp. 181–211, 1999. [5] A. S. Vezhnevets, S. Osindero, T. Schaul, N. Heess, M. Jaderberg, D. Silver, and K. Kavukcuoglu, “Feudal networks for hierarchical rein-forcement learning,” in International conference on machine learning .PMLR, 2017, pp. 3540–3549. [6] O. Nachum, S. S. Gu, H. Lee, and S. Levine, “Data-efficient hi-erarchical reinforcement learning,” Advances in neural information processing systems , vol. 31, 2018. [7] G. Williams, P. Drews, B. Goldfain, J. M. Rehg, and E. A. Theodorou, “Information-theoretic model predictive control: Theory and applica-tions to autonomous driving,” IEEE Transactions on Robotics , vol. 34, no. 6, pp. 1603–1622, 2018. [8] J. Yin, Z. Zhang, E. Theodorou, and P. Tsiotras, “Trajectory dis-tribution control for model predictive path integral control using covariance steering,” in 2022 International Conference on Robotics and Automation (ICRA) . IEEE, 2022, pp. 1478–1484. [9] R. Rubinstein, “The cross-entropy method for combinatorial and continuous optimization,” Methodology and computing in applied probability , vol. 1, no. 2, pp. 127–190, 1999. [10] C. Pinneri, S. Sawant, S. Blaes, J. Achterhold, J. Stueckler, M. Rolinek, and G. Martius, “Sample-efficient cross-entropy method for real-time planning,” in Conference on Robot Learning . PMLR, 2021, pp. 1049– 1065. 
+
+Fig. 6. Qualitative comparison of the learned world model over a rollout horizon in Intersection and Roundabout scenarios. For each scenario, the top row shows the evolution of the predicted BEV images, and the bottom row shows the corresponding ground-truth rollout. The model preserves coarse scene structure, but visible drift accumulates over longer horizons. [11] I. S. Mohamed, J. Xu, G. S. Sukhatme, and L. Liu, “Toward efficient mppi trajectory generation with unscented guidance: U-mppi control strategy,” IEEE Transactions on Robotics , vol. 41, pp. 1172–1192, 2025. [12] J. Pravitra, K. A. Ackerman, C. Cao, N. Hovakimyan, and E. A. Theodorou, “ L1-adaptive mppi architecture for robust and agile con-trol of multirotors,” in 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2020, pp. 7661–7666. [13] K. Ryu, M. Sung, P. Gupta, J. D’sa, F. M. Tariq, D. Isele, and S. Bae, “Iann-mppi: Interaction-aware neural network-enhanced model predictive path integral approach for autonomous driving,” arXiv preprint arXiv:2507.11940 , 2025. [14] S. Levine and V. Koltun, “Guided policy search,” in International conference on machine learning . PMLR, 2013, pp. 1–9. [15] D. Celestini, D. Gammelli, T. Guffanti, S. D’Amico, E. Capello, and M. Pavone, “Transformer-based model predictive control: Trajectory optimization via sequence modeling,” IEEE Robotics and Automation Letters , vol. 9, no. 11, pp. 9820–9827, 2024. [16] Y. Song and D. Scaramuzza, “Policy search for model predictive control with application to agile drone flight,” IEEE Transactions on Robotics , vol. 38, no. 4, pp. 2114–2130, 2022. [17] N. A. Hansen, H. Su, and X. Wang, “Temporal difference learning for model predictive control,” in International Conference on Machine Learning . PMLR, 2022, pp. 8387–8406. [18] Y. Qu, H. Chu, S. Gao, J. Guan, H. Yan, L. Xiao, S. E. Li, and J. Duan, “Rl-driven mppi: Accelerating online control laws calculation with offline policy,” IEEE Transactions on Intelligent Vehicles , vol. 9, no. 2, pp. 3605–3616, 2023. [19] F. Jenelten, J. He, F. Farshidian, and M. Hutter, “Dtc: Deep tracking control,” Science Robotics , vol. 9, no. 86, p. eadh5401, 2024. [20] J. Z. Zhang, M. Sorokin, J. Br¨ udigam, B. Hung, S. Phillips, D. Yer-shov, F. Niroui, T. Zhao, L. Fermoselle, X. Zhu et al. , “Sumo: Dynamic and generalizable whole-body loco-manipulation,” arXiv preprint arXiv:2604.08508 , 2026. [21] Y. Yang, G. Shi, X. Meng, W. Yu, T. Zhang, J. Tan, and B. Boots, “Cajun: Continuous adaptive jumping using a learned centroidal controller,” in Conference on Robot Learning . PMLR, 2023, pp. 2791–2806. [22] J. Cheng, D. Kang, G. Fadini, G. Shi, and S. Coros, “Rambo: Rl-augmented model-based whole-body control for loco-manipulation,” 
+
+IEEE Robotics and Automation Letters , 2025. [23] A. Schakkal, B. Zandonati, Z. Yang, and N. Azizan, “Hierarchi-cal vision-language planning for multi-step humanoid manipulation,” 
+
+arXiv preprint arXiv:2506.22827 , 2025. [24] E. Leurent, “An environment for autonomous driving decision-making,” https://github.com/eleurent/highway-env, 2018. [25] E. Leurent and J. Mercat, “Social attention for autonomous decision-making in dense traffic,” arXiv preprint arXiv:1911.12250 , 2019. [26] S. Gottschalk, M. C. Lin, and D. Manocha, “Obbtree: A hierarchical structure for rapid interference detection,” in Proceedings of the 23rd annual conference on Computer graphics and interactive techniques ,1996, pp. 171–180.
