@@ -1,0 +1,1143 @@
+Title: Multi-Stage Stochastic Optimization and Reinforcement Learning Approaches for Dynamic Inspection of Infrastructure Systems
+
+URL Source: https://arxiv.org/pdf/2606.15840v1
+
+Published Time: Tue, 16 Jun 2026 01:37:14 GMT
+
+Number of Pages: 36
+
+Markdown Content:
+# Multi-Stage Stochastic Optimization and Reinforcement Learning Approaches for Dynamic Inspection of Infrastructure Systems 
+
+Juan-Alberto Estrada-Garc´ ıa 
+
+Department of Industrial and Operations Engineering, University of Michigan, Ann Arbor, USA, juanest@umich.edu 
+
+Siqian Shen 
+
+Department of Industrial and Operations Engineering, University of Michigan, Ann Arbor, USA, siqian@umich.edu 
+
+Abstract. Problem Definition: We study a dynamic inspection problem for infrastructure systems in which multiple vehicles are routed and scheduled to monitor components subject to heterogeneous and stochastic failures. A key challenge is endogenous uncertainty in which failure-time realizations are filtered through prior inspection actions and failure-propagation dynamics, so the distribution of future operational states depends on the history of inspection decisions. This yields a multi-stage decision problem that integrates routing, scheduling, and decision-dependent reliability dynamics over time. Methodology / Results: We formulate the problem as a multi-stage stochastic mixed-integer program that jointly optimizes routing and scheduling decisions under endogenous uncertainty. We develop a stochastic dual dynamic integer programming (SDDiP) algorithm that integrates dual approximation, integer state reduction, and sampling-based forward simulation to approximate cost-to-go functions. In parallel, we propose a reinforcement learning framework that learns job clustering structures and routing policies through interaction with simulated system dynamics and failure processes. Numerical experiments on infrastructure networks with diverse topologies and failure patterns show that SDDiP yields high-quality solutions but faces scalability limitations, while the learning-based approach achieves strong scalability with competitive performance, highlighting a trade-off between optimality and tractability. Implications: This work advances the modeling of endogenous uncertainty in multi-stage stochastic routing problems and bridges stochastic programming with learning-based approaches. The results provide guidance on when to deploy optimization-based versus learning-based methods, enabling more effective and scalable inspection planning in practice. More broadly, the framework supports risk-aware allocation of inspection resources and improved reliability of critical infrastructure systems. 
+
+Key words: dynamic inspection, multi-stage stochastic mixed-integer programming (SMIP), endogenous uncertainty, reinforcement learning, stochastic dual dynamic integer programming (SDDiP) 
+
+1. Introduction 
+
+Inspection and maintenance are central to the safety and reliability of large-scale infrastructure systems. Assets such as power transmission and distribution networks, pipelines, bridges, and transportation corridors are geographically dispersed and exposed to different types of hazards, and thus their operators must decide when and where to allocate limited inspection resources. In practice, these decisions are often sequential: on each shift, an operator selects a subset of components to visit and then determines operational routes that respect shift duration, depot locations, and vehicle or crew capabilities (Liu, Hu, and Cheng 2025). A defining feature of many dynamic inspection 
+
+1 
+
+> arXiv:2606.15840v1 [math.OC] 14 Jun 2026 Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty
+> 2
+
+problems is that inspection actions influence future system evolution. Timely inspections reduce the risk of component failures by detecting deterioration conditions and triggering mitigation. Such feedback, however, creates the so-called endogenous uncertainty of component failures, such that the distribution of future failures depends on the history of inspection decisions (Shahverdi and Miller-Hooks 2023). These endogenous dynamics are particularly salient for infrastructure systems exposed to time-varying environmental stressors or cascading mechanisms, where the benefits of inspection are realized through future risk reduction. In this paper, decision dependence is modeled through the controlled state transition. The uncertainty consists of failure-time realizations sampled on a finite scenario tree. Inspection decisions then filter these realizations through completion, pre-failure inspection, and failure-propagation dynamics. Hence, for the same primitive failure-time realization, different inspection histories can lead to different realized completion and failure states. A motivating application arises in electric power systems. Transmission and distribution assets are exposed to failures originating from aging equipment, vegetation encroachment, and extreme weather events. Such failures can propagate and lead to large service disruptions. Similar planning challenges arise in transportation and civil infrastructure, where ground crews and unmanned aerial systems are deployed over consecutive days to monitor bridges, railways, and pipelines under daily operational limits and evolving risk (Shahverdi and Miller-Hooks 2023). The dynamic-inspection applications lie at the intersection of dynamic vehicle routing (Pil-lac et al. 2013), scheduling (Memarzadeh and Pozzi 2016), and stochastic dynamic optimiza-tion (Pereira and Pinto 1991). Two-stage optimization models and static routing policies cannot represent sequential adaptation when inspection choices affect subsequent failure risk. Multi-stage stochastic mixed-integer programming (SMIP) (Birge and Louveaux 2011, Shapiro, Dentcheva, and Ruszczynski 2021), provides a natural framework for modeling and solving the problem, but exact scenario-tree-indexed formulations become computationally intractable as horizons and the num-ber of samples grow (Gr¨ owe-Kuska, Heitsch, and R¨ omisch 2003, Dupaˇ cov´ a, Gr¨ owe-Kuska, and R¨ omisch 2003). To address this challenge, in this paper, we develop a two-horizon representation 
+
+that separates strategic assignment decisions (which tasks to inspect in a shift) from tactical routing decisions (how to sequence visits within a shift). We further design a reinforcement learning (RL) framework that identifies job clustering structures and routing strategies through real-time inter-actions with simulated training samples capturing system dynamics and endogenous component failures, and we evaluate its performance against the optimization-based approach across a variety of problem instances. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 3
+
+1.1. Contributions 
+
+The main contributions we present in this paper are threefold. First, we formulate a multi-stage SMIP model that jointly optimizes assignment and route scheduling under endogenous failure risk, with a state description that tracks completed inspections, realized failures, and vehicle depot locations, and propose a two-horizon reformulation that preserves the multi-stage decision making and system dynamics, but decomposes the problem into strategic task assignment and tactical routing. Second, we propose a Stochastic Nested Decomposition (SND) algorithm, a variant of stochastic dual dynamic integer programming, to solve the two-horizon formulation by constructing cutting planes to approximate the cost-to-go functions and tactical cuts to approximate the routing recourse. Third, we develop a simulation-based policy-learning framework that casts the strategic horizon as a finite-horizon Markov decision process (MDP). This provides an alternative, scalable policy class and enables a systematic comparison between decomposition-based stochastic optimization and data-driven policy approximation in endogenously evolving uncertain environments. 
+
+1.2. Structure of the Paper 
+
+The remainder of the paper is organized as follows. Section 2 reviews relevant research and positions our work in the context of recent literature. Section 3 presents the multi-stage SMIP model for dynamic inspection, and reformulating the problem as a two-horizon multi-stage problem. Section 4 presents an exact solution algorithm to solve the two-horizon model. Section 5 describes an alternative solution approach to the two-horizon model via RL. In Section 6, we conduct numerical studies, and compare different models and solution approaches using instances with diverse topologies and failure configurations. Finally, in Section 7, we conclude our work and discuss future research. 
+
+2. Related Literature 
+
+Inspection routing extends classical vehicle routing by integrating scheduling elements such as time windows, resource limits, service priorities, and coverage objectives into route design. As such, it is positioned within the broader family of vehicle routing problems (VRPs) that incorporate het-erogeneous constraints and operational features beyond the canonical VRP. Network inspection has emerged as a distinct class of problems in which inspection decisions balance coverage, timeliness, and penalties associated with missed or delayed service (Borrero and Prokopyev 2018). Method-ologically, many inspection routing models inherit algorithmic building blocks from large-scale integer programming, including branch-and-price and branch-cut-and-price frameworks (Barnhart Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 4
+
+et al. 1998, Pecin et al. 2017). Recent work has further emphasized practical scalability through parallelization and improved column generation strategies for solving large routing formulations (Yu, Nagarajan, and Shen 2022). In civil and critical infrastructure systems, inspection and maintenance planning is closely tied to life-cycle management and operational resilience. Reviews of integrated infrastructure systems highlight cross-network dependencies among infrastructure components, motivating coordinated inspection prioritization and network-level response strategies (Saidi et al. 2018). From a monitor-ing and security perspective, inspection can be viewed as allocating limited sensing or monitoring resources across a network to detect adverse events, a perspective that appears in critical infrastruc-ture monitoring and control frameworks (Kyriakides and Polycarpou 2014) and in power system monitoring applications (Monti and Ponci 2015). This perspective also relates to the literature on informative path planning, which focuses on routing vehicles to maximize information gain in uncertain environments. Early related work in manufacturing systems similarly models inspection as an allocation problem under operational constraints and uncertainty (Viswanadham, Sharma, and Taneja 1996). Inspection routing for unmanned systems introduces additional operational constraints such as endurance, charging requirements, and feasibility limits that directly affect inspection coverage decisions. Drone-based inspection models emphasize the interaction between routing, energy limits, and recharge operations (Vom B¨ ogel et al. 2020, Iversen et al. 2021). At the planning level, inspection placement and routing decisions have been studied for offshore wind farms (Chung et al. 2020) and for post-disaster inspection in power distribution networks (Fu, Nunez, and De Schutter 2021, Lim et al. 2016). A recent related contribution is the work of Liu, Hu, and Cheng (2025), which studies the joint problem of drone station location and routing for infrastructure inspection. Their model incorporates heterogeneous drones and solves a static location-routing formulation using adaptive large neighborhood search. While this work addresses strategic deployment and routing design, it considers a deterministic setting and does not model the dynamic evolution of infrastructure conditions or the endogenous impact of inspection actions on system risk. Moreover, Estrada Garcia and Shen (2026) study infrastructure inspection planning with routing decisions in a static setting, where inspection assignments are determined for a fixed planning horizon without modeling stochastic system evolution or endogenous failure dynamics. From an operational perspective, dynamic inspection planning can be interpreted as a form of dynamic vehicle routing in which inspection assignments and routes are revised as system states Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 5
+
+evolve. Surveys of dynamic VRP emphasize the offline–online structure that arises when decisions must be adapted to newly revealed information (Rios et al. 2021, Ulmer et al. 2019). In many canonical dynamic VRP settings, uncertainty is treated as exogenous (decision-independent), such as random realizations of customer requests and travel time (Errico et al. 2018, Ulmer et al. 2019, Ulmer, Mattfeld, and K¨ oster 2018). In contrast, inspection settings often involve endogenous uncertainty, where inspection and maintenance actions influence the evolution of system condition and failure risk. Recent advances by Kang and Bansal (2025) explore bi-parameterized recourse where initial decisions alter future feasible regions. This form of endogenous uncertainty, often referred to as Type 2 decision-dependent uncertainty (DDU), highlights the importance of modeling feedback loops in infrastructure operations (Shahverdi and Miller-Hooks 2023). From a methodological standpoint, multistage stochastic mixed-integer programs can be formu-lated as scenario-tree programs, but such formulations quickly become computationally intractable as the number of stages grows (Shapiro, Dentcheva, and Ruszczynski 2021). Consequently, decom-position methods are central to large-scale stochastic optimization (Ahmed 2013, Deng, Ahmed, and Shen 2018). In multistage settings with binary state variables, Stochastic Dual Dynamic Integer Programming (SDDiP) constructs nested lower approximations of value functions to decompose the problem by stages (Zou, Ahmed, and Sun 2019). As noted in the recent survey by Seranilla (2025), SDDiP has become a cornerstone methodology for solving large-scale stochastic dynamic pro-grams. To the best of our knowledge, our work represents one of the first applications of the SDDiP framework to dynamic inspection routing problems with endogenous infrastructure dynamics. Finally, RL and learning-augmented optimization have become increasingly prominent for com-binatorial optimization problems. Surveys document methodological advances in applying machine learning to structured optimization problems (Mazyavkina et al. 2021). In stochastic dynamic routing, RL is most promising when policies exploit structured state representations (Hildebrandt, Thomas, and Ulmer 2023). The theoretical link between multistage stochastic programming and Markov decision processes is further formalized by Morton, Dowson, and Pagnoncelli (2025), pro-viding a foundation for comparisons between optimization-based and learning-based approaches. Our RL framework enforces assignment feasibility by construction and evaluates tactical routing decisions within a simulation-based learning environment. The policy and value function are learned jointly through an actor–critic architecture using gradient-based updates. This design enables a controlled comparison between exact stochastic optimization and learned policies, clarifying trade-offs among computational scalability, interpretability, and performance under varying levels of endogenous risk. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+6 
+
+> Table 1 Comparison of closely related literature.
+
+Work Application Uncertainty Type Solution Horizon Routing Ulmer et al. (2019) VRP DIU – ADP Multi-stage Yes Errico et al. (2018) VRP DIU – SO Multi-stage Yes Nazari et al. (2018) VRP DIU – RL Single-stage Yes Liu, Hu, and Cheng (2025) Inspection Deterministic – ALNS Single-stage Yes Estrada Garcia and Shen (2026) Inspection DIU – SD+CG Two-stage Yes Shahverdi and Miller-Hooks (2023) Inspection DDU Type 1 SO Multi-stage Partial Zou, Ahmed, and Sun (2018) Power systems DIU – SDDiP Multi-stage No Kang and Bansal (2025) General SMIP DDU Type 2 SO Two-stage No Morton, Dowson, and Pagnoncelli (2025) General SMIP DDU Type 2 SO/MDP Multi-stage No 
+
+This paper Inspection DDU Type 2 SDDiP/RL Two-horizon Yes 
+
+> DIU: decision-independent uncertainty. DDU: decision-dependent uncertainty. Type 1: timing-based DDU. Type 2: state-distribution-based DDU. ADP: approximate dynamic programming. SO: stochastic optimization. ALNS: adaptive large neighborhood search. SD: scenario decomposition. CG: column generation. RL: reinforcement learning.
+
+Table 1 summarizes the most closely related works and highlights the modeling dimensions that distinguish our formulation. The comparison highlights several key distinctions. First, many rout-ing models treat uncertainty as exogenous, whereas inspection systems often involve endogenous dynamics where inspection actions influence future failure risk. Second, existing inspection routing studies such as Estrada Garcia and Shen (2026) and Liu, Hu, and Cheng (2025) primarily focus on static and non-adaptive settings. While these models capture operational routing constraints, they do not incorporate stochastic infrastructure deterioration or the dynamic feedback between inspec-tion actions and future system risk. Third, while stochastic programming methods such as SDDiP have been widely applied in power systems and other infrastructure applications, their integration with routing-based inspection problems remains largely unexplored. Our work combines multistage stochastic optimization, endogenous infrastructure dynamics, and routing decisions within a uni-fied framework. We also compare decomposition-based stochastic optimization and RL for solving dynamic inspection routing problems. 
+
+3. Models for Stochastic Dynamic Inspection 
+
+In this modeling section, we first describe the full multi-stage stochastic dynamic programming model in Section 3.1 and then the two-horizon representation in Section 3.2. 
+
+3.1. Multi-stage Stochastic Dynamic Programming Model 
+
+Consider a finite-horizon stochastic dynamic inspection problem defined on a directed graph 𝐺 =
+
+(𝑁, 𝐴 ), where the node set 𝑁 is partitioned into a set of inspection tasks T ⊂ 𝑁 and a set of depots 
+
+D ⊂ 𝑁 . We operate a fleet of vehicles indexed by 𝑘 ∈ 𝐾 over a planning horizon 𝑡 ∈ { 1, . . . , 𝑇 }. The arc set 𝐴 ⊆ (D ∪ T ) × (D ∪ T ) contains all admissible depot–task, task–task, and task–depot arcs. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 7
+
+We assume throughout that idle vehicles are not considered. Therefore, each vehicle can be assigned at least one inspection task at every stage. Traversal of arc (𝑖, 𝑗 ) ∈ 𝐴 by vehicle 𝑘 requires travel time 𝛿 𝑖 𝑗 𝑘 ≥ 0, and servicing task 𝑖 ∈ T with vehicle 𝑘 requires processing time 𝜅 𝑖𝑘 ≥ 0. Vehicle 𝑘 
+
+operates during a shift of fixed duration 𝛾 𝑘 > 0 and becomes available to begin its shift at time 𝜃 𝑘𝑡 
+
+in stage 𝑡 . We encode the end-of-stage time as 𝐸 𝑡 and assume that 𝜃 𝑘𝑡 + 𝛾 𝑘 ≤ 𝐸 𝑡 for all 𝑘 ∈ 𝐾 and 
+
+𝑡 ∈ { 1, . . . , 𝑇 }. Without loss of generality, at most 𝐵 𝑘𝑡 inspection tasks can be assigned to vehicle 𝑘 
+
+at stage 𝑡 .Each task 𝑖 ∈ T is subject to stochastic failure that depends on whether the inspection task has been completed. If task 𝑖 fails prior to inspection, a penalty 𝛼 𝑖 ≥ 0 is incurred, whereas if task 𝑖 
+
+remains uninspected at the end of the planning horizon, a terminal penalty 𝛽 𝑖 ≥ 0 is incurred. We represent failure time uncertainty with a scenario tree. Let N𝑡 denote the set of information nodes at stage 𝑡 , with root node 𝑛 1 ∈ N 1. The overall set of scenario-tree nodes is N = ∪𝑡 =1,...,𝑇 N𝑡 .For any node 𝑛 ∈ N , let 𝑎 (𝑛 ) denote its unique parent node, C( 𝑛 ) its set of child nodes, and 𝑝 𝑛𝑚 
+
+the conditional probability of transitioning from 𝑛 to 𝑚 ∈ C( 𝑛 ). Let 𝑡 (𝑛 ) ∈ { 1, . . . , 𝑇 } denote the stage associated with node 𝑛 . The sequence of nodes along the unique path from the root to node 
+
+𝑛 is denoted by Π(𝑛 ). We denote the probability of occurrence of a node 𝑛 ∈ N 𝑡 at stage 𝑡 as P(𝑛 ).For node 𝑛 ∈ N 𝑡 , the parameter 𝜑 𝑛 𝑖 ≥ 0 denotes the failure time of task 𝑖 ∈ T if not inspected. The parameter ¯ 𝑓 𝑛 𝑖 := I{𝜑 𝑛 𝑖 ≤ 𝐸 𝑡 (𝑛 ) } indicates whether the failure of task 𝑖 will occur by the end of stage 
+
+𝑡 (𝑛 ). Although the uncertainty evolution and its transition probabilities are specified on a fixed finite scenario tree, the realized operational state is dependent on the decision history. In Figure 1, we provide an illustrative example of the scenario tree and its related notations. At each node 𝑛 ∈ N 𝑡 , decision variables describe assignment, routing, and timing, while state variables record inspection and failure outcomes. The binary variable 𝑥 𝑛 𝑖𝑘 ∈ { 0, 1} equals one if task 
+
+𝑖 is assigned to vehicle 𝑘 at node 𝑛 , and zero otherwise. The binary variable 𝑦 𝑛 𝑖 𝑗 𝑘 ∈ { 0, 1} equals one if vehicle 𝑘 traverses arc (𝑖, 𝑗 ) at node 𝑛 , and zero otherwise. The binary variables 𝑏 𝑛 𝑑𝑘 ∈ { 0, 1} and 
+
+𝑒 𝑛 𝑑𝑘 ∈ { 0, 1} indicate, respectively, the depot from which vehicle 𝑘 departs and the depot at which it completes its route within stage 𝑡 (𝑛 ). The nonnegative variable 𝑎 𝑛 𝑖𝑘 ≥ 0 denotes the completion time of node 𝑖 by vehicle 𝑘 at node 𝑛 , where we set 𝜅 𝑑𝑘 = 0 for all 𝑑 ∈ D (so that 𝑎 𝑛 𝑑𝑘 represents the departure time from depot 𝑑 ). For each task 𝑖 ∈ T and scenario-tree node 𝑛 ∈ N , we also define auxiliary binary variable 𝑣 𝑛 𝑖 ∈ { 0, 1} such that it equals one if task 𝑖 has been completed by the end of stage 𝑡 (𝑛 ) at node 𝑛 . The variable 𝑟 𝑛 𝑖 ∈ { 0, 1} equals one if task 𝑖 is completed at node 𝑛 prior to its failure time. The variable 𝑞 𝑛 𝑖 ∈ { 0, 1} equals one if task 𝑖 is in a failed state at node 𝑛 .Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+8
+
+Figure 1 Scenario tree representation of the failure status of inspection tasks as a function of the stage. The path of gray arrows represents Π(𝑛 ). We track the elapsed time of each stage. For stages representing days, 𝐸 𝑡 is measured in hours from a reference time. 
+
+We collect the within-stage operational constraints that couple routing and timing into a single within-shift operation block. Considering a node 𝑛 ∈ N and a task assignment decision x𝑛 𝑘 for each vehicle 𝑘 ∈ 𝐾 , we define O𝑛 𝑘 (x𝑛 𝑘 ) as the set of variables (y𝑛 𝑘 , b𝑛 𝑘 , e𝑛 𝑘 , a𝑛 𝑘 ) satisfying: ∑︁ 
+
+𝑑 ∈D 
+
+𝑏 𝑛 𝑑𝑘 = 1, (1a) ∑︁ 
+
+𝑑 ∈D 
+
+𝑒 𝑛 𝑑𝑘 = 1, (1b) ∑︁ 
+
+𝑗 :(𝑖, 𝑗 )∈ 𝐴 
+
+𝑦 𝑛 𝑖 𝑗 𝑘 = 𝑥 𝑛 𝑖𝑘 , ∀𝑖 ∈ T , (1c) ∑︁ 
+
+𝑗 :( 𝑗,𝑖 )∈ 𝐴 
+
+𝑦 𝑛 𝑗𝑖𝑘 = 𝑥 𝑛 𝑖𝑘 , ∀𝑖 ∈ T , (1d) ∑︁ 
+
+𝑗 :(𝑑, 𝑗 )∈ 𝐴 
+
+𝑦 𝑛 𝑑𝑗 𝑘 = 𝑏 𝑛 𝑑𝑘 , ∀𝑑 ∈ D , (1e) ∑︁ 
+
+𝑖 :(𝑖,𝑑 )∈ 𝐴 
+
+𝑦 𝑛 𝑖𝑑𝑘 = 𝑒 𝑛 𝑑𝑘 , ∀𝑑 ∈ D , (1f) 
+
+𝑎 𝑛 𝑑𝑘 ≥ 𝜃 𝑘𝑡 (𝑛 ) − 𝑀 (1 − 𝑏 𝑛 𝑑𝑘 ), ∀𝑑 ∈ D , (1g) 
+
+𝑎 𝑛 𝑑𝑘 ≤ 𝜃 𝑘𝑡 (𝑛 ) + 𝑀 (1 − 𝑏 𝑛 𝑑𝑘 ), ∀𝑑 ∈ D , (1h) 
+
+𝑎 𝑛 𝑗 𝑘 ≥ 𝑎 𝑛 𝑖𝑘 + 𝛿 𝑖 𝑗 𝑘 + 𝜅 𝑗 𝑘 − 𝑀 (1 − 𝑦 𝑛 𝑖 𝑗 𝑘 ), ∀( 𝑖, 𝑗 ) ∈ 𝐴, 𝑖 ∈ (D ∪ T ) , 𝑗 ∈ T , (1i) 
+
+𝑎 𝑛 𝑖𝑘 ≤ 𝜃 𝑘𝑡 (𝑛 ) + 𝛾 𝑘 + 𝑀 (1 − 𝑥 𝑛 𝑖𝑘 ), ∀𝑖 ∈ T , (1j) Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 9
+
+𝑎 𝑛 𝑑𝑘 ≤ 𝜃 𝑘𝑡 (𝑛 ) + 𝛾 𝑘 , ∀𝑑 ∈ D . (1k) The operational block O𝑛 𝑘 (x𝑛 𝑘 ) := y𝑛 𝑘 , b𝑛 𝑘 , e𝑛 𝑘 , a𝑛 𝑘 : (1a)–(1k) enforces within-stage routing fea-sibility, depot consistency, temporal propagation, and shift-duration limits for vehicle 𝑘 at node 
+
+𝑛 . Constraints (1a) and (1b) require that each vehicle selects exactly one departure depot and one return depot during stage 𝑡 (𝑛 ). Constraints (1c)–(1d) impose standard flow-conservation conditions for assigned tasks: if 𝑥 𝑛 𝑖𝑘 = 1, exactly one outgoing and one incoming arc must be selected for task 𝑖 ,whereas if 𝑥 𝑛 𝑖𝑘 = 0, no arcs incident to 𝑖 may be used. Constraints (1e)–(1f) link the routing variables to the depot indicators by requiring that the selected start depot has exactly one outgoing arc and the selected end depot has exactly one incoming arc. Constraints (1g)–(1h) anchor the time scale of the route by enforcing that the completion time at the chosen start depot equals the vehicle’s shift start time 𝜃 𝑘𝑡 (𝑛 ) . Constraint (1i) propagates completion times along selected arcs: since 𝑎 𝑛 𝑖𝑘 
+
+represents completion time at node 𝑖 , the completion time at node 𝑗 must be at least the completion time at 𝑖 plus travel time 𝛿 𝑖 𝑗 𝑘 and service time 𝜅 𝑗 𝑘 whenever arc (𝑖, 𝑗 ) is traversed. Constraints (1j) and (1k) enforce shift feasibility by requiring that all completion times remain within the shift window [𝜃 𝑘𝑡 (𝑛 ) , 𝜃 𝑘𝑡 (𝑛 ) + 𝛾 𝑘 ].
+
+REMARK 1. The time-propagation constraints (1g)–(1i), together with constraints (1c)–(1d), eliminate subtours that do not include the start depot. Any directed cycle of selected arcs among tasks would induce a strictly increasing sequence of completion times around the cycle, which is infeasible provided that 𝛿 𝑖 𝑗 𝑘 + 𝜅 𝑗 𝑘 > 0 on any selected arc. Thus, the completion-time variables induce an elimination mechanism without requiring additional ordering variables. Equivalently, given a task assignment x𝑛 𝑘 at scenario node 𝑛 , we define for each vehicle 𝑘 ∈ 𝐾 the feasible operational set 
+
+O𝑛 𝑘 (x𝑛 𝑘 ) = (y𝑛 𝑘 , b𝑛 𝑘 , e𝑛 𝑘 , a𝑛 𝑘 ) : (1a)–(1k) . (2) We are ready to formulate the dynamic inspection problem as the following scenario-tree-indexed extended mixed-integer linear program: min 
+
+> x,y,b,e,
+> v,r,q,a
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+∑︁ 𝑛 ∈N 𝑡 
+
+P(𝑛 )∑︁ 
+
+> 𝑘 ∈𝐾
+
+∑︁ (𝑖, 𝑗 )∈ 𝐴 
+
+𝛿 𝑖 𝑗 𝑘 𝑦 𝑛 𝑖 𝑗 𝑘 +∑︁ 
+
+> 𝑛 ∈N 𝑇
+
+P(𝑛 )∑︁ 
+
+> 𝑖 ∈T
+
+ 𝛼 𝑖 𝑞 𝑛 𝑖 + 𝛽 𝑖 (1 − 𝑣 𝑛 𝑖 ) (3a) s.t. (y𝑛 𝑘 , b𝑛 𝑘 , e𝑛 𝑘 , a𝑛 𝑘 ) ∈ O 𝑛 𝑘 (x𝑛 𝑘 ), ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N , (3b) ∑︁ 
+
+> 𝑖 ∈T
+
+𝑥 𝑛 𝑖𝑘 ≤ 𝐵 𝑘𝑡 (𝑛 ) , ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N , (3c) Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+10 ∑︁ 
+
+> 𝑘 ∈𝐾
+
+𝑥 𝑛 𝑖𝑘 ≤ 1 − 𝑣 𝑎 (𝑛 ) 
+
+> 𝑖
+
+, ∀𝑖 ∈ T , ∀𝑛 ∉ N1, (3d) 
+
+𝑣 𝑛 1 
+
+> 𝑖
+
+= 0, ∀𝑖 ∈ T , (3e) 
+
+𝑞 𝑛 1 
+
+> 𝑖
+
+= 0, ∀𝑖 ∈ T , (3f) 
+
+𝑣 𝑛 𝑖 = 𝑣 𝑎 (𝑛 ) 
+
+> 𝑖
+
++∑︁ 
+
+> 𝑘 ∈𝐾
+
+𝑥 𝑛 𝑖𝑘 , ∀𝑖 ∈ T , ∀𝑛 ∉ N1, (3g) 
+
+𝑟 𝑛 𝑖 ≤∑︁ 
+
+> 𝑘 ∈𝐾
+
+𝑥 𝑛 𝑖𝑘 , ∀𝑖 ∈ T , ∀𝑛 ∈ N , (3h) 
+
+𝑟 𝑛 𝑖 ≤ 1 − 𝑞 𝑎 (𝑛 ) 
+
+> 𝑖
+
+, ∀𝑖 ∈ T , ∀𝑛 ∉ N1, (3i) 
+
+𝑎 𝑛 𝑖𝑘 ≤ 𝜑 𝑛 𝑖 + 𝑀 (1 − 𝑟 𝑛 𝑖 ) + 𝑀 (1 − 𝑥 𝑛 𝑖𝑘 ), ∀𝑖 ∈ T , ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N , (3j) 
+
+𝑞 𝑛 𝑖 ≥ 𝑞 𝑎 (𝑛 ) 
+
+> 𝑖
+
+, ∀𝑖 ∈ T , ∀𝑛 ∉ N1, (3k) 
+
+𝑞 𝑛 𝑖 ≥ ¯𝑓 𝑛 𝑖 −  𝑣 𝑎 (𝑛 ) 
+
+> 𝑖
+
+− 𝑞 𝑎 (𝑛 )
+
+> 𝑖
+
+ − 𝑟 𝑛 𝑖 , ∀𝑖 ∈ T , ∀𝑛 ∉ N1, (3l) 
+
+𝑏 𝑛 𝑑𝑘 = 𝑒 𝑎 (𝑛 ) 
+
+> 𝑑𝑘
+
+, ∀𝑑 ∈ D , ∀𝑘 ∈ 𝐾, ∀𝑛 ∉ N1, (3m) 
+
+𝑥 𝑛 𝑖𝑘 ∈ { 0, 1}, ∀𝑖 ∈ T , ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N , (3n) 
+
+𝑦 𝑛 𝑖 𝑗 𝑘 ∈ { 0, 1}, ∀( 𝑖, 𝑗 ) ∈ 𝐴, ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N , (3o) 
+
+𝑏 𝑛 𝑑𝑘 , 𝑒 𝑛 𝑑𝑘 ∈ { 0, 1}, ∀𝑑 ∈ D , ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N , (3p) 
+
+𝑣 𝑛 𝑖 , 𝑞 𝑛 𝑖 , 𝑟 𝑛 𝑖 ∈ { 0, 1}, ∀𝑖 ∈ T , ∀𝑛 ∈ N , (3q) 
+
+𝑎 𝑛 𝑖𝑘 ≥ 0, ∀𝑖 ∈ (T ∪ D) , ∀𝑘 ∈ 𝐾, ∀𝑛 ∈ N . (3r) The objective (3a) minimizes expected total cost over the scenario tree by accumulating expected travel time across all nodes and stages, as well as assessing terminal penalties at leaf nodes for tasks that have failed or left uninspected. Constraint (3b) enforces within-stage routing-and-timing feasi-bility at each node via the local constraint block O𝑛 𝑘 (x𝑛 𝑘 ), i.e., constraints (1a)–(1k). Constraint (3c) limits the number of tasks assigned to each vehicle at each node, and constraint (3d) prevents re-inspection by prohibiting assignments to tasks completed at an ancestor node. Constraints (3e)–(3f) initialize the task completion and failure indicators at the root. Constraint (3g) updates the comple-tion indicator at node 𝑛 using the ancestor completion status and the current assignment decision. Constraints (3h) and (3i) link 𝑟 𝑛 𝑖 to assignment and rule out pre-failure completion if the task has already failed at the parent node, respectively. Constraint (3j) enforces the pre-failure timing logic by requiring that if 𝑟 𝑛 𝑖 = 1 and vehicle 𝑘 is assigned to inspect task 𝑖 at node 𝑛 , then the completion time satisfies 𝑎 𝑛 𝑖𝑘 ≤ 𝜑 𝑛 𝑖 . Constraint (3k) enforces failure propagation by requiring that once a task Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 11
+
+fails it remains failed at all descendants. Constraint (3l) triggers failure at node 𝑛 whenever ¯ 𝑓 𝑛 𝑖 = 1and neither (i) the task was already completed and not failed at the parent node (captured by 
+
+𝑣 𝑎 (𝑛 ) 
+
+> 𝑖
+
+− 𝑞 𝑎 (𝑛 ) 
+
+> 𝑖
+
+) nor (ii) a pre-failure completion occurs at node 𝑛 (𝑟 𝑛 𝑖 = 1). Constraint (3m) enforces depot carryover by requiring each vehicle to start in stage 𝑡 (𝑛 ) at the depot where it ended at node 
+
+𝑎 (𝑛 ). Constraints (3n)–(3r) specify variable domains. 
+
+3.2. Two-Horizon Representation 
+
+The scenario-tree-indexed formulation (3) is computationally challenging, as it couples long-horizon state evolution driven by endogenous task failures with within-stage multi-vehicle routing and scheduling decisions. We further propose a two-horizon representation that separates strategic 
+
+assignment decisions, which govern state transitions across stages of the scenario tree, from tactical 
+
+within-stage operational decisions. The key feature of our representation is that, conditional on an assignment and inherited vehicle start depots, the tactical routing-and-timing decisions decompose by vehicle and can therefore be solved in parallel. Consider a node 𝑛 ∈ N 𝑡 in stage 𝑡 with parent node 
+
+𝑎 (𝑛 ). We define the inherited state at node 𝑛 as s𝑎 (𝑛 ) :=  v𝑎 (𝑛 ) , q𝑎 (𝑛 ) , e𝑎 (𝑛 ) , where v𝑎 (𝑛 ) and q𝑎 (𝑛 )
+
+denote the task completion and failure indicators at the parent node, and e𝑎 (𝑛 ) encodes the end-depot indicators from node 𝑎 (𝑛 ) (equivalently, the start-depot indicators for stage 𝑡 (𝑛 ) via (3m)). Let 
+
+𝑉 𝑛 (s𝑎 (𝑛 ) ) denote the optimal expected cost-to-go from node 𝑛 given the inherited state s𝑎 (𝑛 ) . For any node 𝑛 ∈ N 𝑡 with 𝑡 < 𝑇 , the Bellman recursion is 
+
+𝑉 𝑛 (s𝑎 (𝑛 ) ) = min    
+
+> x𝑛 ∈X( s𝑎 (𝑛 ))
+
+(
+
+R𝑛 
+
+x𝑛 ; s𝑎 (𝑛 ) 
+
++∑︁ 
+
+> 𝑚 ∈C( 𝑛 )
+
+𝑝 𝑛𝑚 𝑉 𝑚 (s𝑛 )
+
+)
+
+, (4) where x𝑛 = {𝑥 𝑛 𝑖𝑘 }𝑖 ∈T ,𝑘 ∈𝐾 is the strategic assignment decision at node 𝑛 , and X( s𝑎 (𝑛 ) ) is the set of feasible assignments satisfying (3c)–(3d) given the inherited completion state v𝑎 (𝑛 ) . The post-decision state s𝑛 = (v𝑛 , q𝑛 , e𝑛 ) is induced by the tactical routing solutions and the state-transition constraints (3g)–(3l), as described below. For fixed x𝑛 and e𝑎 (𝑛 ) , the routing-and-timing decisions are separable by vehicle. For each vehicle 
+
+𝑘 ∈ 𝐾 , define the per-vehicle tactical routing problem 
+
+R𝑛 𝑘 (x𝑛 𝑘 ; e𝑎 (𝑛 ) 
+
+> 𝑘
+
+) := min    
+
+> y𝑛 𝑘 ,b𝑛 𝑘 ,e𝑛 𝑘 ,a𝑛 𝑘
+
+∑︁ (𝑖, 𝑗 )∈ 𝐴 
+
+𝛿 𝑖 𝑗 𝑘 𝑦 𝑛 𝑖 𝑗 𝑘 (5a) s.t. (y𝑛 𝑘 , b𝑛 𝑘 , e𝑛 𝑘 , a𝑛 𝑘 ) ∈ O 𝑛 𝑘 (x𝑛 𝑘 ), (5b) 
+
+𝑏 𝑛 𝑑𝑘 = 𝑒 𝑎 (𝑛 ) 
+
+> 𝑑𝑘
+
+, ∀𝑑 ∈ D , (5c) Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 12
+
+𝑦 𝑛 𝑖 𝑗 𝑘 ∈ { 0, 1}, ∀( 𝑖, 𝑗 ) ∈ 𝐴, (5d) 
+
+𝑏 𝑛 𝑑𝑘 ∈ { 0, 1}, ∀𝑑 ∈ D , (5e) 
+
+𝑒 𝑛 𝑑𝑘 ∈ { 0, 1}, ∀𝑑 ∈ D , (5f) 
+
+𝑎 𝑛 𝑖𝑘 ≥ 0, ∀𝑖 ∈ (T ∪ D) . (5g) Here x𝑛 𝑘 := {𝑥 𝑛 𝑖𝑘 }𝑖 ∈T and e𝑎 (𝑛 ) 
+
+> 𝑘
+
+:= {𝑒 𝑎 (𝑛 ) 
+
+> 𝑑𝑘
+
+}𝑑 ∈D denote vehicle 𝑘 ’s assigned tasks and inherited start-depot indicator, respectively. Constraint (5c) enforces depot carryover from node 𝑎 (𝑛 ) to node 𝑛 by fixing the start-depot choice. The operational block O𝑛 𝑘 (x𝑛 𝑘 ) enforces within-stage routing feasibility, time propagation, and shift feasibility via (1a)–(1k). Since (5) is defined separately for each vehicle 
+
+𝑘 and depends only on (x𝑛 𝑘 , e𝑎 (𝑛 ) 
+
+> 𝑘
+
+), the |𝐾 | problems (5) can be solved independently and in parallel. We define the tactical recourse as the sum of optimal per-vehicle routing costs: 
+
+R𝑛 
+
+x𝑛 ; s𝑎 (𝑛 ) 
+
+:=∑︁ 
+
+> 𝑘 ∈𝐾
+
+R𝑛 𝑘 
+
+
+
+x𝑛 𝑘 ; e𝑎 (𝑛 )
+
+> 𝑘
+
+
+
+. (6) If any per-vehicle routing problem (5) is infeasible, then R𝑛 (x𝑛 ; s𝑎 (𝑛 ) ) = +∞ . Let {e𝑛 𝑘 }𝑘 ∈𝐾 and 
+
+{𝑎 𝑛 𝑖𝑘 }𝑖 ∈T ,𝑘 ∈𝐾 denote the optimal solutions of (5). We construct the post-decision state s𝑛 =
+
+(v𝑛 , q𝑛 , e𝑛 ) as follows. (i) We set depot carryover via e𝑛 := {e𝑛 𝑘 }𝑘 ∈𝐾 . (ii) We update the task comple-tion indicators via (3g). (iii) We determine the failure and pre-failure completion indicators (q𝑛 , r𝑛 )
+
+according to constraints (3h)–(3j) and (3k)–(3l), using the completion times returned by (5). By construction, the resulting state s𝑛 coincides with the state that would be obtained in the extended formulation (3) under the same assignment and routing decisions. 
+
+Terminal value. After the stage-𝑇 tactical solution induces (v𝑛 , q𝑛 ), the terminal value at leaf nodes is 
+
+𝑉 𝑛 (s𝑎 (𝑛 ) ) =∑︁ 
+
+> 𝑖 ∈T
+
+ 𝛼 𝑖 𝑞 𝑛 𝑖 + 𝛽 𝑖 (1 − 𝑣 𝑛 𝑖 ), ∀𝑛 ∈ N 𝑇 . (7) We provide Figure 2 to illustrate the relationship between the multi-stage tree-indexed formulation and the two-horizon representation, emphasizing that the second-horizon tactical routing problems are separable by vehicle. 
+
+REMARK 2. The two-horizon representation is exact: solving the dynamic program (4) with recourse (5) and terminal values (7) recovers the optimal objective value of the tree-indexed formulation (3). Its value is structural, as it isolates within-stage operational feasibility and failure timing into a recourse mapping for fixed assignments and inherited vehicle locations, thereby enabling decomposition and approximation methods that treat strategic state transitions separately from tactical routing decisions. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+13         
+
+> (a) Multi-stage representation. Each node of the scenario tree carries both strategic assignment decisions and tactical routing-and-timing decisions.
+> (b) Two-horizon representation. Strategic assign-ment decisions are made first, and tactical rout-ing problems are solved conditionally and vehicle-separably.
+> Figure 2 Equivalent representations of the dynamic inspection problem. In the two-horizon representation, the second-horizon tactical problems are vehicle-separable and can be solved in parallel.
+
+4. Stochastic Nested Decomposition (SND) 
+
+To solve the two-horizon multi-stage stochastic optimization problem implied by (4), we propose a Stochastic Nested Decomposition (SND) algorithm. The method follows the forward–backward structure of SDDiP (Zou, Ahmed, and Sun 2019): a forward simulation pass generates decisions along sampled scenario paths using current cut-based under-estimators, and a backward pass constructs cutting-plane outer approximations of cost-to-go functions to tighten node-wise lower bounds. In our two-horizon setting, we approximate two objects: (i) the strategic value functions 
+
+𝑉 𝑚 (·) over binary post-decision states, and (ii) the tactical routing recourse R𝑛 (· ; ·) that maps an assignment and inherited depots to the routing cost. Accordingly, the backward pass maintains two families of cut pools: strategic cut pools H ( 𝑚 ) that approximate 𝑉 𝑚 (·) , and tactical cut pools G( 𝑛 )
+
+that approximate R𝑛 (· ; ·) .
+
+4.1. Assumptions 
+
+We state structural assumptions used to interpret the two-horizon problem as an exact dynamic program and to support the finite-convergence argument. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 14
+
+ASSUMPTION 1 (Exact two-horizon dynamic program and sufficient state) . For each node 
+
+𝑛 in the scenario tree, the inherited state 𝑠 𝑎 (𝑛 ) := (𝑣 𝑎 (𝑛 ) , 𝑞 𝑎 (𝑛 ) , 𝑒 𝑎 (𝑛 ) ) is sufficient in the following sense: conditional on (𝑠 𝑎 (𝑛 ) , 𝑥 𝑛 ) and the information revealed at node 𝑛 , within-stage tactical feasibility, optimal routing cost, and the induced post-decision state depend on the past only through 
+
+(𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ). Consequently, the Bellman recursion (4) is exact. 
+
+ASSUMPTION 2 (Finite tree and finite discrete domains) . The scenario tree is finite. At each node 𝑛 , the feasible strategic assignment set X( 𝑠 𝑎 (𝑛 ) ) is finite and the inherited state space S𝑛 is finite. 
+
+ASSUMPTION 3 (Sampling) . The sampling scheme visits every scenario-tree node with posi-tive probability in each iteration (e.g., paths are sampled with replacement from the finite tree). 
+
+4.2. Lower-bounding approximations and the forward pass 
+
+SND constructs lower-bounding approximations of (i) the strategic value functions and (ii) the tactical routing recourse. For each node 𝑚 , let 𝑉 𝑚 (·) denote the current under-estimator of 𝑉 𝑚 (·) 
+
+represented by the strategic cut pool H ( 𝑚 ):
+
+𝑉 𝑚 (𝑠 ) = max 
+
+> ℓ∈H ( 𝑚 )
+
+𝜋 ⊤ 
+
+> ℓ,𝑚
+
+𝑠 + 𝛼 ℓ,𝑚 . (8) Since the tactical recourse depends on both the assignment and the inherited depot indicators, we maintain an under-estimator of the form 
+
+R𝑛 (𝑥 ; 𝑒 ) = max 
+
+> ℓ∈G( 𝑛 )
+
+𝜓 ⊤
+
+> ℓ,𝑛
+
+𝑥 + 𝜉 ⊤
+
+> ℓ,𝑛
+
+𝑒 + 𝜙 ℓ,𝑛 . (9) In the forward pass, given inherited state 𝑠 𝑎 (𝑛 ) , the strategic decision 𝑥 𝑛 is computed by solving the approximate Bellman recursion in which (𝑉 𝑚 , R𝑛 ) are replaced by (𝑉 𝑚 , R𝑛 ):
+
+𝑉 𝑛 (𝑠 𝑎 (𝑛 ) ) = min    
+
+> 𝑥 𝑛 ∈X( 𝑠 𝑎 (𝑛 ))
+
+
+
+R𝑛 (𝑥 𝑛 ; 𝑒 𝑎 (𝑛 ) ) + ∑︁ 
+
+> 𝑚 ∈C( 𝑛 )
+
+𝑝 𝑛𝑚 𝑉 𝑚 (𝑠 𝑛 )
+
+
+
+. (10) For SND cut generation and convergence guarantees, the post-decision state 𝑠 𝑛 is induced by the optimal tactical evaluation under (𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ) followed by the state-transition logic (3g)–(3l). We also report a statistical upper bound by Monte Carlo evaluation of an incumbent feasible policy over sampled root-to-leaf paths. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 15
+
+4.2.1. Integer optimality cuts as tight Lagrangian cuts We use integer optimality cuts to obtain cuts that are (i) globally valid lower bounds and (ii) tight at the binary point used for cut generation. The construction is standard in SDDiP-type methods for mixed-integer dynamic programs. Let Q ( 𝑧 ) denote a generic value function defined over a binary vector 𝑧 ∈ { 0, 1}𝑑 , and let Q ( 𝑧 ) be any valid lower approximation of Q ( 𝑧 ) (e.g., a current Lagrangian dual value or current cutting-plane under-estimator). Fix a binary point ˆ 𝑧 ∈ { 0, 1}𝑑 and any scalar lower bound 𝐿 ≤ Q ( 𝑧 )
+
+valid for all 𝑧 ∈ { 0, 1}𝑑 . Define 
+
+𝜋 ( ˆ𝑧 ; 𝐿 ) :=  Q ( ˆ𝑧 ) − 𝐿  (2ˆ 𝑧 − 1), (11) 
+
+𝜔 ( ˆ𝑧 ; 𝐿 ) := Q ( ˆ𝑧 ) −  Q ( ˆ𝑧 ) − 𝐿  1⊤ ˆ𝑧. (12) Then the following affine inequality is the integer optimality cut at ˆ 𝑧 :
+
+Q ( 𝑧 ) ≥ 𝜋 ( ˆ𝑧 ; 𝐿 )⊤𝑧 + 𝜔 ( ˆ𝑧 ; 𝐿 ), ∀𝑧 ∈ { 0, 1}𝑑 . (13) 
+
+PROPOSITION 1 (Integer optimality cuts) . For any binary ˆ𝑧 ∈ { 0, 1}𝑑 and any valid global lower bound 𝐿 ≤ Q ( 𝑧 ), the integer optimality cut (13) is valid on {0, 1}𝑑 ; i.e., it holds for all 
+
+𝑧 ∈ { 0, 1}𝑑 .Proof. For any 𝑧 ∈ { 0, 1}𝑑 ,
+
+∥𝑧 − ˆ𝑧 ∥1 = 1⊤𝑧 + 1⊤ ˆ𝑧 − 2ˆ 𝑧 ⊤𝑧. 
+
+Since Q ( ˆ𝑧 ) ≥ 𝐿 , we have 
+
+Q ( 𝑧 ) ≥ Q ( ˆ𝑧 ) −  Q ( ˆ𝑧 ) − 𝐿  ∥𝑧 − ˆ𝑧 ∥1,
+
+which is precisely (13) after substituting the expression of the ℓ1-distance and regrouping terms using (11)–(12). □
+
+Beyond validity, the integer optimality cut is a tight Lagrangian cut at the binary point ˆ 𝑧 in the sense that it matches the under-estimator value at ˆ 𝑧 and can be interpreted as an optimal supporting hyperplane of a Lagrangian dual function at ˆ 𝑧 .
+
+PROPOSITION 2 (Integer optimality cuts are tight Lagrangian cuts) . For any binary ˆ𝑧 ∈{0, 1}𝑑 and any valid global lower bound 𝐿 , the integer optimality cut (13) is tight at ˆ𝑧 , i.e., 
+
+Q ( ˆ𝑧 ) = 𝜋 ( ˆ𝑧 ; 𝐿 )⊤ ˆ𝑧 + 𝜔 ( ˆ𝑧 ; 𝐿 ). (14) 
+
+Moreover, when Q ( ˆ𝑧 ) is obtained from a Lagrangian dual relaxation of Q (·) , the slope vector 
+
+𝜋 ( ˆ𝑧 ; 𝐿 ) corresponds to a maximizer of the dual at ˆ𝑧 , and the intercept 𝜔 ( ˆ𝑧 ; 𝐿 ) equals the associated Lagrangian function value. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 16
+
+Proof. The equality (14) follows by direct substitution: 
+
+𝜋 ( ˆ𝑧 ; 𝐿 )⊤ ˆ𝑧 + 𝜔 ( ˆ𝑧 ; 𝐿 ) = (Q ( ˆ𝑧 ) − 𝐿 )( 2ˆ 𝑧 − 1)⊤ ˆ𝑧 + Q ( ˆ𝑧 ) − (Q ( ˆ𝑧 ) − 𝐿 )1⊤ ˆ𝑧. 
+
+Since ˆ 𝑧 is binary, (2ˆ 𝑧 − 1)⊤ ˆ𝑧 = 1⊤ ˆ𝑧 , hence the two terms involving (Q ( ˆ𝑧 ) − 𝐿 )1⊤ ˆ𝑧 cancel and the expression equals Q ( ˆ𝑧 ).The second claim is the standard interpretation of integer optimality cuts in SDDiP: at a binary point ˆ 𝑧 , the identity (2ˆ 𝑧 − 1)⊤ (𝑧 − ˆ𝑧 ) = −∥ 𝑧 − ˆ𝑧 ∥1 for binary 𝑧 implies that the integer optimality cut is a supporting hyperplane of the (concave, piecewise-linear) Lagrangian dual function at ˆ 𝑧 , and the cut intercept equals the Lagrangian function value at the maximizer. □
+
+REMARK 3 (U NIQUENESS AND FINITENESS ). Under Assumption 2, the binary domain of 𝑧 
+
+is finite. Since the integer optimality cut (13) is determined uniquely by ( ˆ𝑧, 𝐿, Q ( ˆ𝑧 )) , at most one such tight cut is generated per binary point ˆ 𝑧 . Hence only finitely many integer optimality cuts can be generated at any node. 
+
+4.3. Strategic cuts via nonanticipativity constraints on local copies 
+
+At node 𝑛 , the post-decision state is s𝑛 = (v𝑛 , q𝑛 , e𝑛 ), where e𝑛 becomes the inherited depot state in child nodes. To construct cuts for child value functions in a form that admits Lagrangian cut derivation, we introduce local copies (fishing variables) of the inherited state in each child problem. Specifically, for each child node 𝑚 ∈ C( 𝑛 ) we introduce binary copy variables ˜ s𝑚 = ( ˜v𝑚 , ˜q𝑚 , ˜e𝑚 )
+
+and enforce nonanticipativity constraints. Thus, all constraints in the child node that reference the inherited state are written instead in terms of ˜ s𝑚 .Let 𝑉 𝑚 (·) denote the current lower approximation of the child value function, represented as the point-wise maximum of affine functions induced by the strategic cut pool H ( 𝑚 ). In the backward pass, we compute a new cut for node 𝑚 by solving a suitable relaxation of the following nodal approximation: 
+
+𝑉 𝑚 (s𝑛 ) := min   
+
+> x𝑚 ∈X( ˜s𝑚 )
+
+𝜌 𝑚 +∑︁ 
+
+> 𝑢 ∈C( 𝑚 )
+
+𝑝 𝑚𝑢 𝜂 𝑢 (15a) s.t. 𝜂 𝑢 ≥ 𝜋 ⊤
+
+> ℓ,𝑢
+
+s𝑚 + 𝛼 ℓ,𝑢 , ∀𝑢 ∈ C( 𝑚 ), ∀ℓ ∈ H ( 𝑢 ) (15b) 
+
+𝜌 𝑚 ≥ 𝜓 ⊤
+
+> ℓ,𝑚
+
+x𝑚 + 𝜉 ⊤ 
+
+> ℓ,𝑚
+
+˜e𝑚 + 𝜙 ℓ,𝑚 , ∀ℓ ∈ G( 𝑚 ) (15c) ˜s𝑚 = s𝑛 , (15d) ˜s𝑚 ∈ { 0, 1}|v|+| q|+| e| . (15e) Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+17 
+
+We dualize the nonanticipativity constraints (15d). Let 𝜋 denote the associated unconstrained Lagrange multipliers. The resulting max–min Lagrangian relaxation yields a valid affine lower bound in the inherited state: 
+
+𝑉 𝑚 (s𝑛 ) = max 
+
+> 𝜋
+
+n
+
+𝜋 ⊤s𝑛 + L 𝑠 𝑚 (𝜋 )
+
+o
+
+, (16) where the Lagrangian function is 
+
+L𝑠 𝑚 (𝜋 ) := min    
+
+> ˜s𝑚 ∈{ 0,1},x𝑚 ∈X( ˜s𝑚 )
+
+n
+
+𝜌 𝑚 +∑︁ 
+
+> 𝑢 ∈C( 𝑚 )
+
+𝑝 𝑚𝑢 𝜂 𝑢 − 𝜋 ⊤˜s𝑚 : (15b)–(15c) 
+
+o
+
+. (17) 
+
+LEMMA 1 (Validity and tightness of strategic cuts) . For any 𝜋 , the affine function 𝜋 ⊤s𝑛 +L𝑠 𝑚 (𝜋 ) is a global lower bound on 𝑉 𝑚 (s𝑛 ). Moreover, the integer optimality cut (Proposition 1 and Proposition 2) applied to the binary inherited state ˆs𝑛 yields a globally valid cut that is tight at ˆs𝑛 .Proof. Validity follows from weak duality of the Lagrangian relaxation induced by (15d): for any multipliers 𝜋 , the Lagrangian value is a lower bound on the primal nodal value, hence on 𝑉 𝑚 (·) .Tightness at the forward-visited discrete state follows from Proposition 2. □
+
+4.4. Tactical cuts via nonanticipativity constraints on local copies 
+
+We construct routing cuts analogously when approximating the tactical recourse R𝑛 (𝑥 ; 𝑒 ) while emphasizing vehicle separability. Fix a node 𝑛 and inherited depot indicators 𝑒 𝑎 (𝑛 ) . Recall that the exact tactical recourse satisfies 
+
+R𝑛 (𝑥 𝑛 ; 𝑒 𝑎 (𝑛 ) ) =∑︁ 
+
+> 𝑘 ∈𝐾
+
+R𝑛 𝑘 (𝑥 𝑛 𝑘 ; 𝑒 𝑎 (𝑛 ) 
+
+> 𝑘
+
+),
+
+where each R𝑛 𝑘 (·) is defined by the per-vehicle routing MILP (5). To generate cuts that are affine in (𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ), we introduce local copies ( ˜𝑥 𝑛 , ˜𝑒 𝑛 ) of the strategic assignment and inherited depot indicators and impose the nonanticipativity constraints ˜𝑥 𝑛 = 𝑥 𝑛 , ˜𝑒 𝑛 = 𝑒 𝑎 (𝑛 ) . (18) We write ˜ 𝑥 𝑛 = { ˜𝑥 𝑛 𝑖𝑘 }𝑖 ∈T ,𝑘 ∈𝐾 and ˜ 𝑒 𝑛 = { ˜𝑒 𝑛 𝑑𝑘 }𝑑 ∈D ,𝑘 ∈𝐾 . All tactical constraints that depend on (𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) )
+
+are written in terms of ( ˜𝑥 𝑛 , ˜𝑒 𝑛 ). Let (𝜆 𝑛 , 𝜇 𝑛 ) denote the unconstrained Lagrange multipliers asso-ciated with (18), with components 𝜆 𝑛 𝑖𝑘 for ˜ 𝑥 𝑛 𝑖𝑘 = 𝑥 𝑛 𝑖𝑘 and 𝜇 𝑛 𝑑𝑘 for ˜ 𝑒 𝑛 𝑑𝑘 = 𝑒 𝑎 (𝑛 ) 
+
+> 𝑑𝑘
+
+. Dualizing (18) yields a Lagrangian relaxation that decomposes by vehicle. Specifically, we define and formulate the per-vehicle Lagrangian subproblem as: 
+
+L𝑡,𝑛 𝑘 (𝜆 𝑛 𝑘 , 𝜇 𝑛 𝑘 ) := min      
+
+> y𝑛 𝑘 ,b𝑛 𝑘 ,e𝑛 𝑘 ,a𝑛 𝑘 ,
+> ˜x𝑛 𝑘 ,˜e𝑛 𝑘
+
+∑︁ (𝑖, 𝑗 )∈ 𝐴 
+
+𝛿 𝑖 𝑗 𝑘 𝑦 𝑛 𝑖 𝑗 𝑘 −∑︁ 
+
+> 𝑖 ∈T
+
+𝜆 𝑛 𝑖𝑘 ˜𝑥 𝑛 𝑖𝑘 −∑︁ 
+
+> 𝑑 ∈D
+
+𝜇 𝑛 𝑑𝑘 ˜𝑒 𝑛 𝑑𝑘 (19a) Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+18 
+
+s.t. (y𝑛 𝑘 , b𝑛 𝑘 , e𝑛 𝑘 , a𝑛 𝑘 ) ∈ O 𝑛 𝑘 ( ˜x𝑛 𝑘 ), (19b) 
+
+𝑏 𝑛 𝑑𝑘 = ˜𝑒 𝑛 𝑑𝑘 , ∀𝑑 ∈ D , (19c) ˜𝑥 𝑛 𝑖𝑘 ∈ { 0, 1}, ∀𝑖 ∈ T , (19d) ˜𝑒 𝑛 𝑑𝑘 ∈ { 0, 1}, ∀𝑑 ∈ D , (19e) 
+
+𝑦 𝑛 𝑖 𝑗 𝑘 ∈ { 0, 1}, ∀( 𝑖, 𝑗 ) ∈ 𝐴, (19f) 
+
+𝑏 𝑛 𝑑𝑘 , 𝑒 𝑛 𝑑𝑘 ∈ { 0, 1}, ∀𝑑 ∈ D , (19g) 
+
+𝑎 𝑛 𝑖𝑘 ≥ 0, ∀𝑖 ∈ (T ∪ D) . (19h) Here ˜ x𝑛 𝑘 := { ˜𝑥 𝑛 𝑖𝑘 }𝑖 ∈T and ˜ e𝑛 𝑘 := { ˜𝑒 𝑛 𝑑𝑘 }𝑑 ∈D denote vehicle 𝑘 ’s local copies of its assigned tasks and inherited depot indicators. Constraint (19c) is the depot carryover constraint written using the local copy ˜ 𝑒 𝑛 𝑑𝑘 . The aggregated Lagrangian function is the sum of per-vehicle subproblem objectives: 
+
+L𝑡,𝑛 (𝜆 𝑛 , 𝜇 𝑛 ) :=∑︁ 
+
+> 𝑘 ∈𝐾
+
+L𝑡,𝑛 𝑘 (𝜆 𝑛 𝑘 , 𝜇 𝑛 𝑘 ). (20) The Lagrangian dual then yields the lower bound 
+
+R𝑛 (𝑥 𝑛 ; 𝑒 𝑎 (𝑛 ) ) ≥ max 
+
+> 𝜆 𝑛 ,𝜇 𝑛
+
+(∑︁ 
+
+> 𝑖 ∈T
+
+∑︁ 𝑘 ∈𝐾 
+
+𝜆 𝑛 𝑖𝑘 𝑥 𝑛 𝑖𝑘 +∑︁ 
+
+> 𝑑 ∈D
+
+∑︁ 𝑘 ∈𝐾 
+
+𝜇 𝑛 𝑑𝑘 𝑒 𝑎 (𝑛 ) 
+
+> 𝑑𝑘
+
++ L 𝑡,𝑛 (𝜆 𝑛 , 𝜇 𝑛 )
+
+)
+
+. (21) By weak duality, for any multipliers (𝜆 𝑛 , 𝜇 𝑛 ), the expression inside the braces of (21) is a global lower bound on R𝑛 (𝑥 𝑛 ; 𝑒 𝑎 (𝑛 ) ) over all feasible (𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ). Given any multipliers (𝜆 𝑛 , 𝜇 𝑛 ), define the affine function 
+
+𝜓 ⊤ 
+
+> 𝑛
+
+𝑥 𝑛 + 𝜉 ⊤ 
+
+> 𝑛
+
+𝑒 𝑎 (𝑛 ) + 𝜙 𝑛 :=∑︁ 
+
+> 𝑖 ∈T
+
+∑︁ 𝑘 ∈𝐾 
+
+𝜆 𝑛 𝑖𝑘 𝑥 𝑛 𝑖𝑘 +∑︁ 
+
+> 𝑑 ∈D
+
+∑︁ 𝑘 ∈𝐾 
+
+𝜇 𝑛 𝑑𝑘 𝑒 𝑎 (𝑛 ) 
+
+> 𝑑𝑘
+
++ L 𝑡,𝑛 (𝜆 𝑛 , 𝜇 𝑛 ), (22) where 𝜓 𝑛 stacks {𝜆 𝑛 𝑖𝑘 }𝑖,𝑘 , 𝜉 𝑛 stacks {𝜇 𝑛 𝑑𝑘 }𝑑,𝑘 , and 𝜙 𝑛 := L𝑡,𝑛 (𝜆 𝑛 , 𝜇 𝑛 ). Then (21) implies the cut inequality 
+
+R𝑛 (𝑥 𝑛 ; 𝑒 𝑎 (𝑛 ) ) ≥ 𝜓 ⊤ 
+
+> 𝑛
+
+𝑥 𝑛 + 𝜉 ⊤ 
+
+> 𝑛
+
+𝑒 𝑎 (𝑛 ) + 𝜙 𝑛 , ∀( 𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ) feasible at node 𝑛. (23) SND adds such inequalities to the tactical cut pool G( 𝑛 ) and uses them in the under-estimator (9). 
+
+LEMMA 2 (Validity and tightness of tactical cuts) . Each tactical cut generated by (23) is a global lower bound on R𝑛 (𝑥 ; 𝑒 ) over all feasible (𝑥, 𝑒 ). Moreover, applying the integer optimality cut (Proposition 1 and Proposition 2) to the binary point ˆ𝑧 := ( ˆ𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ) yields a globally valid cut that is tight at ˆ𝑧 .Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+19 
+
+Proof. Validity follows from weak duality of the Lagrangian relaxation (21): for any multipliers 
+
+(𝜆 𝑛 , 𝜇 𝑛 ), the right-hand side of (22) is a lower bound on the primal tactical value for all feasible 
+
+(𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ). Tightness at the forward-visited binary point follows from Proposition 2. □
+
+Figure 3 illustrates the two-horizon decision process under SND at a representative scenario-tree node. Next, we show that the SND algorithm produces upper and lower bounds at every iteration.            
+
+> Figure 3 Two-horizon Stochastic Nested Decomposition (SND) at a scenario-tree node. Solid arrows denote the forward simulation pass: we compute the strategic assignment using current cut-based approx-imations of R𝑛 (·) and 𝑉 𝑚 (·) , and per-vehicle routing subproblems are solved in parallel to produce routing costs and the post-decision state. Dotted arrows denote the backward pass. The SND algorithm updates the tactical cut pools G( 𝑛 )and strategic cut pools H ( 𝑚 )to tighten the outer approximations of the recourse and value-to-go functions using feedback from the forward pass. We can replace the cutting-plane generation in the green box with an actor-critic deep neural net-work approximation as we describe later in Section 5.
+
+PROPOSITION 3 (Valid lower bound and statistical upper bound) . At any iteration, let LB 
+
+be the objective value at the root induced by (10) under the current cut pools, computed using exact tactical evaluation to induce post-decision states. Under Assumption 1, LB is a valid lower bound on the optimal objective value of (4) , and LB is non-decreasing over iterations. Let cUB be the sample-average cost obtained by simulating an incumbent feasible policy over 
+
+𝑀 eval sampled root-to-leaf paths, where within-stage routing is evaluated by any feasible tactical solution (optimal or heuristic). Then cUB is a statistical estimate of the expected cost of that policy and hence a statistical estimate of an upper bound on the optimal objective value. Proof. Lower bound. By Lemma 1, each Lagrangian cut generated by dualizing the nonan-ticipativity constraints (15d) is a global lower bound on 𝑉 𝑚 (·) . Moreover, by Proposition 1 (and Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 20
+
+Proposition 2), the corresponding integer optimality cut applied to the binary inherited state ˆ s𝑛 is globally valid and tight at ˆ s𝑛 . Hence every affine function stored in the strategic cut pool H ( 𝑚 ) is a global lower bound on 𝑉 𝑚 (·) , and therefore the point-wise maximum (8) satisfies 
+
+𝑉 𝑚 (𝑠 ) ≤ 𝑉 𝑚 (𝑠 ), ∀𝑠 ∈ S 𝑚 .
+
+Likewise, by Lemma 2 each tactical Lagrangian cut generated by dualizing the nonanticipativity constraints (18) is a global lower bound on R𝑛 (· ; ·) , and by Proposition 1 (and Proposition 2) the corresponding integer optimality cut applied to the binary point ˆ 𝑧 := ( ˆ𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ) is globally valid and tight at ˆ 𝑧 . Hence every affine function stored in the tactical cut pool G( 𝑛 ) is a global lower bound on R𝑛 (· ; ·) , and therefore the pointwise maximum (9) satisfies 
+
+R𝑛 (𝑥 ; 𝑒 ) ≤ R 𝑛 (𝑥 ; 𝑒 ), ∀( 𝑥, 𝑒 ) feasible at node 𝑛. 
+
+Substituting these inequalities into the Bellman recursion implies that the approximate recur-sion (10) under-estimates the true recursion node-wise; hence the root objective LB under-estimates the optimal objective value of (4). 
+
+Monotonicity. Across iterations, SND only adds additional valid affine lower bounds to H (·) 
+
+and G(·) (either Lagrangian cuts or integer optimality cuts). Thus the point-wise maxima in (8)–(9) can only increase, and therefore LB is non-decreasing. 
+
+Statistical upper bound. Any feasible policy on the scenario tree has expected cost greater than or equal to the optimal objective value. The simulation-based quantity cUB is a sample-average estimate of the expected cost of an incumbent feasible policy; therefore it is a statistical estimate of an upper bound. □
+
+4.5. Finite convergence 
+
+We now establish a finite-convergence guarantee for the proposed two-horizon SND algorithm. The proof extends the finite-termination argument of SDDiP (Zou, Ahmed, and Sun 2019) by incorporating the tactical cut pools G(·) that under-estimate the routing recourse and by using integer optimality cuts to guarantee tightness at forward-visited binary points. 
+
+THEOREM 1 (Finite convergence with probability one) . Under Assumptions 1, 2, and 3, we further assume that whenever a node is visited in the backward pass, the algorithm generates at least one new cut that is tight at the corresponding forward-visited binary generation point (either a tactical cut tight at ( ˆ𝑥 𝑛 , 𝑒 𝑎 (𝑛 ) ) or a strategic cut tight at ˆ𝑠 𝑛 ), which is guaranteed by Proposition 2. Then SND terminates in finitely many iterations with probability one, and at termination the root lower bound LB equals the optimal objective value of (4) (up to a prescribed tolerance). Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 21
+
+Proof. Fix any realization of the algorithm’s random sampling sequence. By Proposition 3, at every iteration 𝑖 the computed root value LB 𝑖 is a valid lower bound on the optimal objective value of (4) and the sequence {LB 𝑖 }𝑖 ≥1 is non-decreasing. For each node 𝑛 , let 𝑉 𝑛 𝑖 (·) and R𝑛 𝑖 (· ; ·) denote the under-estimators induced by the cut pools at iteration 𝑖 . For an inherited state 𝑠 at node 𝑛 , let 
+
+𝑄 𝑛 𝑖 (𝑠 ) denote the value of the approximate nodal objective in (10) when the inherited state is 𝑠 (and the minimizer selects an assignment accordingly under the current under-estimators). Let 𝑄 𝑛 (𝑠 )
+
+denote the true nodal objective value, i.e., the Bellman one-stage optimization at node 𝑛 evaluated with the exact tactical recourse R𝑛 (· ; ·) and exact downstream value functions. Define the set of visited triples up to iteration 𝑖 as 
+
+V𝑖 := {( 𝑛, 𝑠, 𝑥 ) : node 𝑛 with inherited state 𝑠 and chosen assignment 𝑥 }.
+
+A visited triple (𝑛, 𝑠, 𝑥 ) ∈ V 𝑖 is called violated at iteration 𝑖 if the current under-estimators strictly under-estimate at the forward-visited generation point, namely if either 
+
+R𝑛 𝑖 (𝑥 ; 𝑒 𝑎 (𝑛 ) ) < R𝑛 (𝑥 ; 𝑒 𝑎 (𝑛 ) ), or 𝑉 𝑚 𝑖 (𝑠 ′) < 𝑉 𝑚 (𝑠 ′) for some 𝑚 ∈ C( 𝑛 ),
+
+where 𝑠 ′ is the post-decision state induced by exact tactical evaluation under (𝑛, 𝑠, 𝑥 ) and the realized information at node 𝑛 , followed by the state-transition logic (3g)–(3l). We first show that violation at a revisited triple cannot persist indefinitely. Fix (𝑛, 𝑠, 𝑥 ) and suppose that at some iteration 𝑖 it is revisited and violated. If R𝑛 𝑖 (𝑥 ; 𝑒 𝑎 (𝑛 ) ) < R𝑛 (𝑥 ; 𝑒 𝑎 (𝑛 ) ), then Proposition 2 implies that the backward pass at node 𝑛 can add an integer optimality cut for R𝑛 (· ; ·) 
+
+that is globally valid and tight at the binary pair (𝑥, 𝑒 𝑎 (𝑛 ) ). Since the inequality is strict before adding the cut, adding a cut that is tight at (𝑥, 𝑒 𝑎 (𝑛 ) ) strictly increases the value of the under-estimator 
+
+R𝑛 (· ; ·) at that point, and therefore strictly increases the approximate nodal objective value at (𝑛, 𝑠 )
+
+under the current forward-visited decision. If instead, there exists a child 𝑚 ∈ C( 𝑛 ) such that 𝑉 𝑚 𝑖 (𝑠 ′) < 𝑉 𝑚 (𝑠 ′), then Proposition 2 implies that the backward pass can add an integer optimality cut for 𝑉 𝑚 (·) that is globally valid and tight at the binary state 𝑠 ′. Since the inequality is strict before adding the cut, this strictly increases 𝑉 𝑚 (·) at 
+
+𝑠 ′, which again strictly increases the approximate nodal objective value at (𝑛, 𝑠 ) under the current forward-visited decision. Therefore, whenever a visited triple (𝑛, 𝑠, 𝑥 ) is revisited while violated, the backward pass produces at least one new cut that yields a strict improvement of the approximate nodal objective at that forward-visited generation point. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 22
+
+Next, we argue that only finitely many such strict improvements are possible. By Assumption 2, the scenario tree is finite and both the inherited state space and feasible assignment set are finite at every node; hence the set of possible visited triples (𝑛, 𝑠, 𝑥 ) is finite. Moreover, by Remark 3, at any fixed node there are only finitely many distinct integer optimality cuts that can be generated, since the binary domains are finite and each integer optimality cut is uniquely determined by its generation point. Consequently, for each node 𝑛 the collection of distinct affine functions that can ever appear in 𝑉 𝑛 (·) and R𝑛 (· ; ·) is finite, and therefore the number of strict improvements of the approximate nodal objective at any fixed visited triple is finite. Finally, consider the sampling process. Under Assumption 3, every node of the finite tree is visited infinitely often with probability one. Because the inherited state space and assignment sets are finite, any visited triple (𝑛, 𝑠, 𝑥 ) that can occur with positive probability under the algorithm’s sampling and decision rules is revisited infinitely often with probability one. Combining this with the previous paragraphs, we conclude that with probability one there exists a finite iteration 𝐼 such that for all 𝑖 ≥ 𝐼 no revisited triple is violated, i.e., the under-estimators coincide with the true functions at all forward-visited generation points. In particular, at iteration 𝐼 , the approximate Bellman recursion coincides with the true Bellman recursion along the forward-induced decisions at the root, and therefore LB 𝐼 equals the optimal objective value (up to the prescribed tolerance). Since {LB 𝑖 } is non-decreasing and always a valid lower bound, this implies finite termination with probability one and optimality of the returned policy. □
+
+Algorithm 1 summarizes the proposed two-horizon SND method. The forward pass uses exact tactical evaluation to ensure validity and tightness of generated cuts. The optional policy evaluation step produces cUB for reporting and for comparisons with RL-based approximations, which will be described next. 
+
+5. Reinforcement Learning Approach 
+
+Given that the endogenous system state admits a compact binary representation and the stage-wise strategic decision is a finite, feasibility-constrained assignment, we propose an RL approach in which strategic assignment decisions are learned from simulated system trajectories. The RL formulation provides an alternative policy class and a computationally scalable approach for large instances where repeated solution of tree-indexed mixed-integer programs is impractical. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+23 
+
+Algorithm 1 Two-horizon SND algorithm for inspection routing 
+
+1: Initialization: 𝑖 ← 1; initialize cut pools H ( 𝑚 ) ← ∅ and G( 𝑛 ) ← ∅ for all 𝑚, 𝑛 ∈ N .
+
+2: while stopping criterion not satisfied do 
+
+3: Sample 𝑀 root-to-leaf scenario paths Ω𝑖 = {𝜔 𝑖 
+
+> 1
+
+, . . . , 𝜔 𝑖 𝑀 }.
+
+4: Forward pass 
+
+5: for 𝑘 = 1, . . . , 𝑀 do 
+
+6: Initialize the inherited state at the root of path 𝜔 𝑖 𝑘 .
+
+7: for 𝑛 ∈ 𝜔 𝑖 𝑘 with 𝑡 (𝑛 ) ≤ 𝑇 − 1 do 
+
+8: Solve (10) using the current cut-based approximation; store ˆ x𝑖 𝑛 .
+
+9: Evaluate the tactical routing recourse (5)–(6) under ( ˆx𝑖 𝑛 , e𝑎 (𝑛 ) ).
+
+10: Compute the post-decision state using (3g)–(3l). 
+
+11: Pass the post-decision state to the next node on the path. 
+
+12: end for 
+
+13: At the leaf node 𝑛 ∈ 𝜔 𝑖 𝑘 with 𝑡 (𝑛 ) = 𝑇 , evaluate the terminal cost (7). 
+
+14: end for 
+
+15: Backward pass 
+
+16: for 𝑡 = 𝑇 − 1, . . . , 1 do 
+
+17: for 𝑛 ∈ N 𝑡 do 
+
+18: if 𝑛 is visited by some sampled path in Ω𝑖 then 
+
+19: Generate a tactical cut (23) and add it to G( 𝑛 ).
+
+20: for 𝑚 ∈ C( 𝑛 ) do 
+
+21: Generate a strategic cut from (15d) and add it to H ( 𝑚 ).
+
+22: end for 
+
+23: end if 
+
+24: end for 
+
+25: end for 
+
+26: Lower bound update 
+
+27: Compute the root lower bound by solving (10) at the root with the current cuts; set 𝑖 ← 𝑖 + 1. 
+
+28: Optional policy evaluation 
+
+29: Simulate the incumbent policy over 𝑀 eval sampled paths and compute cUB as a sample-average cost. 
+
+30: end while 
+
+5.1. MDP formulation 
+
+We model the strategic assignment layer as a finite-horizon Markov decision process over stages 
+
+𝑡 ∈ { 1, . . . , 𝑇 }. At the beginning of stage 𝑡 , the decision maker observes the state 
+
+X𝑡 −1 :=  v𝑡 −1, q𝑡 −1, e𝑡 −1, 𝜙 𝑡 −1
+
+,Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 24
+
+where v𝑡 −1 and q𝑡 −1 are the task completion and failure indicators, e𝑡 −1 encodes the depot location of each vehicle at the start of stage 𝑡 (consistent with the carryover logic in (3m)), and 𝜙 𝑡 −1 denotes auxiliary risk information used to summarize features of the endogenous failure model. An action is a binary assignment a𝑡 := {𝑥 𝑖𝑘,𝑡 }𝑖 ∈T ,𝑘 ∈𝐾 constrained by per-vehicle capacity and completion eligibility: ∑︁ 
+
+> 𝑖 ∈T
+
+𝑥 𝑖𝑘,𝑡 ≤ 𝐵 𝑘,𝑡 , ∀𝑘 ∈ 𝐾, (24a) ∑︁ 
+
+> 𝑘 ∈𝐾
+
+𝑥 𝑖𝑘,𝑡 ≤ 1 − 𝑣 𝑖,𝑡 −1, ∀𝑖 ∈ T , (24b) 
+
+𝑥 𝑖𝑘,𝑡 ∈ { 0, 1}, ∀𝑖 ∈ T , ∀𝑘 ∈ 𝐾. (24c) Given (X𝑡 −1, a𝑡 ), the environment evaluates the tactical layer by querying an oracle consistent with the two-horizon representation. In the oracle variant, the response is obtained by solving the per-vehicle tactical routing problems (5) with inherited depots e𝑡 −1 and fixed assignment a𝑡 . The oracle returns (i) the routing cost 𝑅 𝑡 (a𝑡 ; e𝑡 −1), (ii) completion times {𝑎 𝑖𝑘,𝑡 } that determine whether assigned inspections are completed before failure times, and (iii) the next depot state e𝑡 .We define the one-step cost as 
+
+𝑐 𝑡 (X𝑡 −1, a𝑡 ) := 𝑅 𝑡 (a𝑡 ; e𝑡 −1) + I{𝑡 = 𝑇 }∑︁ 
+
+> 𝑖 ∈T
+
+ 𝛼 𝑖 𝑞 𝑖,𝑇 + 𝛽 𝑖 (1 − 𝑣 𝑖,𝑇 ), (25) which matches the travel and terminal penalty structure in (3a). The state transition from X𝑡 −1 to X𝑡 
+
+is induced by the routing solution and by the endogenous failure realization in stage 𝑡 . In particular, completion is updated as in (3g). For each task 𝑖 , we declare a successful pre-failure inspection at stage 𝑡 if the assigned vehicle completes the task by its realized failure time, consistent with the logic in (3h)–(3j); failures propagate as in (3k) and are triggered as in (3l). The objective is to compute a feasible policy 𝜋 that minimizes E𝜋 [Í𝑇 𝑡 =1 𝑐 𝑡 (X𝑡 −1, a𝑡 )] .
+
+5.2. Actor–critic solution method with deep value-function approximation 
+
+We interpret RL as simulation-based approximate dynamic programming over the strategic hori-zon. We restrict attention to policy classes that generate feasible assignments by construction. Specifically, we parameterize a stochastic policy 𝜋 𝜃 (· | X) over assignment decisions and enforce feasibility through masking: at each stage, any action component that violates (24) is assigned zero probability mass, and thus every sampled assignment is feasible without repair heuristics. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 25
+
+We adopt an actor–critic framework. The actor is the parameterized policy 𝜋 𝜃 , and the critic is a deep neural network that approximates the state value function 
+
+𝑉 𝜓 (X) ≈ E𝜋 𝜃 
+
+" 𝑇 ∑︁ 
+
+> 𝜏 =𝑡
+
+𝑐 𝜏 (X𝜏 −1, a𝜏 ) X𝑡 −1 = X
+
+#
+
+,
+
+where 𝜓 denotes the critic network parameters. For a simulated trajectory, define the one-step temporal-difference (TD) error 
+
+𝛿 𝑡 := 𝑐 𝑡 (X𝑡 −1, a𝑡 ) + I{𝑡 < 𝑇 } 𝑉 𝜓 (X𝑡 ) − 𝑉 𝜓 (X𝑡 −1), (26) and the (possibly multi-step) advantage estimate b𝐴 𝑡 (e.g., TD( 𝜆 )) computed from {𝛿 𝑡 }𝑇 𝑡 =1. The actor is updated using a policy-gradient step with advantage weighting: 
+
+∇𝜃 𝐽 (𝜃 ) = E
+
+" 𝑇 ∑︁ 
+
+> 𝑡 =1
+
+∇𝜃 log 𝜋 𝜃 (a𝑡 | X𝑡 −1) b𝐴 𝑡 
+
+#
+
+. (27) The critic is trained by stochastic gradient descent on a squared TD objective: min  
+
+> 𝜓
+
+E
+
+" 𝑇 ∑︁ 
+
+> 𝑡 =1
+
+𝛿 2
+
+> 𝑡
+
+#
+
+, (28) which performs function approximation of the strategic cost-to-go. The critic is learned from sample paths generated under the current policy and evaluated through the tactical routing oracle. The principal computational bottleneck in training is the repeated evaluation of 𝑅 𝑡 (a𝑡 ; e𝑡 −1) and the induced completion-time logic that determines successful inspections and state evolution. At each stage, the environment calls an exact routing evaluator for the tactical subproblem, returning the realized routing cost and the state transition (v𝑡 , q𝑡 , e𝑡 ).In contrast to SND, the assignment rule is not obtained via cutting-plane approximations of value functions. Instead, we replace this approximation with a black-box learning loop, see Figure 3, where simulated trajectories are used to adjust the actor (policy) and critic (value-function approximation) through gradient-based learning. 
+
+6. Numerical Studies 
+
+This section evaluates the computational performance and solution quality of the proposed stochastic optimization and RL approaches on synthetic inspection instances constructed from the Sioux Falls benchmark network (see, e.g., Transportation Networks for Research Core Team 2026). Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+26 
+
+Algorithm 2 Actor–critic learning with embedded routing evaluation  
+
+> 1:
+
+Inputs: horizon 𝑇 ; simulator implementing endogenous failure dynamics; routing evaluator (oracle or surrogate).  
+
+> 2:
+
+Initialize actor parameters 𝜃 and critic parameters 𝜓 . 
+
+> 3:
+
+for episode = 1, 2, . . . do  
+
+> 4:
+
+Initialize state X0 = (v0, q0, b0, 𝜙 0). 
+
+> 5:
+
+for 𝑡 = 1, . . . , 𝑇 do  
+
+> 6:
+
+Construct feasibility mask from (24) given X𝑡 −1. 
+
+> 7:
+
+Sample feasible assignment a𝑡 ∼ 𝜋 𝜃 (· | X𝑡 −1) under the mask.  
+
+> 8:
+
+Evaluate the routing layer to obtain 𝑅 𝑡 (a𝑡 ; b𝑡 −1) and compute the next state X𝑡 . 
+
+> 9:
+
+Compute stage cost 𝑐 𝑡 via (25) and store (X𝑡 −1, a𝑡 , 𝑐 𝑡 , X𝑡 ). 
+
+> 10:
+
+Compute TD error 𝛿 𝑡 using (26).  
+
+> 11:
+
+end for  
+
+> 12:
+
+Compute advantage estimates { b𝐴 𝑡 }𝑇 𝑡 =1 (e.g., TD( 𝜆 )) from {𝛿 𝑡 }𝑇 𝑡 =1. 
+
+> 13:
+
+Update critic parameters 𝜓 by minimizing (28) on the collected trajectory.  
+
+> 14:
+
+Update actor parameters 𝜃 using the policy-gradient estimator (27).  
+
+> 15:
+
+end for 
+
+6.1. Experimental setup 
+
+We evaluate the solution of the dynamic inspection problem we propose with different solution models. We compare four methods: 
+
+• Exact: we solve the tree-indexed extended formulation (3) directly with Gurobi. 
+
+• One-horizon SND: we apply SND on the one-horizon tree formulation with nodal routing subproblems. 
+
+• Two-horizon SND: we run Algorithm 1 with both strategic and tactical cut pools. 
+
+• RL: we approximate the two-horizon policy using an actor–critic architecture with embedded routing evaluation. All experiments were conducted under identical instance data, failure-time distributions, and scenario-tree structures. For MIP-based methods, we report runtime over multiple replications and optimality gaps at fixed time checkpoints. All experiments were conducted on a machine with an Apple M2 processor and 16GB RAM using Python 3.13 and Gurobi 13.0 to solve all linear programming (LP) and mixed-integer linear programming (MILP) problems. We set three hours as the overall runtime limit on any instance. 
+
+6.2. Instance setup 
+
+We base all instances on variants of the Sioux Falls transportation network (Transportation Networks for Research Core Team 2026, LeBlanc, Morlok, and Pierskalla 1975). We treat the 24 original Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 27
+
+nodes as inspection tasks and we add a depot in the periphery of the city. We construct a directed arc set from the benchmark connectivity. For each city, we place one depot outside the city boundary. For each depot, we add depot-to-task arcs obtained from shortest paths on the underlying city network. These depot-to-task walks traverse the original network but do not execute inspections at intermediate task nodes. Vehicles start evenly across depots at the first stage. At later stages, the model selects the start depot through state carryover, and it may choose to end at any depot at the end of each stage. We generate three network sizes. Instance S1 includes a single city (of one Sioux Falls network) with |T | = 24 tasks and one depot. Instance S2 duplicates the city and connects two copies of the Sioux Falls network with eight bidirectional inter-city highways, yielding |T | = 48 inspection tasks at 48 nodes and two depots. Instance S4 tiles four copies of the city and adds the corresponding inter-city highways, yielding |T | = 96 tasks and four depots. In Figure 4, we illustrate the tiling of two Sioux Falls cities to construct the S2 instance.      
+
+> Figure 4 S2 instance illustration with 𝐾 =2and one vehicle changing depot.
+
+We set travel times 𝛿 𝑖 𝑗 𝑘 proportional to the geometric arc length in the constructed network. We use a constant service time 𝜅 𝑖𝑘 = 𝜅 for all tasks 𝑖 ∈ T and vehicles 𝑘 ∈ 𝐾 . Each stage corresponds to an 8-hour workday. Let |T | denote the number of inspection tasks. Given a horizon length 𝑇 and a fleet size |𝐾 |, we define the minimum required inspections per vehicle per stage needed to cover all tasks by the end of the horizon under nominal routing as 
+
+𝜌 =
+
+ |T | 
+
+𝑇 · | 𝐾 |
+
+
+
+. (29) Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+> 28
+
+We set assignment budgets 𝐵 𝑘,𝑡 and shift lengths 𝛾 𝑘 to target 𝜌 inspections per vehicle per stage. We restrict attention to instances satisfying 3 ≤ 𝜌 ≤ 5 to avoid configurations that require unrealistically dense inspections within a single shift. We set the stage start times 𝜃 𝑘𝑡 to align with the daily start and specify a shift duration 𝛾 𝑘 for each vehicle 𝑘 ∈ 𝐾 .
+
+6.3. Scenario tree and failure modes 
+
+We represent uncertainty with a stage-wise scenario tree. At each node 𝑛 at stage 𝑡 (𝑛 ), the instance specifies failure thresholds {𝜑 𝑛 𝑖 }𝑖 ∈T and realized failure indicators { 𝑓 𝑖 (𝑛 )} 𝑖 ∈T . We generate the scenario tree by branching on regime realizations that shift failure thresholds forward or backward in time. Under branching factor 𝐵 = 2, each node branches into a high-failure regime and a low-failure regime. The high-failure regime shifts failure thresholds earlier, and the low-failure regime shifts failure thresholds later. Under branching factor 𝐵 = 3, we add a neutral regime that leaves failure thresholds unchanged. Once a task fails at a node, it remains failed at all descendant nodes. This monotonicity ensures that the state process remains consistent with progressive degradation. With 𝐵 = 2, the scenario tree contains 2 𝑇 leaves. With 𝐵 = 3, the tree contains 3 𝑇 leaves. We report the number of leaves and total tree nodes for each tested instance in Table 2. To study how solution methods respond to different failure dynamics, we vary both the urgency of inspections and the spatial structure of failure propagation across instances. Urgency controls how rapidly penalties accrue when inspections are delayed: low-urgency settings allow inspections to be deferred with limited risk, whereas high-urgency settings impose steep penalties for late intervention and therefore favor rapid reallocation of inspection effort. Propagation structure determines how failures spread across the network. In clustered propagation, failures remain largely localized, creating opportunities for efficient intra-city routing and stable inspection sequences. In contrast, linear propagation induces broader spatial coupling, as failures can propagate across cities and depots, increasing the value of inter-city movement and dynamic reassignment. 
+
+6.4. Test instances 
+
+Based on the previous description of parameters and scenario tree construction, in Table 2 we name and describe the instances that we will use to run the numerical experiments on all the methods. 
+
+6.5. Runtime of exact solution methods 
+
+We evaluate the time required to reach an optimality gap of 0.1% optimality gap for the instances in Table 2 employing the extended formulation direct solve and the SND-based approaches. We report average runtime and standard deviation over 5 replications. Table 3 shows that the two-horizon Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+29                
+
+> Table 2 Test instances following the naming Network-K#-T#-B# . We report vehicles |𝐾 |, stages 𝑇 , branching factor 𝐵 , network statistics (tasks | T | , depots | D | , arcs |𝐴 |), scenario-tree leaves and nodes, and required inspections per vehicle per stage 𝜌 =⌈ | T |/( 𝑇 |𝐾 | ) ⌉ .
+
+Instance |𝐾 | 𝑇 𝐵 |T | |D| | 𝐴 | Leaves Nodes 𝜌 
+
+S1-K2-T5-B2 2 5 2 24 1 92 32 63 3S1-K2-T5-B3 2 5 3 24 1 92 243 364 3S2-K4-T3-B2 4 3 2 48 2 224 8 15 4S2-K4-T3-B3 4 3 3 48 2 224 27 40 4S2-K2-T5-B2 2 5 2 48 2 224 32 63 5S2-K2-T5-B3 2 5 3 48 2 224 243 364 5S2-K4-T5-B2 4 5 2 48 2 224 32 63 3S2-K4-T5-B3 4 5 3 48 2 224 243 364 3S2-K2-T10-B2 2 10 2 48 2 224 1024 2047 3S2-K6-T3-B2 6 3 2 48 2 224 8 15 3S2-K6-T3-B3 6 3 3 48 2 224 27 40 3S4-K4-T5-B2 4 5 2 96 4 480 32 63 5S4-K4-T5-B3 4 5 3 96 4 480 243 364 5S4-K4-T10-B2 4 10 2 96 4 480 1024 2047 3S4-K6-T5-B2 6 5 2 96 4 480 32 63 4S4-K6-T5-B3 6 5 3 96 4 480 243 364 4 
+
+> Table 3 Runtime in seconds to reach a 0.1% optimality gap.
+
+Instance Exact One-horizon SND Two-horizon SND S1-K2-T5-B2 223 .4 ± 23 .1 307 .2 ± 33 .4 291 .8 ± 30 .2S1-K2-T5-B3 323 .2 ± 37 .4 356 .5 ± 43 .2 338 .7 ± 39 .1S2-K4-T3-B2 892 .4 ± 60 .0 487 .1 ± 33 .2 423 .5 ± 29 .9S2-K4-T3-B3 1292 .7 ± 91 .0 692 .4 ± 50 .1 602 .1 ± 44 .7S2-K2-T5-B2 5413 .3 ± 347 .8 2238 .6 ± 163 .4 1791 .1 ± 148 .6S2-K2-T5-B3 7144 .2 ± 399 .7 3259 .4 ± 243 .8 2606 .8 ± 221 .9S2-K4-T5-B2 3568 .8 ± 279 .2 2232 .4 ± 155 .3 1786 .2 ± 141 .2S2-K4-T5-B3 6801 .3 ± 383 .4 3105 .9 ± 219 .6 2484 .7 ± 199 .9S2-K2-T10-B2 – – 4501 .4 ± 297 .6S2-K6-T3-B2 2982 .1 ± 220 .7 1885 .3 ± 133 .1 1508 .2 ± 120 .6S2-K6-T3-B3 4189 .4 ± 258 .2 2627 .8 ± 197 .3 2101 .6 ± 178 .8S4-K4-T5-B2 6016 .4 ± 396 .8 3129 .8 ± 228 .7 2503 .6 ± 207 .9S4-K4-T5-B3 8076 .2 ± 454 .1 4348 .4 ± 287 .6 3479 .1 ± 260 .9S4-K4-T10-B2 – – 6436 .3 ± 421 .8S4-K6-T5-B2 – – 3221 .0 ± 241 .3S4-K6-T5-B3 – – 4843 .2 ± 347 .9  
+
+> We report mean ±standard deviation over five replications. Entries marked “–” indicate instances that exceeded the 3-hour time limit.
+
+representation yields little improvement on smaller instances, where cut generation, nodal problem construction, and management dominate, but reduce runtime by roughly 20% on the larger instances that still converge within the 3-hour time limit. 
+
+6.6. Convergence Behavior 
+
+We compare the optimality gaps at different runtimes to report the observed solution gap as a function of runtime budget for those instances that had methods not reach the target optimality gap Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+30                                                                                                           
+
+> Table 4 Optimality gaps (%) over time for larger instances where at least one method does not reach the 0.1% tolerance within three hours.
+> Time (seconds) Instance Method 100 200 400 800 1600 3200 6400 10800 S2-K2-T10-B2 Exact 60.0 55.1 48.4 40.2 32.1 22.0 12.1 7.5
+> One-horizon SND 18.2 15.3 12.1 9.2 6.6 4.2 3.2 2.6
+> Two-horizon SND 15.1 12.1 9.9 7.4 4.6 0.35 0.07 *S4-K4-T10-B2 Exact 70.4 66.0 60.1 52.3 44.2 33.8 19.7 8.9
+> One-horizon SND 22.3 19.4 16.2 13.4 10.1 6.6 4.1 3.0
+> Two-horizon SND 18.7 15.8 12.6 8.8 4.2 1.20 0.12 *S4-K6-T5-B2 Exact 55.6 50.8 44.3 36.5 28.7 18.2 10.0 5.8
+> One-horizon SND 16.7 14.1 11.6 9.6 7.1 4.1 3.1 2.4
+> Two-horizon SND 14.9 11.8 7.2 2.6 0.62 0.12 **S4-K6-T5-B3 Exact 68.2 62.7 54.8 45.1 35.6 24.1 13.8 7.2
+> One-horizon SND 19.4 17.0 14.6 12.3 9.1 5.6 3.8 2.9
+> Two-horizon SND 16.5 13.4 9.3 4.2 3.10 1.25 **Bold values denote final optimality gaps at the 3-hour time limit for methods that did not converge. A symbol * indicates that the method reached the 0.1% tolerance and terminated before the time limit.
+
+within the 3-hour limit. In Table 4 we provide the gap analysis for the four instances that showed this behavior. Two-horizon SND reaches the 0.1% optimality-gap tolerance on all 16 instances within the 10,800-second cap. In contrast, solving the exact model directly (i.e., Exact) exceeds the time limit with a gap that’s larger than that of the one-horizon SND in the hard instances. Among the instances where both SND variants converge, Two-horizon SND reduces average time-to-0.1% by roughly 20% relative to One-horizon SND, with the largest gains occurring on the larger networks and deeper scenario trees. 
+
+6.7. Solution and Policy Analysis 
+
+We summarize several interpretable metrics that describe how a policy allocates inspection effort in space and time. We define “intra-city routes” and “inter-city routes” as the fraction of traversed arcs that remain within the same city (or region) versus those that cross city boundaries; these metrics capture the degree of spatial reallocation induced by the policy. We define “vehicle switching” as the percentage of stage transitions in which a vehicle starts the next stage from a different depot (city) than in the previous stage, which measures how aggressively a policy relocates resources across the network. We define “early inspections” as the fraction of completed inspections that occur in the first portion of the planning horizon (e.g., early stages relative to 𝑇 ), which captures how strongly the policy front-loads preventive effort. Finally, we define “propagation containment” as the percentage reduction in realized downstream failures relative to a no-intervention baseline under the same failure realization, which measures how effectively the policy limits failure spread. In Table 5, we report these metrics for SND and RL across urgency and propagation regimes. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+31  
+
+> Table 5 Comparison of SND and RL solution characteristics across urgency levels and propagation structures (S4 instances).
+
+Urgency Propagation Metric SND RL Mean Std Mean Std Medium Clustered Intra-city routes (%) 92.3 4.2 48.6 6.4 Inter-city routes (%) 7.7 3.1 51.4 6.4 Vehicle switching (%) 14.6 5.1 41.2 7.3 Early inspections (%) 68.4 6.3 44.1 8.2 Propagation containment (%) 76.8 5.4 86.2 4.6 Medium Linear Intra-city routes (%) 70.8 6.2 38.7 7.4 Inter-city routes (%) 29.2 6.2 61.3 7.4 Vehicle switching (%) 22.4 6.3 49.5 8.1 Early inspections (%) 58.7 7.4 36.2 9.1 Propagation containment (%) 69.1 6.5 83.4 5.2 High Clustered Intra-city routes (%) 74.6 7.3 33.8 8.6 Inter-city routes (%) 25.4 7.3 66.2 8.6 Vehicle switching (%) 27.3 8.4 57.6 9.2 Early inspections (%) 54.1 8.6 30.9 10.4 Propagation containment (%) 63.5 7.8 81.7 6.3 High Linear Intra-city routes (%) 60.9 8.1 27.6 9.3 Inter-city routes (%) 39.1 8.1 72.4 9.3 Vehicle switching (%) 33.7 9.0 65.1 10.2 Early inspections (%) 47.6 9.2 26.4 11.1 Propagation containment (%) 58.2 8.4 78.3 7.1 
+
+> We report percentages averaged over simulated scenarios; standard deviations appear in paren-theses. Boldface indicates the method with the higher mean for that metric and regime.
+
+Table 5 shows that SND and RL produce consistently different inspection and routing policies across urgency levels and propagation structures. SND solutions emphasize intra-city routing and earlier inspections, particularly under clustered propagation and moderate urgency. This behavior reflects the planning bias induced by value-function cuts, which internalize expected downstream penalties and favor stable sequencing when future states evolve predictably. RL exhibits systematically higher levels of inter-city routing and vehicle switching across all configurations. This behavior reflects the flexibility of the learned policy class, which reallocates inspection effort aggressively across the network. As a result, RL achieves stronger propagation con-tainment in high-urgency and linear-propagation regimes, where rapid global response dominates the benefits of early commitment. However, this flexibility comes at the cost of later inspections and higher routing variability, particularly in settings where failures evolve gradually and localized sequencing is effective. To compare policies on a common scale, we report regime-wise cost ratios of RL relative to SND. For each urgency–propagation regime 𝑟 , we compute out-of-sample estimates of the expected total cost 𝐽 𝜋 (𝑟 ) and its decomposition into travel, failure (late/realized failure) penalties, and missed-Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+32                         
+
+> Table 6 Regime-wise cost ratios (RL/SND) for S4 instances.
+> Urgency Propagation Total Cost Travel Failure Missed Medium Clustered 1.15 1.22 0.95 0.98 Linear 0.95 1.18 0.88 0.92 High Clustered 0.92 1.20 0.82 0.93 Linear 0.90 1.25 0.78 0.92
+> Values report the ratio RL/SND. Ratios below 1 favor RL and ratios above 1 favor SND.
+
+inspection (terminal) penalties. We then report the relative indices RelTotal (𝑟 ) = 𝐽 RL (𝑟 )
+
+𝐽 SND (𝑟 ) , RelTrav (𝑟 ) = 𝐽 RL trav (𝑟 )
+
+𝐽 SND trav (𝑟 ) , RelFail (𝑟 ) = 𝐽 RL fail (𝑟 )
+
+𝐽 SND fail (𝑟 ) , RelMiss (𝑟 ) = 𝐽 RL miss (𝑟 )
+
+𝐽 SND miss (𝑟 ) .
+
+Values below 1 indicate that RL is cheaper (better) than SND for that component, while values above 1 indicate that SND is cheaper. Boldface highlights the dominant method for each metric direction (i.e., the smaller ratio). In medium urgency with clustered propagation, SND is the cost-dominant approach: the total-cost ratio is 1 .15, meaning RL is about 15% more expensive out-of-sample. This aligns with the behavioral patterns in Table 5: RL relocates vehicles more aggressively, increasing travel overhead (Rel. Travel > 1), while the resulting reductions in downstream penalties are limited in localized, slowly evolving regimes. Even though RL slightly improves penalty components (Rel. Failure and Rel. Missed < 1), these gains do not offset the travel increase, and thus the total cost favors SND. As the dynamics become more globally coupled (linear propagation) and/or penalties become steeper (high urgency), the ordering flips: RL becomes 5–10% cheaper overall (Rel. Total Cost 
+
+= 0.90–0 .95). In these regimes, RL still pays a travel premium (Rel. Travel > 1), but achieves substantially lower penalty components (Rel. Failure = 0.78–0 .88 and Rel. Missed ≈ 0.92–0 .93), consistent with the idea that rapid global redeployment is valuable when failures spread across cities and late intervention is expensive. 
+
+7. Conclusion 
+
+In this paper, we addressed the challenge of dynamic infrastructure inspection under endogenous (decision-dependent) uncertainty. Our model explicitly accounts for the feedback loop where timely inspection actions alter the evolution of component failure probabilities. To manage the resulting computational complexity, we introduced a two-horizon representation that decouples strategic task assignment from tactical routing, bridging the gap between long-term risk mitigation and daily operational constraints. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+33 
+
+Our research yields several key methodological and managerial insights that underscore the value of the two-horizon framework. Primarily, we demonstrate the methodological efficiency of the SND algorithm. By integrating integer state reduction with tactical cut generation, we can solve computationally challenging multi-stage stochastic mixed-integer programs. This approach highlights the viability of exact decomposition in complex infrastructure settings. Beyond exact methods, the RL framework emerges as a scalable, data-driven alternative in real-time responsiveness. While exact decomposition enjoys provable optimality, the RL policy demonstrates good performance in high-dimensional state spaces. This trade-off between scalability and interpretability suggests that the optimal solution approach is fundamentally dictated by the failure characteristics of the system. For infrastructure networks facing localized, slow-moving risks where precision is paramount, the exact SND approach is most beneficial. Conversely, the RL framework proves superior for managing high-urgency, expansive threats where the necessity for rapid adaptation outweighs marginal gains in optimality. For future research, this framework opens several avenues. Accounting for varying sensor capa-bilities and endurance limits would introduce significant layers of strategic complexity to the model. Furthermore, expanding the scope to include simultaneous restoration and repair decisions would transition the current model into a comprehensive resilience framework. Finally, the integration of real-time Internet of Things data streams into the RL training environment could facilitate a “digital twin” approach to infrastructure monitoring. 
+
+References 
+
+Ahmed S, 2013 A scenario decomposition algorithm for 0–1 stochastic programs . Operations Research Letters 
+
+41(6):565–569. Barnhart C, Johnson EL, Nemhauser GL, Savelsbergh MW, Vance PH, 1998 Branch-and-price: Column generation for solving huge integer programs . Operations research 46(3):316–329. Birge JR, Louveaux F, 2011 Introduction to Stochastic Programming . Springer Series in Operations Research and Financial Engineering (New York, NY: Springer New York), ISBN 978-1-4614-0236-7, URL http://dx. doi.org/10.1007/978-1-4614-0237-4 .Borrero JS, Prokopyev OA, 2018 Network inspection problems: Literature review and research prospects . Omega 
+
+81:2–19. Chung HM, Maharjan S, Zhang Y, Eliassen F, Strunz K, 2020 Placement and routing optimization for automated inspection with unmanned aerial vehicles: A study in offshore wind farm . IEEE Transactions on Industrial Informatics 17(5):3032–3043. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+34 Deng Y, Ahmed S, Shen S, 2018 Parallel scenario decomposition of risk-averse 0-1 stochastic programs . INFORMS Journal on Computing 30(1):90–105. Dupaˇ cov´ a J, Gr¨ owe-Kuska N, R¨ omisch W, 2003 Scenario reduction in stochastic programming An approach using probability metrics . Mathematical Programming, Series B 95(3):493–511, URL http://dx.doi.org/10. 1007/s10107-002-0331-0 .Errico F, Desaulniers G, Gendreau M, Rei W, Rousseau LM, 2018 The vehicle routing problem with hard time windows and stochastic service times . EURO Journal on Transportation and Logistics 7(3):223–251. Estrada Garcia JA, Shen S, 2026 Optimizing inspection routes and schedules for infrastructure systems under stochastic decision-dependent failures . Forthcoming in IISE Transactions .Fu J, Nunez A, De Schutter B, 2021 Real-time UAV routing strategy for monitoring and inspection for postdisaster restoration of distribution networks . IEEE Transactions on Industrial Informatics 18(4):2582–2592. Gr¨ owe-Kuska N, Heitsch H, R¨ omisch W, 2003 Scenario reduction and scenario tree construction for power management problems . 2003 IEEE Bologna PowerTech - Conference Proceedings 3:152–158, URL http://dx.doi. org/10.1109/PTC.2003.1304379 .Hildebrandt FD, Thomas BW, Ulmer MW, 2023 Opportunities for reinforcement learning in stochastic dynamic vehicle routing . Computers & operations research 150:106071. Iversen N, Schofield OB, Cousin L, Ayoub N, Vom B¨ ogel G, Ebeid E, 2021 Design, integration and implementation of an intelligent and self-recharging drone system for autonomous power line inspection . 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 4168–4175 (IEEE). Kang S, Bansal M, 2025 Bi-parameterized two-stage stochastic min-max and min-min mixed integer programs .
+
+INFORMS Journal on Computing 37(1). Kyriakides E, Polycarpou M, 2014 Intelligent monitoring, control, and security of critical infrastructure systems ,volume 565 (Springer). LeBlanc LJ, Morlok EK, Pierskalla WP, 1975 An efficient approach to solving the road network equilibrium traf-fic assignment problem . Transportation Research 9(5):309–318, URL http://dx.doi.org/10.1016/ 0041-1647(75)90030-1 .Lim GJ, Kim S, Cho J, Gong Y, Khodaei A, 2016 Multi-uav pre-positioning and routing for power network damage assessment . IEEE Transactions on Smart Grid 9(4):3643–3651. Liu P, Hu X, Cheng C, 2025 Drone Station Location and Routing Optimization for Infrastructure Inspection . Arxiv preprint .Mazyavkina N, Sviridov S, Ivanov S, Burnaev E, 2021 Reinforcement learning for combinatorial optimization: A survey . Computers & Operations Research 134:105400. Memarzadeh M, Pozzi M, 2016 Integrated Inspection Scheduling and Maintenance Planning for Infrastructure Sys-tems . Computer-Aided Civil and Infrastructure Engineering 31(6):403–415, URL http://dx.doi.org/ 10.1111/mice.12178 .Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+35 Monti A, Ponci F, 2015 Electric power systems . Intelligent Monitoring, Control, and Security of Critical Infrastructure Systems , 31–65 (Springer). Morton DP, Dowson O, Pagnoncelli BK, 2025 MDP modeling for multi-stage stochastic programs with decision-dependent uncertainty . Working Paper, Northwestern University .Nazari M, Oroojlooy A, Snyder L, Tak´ ac M, 2018 Reinforcement learning for solving the vehicle routing problem .
+
+Advances in neural information processing systems 31. Pecin D, Pessoa A, Poggi M, Uchoa E, 2017 Improved branch-cut-and-price for capacitated vehicle routing . Mathe-matical Programming Computation 9:61–100. Pereira MV, Pinto LM, 1991 Multi-stage stochastic optimization applied to energy planning . Mathematical Program-ming 52(1-3):359–375, URL http://dx.doi.org/10.1007/BF01582895 .Pillac V, Gendreau M, Gu´ eret C, Medaglia AL, 2013 A review of dynamic vehicle routing problems . European Journal of Operational Research 225(1):1–11, URL http://dx.doi.org/10.1016/j.ejor.2012.08.015 .Rios BHO, Xavier EC, Miyazawa FK, Amorim P, Curcio E, Santos MJ, 2021 Recent dynamic vehicle routing problems: A survey . Computers & Industrial Engineering 160:107604. Saidi S, Kattan L, Jayasinghe P, Hettiaratchi P, Taron J, 2018 Integrated infrastructure systems—a review . Sustainable Cities and Society 36:1–11. Seranilla BK, 2025 A survey on the applications of stochastic dual dynamic programming and its variants . European Journal of Operational Research Forthcoming. Shahverdi B, Miller-Hooks E, 2023 Scheduling inspection and restoration action in postdisaster critical lifeline recovery through stochastic optimization with endogenous uncertainty . Natural Hazards Review 24(1):04022037. Shapiro A, Dentcheva D, Ruszczynski A, 2021 Lectures on stochastic programming: modeling and theory (SIAM). Transportation Networks for Research Core Team, 2026 Transportation networks for research . URL https:// github.com/bstabler/TransportationNetworks , last accessed March 27, 2026. Ulmer MW, Goodson JC, Mattfeld DC, Hennig M, 2019 Offline–online approximate dynamic programming for dynamic vehicle routing with stochastic requests . Transportation Science 53(1):185–202. Ulmer MW, Mattfeld DC, K¨ oster F, 2018 Budgeting time for dynamic vehicle routing with stochastic customer requests .
+
+Transportation Science 52(1):20–37. Viswanadham N, Sharma SM, Taneja M, 1996 Inspection allocation in manufacturing systems using stochastic search techniques . IEEE Transactions on Systems, Man, and Cybernetics-Part A: Systems and Humans 26(2):222–230. Vom B¨ ogel G, Cousin L, Iversen N, Ebeid ESM, Hennig A, 2020 Drones for inspection of overhead power lines with recharge function . 2020 23rd Euromicro Conference on Digital System Design (DSD) , 497–502 (IEEE). Yu M, Nagarajan V, Shen S, 2022 Improving column generation for vehicle routing problems via random coloring and parallelization . INFORMS Journal on Computing 34(2):953–973. Estrada-Garcia and Shen: Dynamic Infrastructure Inspection under Endogenous Uncertainty 
+
+36 Zou J, Ahmed S, Sun XA, 2018 Multistage stochastic unit commitment using stochastic dual dynamic integer program-ming . IEEE transactions on Power Systems 34(3):1814–1823. Zou J, Ahmed S, Sun XA, 2019 Stochastic dual dynamic integer programming . Mathematical Programming 175(1-2):461–502, URL http://dx.doi.org/10.1007/s10107-018-1249-5 .

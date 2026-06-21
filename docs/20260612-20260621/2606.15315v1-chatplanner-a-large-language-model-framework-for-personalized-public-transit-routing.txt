@@ -1,0 +1,795 @@
+Title: ChatPlanner: A Large Language Model Framework for Personalized Public Transit Routing
+
+URL Source: https://arxiv.org/pdf/2606.15315v1
+
+Published Time: Tue, 16 Jun 2026 00:50:46 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+# CHAT PLANNER : A L ARGE LANGUAGE MODEL FRAMEWORK FOR PERSONALIZED PUBLIC TRANSIT ROUTING 
+
+Tingting Yang ∗
+
+> 1
+
+School of Engineering and Materials Science, Queen Mary University of London Mile End Road, London, E1 4NS, United Kingdom 
+
+t.yang@qmul.ac.uk 
+
+Chenhao Xue ∗
+
+> 2
+
+Department of Engineering Science, University of Oxford Parks Road, Oxford, OX1 3PJ, United Kingdom 
+
+chenhao.xue@eng.ox.ac.uk 
+
+Jun Chen †
+
+> 1
+
+School of Engineering and Materials Science, Queen Mary University of London Mile End Road, London, E1 4NS, United Kingdom 
+
+jun.chen@qmul.ac.uk 
+
+# ABSTRACT 
+
+Personalized public transit routing in public transit systems remains challenging due to the difficulty of capturing and integrating diverse user preferences into routing algorithms. This paper presents ChatPlanner, a novel framework that leverages Large Language Models (LLMs) to enable preference aware public transit routing. Our approach employs fine-tuned LLMs with Retrieval-Augmented Generation (RAG) to extract routing parameters and interpret nuanced user preferences from natural language queries, subsequently integrating these preferences into the objective function of a public transit routing algorithm. This study designs preference aware datasets incorporating eight personas and five contexts to establish scoring standards for both fine-tuning and RAG. This work conducted three experiments to validate the solutions’ feasibility, extraction of routing information and prefer-ences, and solution set quality and completeness. Results demonstrate that ChatPlanner generates feasible solutions reliably. Fine-tuning enforces the required output structure and learns general preference patterns, while RAG provides query-specific context to resolve imprecise or conversational expressions and calibrate continuous scores. The combination of both achieves the highest accuracy in routing information extraction and user preference interpretation. Results based on selected case studies show that by capturing user preferences, ChatPlanner identifies valuable solutions across different dimensions that existing route planners overlook, generating more valuable route alterna-tives. This research establishes a new paradigm for integrating natural language understanding into transportation optimization. 
+
+Keywords Public transit routing · User preferences · RAPTOR algorithm · Personalized transportation · Multi-criteria optimization · Urban mobility · Large language models · Public transit routing 
+
+> ∗
+
+These authors contributed equally to this work. 
+
+> †
+
+Corresponding author 
+
+> arXiv:2606.15315v1 [cs.AI] 13 Jun 2026
+
+ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+# 1 Introduction 
+
+Public transit, as defined by the Federal Transit Administration, is transportation by bus, rail, or other conveyance, either publicly or privately owned, that provides general or special service to the public on a regular and continuing basis [Daganzo and Ouyang, 2019]. These systems are characterized by large-capacity vehicles operating on predetermined routes and timetables. They serve as the foundation of urban mobility in major cities worldwide, particularly in areas with high population density [Hörcher and Tirachini, 2021]. Public transit routing identifies feasible passenger paths across existing transit networks. Public transit routing algorithms provide decision support for route planner apps, for example, Google Maps, Apple Maps, and Citymapper. However, most commercial journey planners still primarily optimize for travel time and the number of transfers as fixed objectives. These planners do not interpret users’ preferences directly and translate those into extra objectives dynamically. [Apple Inc., 2025, Google, 2025, Citymapper, 2025]. Traveler preferences are heterogeneous across time sensitivity, trip purpose, accessibility, affordability, and perceived safety. Commuters typically prioritize time efficiency [Mackie et al., 2001], leisure travelers often trade time for itinerary quality [Zhou et al., 2024], and riders with limited mobility require step-free access [Ceccato et al., 2020]. Low-income travelers, non-drivers, children, and elderly adults frequently rely on public transit for affordability, safety, and convenience [Fan, 2004], while safety concerns, particularly among women, children, and students, also shape route choice [The Mayor of London, 2023]. Because public transit is essential to daily life for many groups, system performance has tangible consequences for well-being [Heaps et al., 2021, Molner et al., 2023]. Incorporating user preferences into routing algorithms is therefore critical to serving diverse needs and improving the overall transit experience. When specific preferences are captured through the user interfaces of those commercial journey planners, they are often used as post-hoc filters. That is, the solutions set and the process of finding solutions remain unchanged. The routes are simply re-ranked by preferences. Public transit routing problems with multiple conflicting objectives seek to find Pareto optimal journeys for travelers [Delling et al., 2015, Fan and Mumford, 2010]. However, considering many conflicting preferences as various objective functions in the public transit routing algorithm may cause high computational cost, and lead to information clusters as more than necessary solutions are presented to the end users. Apart from the limitations of fixed objectives, a more fundamental issue lies in how preferences are captured in the first place. A structured preference interface with sliders or ranking widgets could let travelers rate criteria such as accessibility or safety directly. However, research in public transit routing shows that it is difficult for users to accurately express their preferences for each criterion through seemingly more guaranteed inputs [Wang et al., 2021, Huang et al., 2024]. Such an interface faces an inherent trade-off: simplified but more guaranteed methods require less cognitive effort but are less expressive, while more expressive methods demand greater cognitive effort and reduce usability [Pommeranz et al., 2012]. However, even when the preference dimensions are low, asking users to assign numerical importance scores creates a cognitive mismatch. Travelers naturally think in terms of situational context (e.g., “I have a stroller and it is rush hour”) rather than abstract ratings of preferences on a scale [Kostric et al., 2024]. Given the above circumstance, this study contemplates three research questions: (i) What constitutes an effective, systematic methodology for formulating a useful framework to identify travelers’ preferences? (ii) How does the proposed framework better understand traveler requests across different preferences? (iii) How does the proposed work perform in both theoretical and practical perspectives? To address the above challenges, ChatPlanner, a Large Language Model (LLM) Framework for Personalized Public Transit Routing, is proposed. Within this context, Chat corresponds to the conversational interaction and natural language handling functionalities provided by LLM. Planner applies a multi-criterion round-based public transit routing (MC-RAPTOR) algorithm [Delling et al., 2015]. Practically, ChatPlanner provides a flexible conversational interface that interprets user preferences and returns diverse, feasible route sets. Methodologically, a fine-tuned transit-domain LLM translates natural-language queries into journey requests and user preferences based on four extra criteria in addition to travel time and number of transfers: (i) accessibility level, (ii) crowding level, (iii) safety level, and (iv) sightseeing level. The LLM estimates the importance of these criteria, allowing the framework to select the most relevant ones for the traveler. The route planner incorporates these preferences from the traveler into the multi-objective search and selects potentially different objective functions during routing. These preference-aware objectives thereby yield distinct Pareto fronts over candidate routes, combining personalized user preferences with the transit routing algorithm. The contribution of this framework is that, first, the state-of-the-art LLM models’ performances in generating public transit routing solutions are investigated, providing insights into the feasibility, completeness, and correctness. Second, this paper introduces ChatPlanner, a framework that integrates the LLM with a public transit routing algorithm with a preference-aware dataset. This work designs the datasets for both fine-tuning and RAG with an input-output structure 2ChatPlanner: LLM Framework for Personalized Public Transit Routing and incorporates preference information through eight distinct personas and five contexts to establish preference scoring standards. Third, this study evaluates the proposed RAG and fine-tuned LLM under the proposed framework for extracting routing information and interpreting user preferences, compared to general purpose base LLM models. Evaluation demonstrates that fine-tuning is essential for accurate parsing of origin, destination, and requested arrival time, while the combination of fine-tuning and RAG best enhances preference interpretation accuracy. Especially, the RAG’s contextual examples ensure consistent and accurate preference scoring, aligning with the designed scoring standards. Finally, this study conducted case studies to confirm that by capturing user preferences systematically, the framework generates more valuable route alternatives overlooked by existing route planners. The rest of this article is organized as follows. Section 2 describes the related work on classic public transit routing algorithms, multi-objective routing algorithms, personalized route recommendation systems, LLM in transportation, and LLM in public transit routing. Section 3 provides a detailed presentation of the proposed ChatPlanner framework. Section 4 presents the experiments conducted to test the parsing performance, solution feasibility and completeness, and the analysis of solution diversity. It also discusses the major findings of this study and the academic and industrial implications. Finally, the conclusion is drawn in Section 5. 
+
+# 2 Literature Review 
+
+A public transit system is generally referred to as public transport and mass transit [ScienceDirect Topics]. When it comes to public transit, bus, railway, and airline transit network design play a key role in optimization [Kepaptsoglou and Karlaftis, 2009, Cipriani et al., 2012, Liang et al., 2025]. Kepaptsoglou and Karlaftis [2009] systematically reviews research on the Transit Route Network Design Problem, addressing the challenges of efficiently designing public transportation networks that enhance mobility while reducing congestion and pollution. Liang et al. [2025] propose a novel multi-objective evolutionary algorithm based on objective space decomposition to solve the transit network design and frequency-setting problem. The network design problem determines the stations that the bus, subway, or railway needs to go through at a specific frequency. By contrast, the public transit routing aims to select the stations that travelers need to go through from the origin to the destination, given the scheduled timetable. Early approaches to public transit routing adapt classical shortest path algorithms, particularly Dijkstra’s algorithm, by modeling timetables as either time-expanded or time-dependent graphs [Pyrga et al., 2008, Disser et al., 2008]. Delling et al. [2015] introduce Round-based Public Transit Optimized Router (RAPTOR), which is achieved by examining routes that have been marked and incrementally exploring connected paths in a round-by-round manner, identifying the earliest trip on that line that can be boarded. Unlike previous Dijkstra-based graph approaches, RAPTOR operates in rounds, processing each route at most once per round, making it simpler and faster. MC-RAPTOR is a multiple-criteria Round-based Public Transit Optimized Router, a multiple-criteria extension of RAPTOR for computing Pareto-optimal journeys in public transit networks that minimizes arrival time, number of transfers, and any extra criteria in a round-based manner. In each iteration, it determines the earliest arrival times for journeys with n − 1 transfers, where n
+
+corresponds to the current iteration. The multiple objective values are saved in different labels. Not all public transit routing problems are NP-Hard, but they become NP-Hard when multiple objectives need to be considered. Regarding the traveler’s preference, Jakob et al. [2014] presents an advanced journey planner that combines all types of urban mobility services while personalizing recommendations based on each user’s past travel choices and preferences. Ceder and Jiang [2019] considers multiple traveler preferences, including time, cost, and convenience, and performs multiple searches across different criteria to generate alternative routes, with each route optimized for different attribute combinations to provide personalized options. Zografos et al. [2010] identify traveler preferences by conducting surveys that capture travelers’ needs, which are then analyzed to determine the requirements for personalized journey planning services. Ludwig et al. [2009] propose ROSE, a mobile application that combines event recommendation with public transportation navigation, using the A* algorithm to incorporate multi-criteria user preferences for optimal public transit routing. Bajaj et al. [2016] develop a personalized route recommendation system that identifies commuter preferences through a participatory sensing Android application, which collects convenience feedback from users during their public transit journeys, and stores this feedback in a knowledge base to provide personalized route recommendations. In recent years, a new paradigm has been proposed to create greener, safer, and more inclusive future transportation [Lin et al., 2023, Shamsuddoha et al., 2025]. This new paradigm is reflected as transportation 5.0, which employs emerging technologies such as Internet of Things, artificial intelligence (AI), and data analytics [Lin et al., 2023, webdemia]. An LLM is an AI model that learns language patterns by training on large datasets. These models are built to understand and generate human language. Although language models have been developed for decades, transfer learning is what makes foundation models possible, and scale is what makes them powerful in recent years [Wallace and Dunlop, 2016] [Bommasani, 2021]. The introduction of the self-attention mechanism enabled the transformer architecture to capture long-range dependencies more effectively [Vaswani et al., 2017]. LLMs possess remarkable capabilities, producing 3ChatPlanner: LLM Framework for Personalized Public Transit Routing text that can match human writing in both quality and natural flow. These powerful AI systems have rapidly become integrated into people’s everyday lives [Rapp et al., 2025]. The emergence of LLMs in transportation can be seen in recent years. Cheng et al. [2025] propose LLM-TFP, which integrates LLMs with spatio-temporal features through a tokenizer that captures timestep, time-of-day, and spatial embeddings for urban traffic flow prediction. Rong et al. [2024] propose an architecture that integrates LLMs with spatio-temporal features for large-scale traffic flow prediction in intelligent autonomous transport systems. Wang et al. [2025] introduces LLMTraveler, an LLM-empowered agent with a memory system that learns from past experiences to simulate human route choice behavior in transportation networks. Zhao et al. [2025] integrates multi-modal crash data, including driver, vehicle, and environment information, into a textualized dataset of prompts to fine-tune an LLM for crash prediction, and provides event-level and conditional risk analysis for identifying critical features and guiding targeted interventions. For the LLM in public transit routing problem,Jonnala et al. [2024] use LLMs to handle questions about the General Transit Feed Specification (GTFS) data, which is a data format that contains a series of .txt files for public transit. Questions such as “What is the meaning of the accessibility file?” target the understanding of the GTFS data format. Furthermore, there is a gap between analyzing the GTFS data and providing journey solutions. Wang and Shalaby [2024] design an LLM-based trip advisor application to provide trip suggestions. The key inputs are the Origin-Destination pair (OD), travel time, and user preference. This study uses LLMs to generate paths directly based on information queried from their database, without using any public transit routing algorithms. Fang et al. [2024] apply LLMs in public transit routing for network disruption. The LLM works as both planner and summarizer. The LLM planner analyzes the subway map for connections between stops and routes through stops. It can identify nearby stations and possible routes as alternatives during disruption. The LLM summarizer organizes the content about possible routes and stops. However, these suggestions do not include timetable information for suggested routes and stops. Fang et al. [2024] show that it is difficult to conduct the experiments since there is no benchmark model for LLM in public transit routing. Also, the challenges of LLM in public transit routing lie in its lack of transportation-specific domain knowledge, public transit data, and the accuracy of its answers. Despite recent advances in applying LLMs to transportation problems, significant gaps remain in personalized public transit routing. Existing personalized routing approaches rely heavily on historical data collection through surveys, past travel records, or participatory sensing applications to learn user preferences. These methods assume static preference patterns and require substantial user data before providing personalized recommendations. They fail to address the reality that travelers’ requests are dynamic and change daily based on varying contexts, needs, and circumstances. Recent LLM-based transit applications have limitations. Some focus only on interpreting GTFS data structures without providing actual journey solutions. Others employ routes recorded in the past directly without using a routing algorithm to find the most suitable routes according to the current dynamic real-world environment. Most lack the ability to dynamically interpret and adapt to user preferences expressed in natural language during the planning process. Therefore, this work addresses the gap by proposing an LLM-based framework that enables intelligent, personalized preferences by integrating LLM with MC-RAPTOR to find solutions based on real timetable data. The proposed framework supports conversational preference refinement throughout the journey planning process and allows public transit routing to be personalized, intelligent, and adaptive to the dynamic nature of daily travel requests. Within the large language models for transportation taxonomy [Nie et al., 2025], ChatPlanner operates simultaneously as an information processor, interpreting natural language preference expressions, and a decision facilitator, integrating LLM reasoning with MC-RAPTOR to produce timetable-grounded journey plans. 
+
+# 3 Methodology 
+
+This section explains the ChatPlanner framework and its core components. Section 3.1 presents the overall framework architecture, which focuses on the information transition across each node. Furthermore, two core components are explained in detail in Sections 3.2 and 3.3, including the fine-tuned LLM parser with RAG for understanding traveler requests in Node 1, and the process of integrating the multi-criteria public transit algorithm in Node 4. 
+
+3.1 ChatPlanner Agent Framework 
+
+ChatPlanner is structured as a directed graph of seven nodes, implemented via the LangGraph software library. The LangGraph architecture comprises three core elements: nodes, edges, and a shared data structure State, as illustrated in Figure 1. State stores structured information throughout execution, including Preference Scores, Journey Request, Criteria List, and Solution Table. Nodes represent discrete actions. Each node operates on State through a read-modify-4ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+Figure 1: Overall framework of the LangGraph for ChatPlanner write cycle: it reads the structured information, performs its designated action, and updates State with results. Edges define conditional transitions between nodes, determining control flows. 
+
+3.1.1 Initial Planning Phase 
+
+Node 1 contains three actions: RAG, Prompt, and Fine-tuned LLM parse. It processes the user’s free-text input and records the requested origin, destination, and arrival time. The input may also include the user’s preferences and intentions. First, the semantic similarity is computed between the user’s input query and the query instances stored in the RAG dataset. Second, the most similar five RAG instances are retrieved and injected into the Prompt together with the user’s input query. The Prompt instructs the fine-tuned LLM to parse the correct request of the user’s information, including the origin, destination, requested arrival time, and preferences. The parsed information from Node 1 updates the Preference Scores and Journey Request in the State. 
+
+Node 2. The origin and destination from the Journey Request, parsed by the fine-tuned LLM, may not match the standard format required by the Route Planner in Node 4. The parsed origin and destination are mapped to standard names that appear in the available timetables for the Route Planner to carry out the search. The mapping is supported by both the string matching check and a further geographic matching check using latitude and longitude to avoid misinterpretation. The geographic matching check using the geopy package [Esmukov et al., 2023] improves the mapping accuracy, even when the user uses conventions or abbreviations for stations. The accurate origin and destination are written to the State. 
+
+Node 3. The Preference Scores from State contain four criteria: accessibility, crowding, safety, and sightseeing. Each criterion is parsed with a score, from 0 to 1, in Node 1 by the fine-tuned LLM. These preference scores require further processing in Node 3 for active preferences selection. To accurately identify true user needs and maintain computational tractability during route search, Node 3 implements a two-step preference selection process. First, criteria with scores below 0.6 are filtered out. This threshold was determined empirically through preliminary experiments. By evaluating 30 semantically neutral journey requests (i.e., requests containing only origin, destination, and time information), it is observed that the average predicted scores naturally hover around 0.5 rather than absolute zero (detailed results of this empirical test are provided in Appendix A). Therefore, 0.6 is established as the minimum activation threshold. Second, from the retained set, a maximum of K = 2 criteria with the highest scores are selected as active user preferences for the initial planning phase. Because the MC-RAPTOR algorithm inherently optimizes travel time and the number of transfers, adding K = 2 user preferences creates a four objectives Pareto optimization problem. To guarantee that moderately important preferences will not be discarded, and to ensure this selection policy does not systematically suppress meaningful solutions or cause permanent information loss, ChatPlanner leverages its conversational architecture. The parameter K can be adjusted, and any specific preferences filtered out in Node 3 can be reselected during the follow-up conversation phase (Node 6) if the user is unsatisfied with the initial solutions. The 5ChatPlanner: LLM Framework for Personalized Public Transit Routing selection is saved to the Criteria List in State. Actions in Nodes 1, 2, and 3 work together to support the understanding of users’ preferences. 
+
+Node 4 reads the Journey Request and the Criteria List from State, including the canonical origin and destination, the requested arrival time, and the active user preferences as inputs. Then these inputs are passed to MC-RAPTOR, with the active user preferences determining the objectives that drive search. The solutions provided by MC-RAPTOR are saved in the Solution Table in State. More information about MC-RAPTOR is explained in Section 3.3. 
+
+Node 5 is designed to present the solutions, which simplifies the Solution Table essential information. The original table contains case metadata, algorithm parameters, intermediate metrics, and final criteria values. The simplified table retains only the solution ID and six solution criteria: travel time, number of transfers, accessibility, crowding, safety, and sightseeing. This simplification reduces users’ effort in comprehending solutions. A base LLM then presents this simplified table and generates a brief text summary highlighting the tradeoffs between solutions, such as which solution balances the user’s preferences best and how solutions differ in terms of the criteria. 
+
+3.1.2 Follow-up Phase 
+
+Nodes 6 and 7 work together to handle the follow-up phase. Node 6 interprets the follow-up request from users, leveraging a base LLM for conversational interaction. The main responsibility of Node 6 is to decide which actions to take in Node 7. The actions include: (i) Show Specific Solutions, (ii) Criteria Adjustment, and (iii) Solution Regeneration. Show Specific Solutions is executed when the user requests to provide more details for the existing solutions from the initial planning phase. Criteria Adjustment happens when Node 6 detects that the user is particularly emphasizing one of the four criteria. It triggers the solutions re-ranking process based on the emphasized criterion. Solution Regeneration initiates re-planning based on the follow-up request by calling the route planner in Node 4. When the users provide an extra criterion and are not satisfied with the current solutions, the regeneration starts. 
+
+3.2 Fine-tuning LLM Parse and RAG 
+
+In the LangGraph architecture, Nodes 1, 5, and 6 all invoke an LLM, but each node assigns the LLM a distinct role. Nodes 5 and 6 rely on the base LLM to present solutions and to classify user intended follow-up actions. These do not require fine-tuning. By contrast, Node 1 employs a fine-tuned LLM for parsing the origin, destination, and requested arrival time from the user’s query and to interpret the user’s travel preferences. 
+
+3.2.1 Fine-tuned Data Preparation 
+
+Two established datasets serve as the foundation for fine-tuning: the Multi-Domain Wizard-of-Oz (MultiWOZ) and Schema-Guided Dialogue (SGD) datasets Buses domain. MultiWOZ was chosen because it contains over 10,000 human-to-human dialogues, including many in train and taxi transportation contexts [Budzianowski et al., 2018]. SGD was selected because it contains 3135 annotated dialogues for bus services [Rastogi et al., 2020]. In MultiWOZ, stop names are real UK city names and railway stations, while in SGD, they are primarily US city names. This geographic diversity in the training data provides varied location naming patterns. To prepare the fine-tuning dataset, the MultiWOZ dataset is filtered to retain only transportation-related dialogues. Because the focus is on urban public transit in this work rather than intercity trains or taxis, this study replaces train and taxi terms with urban transit terms in both datasets. For example, “find me a train” becomes “find me a route,” and “book a taxi” becomes “plan a route,” to ensure the terminology is consistent with urban transit. Since MC-RAPTOR searches timetables backward from a requested arrival time, this study uses an “arrive by” convention rather than “depart at” throughout the dataset. While the current system does not implement departure time logic, the same data processing approach could be applied by converting “arrive by” to “depart at” convention and integrating forward search functionality in MC-RAPTOR. 
+
+Preference Data Argumentation Our fine-tuning approach follows a supervised learning setting, where the model learns to map traveler queries in the form of natural language to structured JSON outputs containing origin, destination, requested arrival time, and preference scores. In supervised fine-tuning, the model requires labeled training examples with input-output pairs that demonstrate the desired behavior. Since existing traveler query dialogue datasets lack preference annotations, this study conducts systematic preference data augmentation guided by established travel behavior research to inject preference information into journey requests and create the necessary ground truth labels for our training dataset. An augmentation system is designed based on eight user personas and five context types (Tables 1, 2). The eight personas defined include mobility impaired users [Ceccato et al., 2020, Bezyak et al., 2017], safety-conscious travelers 6ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 1: Persona Types, Preference Weights, and Examples. Note: Personas are not included in the LLM’s inputs and predicted outputs during both training and generation.                                           
+
+> Persona Access-ibility Crowd-edness Safety Sight-seeing Example
+> Sightseeing Tourist 0.4 0.3 0.7 0.9 I’d love to see landmarks on the way Mobility Impaired 0.95 0.8 0.8 0.2 I don’t want stairs or gaps Safety Conscious 0.4 0.6 0.95 0.2 I want to feel secure in my journey Crowd Averse 0.4 0.9 0.6 0.3 I prefer quieter, less busy routes Daily Commuter 0.6 0.7 0.7 0.2 I go to office Family with Children 0.8 0.8 0.9 0.6 I’m traveling with children Senior Citizen 0.9 0.85 0.9 0.5 I am elderly; I want less crowded routes Flexible Travel 0.5 0.3 0.6 0.7 I’m flexible with conditions
+
+Table 2: Context Types, Preference Weights, and Examples. Note: Contexts are not included in the LLM’s inputs and predicted outputs during both training and generation.                              
+
+> Context Access-ibility Crowd-edness Safety Sight-seeing Example
+> Rush Hour 0.6 0.8 0.5 0.5 during rush hour; in the morning rush; when it’s busy Late Night 0.5 0.3 0.9 0.2 late at night; after dark; in the evening Weekend 0.5 0.6 0.0 0.8 on the weekend; for a weekend trip; on Saturday/Sunday Tourist Area 0.5 0.6 0.7 0.9 in the tourist district; near the main attractions Bad Weather 0.8 0.7 0.5 0.3 when it’s raining; during bad weather
+
+[Loukaitou-Sideris, 2014, Delbosc and Currie, 2012], crowd-averse passengers [Roncoli et al., 2023, Tirachini et al., 2013], sightseeing tourists [Zhou et al., 2024, De Vos et al., 2016], daily commuters [Cascetta and Cartenì, 2014], families with children [Delbosc and Currie, 2012, Ceccato et al., 2020], senior citizens [National Centre for Accessible Transport (ncat), 2024], and flexible travelers [Cascetta and Cartenì, 2014]. Preference weights are assigned to each persona across four dimensions: accessibility, safety, crowdedness, and sightseeing, with the score of preferences referencing the above literature. For example, high accessibility preferences are assigned to mobility-impaired users with accessibility scores set to 0.95 in the dataset, consistent with findings on accessibility measurement [Ceccato et al., 2020]. Similarly, high sightseeing scores (0.9) are assigned to tourist personas, following Zhou et al. [2024]. Contextual modifiers are designed to assign preference scores for situational factors such as rush hour, late night, weekend, tourist area, and bad weather conditions, where score magnitudes are guided by [Loukaitou-Sideris, 2014, Cascetta and Cartenì, 2014]. These assignments serve as the ground truth labels for the training dataset, though alternative scoring schemes could be developed for different preference frameworks. The augmentation process randomly selects personas or contexts for each training example, injects appropriate preference language into the instruction, and generates the corresponding preference scores in structured JSON output, creating aligned input-output pairs for supervised learning. The JSON structure ensures the fine-tuned model produces consistently parseable output. 
+
+3.2.2 Fine-tune 
+
+Fine-tuning adapts pre-trained language models to domain-specific tasks by optimizing model parameters θ to minimize the loss function. 
+
+L(θ) = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ℓ(fθ (xi), y i) (1) where fθ represents the language model, (xi, y i) are input-output pairs from the fine-tuned dataset, and ℓ is the loss function. 7ChatPlanner: LLM Framework for Personalized Public Transit Routing Parameter Efficient Fine-Tuning (PEFT) [Han et al., 2024] is employed to reduce computational costs. Specifically, Low-Rank Adaptation (LoRA) [Hu et al., 2022] is used, which avoids updating all model parameters by learning low-rank small adjustment matrices. For each linear layer of weight matrix W0 ∈ Rd×k in the original model, LoRA introduces two smaller matrices B ∈ Rd×r and A ∈ Rr×k, where r is the rank and r ≪ min( d, k ). The adapted transformation becomes: 
+
+h = W0x + BAx (2) The original weights W0 remain frozen, and only B and A are trained. This reduces trainable parameters from d × k to 
+
+r × (d + k), significantly lowering computational requirements. LoRA is applied to the LLaMA-3-8B-Instruct and Qwen2.5-7B-Instruct models with rank r = 16 and scaling factor 
+
+α = 32 . The method targets the attention and feed-forward layers of these models. Training uses 4-bit quantization for memory efficiency and runs for 2 epochs with learning rate 1.5 × 10 −4. The objective is to train the model to parse natural language transportation queries into structured JSON outputs containing origin, destination, arrival time, and preference scores. Please note that the persona and context labels are not used to form the training dataset; the LLM is trained to perform direct regression from the raw natural language request to predict the four continuous preference scores. 
+
+3.2.3 Retrieval-Augmented Generation (RAG) 
+
+RAG [Lewis et al., 2020] enhances language model performance by incorporating relevant external knowledge during inference. While fine-tuning updates the model’s global parameters to learn the required JSON output structure and general preference scoring patterns, RAG provides instance-specific context; by retrieving similar examples as local reference points to guide the fine-tuned model’s output generation, it helps the model resolve users’ imprecise and scenario-specific expressions and addresses scenario-specific preference understanding. The retrieval process identifies semantically similar examples using text embeddings. An embedding is a mathematical representation that converts text into a numerical vector, where texts with similar meanings produce vectors that are close together in vector space. The BAAI/bge-small-en-v1.5 embedding model [Xiao et al., 2024] is used to compute 384-dimensional vectors for query instance qi in our RAG dataset, denoted as ei. Similarly, the user query q is converted to a query embedding eq .The semantic similarity between a user query and a query instance stored in the RAG dataset is measured using cosine similarity: sim (q, q i) = eq · ei
+
+|| eq || 2 · || ei|| 2
+
+(3) where eq · ei is the dot product and || · || 2 denotes the L2 norm. This metric ranges from -1 to 1, with higher values indicating greater semantic similarity. For each user query, the top k = 5 most similar queries are retrieved from the RAG dataset. These retrieved examples are then formatted as demonstration examples in the prompt together with the current user query. This approach, known as in-context learning, provides the fine-tuned model with concrete examples showing how similar queries were previously mapped to structured preference scores. The retrieved examples help the model maintain consistency with our designed preference score assignments based on personas and contexts. The retrieval library is constructed using the same training dataset generated through the preference data augmentation process. Consequently, highly similar patterns exist between the training set and the RAG corpus. It is important to note that the retrieved examples contain only the raw natural language request and the corresponding origin, destination, arrival time, and preference scores; they do not explicitly contain the persona or context labels used during preference data augmentation. Furthermore, the retrieval library is strictly disjoint from the human-written evaluation test set used in Section 4.2, ensuring that the model is tested on its ability to generalize to out-of-distribution human language rather than simply memorizing training distributions. 
+
+3.3 Multi-Criteria Route Planning Algorithm 
+
+The Multi-criteria Round-Based Public Transit Routing (MC-RAPTOR) algorithm is used as the default solver in Node 4. The original MC-RAPTOR algorithm uses timetable data to optimize travel time and the number of transfers. MC-RAPTOR runs backward in the timetable from the destination, marking routes and stops that can reach the destination. The search proceeds in rounds N ; stops marked in the previous round seed the expansion in the next 8ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+Figure 2: Data Preparation for MC-RAPTOR round. The number of transfers is equal to N − 1. Per-stop labels store objective values, including travel time labels L1,accessibility L2, crowding L3, safety L4, and sightseeing L5. A Pareto-dominance check removes labels dominated by others at each stop. The MC-RAPTOR algorithm is a timetable search algorithm that minimizes travel time and the number of transfers. To support the algorithm in considering additional and user-centric criteria, such as accessibility, crowding, safety, and sightseeing, this study integrates additional datasets as shown in Figure 2. In particular, the accessibility level, crowding level, safety level, and sightseeing level are the extra criteria considered in this study. The selected active preferences determined in Node 3 directly weight the third and fourth criteria. Crowding and safety levels at each station are simulated using a normal distribution and then normalized to the range 
+
+[0 , 1] , where 0 represents the lowest level and 1 represents the highest level. Tourist-friendly level is based on whether the distance of each station to the London tourist attractions is within 100 meters. The London tourist locations are downloaded from the Open Trip Map by enabling the tourism option [Ope, 2025]. The step-free data are collected from Transport for London (TfL) to assess accessibility of stops; all buses and bus stops are step-free, featuring the low-floor vehicles with ramps that deploy to make boarding easier. The step-free data are mainly collected for the underground and tram [TfL, 2025]. The timetable data is based on the London city TfL GTFS data from June 2024 to December 2024. 9ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+# 4 Experiments and Discussions 
+
+To validate the effectiveness of our proposed ChatPlanner, three complementary experiments are designed to evaluate different components and capabilities. Experiment 1 investigates and compares the feasibility of end-to-end route planning between LLM-based approaches and our ChatPlanner framework. Experiment 2 evaluates the LLM parsing component’s ability to extract travel information and predict user preferences from natural language requests. Experi-ment 3 demonstrates how ChatPlanner enlarges the solution space by finding diverse routes that serve different user preferences beyond traditional optimization criteria. 
+
+4.1 Experiment 1: Route Planning Feasibility by LLM with Tool 
+
+This experiment aims to evaluate the end-to-end public transit routing performance of the available LLM equipped with public transit routing tools. Specifically, whether it can generate realistic, feasible, and complete transit routes when given the same journey planning queries as ChatPlanner. GPT-5.0 (released in August 2025) is utilized and accessed via the OpenAI API in September 2025 [Singh et al., 2025]), a state-of-the-art closed-source model. For each test case, GPT-5.0 first parses the origin, destination, and requested arrival time from the natural language query, then calls a Google Maps API tool, which is implemented as a Python script that receives the parsed variables from LLM, queries the API, and returns the structured routing response to the LLM. If the Google Maps API does not return a valid result, GPT-5.0 is instructed to use its web search tool to query Moovit [Moovit Inc., 2025] and Rome2Rio [Rome2Rio Pty Ltd., 2025] as fallback routing services. All three services contain the whole London GTFS data used by ChatPlanner. 
+
+Test Dataset 45 basic journey planning query instances are constructed using the template "I need to get from {start} to {end} by {time}" with actual London locations and realistic arrival times. Each query contains information: start and end stops, and the requested arrival time. For each case, the origin and destination routes were manually verified using Citymapper and Google Maps, with the requested arrival time specified accordingly. For routes that did not appear in either map solver but were returned by the tool-augmented LLM, further verification was conducted by searching the route number of each segment against the London TfL dataset to confirm its existence. 
+
+4.1.1 Evaluation Metrics 
+
+To assess practical feasibility, the generated route planning solutions are evaluated across four key performance indicators (KPIs). These KPIs determine whether a generated route is useful for real transit users. Table 3 provides the scope for each KPI. (i) Station Identification (SI) captures inaccuracies in location specification. This includes wrong station names for origins, destinations, or transfers; vague descriptions where no explicit station name is provided; and ambiguous stop references that prevent a valid API call from being issued. Such issues prevent the system from retrieving route information and prevent users from identifying the correct physical locations to begin or continue their journeys. (ii) Timetable Accuracy (TA) captures inaccuracies in timing information for valid services. This includes wrong departure or arrival times and incorrect duration estimates. TA excludes cases where the route itself does not exist. Timetable inaccuracies mean users may miss the timed service, though the route itself may remain feasible via an alternative departure on the same route. (iii) Route Validity (RV) captures wrong or unsupported services that do not serve the specified journey, and missing transit legs that leave a route incomplete. RV excludes timing issues for otherwise valid services. (iv) Walking Completeness (WC) concerns the pedestrian portions of a route, including incorrect estimates of walking time in a segment. Solutions missing the necessary walking segment are classified under route validity. KPI Rate = Number of solutions with specific KPI type Total number of solutions The Feasibility Rate serves as our overall success metric, representing the proportion of solutions that can actually be executed by real users: Feasibility Rate = Number of feasible solutions Total number of solutions A solution is considered feasible if a user can complete the trip from the origin to the destination. 10 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 3: Scope and exclusion criteria for each error dimension.     
+
+> Dimension Scope Exclude
+> Station Identification (SI) Wrong name, vague description, ambiguous stop for OD pair that blocks calling for external tools -Timetable Accuracy (TA) Wrong departure/arrival times, wrong duration Route does not exist Route Validity (RV) Any public transit portion being invalid or incomplete, e.g., wrong service, unsupported line, and missing transit leg Timings of a valid service Walking Completeness (WC) Covers walking portion: wrong walking time estimates and missing walking segment Missing public transport segment that makes a trans-fer impossible
+
+4.1.2 Performance Discussion and Comparison 
+
+Table 4 presents a case-by-case summary of the KPIs observed for the tool-augmented GPT-5.0. Despite having access to external routing APIs and web search, the overall feasibility rate is only 35%.RV records the highest value among all KPIs, achieving 35%. A primary cause of this low feasibility is the inherent instability of autonomous tool use. When querying the Google Maps API, the LLM can generate malformed requests to the API even when query codes and formats are provided. When forced to fall back on web search tools (e.g., Moovit or Rome2Rio), the model must parse complex, unstructured web page layouts. This extraction process is prone to information loss. If the LLM misses an intermediate step or misinterprets the retrieved text, it leads to an invalid route. These manifest as incorrect transfer stations (e.g., London Bridge instead of Waterloo in Case 7), bus route misassignments where real service numbers are applied to segments they do not operate (e.g., Bus 13 and 73 in Cases 26 and 29), and completely omitted transit legs (Cases 16 and 22). SI further illustrates the challenge of using an LLM without a tightly integrated location database. The location names the LLM extracts from the user’s prompt often do not exactly match the location strings expected by the external routing tools. For example, Cases 19-21 and 25 fail because the LLM submits ambiguous station names that the external APIs cannot resolve, returning zero results or routing the user to a location. Furthermore, TA and WC occur when the model incorrectly transcribes and summarizes the retrieved data. For instance, in Case 5, the LLM extracts an incorrect travel duration (stating 23 minutes for an 80-minute journey), rendering the suggested departure time unusable. LLM could overlook walking details during summarization, resulting in omitted walking segments (Case 0) or incorrect walking time estimates (Case 12). Table 6 compares these baseline results against the proposed ChatPlanner framework. ChatPlanner achieves a 98% feasibility rate across 52 generated solutions, significantly outperforming the tool-augmented LLM. This performance gap is a direct result of ChatPlanner’s modular architecture. Rather than relying on the LLM to execute tool calls or summarize path planning results, ChatPlanner strictly limits the LLM’s role to natural language parsing and conversation handling. The extracted location names are handled and mapped to the same stops locations database used by the routing algorithm, which minimizes API mismatches and reduces station identification errors to 2%. Once the locations are accurately resolved, the deterministic MC-RAPTOR algorithm computes the routes. Because the actual path planning is handled by an exact search algorithm rather than language generation, ChatPlanner is not affected by route validity, timetable accuracy, and walking completeness errors (0% across all three dimensions). 
+
+4.2 Experiment 2: User Request Parsing 
+
+This experiment evaluates the performance of the LLM component in Node 1 of our system. The LLM processes natural language requests and produces structured JSON output for three tasks: (1) extraction of stop names and request arrival time, (2) regression of user preference scores for four criteria, and (3) active preferences selection, involving multi-label classification and ranking of criteria based on the regression scores. Tasks (1) and (2) directly reflect the LLM component effectiveness for understanding and parsing the user request in Node 1, while task (3) reflects the effectiveness for guiding subsequent criteria selection in Node 3. Finally, to explicitly validate the value of the LLM’s semantic understanding, LLM’s preference interpretation performance is compared against a traditional keyword matching system as the baseline. 11 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 4: Analysis of solutions from the Tool-Augmented LLM across 45 test cases (Cases 0–29). S indicates a feasible route. 
+
+Case Option SI TA RV WC Feasible Evidence 
+
+0 1 TA WC Wrong time (17:21 →17:33); walking omitted on first leg 
+
+1 1 TA RV Only first segment shown; wrong time (9:40 →10:32) 
+
+2 1 WC Walk 2 mins stated as 10 mins 
+
+3 1 WC S Final walk 9 mins stated as 4 mins 
+
+4 1 TA S Told to leave 20 mins before earliest possible 
+
+2 S5 1 TA RV 81–90 mins shown as 23 mins; bus fails destination 
+
+6 1 S Transfer very tight 
+
+7 1 RV Transfer should be Waterloo, not London Bridge 
+
+8 1 WC First walking leg is (15 mins) not mentioned 
+
+9 1 SI RV API failed; transfer station wrong 
+
+10 1 RV Bus 206 does not support this journey 
+
+11 1 SI RV API failed 
+
+12 1 WC S Walk 6 mins stated as 1 mins 
+
+13 1 SI API failed; station name ambiguous 
+
+14 1 SI API failed 
+
+15 1 S2 RV Barbican wrong transfer; Barbican and Tower Hill station do not exist in the Circle Line 
+
+16 1 RV Specific route is missing 
+
+17 1 S Start time should be 30 mins earlier 
+
+18 1 SI Bus stop name not specified 
+
+19 1 SI API failed; station name ambiguous 
+
+20 1 SI API failed; station name ambiguous 
+
+21 1 SI API failed; station name ambiguous 
+
+22 1 RV WC First segment missing; how to reach Marble Arch omitted 
+
+23 1 RV Specific route not provided 
+
+2 TA RV Bus 115 does not serve this journey 
+
+24 1 TA S Specific departure time not mentioned 
+
+25 1 SI Both start and end stations are ambiguous 
+
+26 1 TA S Need 50 mins but shown as 35–40 mins 
+
+2 RV Bus 13 does not serve this journey 
+
+3 WC Walking missing on first leg; train and tube not specified 
+
+27 1 S2 RV District line does not support this journey 
+
+28 1 S29 1 S2 RV Bus 73 does not serve the final leg 
+
+12 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 5: Analysis of solutions from the Tool-Augmented LLM (continued, Cases 30–44). S indicates a feasible route.        
+
+> Case Option SI TA RV WC Feasible Evidence
+
+30 1 RV Bus 428 does not serve this OD pair 
+
+31 1 S32 1 RV Bus 410 does not serve this OD pair 
+
+33 1 TA S Total time is 41 mins not 25 mins 
+
+34 1 WC Ambiguous origin; failed to call Google API 
+
+35 1 Second segment requires 20 mins walk; walking omitted 
+
+36 1 SI “Dixon Way” is ambiguous 
+
+37 1 S38 1 S39 1 SI Failed to identify start point 
+
+40 1 WC S Missing second walking segment (16 mins walk) 
+
+41 1 S42 1 RV Final bus segment is missing 
+
+43 1 SI Google API failed; station name ambiguous 
+
+44 1 RV Invalid solution Total (45 cases, 52 options) 12 8 18 9 18  
+
+> Error / feasibility rate
+
+23% 15% 35% 17% 35% 
+
+Table 6: Summary comparison of GPT-5.0 with Tools and ChatPlanner across 30 test cases.  
+
+> Method Solution count SI rate TA rate RV rate WC rate Feasibility rate
+
+GPT-5.0 with Tools 37 24% 19% 38% 19% 32% ChatPlanner 48 2% 0% 0% 0% 98% 
+
+4.2.1 Experimental Setup 
+
+The test set comprises 120 instances collected through a user study. Participants were asked to provide transit journey requests, organized across five travel scenarios: an everyday journey, a special occasion, a journey planned to help another person, a journey under an unusual constraint, and a free-choice journey. Participants completed all ten requests before receiving any information about the four preferences (accessibility, crowdedness, safety, and sightseeing). After completing all requests, participants were introduced to the four preferences with a scoring rubric and scored example transit requests. Each preference is scored on a continuous scale from 0 to 1 for each of their ten requests. Participants also provided the origin, destination, and time request for each instance. From the 17 returned questionnaires, five were excluded (one blank, two missing preference labels, and two incomplete), yielding 120 labeled requests from 12 fully valid participants. These labeled requests were then processed into the User Study Test Set, where each instance consists of a natural language travel request as the instruction, and a structured label containing the origin, destination, time specification, and four preference scores as the output. In evaluation, the models are given each travel request and are expected to generate the corresponding output. Three properties distinguish this user study test set from our training and RAG data. First, the requests capture the essences of public transit queries, including ambiguous expressions and mixed priorities, as they were composed freely without template constraints or domain-specific priming. Second, because participants wrote their requests without prior knowledge of the four preferences, the request text carries no systematic bias toward those preferences. Third, participants had no access to the eight personas and five travel contexts used for preference injection in constructing the fine-tuning and RAG datasets; the test set is therefore out-of-distribution (OOD) with respect to both, providing a more realistic assessment of generalization than evaluation based on in-distribution synthetic data, where inputs map cleanly to predefined personas or contexts. To assess label reliability, three independent annotators scored all 120 instances across the four preferences using the same rubric and the same examples provided to the original participants. The intraclass correlation coefficient (ICC(A,1), two-way random, absolute agreement, single measures [McGraw and Wong, 1996]) was computed across three annotators and the original participant, following Koo and Li [2016]. The ICC values were 0.79 (95% CI: [0.76, 0.82]) for accessibility, 0.75 ([0.71, 0.80]) for crowdedness, 0.77 ([0.74, 0.79]) for safety, and 0.81 ([0.78, 0.83]) for 13 ChatPlanner: LLM Framework for Personalized Public Transit Routing sightseeing, indicating moderate to good inter-annotator agreement [Artstein and Poesio, 2008, Koo and Li, 2016] and supporting the use of the original participant scores as ground truth in Experiment 2. Two open-source LLMs are selected, including Llama3-8B-Instruct [Dubey et al., 2024] and Qwen2.5-7B-Instruct [Qwen et al., 2025]. Open-source models differ from closed-source models in that they allow access to model weights and architecture, enabling fine-tuning for domain-specific tasks. 
+
+4.2.2 Experimental Design 
+
+Four different model configurations are compared: (i) ChatPlanner (LoRA fine-tuned LLM with RAG), (ii) raw base LLM, (iii) base LLM with RAG, and (iv) LoRA fine-tuned LLM without RAG. For each data instance in the test set, the journey request is input into the parsing component of each configuration, and the output JSON is compared with the ground truth label across three evaluation tasks: (1) exact matching, (2) preference score regression, and (3) active preferences selection. 
+
+4.2.3 Task 1: Exact Matching 
+
+Task 1 examines the model’s ability to extract the exact origin, destination names, and the requested arrival time from the user’s natural language input query. Exact string matching is evaluated for stop names and requested arrival time values. For discrete slots (start stop, end stop, requested arrival time), exact match accuracy is used as the evaluation metric, following the information extraction practice established in [Rajpurkar et al., 2016]. 
+
+Exact match accuracies for stop names ( EM start and EM end ) and requested arrival time ( EM time ) extraction directly measure the model’s ability to extract origin and destination locations and requested arrival time without any tolerance for variation. They are calculated as EM stop = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[ˆ si = si], EM time = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[ˆ ti = ti]
+
+where N is the total number of test instances, ˆsi and si are the predicted and true stop names, ˆti and ti are the predicted and true time values for instance i, and 1[·] is the indicator function that returns 1 if the condition is true and 0 otherwise. 
+
+EM all is additionally defined as the joint exact match, where all three fields must be simultaneously correct: EM all = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[ˆ sstart  
+
+> i
+
+= sstart  
+
+> i
+
+∧ ˆsend  
+
+> i
+
+= send  
+
+> i
+
+∧ ˆti = ti]
+
+where ∧ denotes logical AND. A time tolerance accuracy is also included as an operational relaxation for practical transportation applications. Time tolerance accuracy allowing 5-minute deviation ( TimeTol@5mins ) provides a measure with tolerance, as small time deviations are sometimes acceptable in real-world scenarios. It is calculated as TimeTol@5mins = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[|ˆti − ti| ≤ 5] 
+
+Table 7 presents the exact matching metrics for stop name and requested arrival time extraction. These metrics measure the model’s ability to parse discrete fields from natural language input. The results show that the base LLMs struggle with exact matching on the User Study Test Set, achieving only 47.5-60.8% overall accuracy. Adding RAG components improves performance to 69.2-77.5%, but still leaves significant parsing errors. The exact parsing of stops and time is important, and any error at this stage will result in route planner failure. After fine-tuning with LoRA, accuracy improves to 80.8-82.5%. Combining fine-tuning with RAG leads to the best performance at 97.5-98.3%. These results demonstrate their complementary roles. Fine-tuning enforces the strict output structure, while RAG provides query-specific examples to resolve location-specific, imprecise, conversational, and implicit human expressions, making their combination necessary for more reliable exact matching. The fine-tuning corpus draws from both US-context (SGD) and UK-context (MultiWOZ) data, which introduces variation in location-specific terminology. However, the RAG component helps ground the stop name resolution directly in the target TfL 14 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 7: Exact matching performance for stop names and requested arrival time.                                          
+
+> Label EM start EM end EM time Time Tol@5mins EM all
+> Llama Base 0.867 0.733 0.642 0.675 0.475
+> Qwen Base 0.875 0.750 0.800 0.850 0.608
+> Llama Base + RAG 0.858 0.808 0.850 0.892 0.692
+> Qwen Base + RAG 0.883 0.833 0.917 0.958 0.775
+> Llama Fine-tuned 0.892 0.875 0.908 0.954 0.808
+> Qwen Fine-tuned 0.900 0.892 0.900 0.950 0.825
+> Llama Fine-tuned + RAG 1.000 0.992 0.992 1.000 0.983
+> Qwen Fine-tuned + RAG 1.000 1.000 0.975 1.000 0.975
+
+corpus. As shown in Table 7, while the fine-tuned models alone perform well, adding the RAG component achieves near-perfect stop name extraction (up to 100.0% EM start and end). This demonstrates that the retrieval mechanism can compensate for distributional mismatches in transport terminology (e.g., US vs. UK vocabulary) between the training and test domains. 
+
+4.2.4 Task 2: Preference Score Regression 
+
+Given the user query, the model predicts one numerical score between 0 and 1 for each of the four criteria: accessibility, crowding, safety, and sightseeing, which reflect user preferences in public transit route planning. Standard regression metrics are used for evaluation, along with agreement measures [Hyndman and Koehler, 2006]. 
+
+Mean Absolute Error (MAE) measures the average magnitude of prediction errors for preference scores, providing an intuitive measure of how far predictions deviate from true user preferences. N is the total number of test instances, ˆyi
+
+and yi are the predicted and true preference scores for instance i. MAE is calculated as MAE = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+|ˆyi − yi|
+
+Root Mean Square Error (RMSE) penalizes larger errors more heavily than MAE, indicating how well the model avoids substantial errors in estimating user preferences. It is calculated as RMSE =
+
+vuut 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+(ˆ yi − yi)2
+
+Symmetric Mean Absolute Percentage Error (sMAPE) normalizes errors across different score scales, providing a scale-independent measure of relative prediction accuracy. It is calculated as sMAPE = 100 
+
+N
+
+> N
+
+X
+
+> i=1
+
+|ˆyi − yi|
+
+(|ˆyi| + |yi|)/2
+
+While error metrics (MAE, RMSE, sMAPE) measure prediction deviations, the Concordance Correlation Coefficient (CCC) evaluates whether predictions agree with true values in both their correlation and absolute scale [Lawrence and Lin, 1989]. CCC is calculated as CCC = 2ρσ ˆy σy
+
+σ2ˆy + σ2 
+
+> y
+
++ ( μˆy − μy )2
+
+where ρ is the Pearson correlation between predicted and true scores, σˆy and σy denote their standard deviations, and 
+
+μˆy and μy denote their means. CCC ranges from -1 to 1, with 1 indicating perfect agreement, 0 no concordance, and negative values indicating systematic disagreement. CCC captures both relative ordering and magnitude matching, rewarding models that both rank correctly and match magnitudes. This is useful because a model might correctly rank preferences but systematically over/underestimate scores, which error metrics alone cannot fully reveal. 15 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 8 presents the regression metrics for predicting user preference scores averaged across the four criteria. Table 8: Regression performance for preference score prediction.                                     
+
+> Label MAE RMSE sMAPE CCC
+> Llama Base 0.406 0.480 0.507 0.076
+> Qwen Base 0.411 0.501 0.475 0.060
+> Llama Base + RAG 0.138 0.185 0.190 0.602
+> Qwen Base + RAG 0.191 0.275 0.294 0.556
+> Llama Fine-tuned 0.109 0.177 0.193 0.744
+> Qwen Fine-tuned 0.180 0.252 0.232 0.653
+> Llama Fine-tuned + RAG 0.098 0.142 0.158 0.779
+> Qwen Fine-tuned + RAG 0.129 0.185 0.202 0.680
+
+The regression results demonstrate clear improvements from both RAG and fine-tuning (8. Base LLMs show MAE values around 0.4, which represents substantial error given the [0 , 1] score range. Adding either RAG or fine-tuning individually reduces MAE considerably, while the combination of our designed fine-tuning and RAG achieves the best performance across all four metrics. The best-performing configuration, Llama Fine-tuned + RAG, achieves an MAE of below 0.1 and a CCC near 0.8, indicating both accurate preference magnitude prediction and substantial correlation with human-annotated preference scores. 
+
+Statistical Robustness of Tasks 1 and 2 To quantify the variability in LLM performance for the extraction (Task 1) and regression (Task 2) across different test samples, paired bootstrap resampling is applied, and confidence intervals are computed following standard practices [Tibshirani and Efron, 1993, Dror et al., 2018]. Since LLM performance can vary depending on which specific test examples are evaluated, a single test set may not fully represent the model’s true capability. Bootstrap resampling addresses this limitation by drawing 1,000 resampled test sets of equal size (120 instances each) with replacement from the User Study Test Set, where some instances may appear multiple times, and others may be omitted in each resample. EM and MAE are recomputed on each resampled set, and the resulting 95% confidence intervals (CIs), reported in Table 9, indicate the range within which true performance likely falls. Table 9: Bootstrapped EM and MAE (means and 95% CIs).                                                  
+
+> Label EM all mean EM all CI low EM all CI high Score MAE mean (items) MAE CI low MAE CI high
+> Llama Base 0.492 0.408 0.558 0.405 0.383 0.428
+> Qwen Base 0.683 0.633 0.717 0.429 0.404 0.457
+> Llama Base + RAG 0.617 0.525 0.649 0.131 0.118 0.145
+> Qwen Base + RAG 0.767 0.742 0.792 0.191 0.176 0.208
+> Llama Fine-tuned 0.817 0.775 0.858 0.112 0.105 0.120
+> Qwen Fine-tuned 0.817 0.775 0.867 0.178 0.164 0.195
+> Llama Fine-tuned + RAG 0.958 0.925 1.000 0.099 0.090 0.109
+> Qwen Fine-tuned + RAG 0.950 0.925 1.000 0.128 0.119 0.138
+
+The confidence intervals confirm two key findings. First, the performance gains from combining fine-tuning with RAG are statistically robust: both ChatPlanner configurations (LLM Fine-tuned + RAG) achieve EM CIs whose lower bounds remain above 0.92, with no overlap against any other configurations. This rules out the possibility that the observed improvements are accidentally achieved due to a few simple examples. Second, configurations with better performance also produce more stable results. The best configuration has a CI width of only 0.019 for MAE, whereas base LLMs without RAG exhibit CI widths roughly three times larger, meaning their performance fluctuates more depending on which particular test instances are included. Together, these results provide statistical evidence that the combination of fine-tuning and RAG is not only more accurate but also more reliable across different test samples. 
+
+4.2.5 Task 3: Active Preferences Selection 
+
+In Node 3, the four predicted preference scores are used to select a subset of criteria to guide route planning. The selection process consists of (i) filtering out criteria with scores below 0.6, and (ii) selecting the top two highest-scoring criteria among the remaining criteria (or all remaining criteria if fewer than two remain after filtering). Task 3 is evaluated from two complementary perspectives: (i) as a multi-label classification problem and (ii) as a ranking preservation problem. 16 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+(I) As a multi-label classification problem Each query can activate up to two criteria from accessibility, crowdedness, safety, and sightseeing, making this a multi-label classification problem of predicting which subset of criteria should be selected. Unlike standard classification, where each instance gets exactly one label, here each query can receive multiple labels simultaneously. For instance, a user might care about both safety and accessibility. This experiment assesses whether the model selects the correct subset using (1) multi-label classification metrics [Madjarov et al., 2012, Zhang and Zhou, 2013, Chicco and Jurman, 2020]; and (2) calibration metrics [Guo et al., 2017, Glenn et al., 1950], to evaluate whether the model’s confidence in its selections is well-calibrated. The multi-label classification metrics are defined as follows. 
+
+Micro-averaged F1 score (Micro-F1) measures overall classification performance across all criteria by treating each criterion selection as an independent binary decision. It is calculated as Micro-F1 = 2 · Micro-P · Micro-R Micro-P + Micro-R where Micro-P =     
+
+> PLj=1 T P j
+> PLj=1 (T P j+F P j)
+
+and Micro-R =     
+
+> PLj=1 T P j
+> PLj=1 (T P j+F N j)
+
+, are micro-averaged precision and recall. L is the number of criteria labels, and T P j , F P j , F N j are true positives, false positives, and false negatives for criterion j.
+
+Intersection over Union (Jaccard) measures the similarity between predicted and true criteria sets, directly evaluating how well the model selects the correct combination of transportation criteria. ˆYi and Yi are predicted and true label set. Jaccard is calculated as Jaccard = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+| ˆYi ∩ Yi|| ˆYi ∪ Yi|
+
+Exact match accuracy for label sets (Subset Accuracy) measures the proportion of instances where the model selects exactly the correct set of criteria, providing the strictest evaluation of criteria selection performance. ˆYi and Yi are the set of predicted and true criteria for instance i, and 1[·] is the indicator function. Subset Accuracy is calculated as Subset Accuracy = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[ ˆYi = Yi]
+
+Area Under the ROC Curve (AUC) evaluates the model’s ability to distinguish between criteria that should and should not be selected across different decision thresholds. It is calculated using the trapezoidal rule for each label and then averaged. 
+
+Matthews Correlation Coefficient (MCC) provides a robust measure under class imbalance, which is important given that not all criteria are equally likely to be selected [Chicco and Jurman, 2020]. It is calculated for each criterion and then averaged, as MCC = T P × T N − F P × F N 
+
+p(T P + F P )( T P + F N )( T N + F P )( T N + F N )
+
+Calibration metrics are defined below. 
+
+Expected Calibration Error (ECE) measures the difference between predicted confidence and actual accuracy, with lower values indicating better calibration [Guo et al., 2017]. It is calculated as ECE =
+
+> M
+
+X
+
+> m=1
+
+|Bm|
+
+N |acc (Bm) − conf (Bm)|
+
+where M is the number of confidence bins, Bm is the set of samples in bin m, |Bm| is the number of samples in bin m,
+
+N is the total number of samples, acc (Bm) and conf (Bm) are the accuracy and average confidence of samples in bin 
+
+m.17 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+Brier Score measures both calibration and sharpness of probability predictions, with lower values indicating better probabilistic predictions [Glenn et al., 1950]. pi and yi are the predicted probability and actual binary outcome (0 or 1) for sample i. The Brier score is calculated as Brier = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+(pi − yi)2
+
+Table 10 presents performance measured by the multi-label classification metrics and calibration metrics for Task 3. Table 10: Multi-label classification performance for criteria selection.                                                       
+
+> Label micro F1 Jaccard Subset Accuracy AUC ECE Brier
+> Llama Base 0.516 0.403 0.142 0.563 0.535 0.519
+> Qwen Base 0.483 0.372 0.125 0.510 0.547 0.558
+> Llama Base + RAG 0.726 0.669 0.550 0.769 0.272 0.278
+> Qwen Base + RAG 0.650 0.569 0.450 0.743 0.328 0.303
+> Llama Fine-tuned 0.770 0.729 0.617 0.813 0.231 0.220
+> Qwen Fine-tuned 0.668 0.601 0.558 0.767 0.275 0.275
+> Llama Fine-tuned + RAG 0.781 0.746 0.675 0.848 0.217 0.170
+> Qwen Fine-tuned + RAG 0.732 0.682 0.608 0.795 0.231 0.215
+
+The multi-label classification metrics reveal a direct link between regression accuracy in Task 2 and criterion selection quality. Configurations that better predict preference scores also more accurately select which criteria to activate. Base LLMs perform at a near-chance level, with subset accuracy below 0.15, meaning nearly every request would trigger route planning with incorrect criteria. RAG and fine-tuning each improve performance substantially, but even with either component alone, roughly half of requests still select the wrong criteria combination. The combined approach achieves the strongest results, with a subset accuracy of 0.675 from the best configuration. While not perfect, this is acceptable for the initial planning stage, as only about one-third of requests would require adjustment through follow-up interaction, either re-ranking solutions or rerunning the route planning algorithm. Calibration metrics assess whether high-confidence predictions are indeed more likely to be correct. Base LLMs produce confidence estimates that are essentially uninformative, with ECE values above 0.5. Both RAG and fine-tuning substantially improve calibration, with fine-tuning being more effective of the two. The combined approach again achieves the best results, producing the lowest ECE and Brier scores across all configurations. This indicates that fine-tuning and retrieval are complementary. Fine-tuning aligns the model’s internal confidence with actual correctness, while RAG provides grounding examples that further sharpen prediction reliability. 
+
+(II) As a ranking preservation problem Beyond selecting the correct criteria, the model should also preserve the relative ordering of user preferences. For example, if a user cares more about safety (scoring 0.8) than crowdedness (scoring 0.5), the model should maintain this ranking even if both criteria are eventually filtered out or selected. Ranking quality is measured using three rank correlation coefficients, as shown below. All rank correlation metrics range from 
+
+−1 to 1, with higher values indicating better preservation of preference ordering. 
+
+Spearman’s rank correlation coefficient (Spearman ρ) is a nonparametric metric that measures monotonic rela-tionships between the predicted and true score rankings, robust to score rescaling [Spearman, 1961]. It is calculated as 
+
+ρ = 1 − 6 P d2
+
+> i
+
+n(n2 − 1) 
+
+where n is the number of criteria, and di is the difference between the ranks of criterion i in the predicted and true scores. 
+
+Kendall’s rank correlation coefficient (Kendall τ ) provides an alternative measure of rank correlation that emphasizes pairwise rank agreements [Kendall, 1938]. It is calculated as 
+
+τ = nc − nd 
+
+> 12
+
+n(n − 1) 
+
+18 ChatPlanner: LLM Framework for Personalized Public Transit Routing where nc and nd are the number of concordant pairs (where both the predicted and true rankings agree on relative order) and discordant pairs. 
+
+Pearson correlation coefficient (Pearson r) serves as a reference for linear relationships between predicted and true scores, though it is less robust to monotonic transformations than the nonparametric alternatives [Lee Rodgers and Nicewander, 1988]. It is calculated as 
+
+r =
+
+P(xi − ¯x)( yi − ¯y)
+
+pP (xi − ¯x)2 P(yi − ¯y)2
+
+To evaluate whether models preserve the relative ordering of user preference scores across criteria, rank correlation is examined through ρ, τ , and r. These metrics are presented in Table 11. Table 11: Ranking performance for criteria selection.                            
+
+> Label Spearman Kendall Pearson
+> Llama Base 0.112 0.100 0.076
+> Qwen Base 0.161 0.138 0.130
+> Llama Base + RAG 0.563 0.529 0.566
+> Qwen Base + RAG 0.556 0.518 0.546
+> Llama Fine-tuned 0.703 0.687 0.701
+> Qwen Fine-tuned 0.625 0.602 0.646
+> Llama Fine-tuned + RAG 0.717 0.691 0.738
+> Qwen Fine-tuned + RAG 0.630 0.604 0.656
+
+Base LLMs show near-zero correlations, meaning they largely fail to distinguish which criteria a user considers more important. This is a critical limitation, since Task 3 depends on correctly prioritizing preferences. Both RAG and fine-tuning substantially improve ranking quality. The combined approach again achieves the strongest performance, with all three correlation measures around 0.7. In practical terms, this means that when a user emphasizes safety over crowdedness, for example, the model consistently reflects this ordering in its predicted scores. The results suggest that retrieval provides relevant preference context from similar past queries, while fine-tuning teaches the model to assign and order criteria weights appropriately. In summary, the combination of fine-tuning and RAG consistently achieves the best performance across all three tasks, with bootstrap analysis confirming these gains are statistically robust. The two components serve complementary roles. Fine-tuning enforces structured output formatting and teaches the model to map natural language to preference scores, while RAG grounds predictions in query-specific examples that resolve ambiguous or location-specific expressions. 
+
+4.2.6 Comparison Against a Keyword Matching Baseline 
+
+Rule-based frameworks, such as bag-of-words and keyword matching, have long served as standard baselines in transportation research for extracting user preferences and network features from unstructured natural language data [Ali et al., 2019]. To directly assess whether the semantic understanding capacity of our ChatPlanner provides measurable gains over such approaches, a keyword matching baseline is developed, and both systems are evaluated on the same binary preference detection task. 
+
+Keyword Matching System Design The keyword matching system is designed as a binary relevance classifier reliant on a hand-crafted, domain-specific dictionary. (i) Accessibility (25 keywords, e.g., “wheelchair”, “step-free”, “elevator”); (ii) Safety (31 keywords, e.g., “safe”, “well-lit”, “crime”); (iii) Crowdedness (31 keywords, e.g., “crowded”, “rush hour”, “personal space”); and (iv) Sightseeing (39 keywords, e.g., “scenic”, “landmarks”, “architecture”). The complete lists of curated keywords for each preference are provided in B. The classifier employs a token-level matching approach to prevent sub-word matching errors inherent to basic regular expressions [Zhang et al., 2018]. Utilizing the Natural Language Toolkit (NLTK) [Bird et al., 2009], the user’s journey request is first lowercased and segmented into discrete word tokens. If the intersection between the user’s tokenized 19 ChatPlanner: LLM Framework for Personalized Public Transit Routing request and a predefined keyword list is non-empty, that corresponding preference is activated (assigned a value of 1); otherwise, it remains inactive (assigned a value of 0). 
+
+Experimental Setup and Evaluation Metrics To evaluate ChatPlanner against the keyword matching system in the binary preference detection task, the User Study Test Set described in Section 4.2.1 is adapted by binarizing the human-labeled continuous ground-truth scores. A preference is considered active if its score is ≥ 0.6, and inactive otherwise. To ensure a fair comparison, 0.6 is chosen as the same threshold to convert the continuous preference scores generated by the LLM in ChatPlanner into binary active and inactive labels. Performance is evaluated using three standard metrics: • Exact Match Accuracy : The proportion of user requests where the model correctly predicts the binary activation states for all four criteria simultaneously. • F1-Score : The harmonic mean of precision and recall, providing a robust evaluation metric when positive and negative samples are highly imbalanced (e.g., when a specific travel constraint is rarely requested). It is mathematically formulated as: 
+
+F1 = 2T P 
+
+2T P + F P + F N 
+
+where T P , F P , and F N denote the number of true positives, false positives, and false negatives, respectively. We report both the overall F1-score to capture global performance, and the per-dimension F1-scores to evaluate robustness across different preference types. 
+
+Results and Discussion Table 12 presents the comparative results of the keyword matching baseline and our fine-tuned LLMs equipped with RAG (Llama Fine-tuned + RAG and Qwen Fine-tuned + RAG). The table also reports Support, which is the number of active instances per criterion out of the 120 instances in the User Study Test Set. Table 12: Performance comparison between the Keyword Matching Baseline and ChatPlanner on binary preference detection.                               
+
+> Model / Metric Overall Performance Per-Criterion F1-Scores Exact Match Accuracy Overall F1-Score Accessibility Crowdedness Safety Sightseeing
+> Keyword Matching System Baseline 0.242 0.560 0.590 0.619 0.460 0.571 Qwen Fine-tuned + RAG 0.650 0.833 0.800 0.833 0.848 0.889 Llama Fine-tuned + RAG 0.725 0.884 0.835 0.902 0.899 0.957
+> Support (Active Instances) --41 54 63 24
+
+The results show that keyword matching fails to identify the complete set of user preferences in the majority of cases, while ChatPlanner achieves substantially higher performance across both overall and per-criterion metrics. The performance gap is most significant for criteria that users tend to express implicitly rather than through explicit keywords. For example, a request such as "I am traveling with my grandmother" implies safety needs, and "I want a beautiful walk" implies sightseeing interest, but neither contains vocabulary that a keyword system would match, while the fine-tuned LLM with RAG can correctly identify these preferences. The per-criterion F1-scores confirm this pattern. Criteria where implicit expression could be more common (i.e., Safety and Sightseeing) show the largest gains over the keyword baseline. These findings demonstrate that the core value of integrating an LLM into the planning pipeline lies in its ability to interpret varied and indirect human expressions of travel preferences, ensuring the downstream routing solver optimizes for the correct objectives. 
+
+4.3 Experiment 3: ChatPlanner Enlarge Solution Space for User Preference 
+
+ChatPlanner is compared against the baseline MC-RAPTOR algorithm, which only considers minimizing travel time and the number of transfers in journey planning. Case A focuses on mobility-impaired users requiring accessibility considerations. Case B examines commuters seeking less crowded routes. Case C explores tourist preferences for routes with sightseeing opportunities. 
+
+Case A: Accessibility for Mobility-Impaired Users For Case A, the journey is from Farringdon to Bow Road with a requested arrival time of 12:00. Figure 3 shows the routes. In the lower half figure, the baseline MC-RAPTOR 20 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 13: Example user inquiries used for evaluation.     
+
+> User Case User query
+> Case A: Mobility-impaired people I’m traveling with a stroller and need elevator access. I want to plan my journey from Farringdon to Bow Road by 12:00. Case B: Crowding-adverse commuter As a daily commuter, I need spacious routes. I need to get from Charing Cross Under-ground Station to Euston Station by 15:45. Case C: Tourist Getting around London: Sloane Square to Tate Britain by 10:00. I prefer routes that pass interesting architecture.
+
+algorithm finds a direct path that goes through fewer stations, start-A-B-C-D-E-F-G-H-End, but requires the user to exit at station H, which lacks step-free access. ChatPlanner (upper half) identifies an alternative solution with higher accessibility scores that suggests transferring at station I to reach another station J that both have step-free access. This route also ensures direct exiting at the end stop. Traditional optimization methods would reject this option because it requires more time and transfers. However, this alternative route provides essential value for users with limited mobility. 
+
+Figure 3: Case A: Route Planning with Accessibility Need 
+
+Case B: Crowding Avoidance for Commuters In Case B, the user needs to travel from Charing Cross Underground Station to Euston Station by 15:45 while avoiding crowded areas. Figures 5a and 5b compare two route options. Route 1 shows higher crowding levels at most stops, while Route 2 maintains lower crowding throughout the journey. Although 21 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+> (a) Case A: Pareto front comparison between ChatPlanner and MC-RAPTOR baseline in travel time vs number of transfers space.
+> (b) Case A: Pareto front in travel time vs accessibility, showing how ChatPlanner enlarges the solution space along accessibility.
+
+Figure 4: Case A: Pareto front comparisons for ChatPlanner. Route 2 requires more stops and takes longer travel time, it successfully avoids crowded areas, providing a more comfortable travel experience for daily commuters who prioritize space over speed.  
+
+> (a) Case B: Route Planning with Crowding Need, (b) Case B: Route Planning with Crowding Need
+
+Figure 5: Case B: Route Planning with Crowding Need (two solutions). 
+
+Case C: Sightseeing Opportunities for Tourists In Case C, the journey goes from Sloane Square to Tate Britain by 10:00 for a tourist seeking interesting architecture. Figures 7a and 7b compare different routing approaches. The first figure shows a direct route that passes through segments (A’–F’) with few sightseeing opportunities within 100 meters, offering limited value for tourists. The second figure demonstrates ChatPlanner’s tourist-friendly alternative that prioritizes points of interest and areas with high sightseeing potential, even though it requires one transfer. This route creates a more engaging journey (A–E) while still efficiently connecting the same start and end locations. Across all three cases, ChatPlanner successfully discovers and preserves valuable personalized solutions that address specific user needs. Figures 4, 6, and 8 present the Pareto front comparisons, showing that ChatPlanner expands 22 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+> (a) Case B: Pareto front comparison between ChatPlanner and MC-RAPTOR baseline in travel time vs number of transfers space.
+> (b) Case B: Pareto front in travel time vs crowding space, showing how ChatPlanner enlarges the solution space along the crowding dimension.
+
+Figure 6: Case B: Pareto front comparisons for ChatPlanner.  
+
+> (a) Case C: Route Planning with Sightseeing Need (b) Case C: Route Planning with Sightseeing Need
+
+Figure 7: Case C: Route Planning with Sightseeing Need (two solutions). the solution set along preference-specific dimensions (accessibility, crowding, sightseeing) compared to the baseline MC-RAPTOR algorithm. These results confirm that the framework effectively helps travelers customize their journeys. 
+
+4.3.1 Quantitative Analysis of Multi-objective performance 
+
+While visual inspections demonstrate ChatPlanner’s ability to accommodate specific user preferences, this study provides a quantitative evaluation of the performance of the solutions to statistically demonstrate its advantage over the baseline. To evaluate across different travel scales, this study randomly sampled a subset of 30 journey requests to form our Routing Test Set. To reflect the spatial distribution of the transit network, these cases are divided into three distance categories based on the direct distance between the origin and destination, leading to 10 short journeys ( < 5 km), 10 medium journeys ( 5-10 km), and 10 long journeys ( > 10 km). The baseline MC-RAPTOR algorithm optimizes only two objectives: travel time and the number of transfers. In contrast, ChatPlanner dynamically incorporates additional user-specific preferences as objectives. Post-hoc evaluation can be 23 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+> (a) Case C: Pareto front comparison between ChatPlanner and MC-RAPTOR baseline in travel time vs number of transfers space.
+> (b) Case C: Pareto front in travel time vs sightseeing space, show-ing how ChatPlanner enlarges the solution space along the sight-seeing dimension.
+
+Figure 8: Case C: Pareto front comparisons for ChatPlanner. applied to MC-RAPTOR, allowing their solution sets to be analyzed and compared within a unified 6-dimensional objective space. This study compares the Pareto fronts using three standard multi-objective performance indicators [Audet et al., 2021]: the Coverage metric (C-metric) [Zitzler and Thiele, 2002], Inverted Generational Distance (IGD) [Zhang and Li, 2007], and Hypervolume (HV) [Zitzler and Thiele, 2002]. The results across 30 journey cases are summarized in Table 14. 
+
+C-metric: This metric measures the proportion of solutions in one set that are dominated by at least one solution in another set. C(A, B ) = 1 means A dominates all solutions in B, whereas C(A, B ) = 0 means A dominates none. As shown in Table 14, C(RAPTOR , ChatPlanner ) = 0 .00 across all 30 cases. This indicates that the baseline algorithm never dominates any solution generated by ChatPlanner in the 6D space. Conversely, C(ChatPlanner , RAPTOR ) is greater than zero in several cases (mean = 0.25), demonstrating that ChatPlanner solutions frequently and strictly dominate the baseline solutions. 
+
+IGD measures the distance from a reference Pareto front to the algorithm’s approximation set, evaluating both convergence and coverage. Since the true Pareto front is unknown, we construct the reference set as the union of non-dominated solutions from both MC-RAPTOR and ChatPlanner. ChatPlanner achieves a near-perfect mean IGD of 0.02, indicating that its solution set essentially constitutes the entire reference front. In contrast, the baseline algorithm yields a mean IGD of 0.88, remaining far from the true multi-objective front due to its exclusive focus on time and transfers. 
+
+HV measures the volume of the objective space dominated by the solution set; higher values indicate better diversity and optimality. In the full 6-dimensional objective space, ChatPlanner achieves substantially higher hypervolume than the baseline in 26 out of 30 cases, with a mean of 0.44 compared to 0.11 for the baseline. In some cases, this improvement is considerable, with ChatPlanner achieving substantially higher hypervolume where the baseline performs poorly. This result directly reflects ChatPlanner’s ability to explore multiple user-specific criteria that MC-RAPTOR does not, producing solutions that collectively dominate a much larger region of the objective space. 
+
+4.4 Experiment 4: Latency and Computational Tractability 
+
+To assess the viability of ChatPlanner for real-world deployment, the computation time of both blocks was evaluated for latency and computational tractability. The ChatPlanner pipeline consists of two main computational blocks in the initial planning phase: the natural language processing block, where the LLM interprets the user’s request, and the public transit routing block, where the MC-RAPTOR algorithm calculates paths. 
+
+4.4.1 Language Processing Latency 
+
+First, this experiment measured the time required for the LLM to process a user’s natural language travel request. This includes retrieving similar examples from the database (RAG), processing the text, and generating the structured 24 ChatPlanner: LLM Framework for Personalized Public Transit Routing Table 14: Per-case comparison of MC-RAPTOR (R) and ChatPlanner (CP). 
+
+Pareto size |P| C-metric IGD ↓ HV ↑
+
+Case R CP C(CP,R )↑ C(R,CP )↓ R CP R CP 
+
+Long journeys 
+
+long_1 1 22 0.00 0.00 1.49 0.03 0.01 0.69 long_2 2 16 0.00 0.00 0.71 0.00 0.04 0.13 long_3 1 3 0.00 0.00 1.00 0.00 0.01 0.02 long_4 2 23 1.00 0.00 0.87 0.00 0.05 0.23 long_5 1 5 0.00 0.00 1.05 0.00 0.01 0.05 long_6 1 17 0.00 0.00 1.17 0.00 0.04 0.44 long_7 2 68 1.00 0.00 0.73 0.00 0.07 0.74 long_8 1 8 1.00 0.00 1.34 0.00 0.01 0.85 long_9 2 13 0.00 0.00 0.58 0.00 0.11 0.42 long_10 2 47 1.00 0.00 0.89 0.00 0.06 0.42 
+
+Medium journeys 
+
+medium_1 2 3 0.50 0.00 0.53 0.00 0.01 0.14 medium_2 2 11 1.00 0.00 0.88 0.00 0.16 0.29 medium_3 2 19 0.00 0.00 0.82 0.00 0.05 0.72 medium_4 1 29 0.00 0.00 1.16 0.00 0.04 0.50 medium_5 2 6 0.00 0.00 0.65 0.10 0.02 0.26 medium_6 1 28 0.00 0.00 1.22 0.00 0.01 0.57 medium_7 1 3 0.00 0.00 0.98 0.00 0.00 0.02 medium_8 2 23 0.00 0.00 0.79 0.02 0.08 0.60 medium_9 2 5 0.00 0.00 0.46 0.00 0.02 0.03 medium_10 2 6 0.00 0.00 0.70 0.08 0.05 0.05 
+
+Short journeys 
+
+short_1 2 33 0.00 0.00 0.98 0.02 0.26 0.56 short_2 1 53 0.00 0.00 1.08 0.00 0.72 1.33 short_3 1 8 0.00 0.00 0.96 0.00 0.01 0.46 short_4 1 6 1.00 0.00 1.30 0.00 0.01 0.16 short_5 2 4 0.00 0.00 0.64 0.18 0.14 0.10 short_6 2 5 0.00 0.00 0.74 0.13 0.13 0.12 short_7 2 12 0.00 0.00 0.78 0.09 0.04 0.68 short_8 2 5 0.50 0.00 0.54 0.00 0.17 0.54 short_9 2 18 0.50 0.00 0.65 0.00 0.01 0.36 short_10 1 1 0.00 0.00 0.00 0.00 1.77 1.77 
+
+Summary (30 cases) 
+
+Mean 1.57 16.77 0.25 0.00 0.88 0.02 0.11 0.44 Std 0.50 16.13 0.39 0.00 0.34 0.05 0.33 0.37 Median 2.00 10.00 0.00 0.00 0.82 0.00 0.04 0.38 
+
+Table 15: Average language processing time per user request across 30 test cases. 
+
+Model Configuration Mean (s) Std Dev Median 90th Percentile 
+
+Qwen Base + RAG 4.84 0.12 4.82 4.98 Qwen Base 5.14 0.20 5.14 5.31 Llama Base 5.30 0.31 5.22 5.44 Llama Base + RAG 5.80 0.16 5.80 6.01 Qwen Fine-tuned 8.55 0.36 8.56 8.85 Llama Fine-tuned 9.04 0.32 8.94 9.54 Qwen Fine-tuned + RAG 9.14 0.22 9.12 9.39 Llama Fine-tuned + RAG 9.76 0.24 9.74 10.14 
+
+25 ChatPlanner: LLM Framework for Personalized Public Transit Routing output with the interpreted preference scores. 30 user requests were randomly sampled from the User Study Test Set (described in Section 4.2.1) and measured the processing time on our server with an NVIDIA A40 GPU for different model configurations. As shown in Table 15, our best-performing configuration from Experiment 2 (Llama Fine-tuned + RAG) takes an average of 9.76 seconds to process requests. This processing time is considered reasonable and acceptable, as it falls within the established 10-second usability threshold for keeping a user’s attention focused on a continuous dialogue task [Nielsen, 1994]. Furthermore, this running time can still be optimized significantly in real-world product deployment settings through hardware scaling and server-side memory management optimizations, such as continuous batching and PagedAttention [Kwon et al., 2023]. 
+
+4.4.2 Route Search Latency and Computational Tractability 
+
+While the language processing takes about 10 seconds, the majority of the system’s total response time is determined by the public transit routing algorithm. MC-RAPTOR is highly sensitive to the number of objectives considered. The algorithm tracks and compares non-dominated solutions at every transit stop. Therefore, increasing the number of objectives causes an exponential increase in calculation time. To manage this computational burden, a core design choice in the ChatPlanner framework is the preference selection mechanism in Node 3, which restricts the number of active user-defined criteria to K = 2 . To provide a principled computational justification for this choice, the sensitivity of the MC-RAPTOR algorithm to the number of simultaneous objectives is analyzed. Specifically, experiments are conducted by incrementally adding user preferences (crowdedness, accessibility, safety, and sightseeing) to the base routing objectives (travel time and number of transfers). The average execution time is measured across the same 30 journey cases evaluated in Section 4.3.1 (10 short, 10 medium, and 10 long journeys). As shown in Table 16, a standard routing search (2 objectives) requires an average of 12.6 seconds. Adding two additional user preferences increases the average search time to around 50 seconds. However, expanding the number of objectives to 5 causes an immediate combinatorial explosion, pushing average computation times past 8 minutes. Attempting to optimize all 6 criteria simultaneously results in complete algorithm failure, exhausting the 86GB RAM of an NVIDIA A40 server on long and medium journeys. 
+
+4.4.3 Overall Deployment Feasibility 
+
+When combining the LLM processing time and the MC-RAPTOR search time for a K = 2 configuration, ChatPlanner requires an average end-to-end processing time of approximately 1 minute to generate its initial response. Compared to standard routing engines such as Google Maps, which primarily optimize only for travel time and compute paths in a few seconds, ChatPlanner’s latency is notably higher. However, ChatPlanner acts as a personalized travel assistant, solving a highly complex 4-objectives optimization problem tailored specifically to users’ preferences. Research on human-chatbot interaction suggests that users tolerate higher response times and even report increased trust when the system is perceived to be performing complex, personalized computation [Gnewuch et al., 2018, Buell and Norton, 2011]. Also, the current implementation is not optimized for running speed, and further reductions are achievable through code optimization, hardware scaling, and parallelizing independent route traversals across multiple cores [Delling et al., 2015]. Importantly, the modular design of the ChatPlanner framework allows the routing solver to be replaced with any faster multi-objective algorithm without modifying the rest of the pipeline. Table 16: Sensitivity analysis of MC-RAPTOR computation time relative to the number of simultaneous optimization objectives.                                  
+
+> Algorithm Configuration Total Objectives Long Journeys (>10 km) [s] Medium Journeys (5–10km) [s] Short Journeys (<5km) [s] Average Time [s]
+> Base (Time, Transfers) ( K= 0 )217.32 16.26 4.12 12.57 Base + 1 Preference ( K= 1 )343.69 42.11 41.89 42.56 ChatPlanner Initial Max ( K= 2 )464.83 43.25 43.16 50.41 Base + 3 Preferences ( K= 3 )5907.27 457.91 197.73 520.97 Base + 4 Preferences ( K= 4 )6−−857.79 −
+
+26 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+# 5 Conclusions 
+
+This research presents ChatPlanner, a novel framework for applying LLMs to public transit routing, addressing the critical gap in personalized route planning. This approach integrates LLM capabilities into the public transit routing algorithm to capture users’ implicit and explicit preferences alongside traditional routing inputs extracted from natural language queries, such as origin, destination, and requested arrival time. These extracted preferences guide the selection of criteria, which are then incorporated into the objective function of the public transit routing algorithm, enabling the generation of personalized, preference-aware solution sets. Three experiments are conducted to validate the framework: solutions’ feasibility compared with tool-augmented LLM, extraction of routing information and preferences, and solution set quality and completeness. Comparative analysis reveals that even tool-augmented LLMs, such as GPT-5.0 equipped with external routing APIs including Google Map API, Moovit, and Rome2rio, cannot stably perform end-to-end public transit routing, achieving only one-third feasibility rate, while ChatPlanner generates feasible solutions reliably. These limitations of tool-augmented LLMs stem from the inherent instability, as the model cannot always guarantee successful API calls. The model cannot reliably resolve ambiguous location names across different external databases and could misinterpret transit information when parsing unstructured web layouts. The model can also misreport travel durations and walking segments when summarizing route details from external sources. ChatPlanner addresses these constraints by strictly limiting the LLM to natural language parsing and delegating the path planning to a routing algorithm, with both components sharing the same database of stop names and transit network data. Testing on an out-of-distribution, human-written dataset, our evaluation across three user query extraction tasks validates the necessity of combining fine-tuning with RAG. Fine-tuning with our designed input-output pairs is essential for extracting origin, destination, and requested arrival time from natural language queries, while RAG is needed to provide query-specific context that resolves imprecise, conversational human expressions for locations and times. For preference interpretation, datasets incorporating eight personas and five contexts establish scoring standards for both fine-tuning and RAG components. The combination achieves better preference interpretation compared to either component alone. Fine-tuning learns preference patterns, and RAG provides query-specific examples that guide the model toward consistent and accurate scoring aligned with the designed standards. Our case studies demonstrate that by capturing user preferences, ChatPlanner identifies valuable solutions across different criteria dimensions that existing route planners overlook. From a user-centric perspective, ChatPlanner provides a richer set of meaningful route alternatives. From an algorithmic standpoint, this demonstrates how distinct objective functions operating in different search regions of the solution space provide differentiated Pareto frontiers, thereby expanding the solution set for personalized transit routing. 
+
+# 6 Future Directions 
+
+Looking ahead, the integration of LLMs in public transit systems warrants further investigation in several key areas. First, enhanced solution algorithms could provide users with a broader range of valuable routing alternatives. If alternative route planners employing different search mechanisms, such as evolutionary algorithms, can generate more diverse solution sets, the current ChatPlanner framework could similarly benefit from incorporating these approaches to expand its solution space. Second, improving preference interpretation accuracy remains a critical research direction. LLMs trained on general text may associate words in ways that do not match their meaning in a transportation context. Developing techniques to strengthen domain-specific understanding of transit terminology represents a promising avenue for more reliable LLM-based transit planning systems. 
+
+# Acknowledgments 
+
+The authors would like to thank [Chinese Scholarship Council] for their support and contributions to this research. 27 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+# References 
+
+Carlos F. Daganzo and Yanfeng Ouyang. Public Transportation Systems: Principles of System Design, Operations Planning and Real-Time Control . World Scientific Publishing Co., 2019. ISBN 978-981-3224-10-0. doi: 10.1142/ 10553. URL https://doi.org/10.1142/10553 .Daniel Hörcher and Alejandro Tirachini. A review of public transport economics. Economics of transportation , 25: 100196, 2021. Apple Inc. Apple maps. https://maps.apple.com/ , 2025. Accessed: October 22, 2025. Google. Google maps. https://www.google.com/maps/@51.7716261,-1.2590835,14z , 2025. Accessed: October 22, 2025. Citymapper. Citymapper. https://citymapper.com/?lang=en , 2025. Accessed: October 22, 2025. Peter J Mackie, Sergio Jara-Dıaz, and Anthony Stanley Fowkes. The value of travel time savings in evaluation. 
+
+Transportation Research Part E: Logistics and Transportation Review , 37(2-3):91–106, 2001. Heng Zhou, Xiaoting Chi, Richard Norman, Yanqing Zhang, and Chunyu Song. Tourists’ urban travel modes: Choices for enhanced transport and environmental sustainability. Transportation Research Part D: Transport and Environment ,129:104144, 2024. Riccardo Ceccato, Francesco Deflorio, Marco Diana, and Miriam Pirra. Measure of urban accessibility provided by transport services in turin: A traveller perspective through a mobility survey. Transportation Research Procedia , 45: 301–308, 2020. Wei Fan. Optimal transit route network design problem: Algorithms, implementations, and numerical results . The University of Texas at Austin, 2004. The Mayor of London. Violent incidents on the London Underground, 2023. URL https://www. london.gov.uk/who-we-are/what-london-assembly-does/questions-mayor/find-an-answer/ violent-incidents-london-underground-1 .Wendy Heaps, Erin Abramsohn, and Elizabeth Skillen. Public transportation in the us: a driver of health and equity. 
+
+Health Affairs Health Policy Brief , 10, 2021. Brittany Molner, Kimberley D Curtin, Krystyna Kongats, Jennifer Ann Brown, Mathew Thomson, Kayla Atkey, and Candace IJ Nykiforuk. Policy influencer support for active transportation policy in two canadian provinces: Implications for advocacy. Journal of Transport & Health , 28:101537, 2023. Daniel Delling, Thomas Pajor, and Renato F Werneck. Round-based public transit routing. Transportation Science , 49 (3):591–604, 2015. Lang Fan and Christine L Mumford. A metaheuristic approach to the urban transit routing problem. Journal of Heuristics , 16(3):353–372, 2010. Ren Wang, Mengchu Zhou, Kaizhou Gao, Ahmed Alabdulwahab, and Muhyaddin J Rawa. Personalized route planning system based on driver preference. Sensors , 22(1):11, 2021. Yinuo Huang, Xin Jin, Miao Fan, Xunwei Yang, and Fangliang Jiang. Personalized route recommendation based on user habits for vehicle navigation. In Proceedings of the 2024 International Conference on Intelligent Driving and Smart Transportation , pages 28–32, 2024. Alina Pommeranz, Joost Broekens, Pascal Wiggers, Willem-Paul Brinkman, and Catholijn M Jonker. Designing interfaces for explicit preference elicitation: a user-centered investigation of preference representation and elicitation process. User Modeling and User-Adapted Interaction , 22(4):357–397, 2012. Ivica Kostric, Krisztian Balog, and Filip Radlinski. Generating usage-related questions for preference elicitation in conversational recommender systems. ACM Transactions on Recommender Systems , 2(2):1–24, 2024. ScienceDirect Topics. Public transport. https://www.sciencedirect.com/topics/social-sciences/ public-transport . Accessed: 2025-11-04. Konstantinos Kepaptsoglou and Matthew Karlaftis. Transit route network design problem. Journal of transportation engineering , 135(8):491–505, 2009. Ernesto Cipriani, Stefano Gori, and Marco Petrelli. Transit network design: A procedure and an application to a large urban area. Transportation Research Part C: Emerging Technologies , 20(1):3–14, 2012. Mingzhang Liang, Min Xu, and Shuaian Wang. A novel multi-objective evolutionary algorithm for transit network design and frequency-setting problem considering passengers’ choice behaviors under station congestion. Transportation Research Part B: Methodological , 197:103238, 2025. 28 ChatPlanner: LLM Framework for Personalized Public Transit Routing Evangelia Pyrga, Frank Schulz, Dorothea Wagner, and Christos Zaroliagis. Efficient models for timetable information in public transportation systems. Journal of Experimental Algorithmics (JEA) , 12:1–39, 2008. Yann Disser, Matthias Müller-Hannemann, and Mathias Schnee. Multi-criteria shortest paths in time-dependent train networks. In International Workshop on Experimental and Efficient Algorithms , pages 347–361. Springer, 2008. Michal Jakob, Jan Hrncir, Luis Oliva, Francesco Ronzano, Pavol Zilecky, and Jason Finnegan. Personalized fully multimodal journey planner. In ECAI 2014 , volume 263 of Frontiers in Artificial Intelligence and Applications ,pages 1225–1226, 2014. doi: 10.3233/978-1-61499-419-0-1225. Avishai Avi Ceder and Yu Jiang. Personalized public transport mobility service: a journey ranking approach for route guidance. Transportation Research Procedia , 38:935–955, 2019. Konstantinos G Zografos, Konstantinos N Androutsopoulos, and John D Nelson. Identifying travelers’ information needs and services for an integrated international real time journey planning system. In 13th International IEEE Conference on Intelligent Transportation Systems , pages 998–1004. IEEE, 2010. Bernd Ludwig, Bjørn Zenker, and Jan Schrader. Recommendation of personalized routes with public transport connections. In International Conference on Intelligent Interactive Assistance and Mobile Multimedia Computing ,pages 97–107. Springer, 2009. Garvita Bajaj, Rachit Agarwal, Georgios Bouloukakis, Pushpendra Singh, Nikolaos Georgantas, and Valérie Issarny. Towards building real-time, convenient route recommendation system for public transit. In 2016 IEEE International Smart Cities Conference (ISC2) , pages 1–5, 2016. doi: 10.1109/ISC2.2016.7580779. Yilun Lin, Xiaoxiang Na, Ding Wang, Xingyuan Dai, and Fei-Yue Wang. Mobility 5.0: Smart logistics and transportation services in cyber-physical-social systems. IEEE Transactions on Intelligent Vehicles , 8(6):3527–3532, 2023. doi: 10.1109/TIV.2023.3286995. Mohammad Shamsuddoha, Mohammad Abul Kashem, and Tasnuba Nasir. A review of transportation 5.0: Advancing sustainable mobility through intelligent technology and renewable energy. Future Transportation , 5(1):8, 2025. webdemia. Mobility 5.0: The technological revolution transforming transportation. URL https://mobipar.it/en/ https-mobipar-it-en-mobility-5-0-future-transport/ .Michael Wallace and George Dunlop. Eliza: a very basic rogerian psychotherapist chatbot. Retrieved July , 10:2019, 2016. Rishi Bommasani. On the opportunities and risks of foundation models. arXiv preprint arXiv:2108.07258 , 2021. Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. Amon Rapp, Chiara Di Lodovico, and Luigi Di Caro. How do people react to chatgpt’s unpredictable behavior? anthropomorphism, uncanniness, and fear of ai: A qualitative study on individuals’ perceptions and understandings of llms’ nonsensical hallucinations. International Journal of Human-Computer Studies , 198:103471, 2025. Haitao Cheng, Zibin Gong, and Chang Wang. Llm-tfp: Integrating large language models with spatio-temporal features for urban traffic flow prediction. Applied Soft Computing , page 113174, 2025. Yi Rong, Yingchi Mao, Huajun Cui, Xiaoming He, and Mingkai Chen. Edge computing enabled large-scale traffic flow prediction with gpt in intelligent autonomous transport system for 6g network. IEEE Transactions on Intelligent Transportation Systems , 2024. Leizhen Wang, Peibo Duan, Zhengbing He, Cheng Lyu, Xin Chen, Nan Zheng, Li Yao, and Zhenliang Ma. Agentic large language models for day-to-day route choices. Transportation Research Part C: Emerging Technologies , 180: 105307, 2025. Yang Zhao, Pu Wang, Yibo Zhao, Hongru Du, and Hao Frank Yang. Safetraffic copilot: adapting large language models for trustworthy traffic safety assessments and decision interventions. Nature Communications , 16(1):8846, 2025. Ramya Jonnala, Gongbo Liang, Jeong Yang, and Izzat Alsmadi. Using large language models in public transit systems, san antonio as a case study, 2024. URL https://arxiv.org/abs/2407.11003 .Jiahao Wang and Amer Shalaby. Leveraging large language models for enhancing public transit services. arXiv preprint arXiv:2410.14147 , 2024. Bowen Fang, Zixiao Yang, Shukai Wang, and Xuan Di. Travellm: Could you plan my new public transit route in face of a network disruption?, 2024. URL https://arxiv.org/abs/2407.14926 .Tong Nie, Jian Sun, and Wei Ma. Exploring the roles of large language models in reshaping transportation systems: A survey, framework, and roadmap. Artificial Intelligence for Transportation , 1:100003, 2025. 29 ChatPlanner: LLM Framework for Personalized Public Transit Routing Kostya Esmukov et al. geopy: Geocoding library for python, 2023. URL https://github.com/geopy/geopy .Paweł Budzianowski, Tsung-Hsien Wen, Bo-Hsiang Tseng, Iñigo Casanueva, Stefan Ultes, Osman Ramadan, and Milica Gasic. Multiwoz-a large-scale multi-domain wizard-of-oz dataset for task-oriented dialogue modelling. In 
+
+Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing , pages 5016–5026, 2018. Abhinav Rastogi, Xiaoxue Zang, Srinivas Sunkara, Raghav Gupta, and Pranav Khaitan. Towards scalable multi-domain conversational agents: The schema-guided dialogue dataset. In Proceedings of the AAAI conference on artificial intelligence , volume 34, pages 8689–8696, 2020. Jill L Bezyak, Scott A Sabella, and Robert H Gattis. Public transportation: an investigation of barriers for people with disabilities. Journal of Disability Policy Studies , 28(1):52–60, 2017. Anastasia Loukaitou-Sideris. Fear and safety in transit environments from the women’s perspective. Security journal ,27(2):242–256, 2014. Alexa Delbosc and Graham Currie. Modelling the causes and impacts of personal safety perceptions on public transport ridership. Transport Policy , 24:302–309, 2012. Claudio Roncoli, Ektoras Chandakas, and Ioannis Kaparias. Estimating on-board passenger comfort in public trans-port vehicles using incomplete automatic passenger counting data. Transportation Research Part C: Emerging Technologies , 146:103963, 2023. Alejandro Tirachini, David A Hensher, and John M Rose. Crowding in public transport systems: effects on users, operation and implications for the estimation of demand. Transportation research part A: policy and practice , 53: 36–52, 2013. Jonas De Vos, Patricia L Mokhtarian, Tim Schwanen, Veronique Van Acker, and Frank Witlox. Travel mode choice and travel satisfaction: bridging the gap between decision utility and experienced utility. Transportation , 43(5):771–796, 2016. Ennio Cascetta and Armando Cartenì. The hedonic value of railways terminals. a quantitative analysis of the impact of stations quality on travellers behaviour. Transportation Research Part A: Policy and Practice , 61:41–52, 2014. National Centre for Accessible Transport (ncat). Understanding and identifying barriers to accessing transport: The experiences of disabled people in the uk. Technical report, National Centre for Ac-cessible Transport, November 2024. URL https://www.ncat.uk/wp-content/uploads/2024/12/ ncat-Understanding-and-identifying-barriers-to-accessing-transport-Full-Report-Accessible-PDF-FINAL-1 pdf . Accessed: 2025-10-30. Zeyu Han, Chao Gao, Jinyang Liu, Jeff Zhang, and Sai Qian Zhang. Parameter-efficient fine-tuning for large models: A comprehensive survey. arXiv preprint arXiv:2403.14608 , 2024. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. ICLR , 1(2):3, 2022. Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks. 
+
+Advances in neural information processing systems , 33:9459–9474, 2020. Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff, Defu Lian, and Jian-Yun Nie. C-pack: Packed resources for general chinese embeddings. In Proceedings of the 47th international ACM SIGIR conference on research and development in information retrieval , pages 641–649, 2024. Apis, 2025. URL https://docs.opentripplanner.org/en/latest/apis/Apis/ .Step free map, 2025. URL https://tfl.gov.uk/info-for/open-data-users/our-open-data .Aaditya Singh, Adam Fry, Adam Perelman, Adam Tart, Adi Ganesh, Ahmed El-Kishky, Aidan McLaughlin, Aiden Low, AJ Ostrow, Akhila Ananthram, et al. Openai gpt-5 system card. arXiv preprint arXiv:2601.03267 , 2025. Moovit Inc. Moovit: Multimodal mobility and transit routing, 2025. URL https://moovitapp.com . 2025-9-15. Rome2Rio Pty Ltd. Rome2rio: Global multi-modal transport search engine, 2025. URL https://www.rome2rio.com .2025-09-15. Kenneth O McGraw and Seok P Wong. Forming inferences about some intraclass correlation coefficients. Psychological methods , 1(1):30, 1996. Terry K Koo and Mae Y Li. A guideline of selecting and reporting intraclass correlation coefficients for reliability research. Journal of chiropractic medicine , 15(2):155–163, 2016. 30 ChatPlanner: LLM Framework for Personalized Public Transit Routing Ron Artstein and Massimo Poesio. Survey article: Inter-coder agreement for computational linguistics. Computational linguistics , 34(4):555–596, 2008. Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. arXiv e-prints , pages arXiv–2407, 2024. Qwen, :, An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tianyi Tang, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. Qwen2.5 technical report. 2025. URL https://arxiv.org/abs/2412.15115 .Pranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, and Percy Liang. Squad: 100,000+ questions for machine comprehension of text. In Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing , pages 2383–2392, 2016. Rob J Hyndman and Anne B Koehler. Another look at measures of forecast accuracy. International journal of forecasting , 22(4):679–688, 2006. I Lawrence and Kuei Lin. A concordance correlation coefficient to evaluate reproducibility. Biometrics , pages 255–268, 1989. Robert J Tibshirani and Bradley Efron. An introduction to the bootstrap. Monographs on statistics and applied probability , 57(1):1–436, 1993. Rotem Dror, Gili Baumer, Segev Shlomov, and Roi Reichart. The hitchhiker’s guide to testing statistical significance in natural language processing. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 1383–1392, 2018. Gjorgji Madjarov, Dragi Kocev, Dejan Gjorgjevikj, and Sašo Džeroski. An extensive experimental comparison of methods for multi-label learning. Pattern recognition , 45(9):3084–3104, 2012. Min-Ling Zhang and Zhi-Hua Zhou. A review on multi-label learning algorithms. IEEE transactions on knowledge and data engineering , 26(8):1819–1837, 2013. Davide Chicco and Giuseppe Jurman. The advantages of the matthews correlation coefficient (mcc) over f1 score and accuracy in binary classification evaluation. BMC genomics , 21(1):6, 2020. Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q Weinberger. On calibration of modern neural networks. In International conference on machine learning , pages 1321–1330. PMLR, 2017. W Brier Glenn et al. Verification of forecasts expressed in terms of probability. Monthly weather review , 78(1):1–3, 1950. Charles Spearman. The proof and measurement of association between two things. 1961. Maurice G Kendall. A new measure of rank correlation. Biometrika , 30(1-2):81–93, 1938. Joseph Lee Rodgers and W Alan Nicewander. Thirteen ways to look at the correlation coefficient. The American Statistician , 42(1):59–66, 1988. Farman Ali, Shaker El-Sappagh, and Daehan Kwak. Fuzzy ontology and lstm-based text mining: A transportation network monitoring system for assisting travel. Sensors , 19(2):234, 2019. Zhenhua Zhang, Qing He, Jing Gao, and Ming Ni. A deep learning approach for detecting traffic accidents from social media data. Transportation research part C: emerging technologies , 86:580–596, 2018. Steven Bird, Ewan Klein, and Edward Loper. Natural language processing with Python: analyzing text with the natural language toolkit . " O’Reilly Media, Inc.", 2009. Charles Audet, Jean Bigeon, Dominique Cartier, Sébastien Le Digabel, and Ludovic Salomon. Performance indicators in multiobjective optimization. European journal of operational research , 292(2):397–422, 2021. Eckart Zitzler and Lothar Thiele. Multiobjective evolutionary algorithms: a comparative case study and the strength pareto approach. IEEE transactions on Evolutionary Computation , 3(4):257–271, 2002. Qingfu Zhang and Hui Li. Moea/d: A multiobjective evolutionary algorithm based on decomposition. IEEE Transactions on evolutionary computation , 11(6):712–731, 2007. Jakob Nielsen. Usability engineering . Morgan Kaufmann, 1994. 31 ChatPlanner: LLM Framework for Personalized Public Transit Routing Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model serving with pagedattention. In Proceedings of the 29th symposium on operating systems principles , pages 611–626, 2023. Ulrich Gnewuch, Stefan Morana, Marc Adam, and Alexander Maedche. Faster is not always better: understanding the effect of dynamic response delays in human-chatbot interaction. 2018. Ryan W Buell and Michael I Norton. The labor illusion: How operational transparency increases perceived value. 
+
+Management Science , 57(9):1564–1579, 2011. 32 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+# A Empirical Justification of the Activation Threshold 
+
+To determine the appropriate threshold for converting continuous LLM preference predictions into active routing criteria (Node 3), we analyzed the default output behavior of the models. We evaluated 30 semantically neutral journey requests. These requests contained only basic travel information (origin, destination, and arrival time) without any explicit or implicit preference keywords. An example of such a request is: “I need to get from Temple Fortune Lane to Suffolk Road by 10:54.” 
+
+Table 17 presents the average preference scores predicted by different model configurations across these 30 neutral sentences. The results show that LLMs do not output scores of zero for neutral inputs. Base models often generate inaccurately high scores, such as Llama Base predicting an average safety score of 0.961. While the combination of fine-tuning and RAG successfully reduces these extreme values, the average predicted scores stabilize around 0.5 rather than 0.0. Because the default output for a neutral request naturally centers around 0.5, setting an activation threshold is a necessary structural requirement to separate the LLM’s default output values from actively expressed travel preferences. This threshold is set to 0.6 to ensure the route planning algorithm only optimizes for criteria the user actually cares about. Table 17: Average LLM preference score predictions across 30 semantically neutral test sentences.                                     
+
+> Model Setup Accessibility Crowdedness Safety Sightseeing
+> Llama Base 0.835 0.427 0.961 0.615 Qwen Base 0.900 0.676 0.948 0.250 Llama Base + RAG 0.676 0.416 0.510 0.046 Qwen Base + RAG 0.610 0.623 0.630 0.020 Llama FT 0.526 0.559 0.578 0.477 Qwen FT 0.544 0.544 0.576 0.441 Llama FT + RAG 0.546 0.533 0.486 0.516
+> Qwen FT + RAG 0.544 0.526 0.483 0.510
+
+# B Curated Keyword Dictionary for Baseline Classifier 
+
+This section details the complete sets of curated keywords utilized by the rule-based baseline system (described in Section 4.2.6) to detect user travel preferences from natural language requests. The dictionary consists of 126 unique natural language triggers and semantic proxies, categorized into four core transportation preference dimensions. The keywords for each dimension are presented below in alphabetical order: • Accessibility (25 keywords): access needs, accessible, accessible platform, assistance, barrier-free, carrying, disabled, easy access, elevator, heavy bags, lift, luggage, mobility, mobility equipment, physical, platform, ramp, stairs, step free, step-free, stroller, suitcase, walking, walking distance, wheelchair. • Safety (31 keywords): alone, area safety, avoid, bright, busy area, cctv, crime, dangerous, dark, emergency, feel secure, gangster, late night, lighting, main road, monitored, neighborhood, night time, personal security, police, populated, risk, safe, safety, secure, security, threat, unsafe, visible, well lit, well-lit. • Crowdedness (31 keywords): anxiety, avoid crowds, breathing room, busy, claustrophobic, comfortable, congested, crowd, crowded, empty, full, jam, less busy, less crowded, not busy, overwhelming, packed, peak hour, personal space, quiet, room, rush, rush hour, sardines, seat, seating, space, spacious, standing, stress, uncrowded. • Sightseeing (39 keywords): above ground, architecture, art, attraction, attractions, beautiful, bridge, cathe-dral, church, cultural, culture, enjoyable, experience, explore, exploring, gallery, garden, historic, holiday, interesting, journey, landmarks, leisure, monument, museum, overground, palace, park, river, scenic, sights, sightseeing, street view, tourism, tourist, vacation, view, views, window. 
+
+# C Multi-turn User Request Parsing 
+
+The evaluations in Section 4.2 assessed the parsing component on single-turn requests from the User Study Test Set. In practice, users may also interact with the system across multiple turns, for example, omitting key trip details initially or revising their preferences during the conversation. To evaluate parsing performance under these conditions, an 33 ChatPlanner: LLM Framework for Personalized Public Transit Routing additional multi-turn test set was constructed. Each request in the User Study Test Set was randomly assigned with a fixed seed to four dialogue patterns, with each base request used only once. 
+
+C.1 Multi-turn Test Set Construction 
+
+The multi-turn test set was created by rule-based transformations of the original single-turn requests and their structured labels. Four dialogue patterns were considered: (i) requests with the origin omitted, (ii) requests with the requested arrival time omitted, (iii) requests with both origin and requested arrival time omitted, and (iv) complete requests followed by later preference revisions. For incomplete-information cases (i-iii), the missing fields were removed from the initial request and then supplied in subsequent user turns. For the preference-revision cases (iv), the original request was preserved and followed by short, templated updates (e.g., ’I care more about safety’), and the corresponding preference score in the ground-truth output was set to 1.0. An example dialogue is shown in Figure 9. The Multi-turn Test Set should be interpreted as a controlled test of conversational parsing under common interaction patterns, rather than a substitute for naturally collected multi-turn dialogues, which is left for future work.            
+
+> System instruction (abridged): “You are a strict information extractor for public transit requests. If start_stop, end_stop, requested_arrival_time, or preference is missing, ask one short clarification question. If all are provided, output only one JSON object ...”
+> Turn 1 User: “I want to get to Stratford from the Sainsbury’s in Whitechapel by 2 pm. I am carrying groceries, so please make sure the route doesn’t have crowded spaces.”
+> Assistant (ChatPlanner response):
+> {...}
+> Turn 2 User: “I care more about safety.”
+> Assistant (ChatPlanner response):
+> {...}
+> Turn 3 User: “Please avoid crowds more.”
+> Assistant (ChatPlanner response):
+> {...}
+> Ground-truth (for evaluation):
+> {"start_stop": "Whitechapel", "end_stop": "Stratford", "requested_arrival_time": "14:00:00", "scores": {"accessibility": 0.7, "crowdedness": 1, "safety": 1, "sightseeing": 0.2}}
+
+Figure 9: Each dialogue instance consists of the user’s messages across turns and a ground-truth structured output used for evaluation. The system instruction shown at the top is shared across all dialogues and is not part of any individual dialogue. During evaluation, the model generates its own response at each assistant turn, and the final output is compared against the ground-truth. 
+
+C.2 Evaluation Setup 
+
+Each configuration was evaluated by replaying the Multi-turn Test Set dialogue one turn at a time. The system prompt and user messages were provided sequentially, and whenever an assistant turn was reached, the LLM was asked to generate its own response based on the preceding dialogue history. The LLM reply was then added to the dialogue history before the next user turn was provided. In this way, the evaluation tests whether the LLM can ask for missing information when needed and produce the final structured output once sufficient information has been supplied. The same LLM configurations as in the single-turn experiments in Section 4.2 were tested here. To maintain comparability, the RAG-based configurations used the same retrieval library as in the single-turn evaluation. 34 ChatPlanner: LLM Framework for Personalized Public Transit Routing 
+
+C.3 Multi-turn Evaluation Metrics 
+
+The same metrics as above are reported: EM_start, EM_end, EM_time, EM_all, MAE, Subset Accuracy, and Pearson correlation coefficient. In addition, ARF_turn0 (Ask-Right-Field Accuracy at the first assistant turn) is introduced, which measures whether the LLM’s first clarification question asks for the field or fields that are missing from the request. 
+
+C.4 Results and Discussions 
+
+Table 18: Multi-turn performance on the Multi-turn Test Set.                                                                      
+
+> Label EM start EM end EM time EM all MAE Subset Accuracy Pearson ARF turn0
+> Llama Base 0.458 0.417 0.442 0.342 0.390 0.058 0.103 0.333
+> Qwen Base 0.358 0.342 0.417 0.258 0.398 0.017 0.133 0.433
+> Llama Base + RAG 0.617 0.508 0.642 0.417 0.270 0.342 0.506 0.500
+> Qwen Base + RAG 0.642 0.583 0.683 0.542 0.278 0.317 0.439 0.500
+> Llama Fine-tuned 0.642 0.592 0.700 0.500 0.265 0.400 0.511 0.617
+> Qwen Fine-tuned 0.658 0.617 0.725 0.567 0.274 0.392 0.451 0.650
+> Llama Fine-tuned + RAG 0.742 0.750 0.833 0.658 0.226 0.583 0.539 0.733
+> Qwen Fine-tuned + RAG 0.758 0.733 0.858 0.675 0.219 0.592 0.513 0.767
+
+The results in Table 18 show that the same performance hierarchy observed in the single-turn experiments holds in the multi-turn setting. Fine-tuning combined with RAG consistently outperforms all other configurations across all metrics. For ARF_turn0, the best configuration correctly identifies the missing field(s) in more than 75% of cases, indicating the ChatPlanner’s configuration can often recognize what information is lacking, while there is clear room for improvement. Overall, performance is lower than in the single-turn setting, which is expected given the added complexity of handling clarification and preference revision across multiple turns, but the results still demonstrate that the parsing component can function in a conversational setting. This performance could be further improved through several potential approaches, such as incorporating multi-turn dialogue examples into the fine-tuning data, collecting and training on real user conversation dialogues from a deployed system, and so on. 35
