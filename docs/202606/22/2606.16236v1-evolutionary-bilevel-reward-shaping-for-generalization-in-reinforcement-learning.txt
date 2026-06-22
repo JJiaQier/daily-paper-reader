@@ -1,0 +1,763 @@
+Title: Evolutionary Bilevel Reward Shaping for Generalization in Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2606.16236v1
+
+Published Time: Tue, 16 Jun 2026 01:43:36 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Evolutionary Bilevel Reward Shaping for Generalization in Reinforcement Learning 
+
+Ekasit Usaratniwart 1[0009 −0005 −6981 −6301] , Xilin Gao 1[0009 −0005 −8218 −6375] ,Marc Ong 1[0009 −0009 −9667 −3026] , and Youhei Akimoto 1,2[0000 −0003 −2760 −8123]  
+
+> 1
+
+University of Tsukuba, Tsukuba, Japan  
+
+> 2
+
+RIKEN Center for Advanced Intelligence Project, Tokyo, Japan 
+
+{ekasit,xilin.gao,marc}@bbo.cs.tsukuba.ac.jp akimoto@cs.tsukuba.ac.jp 
+
+Abstract. Reinforcement learning (RL) often suffers from performance degradation when deployed in environments that differ from those en-countered during training. Existing techniques such as domain random-ization (DR) mitigate this, but require access to diverse training environ-ments and full trajectory observability, assumptions that fail in privacy-preserving or restricted scenarios where only scalar performance metrics are available. We propose Generalization via Evolutionary Reward Shap-ing (GERS), a bilevel optimization approach to improve generalization on unseen test environments using only scalar feedback from validation environments. At the lower level, an RL agent guided via a reward func-tion shaped by the upper level learns a policy on a limited set of training environments with accessible trajectory data; at the upper level, CMA-ES optimizes the reward shaping parameters to maximize the cumulative unshaped reward on separate validation environments for which trajec-tory access is unavailable. Results on continuous control tasks indicate that GERS outperforms the standard RL baseline on unseen test envi-ronments. GERS performance is comparable to DR, despite DR treating the combined set of training and validation environments of GERS as a single training set that requires trajectory access, whereas GERS cannot access validation trajectories. These results confirm that GERS effec-tively enhances generalization under restricted data access constraints. 
+
+Keywords: Reinforcement learning · Reward shaping · Generalization 
+
+· Bilevel optimization · CMA-ES · Evolution strategy. 
+
+1 Introduction 
+
+Deep reinforcement learning has emerged as a powerful framework for optimizing decision-making in complex environments [3,32]. Despite its success in controlled simulations, a significant hurdle to its deployment in real-world problems remains the generalization gap [7]. When a reinforcement learning (RL) agent interacts with a fixed or limited training environment, the learned policy inevitably overfits to that specific environment’s dynamics [7, 39]. Consequently, the policy often  
+
+> arXiv:2606.16236v1 [cs.LG] 15 Jun 2026 2E. Usaratniwart et al.
+
+fails when deployed in test environments that differ even slightly from those used during training [22, 25]. Existing research on RL generalization often relies on Domain Randomiza-tion (DR) [2,34] or Procedural Content Generation (PCG) [6,25], which typically require access to a wide variety of training environments. Other common ap-proaches, such as Data augmentation [24] or specialized exploration policies [40], bypass the need for multiple environments; however, they are primarily designed to handle visual variations or complex exploration hurdles. In this paper, we step away from visual or exploration-based challenges to focus specifically on gener-alizing across shifting system dynamics. We tackle the problem where the fun-damental mechanics of the environment change, meaning the test environment operates under a different transition probability, than the training environment. This specific focus is necessary for real-world applications where developers are prevented from observing diverse trajectories or interacting with multiple envi-ronments during training. Our approach addresses a challenging scenario where standard generalization techniques are often inapplicable: trajectories from a limited set of training en-vironments are fully observable, while trajectories from validation environments are unavailable. In this setting, the developer can optimize the policy using state-action trajectories observed in the training environments, but can only observe a single scalar performance metric (cumulative undiscounted reward) from the validation environments. Without access to the trajectories in the validation en-vironments, the policy gradients can not be computed for these environments. Therefore, the scalar signals provided by the validation environments can be utilized only to steer the training indirectly. A real-world example of this constraint is automated red teaming, where an RL policy is developed to identify network vulnerabilities [16, 21, 27]. In this ap-plication, the agent is trained in a local, transparent sandbox network (training environment) where every network hop and system log (as a state) is visible, al-lowing the developer to record and learn from full trajectories [31]. However, for security and data privacy reasons, the policy must be validated against a client’s live production replica (validation environment), a black box where the specific sequence of states and actions must remain hidden to protect sensitive infras-tructure [29]. While the developer cannot access these private trajectories, they receive a discounted return in the form of a vulnerability score. This constraint is common in decentralized or privacy-preserving settings where validation envi-ronments are available, yet distributed across different stakeholders who cannot share raw data but are willing to share performance outcomes. We hypothesize that the generalization ability can be improved by utiliz-ing a well-shaped reward function during the training, even if the training is performed on a limited number of training environments that have slightly dif-ferent transition kernels from the test environments. Reward design is essential for high-performance RL, yet it is notoriously tedious to design reasonable re-ward functions manually [20, 32]. Reward hacking, where a policy maximizes cumulative rewards through unexpected and undesired behavior, is a frequent Evolutionary Bilevel Reward Shaping for Generalization in RL 3
+
+consequence of suboptimal reward design [28]. By shaping the reward function to avoid such behaviors, the generalization ability of the trained policy can be significantly improved [19]. We conjecture that the cumulative unshaped rewards from validation environments help to shape a reward function automatically .We investigate whether optimizing the reward function in the training en-vironment can bridge this generalization gap using only scalar feedback from the validation environments. For this purpose, we propose a bilevel RL ap-proach combining proximal policy optimization (PPO) [26] for the lower-level policy optimization and covariance matrix adaptation evolution strategy (CMA-ES) [1, 14, 15] for the upper-level reward-shaping parameter optimization. The upper-level CMA-ES maximizes the validation score obtained by the policy trained for the shaped-reward function, which repeatedly requires PPO train-ing. To reduce the computational cost, we introduce parameter sharing between different lower-level PPO calls. Empirical studies on Multi-Joint dynamics with Contact (MuJoCo) problems show that our approach enables the agent to achieve a high generalization perfor-mance in the unseen test environments (i.e., the generalization performance is as high as the training performance), whereas the baseline PPO exhibits overfitting to the training environments (a high performance on the training environments, but a significantly lower performance on the test environments). Moreover, we demonstrate that in a relaxed setting where the trajectories in the validation environments are available (i.e., the validation environments can be used as training environments, and DR approach is applicable), our approach without access to the trajectories on the validation environments performs competitively to DR approach using both training and validation environments as a large set of training environments, showing the effectiveness of the proposed approach. 
+
+2 Problem Formulation 
+
+Our problem is formulated as a contextual Markov decision process (CMDP). A CMDP is defined by the tuple Mω = ( S, A, T ω , ρ ω , r, γ ), where S and A
+
+denote the state and action spaces, respectively; Tω : S × A × S → R the state transition probability distribution; ρω : S → R the initial state distribution; 
+
+r : S × A × S → R the reward function; and γ ∈ [0 , 1) the discount factor. Different from the standard Markov decision process (MDP), Tω and ρω are parameterized by a context parameter ω ∈ Ω.The agent interacts with CMDP environments as follows. In each episode, the context parameter ω ∈ Ω is selected. The way it is selected depends on situations and approaches. For a given CMDP environment Mω , the agent begins in an initial state s0 ∼ ρω and at each timestep t, executes an action at ∈ A that yields a reward rt = r(st, a t) and the next state st+1 ∼ Tω (· | st, a t). A policy π, defined as the conditional probability distribution π(a | s) = Pr( At = a | St = s),determines the agent’s action at each state. In the standard MDP setting, a RL agent typically learns an optimal policy π⋆ that maximizes the expected 4 E. Usaratniwart et al. 
+
+discounted return, 
+
+π⋆ = arg max 
+
+> π
+
+R(π; r, ω ) := Eπ, Mω
+
+" ∞X
+
+> t=0
+
+γtr(st, a t)
+
+#
+
+, (1) where the discounted return R depends on the context parameter ω and the reward function r.In this study, we address the generalization problem in a contextual MDP setting. The training agent has access to a finite set of environments, Mtrain =
+
+{M ω1 , . . . , MωNtrain }, called training environments . The agent optimizes its pol-icy on these Ntrain environments. For example, domain randomization [24, 34] trains the policy by sampling a training environment uniform-randomly from 
+
+MωNtrain at each episode. It corresponds to maximizing the discounted return averaged on MωNtrain , namely, Jtrain (π) = 1
+
+> Ntrain
+
+PNtrain  
+
+> i=1
+
+R(π; r, ω i). During the training, the agent has full access to the trajectory (s0, a 0, r 0, s 1, a 1, r 1, . . . , s T −1,aT −1, r T −1, s T ) of each episode, where T denotes the number of interaction steps performed before termination. Our objective, however, is not to maxi-mize the discounted returns on these training environments, but to maximize the cumulative undiscounted rewards in unseen test environments. Given the distribution of the context parameter, ω ∼ P test , the generalization ability is often measured by the cumulative undiscounted return expected over ω ∼ P test ,namely, Jgen (π) = Eω∼P test [P∞ 
+
+> t=0
+
+r(st, a t; ω)] . Even if ω1, . . . , ω Ntrain ∼ P test ,due to the limited number Ntrain of training environments, maximizing Jtrain 
+
+typically results in an overfitted policy, and we observe a generalization gap, 
+
+Jtrain (π) ≫ Jgen (π).This study addresses the RL generalization problem by utilizing partial ac-cess to additional validation environments, Mval = {M ωv 
+
+> 1
+
+, . . . , MωvNval 
+
+}, where 
+
+Nval ≫ Ntrain . We suppose that the agent can query the cumulative return of its policy, on each Mωvi ∈ Mval . However, we cannot observe a trajectory on these environments. Therefore, the output of the validation environments cannot be used for standard policy gradient approaches. Instead, we utilize the average of these validation scores Jval (π) = 1
+
+> Nval
+
+PNval 
+
+> i=1
+
+hPTt=0 r(st, a t; ωvi )
+
+i
+
+to optimize the 
+
+reward function for the training environment .3
+
+3 Related Work 
+
+Generalization in RL Existing approaches to generalization in RL can be cate-gorized into three classes [17], The first class includes data augmentation [24], do-main randomization (DR) [34], and unsupervised environment design (UED) [9], which mainly work by diversifying or adapting the training environment. The sec-ond class encompasses regularization, which constrains policy learning to prevent  
+
+> 3
+
+Note that both Jtrain and Jval can be seen as Monte-Carlo estimates of Jgen if Mtrain 
+
+and Mval are sampled independently from Ptest . However, because Ntrain and Nval 
+
+are limited, they can differ significantly. Evolutionary Bilevel Reward Shaping for Generalization in RL 5
+
+overfitting, and learning invariances, which guide the policy to capture features that remain consistent across environments [7,12]. The third class addresses RL-specific challenges, utilizing architectural changes, such as decoupling the policy and value functions [8, 23]. While these methods have meaningfully pushed forward the field of RL gen-eralization, most are not well-suited for our specific problem: generalizing to un-seen transition dynamics when environment access is limited. Techniques such as data augmentation [24], regularization [7], and architectural modifications [8,23] are largely designed to handle visual variation, encourage exploration, or reduce overfitting to a fixed state space. As a result, they do not directly tackle the core challenge we face, namely, differences in the underlying transition probability between training and test environments. Methods that do alter environment dynamics, such as DR and UED, align more closely with our objective but rely on assumptions that violate our con-straints. DR trains agents across a wide distribution of randomized parameters to encourage robust policies, while UED actively generates an automated cur-riculum of environments tailored to the agent’s current capabilities. However, both DR and UED critically assume that the developer has access to a fully parameterized simulator and the freedom to continuously generate, alter, and access a vast diversity of training scenarios. In contrast, our work addresses a more constrained setting: the agent learns from a limited, fixed set of training environments and must adapt to unseen dynamics relying solely on episodic per-formance feedback from validation environments, entirely without access to their trajectories or the ability to freely generate new environments. 
+
+Reward Shaping Reward shaping is traditionally employed to improve RL sample efficiency and mitigate reward hacking [11], typically by accelerating convergence while preserving the original optimal policy [10, 20]. Recently, this concept has been extended to bilevel reward optimization frameworks. For exam-ple, in reinforcement learning from human feedback (RLHF) [5], a reward model is optimized to align the agent’s behavior with human preferences. Similarly, meta-learning approaches such as meta-gradient RL [37] and bilevel intrinsic re-ward learning [30] dynamically adjust reward parameters to maximize returns or enhance exploration efficiency. However, the fundamental objectives of these existing bilevel approaches are restricted to either aligning with expert supervision or maximizing performance strictly within the training distribution. In contrast, while we adopt the method-ology of bilevel reward shaping, our objective is fundamentally different: we op-timize the reward function specifically to guide the agent away from overfitting, thereby enhancing its generalization performance across unseen environments. 
+
+4 Proposed Approach 
+
+We propose a novel approach to improve the generalization gap by solving a bilevel reward shaping problem utilizing the validation score Jval (π).6 E. Usaratniwart et al. 
+
+4.1 Reward Shaping as Bilevel RL 
+
+Our main idea to improve the generalization performance is to shape the re-ward function and use it to optimize the policy on the training environments. Let ˆrν : S × A → R be a parametric model of a reward function, where S
+
+and A denote the continuous state and action spaces of the environment, re-spectively. The reward shaping parameter vector is denoted as ν ∈ Rdν , where 
+
+dν represents the dimensionality of the feature vector space. During the train-ing, instead of using the original reward function rωi in Mωi ∈ Mtrain , the agent relies on the shaped reward function ˆrν . That is, the discounted return on Mωi is replaced with R(π; ˆ rν , ω i). The objective function for the policy training is then ˆJtrain (π; ν) = 1
+
+> Ntrain
+
+PNtrain  
+
+> i=1
+
+R(π; ˆ rν , ω i). The optimal policy 
+
+πν† = arg max π ˆJtrain (π; ν) under this objective depends on the reward-shaping parameter ν. Therefore, we optimize ν so that the optimal policy πν† under the shaped reward function ˆrν maximizes the generalization performance Jgen (π).This reward optimization problem is formulated as a bilevel RL problem. The lower-level problem optimizes the policy, which is modeled by a neural net-work πθ with a policy parameter θ ∈ Rdθ , where dθ represents the total number of optimized weights and biases in the lower-level policy network, under the shaped reward function ˆrν determined by the upper-level problem. The upper-level problem optimizes the shaped reward function ˆrν so that the optimal policy 
+
+πν† maximizes the generalization performance Jgen (π). Because Jgen (π) is un-available, we utilize Jval (π) instead. We hope that the policy that performs well on validation levels, despite that it is not trained on them, will generalize well on unseen test environments. To this end, our bilevel reward shaping problem is formulated as a bilevel RL, 4
+
+max  
+
+> ν
+
+Jval (πθ⋆(ν))s.t. θ⋆(ν) = arg max 
+
+> θ
+
+ˆJtrain (πθ ; ν). (2) 
+
+4.2 Generalization via Evolutionary Reward Shaping (GERS) 
+
+We proposed Generalization via Evolutionary Reward Shaping (GERS), which integrates the covariance matrix adaptation evolution strategy (CMA-ES) [1,14, 15] for the upper-level reward-shaping optimization and proximal policy opti-mization (PPO) [26] for the lower-level policy optimization . Algorithm 1 presents the pseudocode of the proposed approach. From the upper-level perspective, the variable to be optimized is the reward shaping pa-rameter ν, and the objective function is a map f : ν 7 → Jval (πθ⋆(ν)). Each objective function evaluation requires solving the lower-level RL problem with a shaped reward function ˆrν to approximate θ⋆(ν). For the moment, we sup-pose that f (ν) can be approximated for each ν, for which the detail is explained later. Then, all we need is to simply apply the CMA-ES to optimize ν with  
+
+> 4Note that the shaped reward is used only in the training environments.
+
+Evolutionary Bilevel Reward Shaping for Generalization in RL 7
+
+Algorithm 1 Evolutionary Reward Shaping 
+
+1: Perform Kinit steps of PPO on training environment Mtrain with original reward 
+
+r and obtain optimized policy parameter θ(1) 
+
+2: for g = 1 , . . . , G do 
+
+3: Sample candidates {ν(g) 
+
+> i
+
+}λi=1 from CMA-ES 4: for each i = 1 , . . . , λ in parallel do 
+
+5: Initialize the PPO agent with θ(g) (both Actor and Critic) 6: Perform K steps of PPO on Mtrain with ˆrν(g)
+
+> i
+
+7: Evaluate Eπθ(g)
+
+> i
+
+hPTt=0 r(st, a t; ω)
+
+i
+
+of the trained θ(g) 
+
+> i
+
+on Mval 
+
+8: Compute the validation score f (ν(g) 
+
+> i
+
+) = Jval (πθ(g)
+
+> i
+
+)
+
+9: end for 
+
+10: Update CMA-ES with {(νi, f (ν(g) 
+
+> i
+
+)}λi=1 
+
+11: i⋆ ← arg max i∈{ 1,...,λ } f (ν(g) 
+
+> i
+
+); θ(g+1) ← θ(g)
+
+> i⋆
+
+12: end for Output: Optimized policy πθ(G+1) = πθ(G)
+
+> i⋆
+
+, optimized reward ˆrν(G)
+
+> i⋆
+
+f as the objective function. The reason for choosing an evolutionary approach (CMA-ES) as the upper-level solver is twofold. First, we cannot observe trajecto-ries in the validation environments, which prevents us from applying approaches based on hyper policy gradients [13, 18, 30, 33]. On the other hand, evolution-ary approaches typically require only the objective function values, which per-fectly match our problem setting. Second, the computational bottleneck of the bilevel approach is the number of upper-level objective function evaluations. Each upper-level objective function evaluation requires solving a lower-level RL task. Though we incorporate techniques to accelerate the lower-level RL, paral-lel evaluation is almost necessary for practical use. Evolutionary approaches are parallel-evaluation-friendly. In the case of the CMA-ES that we employed in this paper, it has been reported that the number of iterations to reach the same tar-get performance decreases as the number of candidate solutions, λ, increases [1]. Therefore, by setting λ to be the maximum number of parallel objective evalu-ations, we gain speed-up in wall clock time. The upper-level objective function evaluation is costly if we perform the lower-level RL from scratch each time. To reduce the computational time for the lower-level RL, we use a pretrained policy as the initial policy for each lower-level RL run. 5 Before the CMA-ES run, we first perform the pretraining of the policy  
+
+> 5
+
+More precisely, we inherit both the Actor and Critic networks of a PPO agent. In PPO, the Actor network models the policy and the Critic network models the value function that is used to compute the policy gradient. As the Critic network is essential for the training of the Actor network, it is insufficient to maintain only the Actor network to accelerate the training. Because the Actor and Critic networks are coupled, we inherit the parameters for both networks together. Hereafter, with a slight abuse of notation, the policy parameter θ represents both the parameters for the Actor and Critic networks. 8 E. Usaratniwart et al. 
+
+in the training environments with the original reward functions. The obtained policy πθ(1) is used as the initial policy for λ PPO runs in the first iteration of the CMA-ES. Each PPO uses a shaped reward function generated by the CMA-ES that is different from the original reward function. Therefore, the optimal policy parameter for each PPO run generally deviates from θ(1) . However, if the shaped-reward functions are close to the original reward function, we expect that θ(1) 
+
+plays as a reasonable initial policy parameter because ˆJtrain is recognized as an estimate of Jtest . After parallel PPO runs, we obtain the policy πθ(1) 
+
+> i
+
+optimized for the shaped reward ˆrν(1) 
+
+> i
+
+for i = 1 , . . . , λ . They are evaluated in the validation environments, and the policy with the best validation score among λ current policies is selected as the next initial policy πθ(2) . We expect that πθ(g) tends to converge as the CMA-ES itself converges because the shaped-reward functions generated by the CMA-ES eventually become similar, and so do the optimal policies for these shaped reward functions. We remark that the reason for not using the best-so-far policy as the initial policy is to prevent from using a policy that achieved a high validation performance by chance due to the stochasticity of the environments as well as the policy. 
+
+5 Experiments 
+
+We investigate whether GERS improves the agent’s generalization ability beyond the training environments. Specifically, our goal is to elucidate whether GERS leads to better performance on unseen environments compared to the baseline. To address this question, we examine whether GERS achieves higher perfor-mance than the baseline when tested on unseen environments, which directly reflects its generalization ability. 
+
+5.1 Task Description 
+
+We evaluate GERS on four MuJoCo continuous control environments (v5) [35]: 
+
+InvertedPendulum , Hopper , HalfCheetah , and Ant . In all tasks, RL agents learn policies within continuous state and action spaces to maximize episodic return. To optimize the reward shaping parameters, we construct validation environ-ments Mval by simultaneously scaling two physical parameters, indicated in Ta-ble 3, using a coefficient multiplier c ∈ [0 .1, 3.0] . The agents are trained ex-clusively on a single training environment Mtrain = {M ω1 }, corresponding to the default setting with physical parameter multiplier c = 1 .0 applied to both parameters. Throughout all experiments, the training, and validation sets are strictly separated. Validation environments remain fixed during the upper-level optimization to ensure consistent performance estimation, and results are re-ported as average returns over multiple episodes to reduce stochastic variance. Evolutionary Bilevel Reward Shaping for Generalization in RL 9
+
+5.2 Experimental Settings Pretraining Stage: We pretrain a PPO agent for Kinit = 3 × 10 7 timesteps. The resulting policy serves two roles: a baseline for comparison, and the initial policy for GERS. 
+
+Reward Shaping Optimization (GERS Stage): The shaped reward func-tion evaluated during the lower-level reinforcement learning phase is linearly parameterized as follows: 
+
+ˆrν(t) (s, a ) = r(s, a ) + ⟨ν(t), ϕ (s, a )⟩, (3) where ϕ(s, a ) = [ s⊤, a ⊤]⊤ ∈ Rds+da is a composite feature vector constructed by concatenating the state observation s ∈ S and the action vector a ∈ A , and ⟨· , ·⟩ 
+
+denotes the standard inner product. To maintain numerical stability and ensure comparable feature scaling, each element of the feature vector is normalized (see Appendix D) before computing the weighted sum. The fitness of each CMA-ES candidate is computed as the mean episodic return over a set of 25 validation environments. The validation environments are generated by uniformly sampling physical parameters, using a coefficient multiplier c ∈ [0 .1, 3.0] . Each validation environment is evaluated for 4 episodes, resulting in a total of 100 validation episodes per candidate. The 25 physical parameter variations for validation environments are generated once and remain strictly constant throughout the entire CMA-ES process. We resample the random seeds 6 at the start of every new generation. Within any single generation, these seeds (total 100 seeds, one per levels) are held iden-tical across all candidates to ensure their fitness scores are directly comparable and to avoid overfitting to specific initial conditions. 7
+
+In this experiment, CMA-ES is executed for G = 100 iterations with initial distribution N (m, 0.12I) with m ∼ N (0, I) and population size λ = 60 . The reward parameter is constrained to [−5, 5] dν and this box constraint is handled by a mirroring [38]. We run each lower-level PPO training process for K = 81920 
+
+steps using the shaped reward for each candidate solution in parallel. We use the same training environment, Mtrain = {M ω1 } for both the pretraining stage and the CMA-ES stage. The proposed method uses CMA-ES, specifically the variant dd-CMA-ES [1], to optimize the reward shaping parameter vector ν ∈ Rdν , where dν = ds + da,with ds and da denoting the dimensions of the continuous state vector and action space vector, respectively.   
+
+> 6In MuJoCo environments, the seed specifically determines the initial state position for the episode.
+> 7If the same seed were reused across generations, the agent would repeatedly en-counter identical initial states, potentially leading to overfitting to those specific trajectories.
+
+10 E. Usaratniwart et al. Table 1: Final test performance across 5 trials per task. Values are mean ± std. Task BasePPO DR GERS InvertedPendulum 527 .29 ± 82 .72 906 .99 ± 39 .02 926 .51 ± 49 .47 
+
+Hopper 621 .95 ± 125 .20 1260 .41 ± 298 .49 1673 .58 ± 177 .01 
+
+HalfCheetah 2563 .20 ± 1462 .29 4956 .37 ± 1758 .56 3992 .22 ± 618 .89 
+
+Ant 2154 .64 ± 456 .25 2740 .69 ± 511 .07 2565 .73 ± 372 .75 
+
+Testing and Comparison: In practice, generalization is estimated using un-seen test environments Mtest = {M ωti }Ntest  
+
+> i=1
+
+, sampled from Ptest , independently from the training set Mtrain and validation set Mval . The test score is Jtest (π) = 
+
+> 1
+> Ntest
+
+PNtest 
+
+> i=1
+
+hPTt=0 r(st, a t; ω)
+
+i
+
+. We generate Ntest = 100 environments by sam-pling the multiplier c ∈ [0 .1, 3.0] , which remain unseen during training. Each method is evaluated using a deterministic policy for 4 episodes per environment (400 episodes total), and the average return is reported. The same test set and protocol are used for both our method and PPO for fair comparison. 
+
+Domain Randomization Setting: We further benchmark our proposed method against a DR baseline optimized via PPO with 5 × 10 7 timesteps 8. To construct the training set for DR, we utilize the 25 levels previously reserved for validation plus a training level Mtrain ∪Mval , totaling 26 levels. Notably, DR is incompatible with our experimental criteria, as they demand full trajectory access across all environments. In contrast, our setting strictly restricts validation environments to providing only a single scalar return (the episodic reward). 
+
+5.3 Results and Discussion Baseline PPO fails to generalize: Figure 1 illustrates the performance of the baseline PPO trained for 3 × 10 7 steps on a single training level. Although PPO achieves stable performance on the training environment, its test rewards remain consistently low across unseen levels. This indicates that PPO tends to overfit to the training environment and struggles to generalize to new unseen environments. 9 
+
+> 8
+
+We choose this specific number because from Figure 2 observed that the DR test performance becomes completely stable by this point; training it for any additional timesteps does not improve its results.  
+
+> 9
+
+Although, in principle, the PPO baseline could be trained for the same total number of timesteps as the proposed method, in practice this would be time-consuming. The empirical observation (Figure 1) shows that the PPO policy maintains a stable performance plateau at 3 × 10 7 steps, indicating near-optimal convergence under the original reward. Further training beyond this point does not yield noticeable improvement. Therefore, we consider the 3 × 10 7 step PPO a reasonable and fair baseline for comparison. Evolutionary Bilevel Reward Shaping for Generalization in RL 11 0 1 2 3Timesteps ×10 7              
+
+> 0
+> 250
+> 500
+> 750
+> 1000 Cumulative Reward
+> Train (raw) Train Test (raw) Test
+> (a) InvertedPendulum 0123Timesteps ×10 7
+> 0
+> 1000
+> 2000
+> 3000 Cumulative Reward
+> Train (raw) Train Test (raw) Test (b) Hopper 0123Timesteps ×10 7
+> 0
+> 2000
+> 4000 Cumulative Reward
+> Train (raw) Train Test (raw) Test
+> (c) HalfCheetah 0123Timesteps ×10 7
+> 0
+> 1000
+> 2000
+> 3000 Cumulative Reward
+> Train (raw) Train Test (raw) Test (d) Ant
+
+Fig. 1: Overfitting behavior of PPO trained on a single fixed environment. Training performance increases steadily, while test performance on unseen environments remains lower, indicating a clear generalization gap. 
+
+GERS Improves Generalization Performance Figure 2 compares the test performance of GERS and the baseline PPO on four MuJoCo tasks. Across all tasks, the baseline PPO (blue) improves in the early stage but later becomes unstable or stops improving on the test environments, which is consistent with overfitting to the fixed training setting. In contrast, after the CMA-ES stage starts, GERS (red) shows a clear and consistent increase in test return. In In-vertedPendulum, GERS reaches near-maximum test performance and remains stable. 10 In Hopper, HalfCheetah, and Ant, GERS exceeds the baseline and reaches higher test returns. These results suggest that the reward shaping op-timized using validation returns helps the policy learn behaviors that transfer better to unseen environments with modified physical parameters (mass, friction, or gravity) indicated in Table 3, leading to improved generalization. Table 1 presents the final test performance of PPO, DR, and GERS across four continuous control tasks over five independent trials. The results demon-strate that both DR and GERS consistently improve generalization compared  
+
+> 10
+
+For Inv. Pendulum, the CMA-ES optimization was terminated early before reaching the maximum number of generations ( T = 100 ), as CMA-ES detects stagnation criterion, when the recent best fitness fails to exceed the historical median fitness over a generation. 12 E. Usaratniwart et al. 10 5 10 6 10 7 10 8           
+
+> Timesteps
+> 250
+> 500
+> 750
+> 1000 Cumulative Reward
+> DR GERS PPO
+> (a) InvertedPendulum 10 510 610 710 8
+> Timesteps
+> 0
+> 1000
+> 2000 Cumulative Reward  DR GERS PPO (b) Hopper 10 510 610 710 8
+> Timesteps
+> 0
+> 2000
+> 4000 Cumulative Reward  DR GERS PPO
+> (c) HalfCheetah 10 510 610 710 8
+> Timesteps
+> 0
+> 1000
+> 2000
+> 3000
+> 4000 Cumulative Reward  DR GERS PPO (d) Ant
+
+Fig. 2: Test performance comparison of PPO baseline, DR, and GERS on MuJoCo tasks. Each subplot reports the mean test return on unseen environments with modified physical parameters. PPO is trained on a single fixed environment, DR uses random-ized environments with full trajectory access, and GERS relies only on scalar validation returns. GERS achieves comparable or improved generalization under restricted infor-mation access. 
+
+to the BasePPO baseline, which yields the lowest mean returns across all envi-ronments. Specifically, GERS achieves the highest mean returns on the Invert-edPendulum and Hopper tasks, while DR performs best on the more complex HalfCheetah and Ant environments. Further details and extended analysis re-garding these performance metrics are provided in the Appendix C 
+
+Domain Randomization: The results, shown in Figure 2 and Table 1, indi-cate that DR achieves mixed test performance compared to GERS, outperform-ing on HalfCheetah and Ant, but underperforming on InvertedPendulum and Hopper. The two approaches, however, differ fundamentally in how the addi-tional environments are used. In DR, the same set of environments that serve as validation levels in GERS are incorporated directly into the training set, and full state–action trajectories from these levels are used for policy optimization. In contrast, GERS treats these exact same levels as black-box validation en-vironments (no trajectories are accessed), and only scalar episodic returns are observed to guide the upper-level reward optimization. Therefore, achieving com-Evolutionary Bilevel Reward Shaping for Generalization in RL 13 
+
+parable performance demonstrates that the proposed approach attains similar robustness to DR while operating under restrictive information access. 
+
+In-Distribution and Out-Of-Distribution Generalization Performance: 
+
+To thoroughly test policy robustness, we evaluate each policy across a wide range of physical conditions on a 15 ×15 parameter grid (Figure 3), reporting the mean return per policy. For each grid environment, we scale two critical parameters (such as friction, mass, or gravity) from 0.1 up to 4.5 times their default MuJoCo values. Extending the grid beyond the maximum training value of 3.0 lets us visualize both in-distribution and out-of-distribution (OOD) performance. The policy’s OOD performance depends heavily on the number of parameters shifted. When only a single parameter exceeds the in-distribution bound ( c > 3.0) while the other remains within range, the proposed method maintains strong robust-ness and continues to achieve high returns across most tasks. However, perfor-mance drops significantly when both parameters are pushed into the extreme OOD region simultaneously. This pattern indicates that while our method suc-cessfully adapts to one extreme physical change, it struggles to generalize when forced to handle multiple extreme variations at once. 
+
+6 Conclusion 
+
+We propose GERS, a CMA-ES-based reward shaping framework that automati-cally optimizes linear reward weights to improve RL generalization from limited training environments. Across four MuJoCo tasks under varying physical pa-rameters, GERS improves generalization over standard PPO and is competitive with DR, despite far more restrictive data access: unlike DR, which requires interaction trajectories during training, GERS targets the setting where such trajectory access is severely limited. 
+
+Limitations and Future Work While GERS demonstrates strong general-ization under restricted data access, our study has four main limitations. First, our evaluation is restricted to dense-reward continuous control tasks, so it re-mains unclear how much GERS contributes when the reward signal is weak or delayed. Future work should evaluate the method on sparse-reward problems, where effective reward shaping is expected to matter most. Second, the high computational cost ( GλK ) constrained us to a small number of trials, limiting the statistical power of our comparisons. More independent trials are desired to establish the reliability of the observed improvements through proper statistical testing. Third, our results do not fully isolate the source of the performance gain. Because GERS trains many PPO policies during the evolutionary search and the best validation policy is selected, the evaluation of the effect of the reward shaping itself is not isolated from the effect of selecting the best vali-dation policy among many stochastically trained policies. An ablation study of the proposed approach with a fixed (unmodified) reward function will isolate 14 E. Usaratniwart et al. 0 1 2 3 4
+
+> gravity
+> 01234
+> pole mass
+
+PPO     
+
+> 01234
+> gravity
+> 01234
+> pole mass
+
+DR     
+
+> 01234
+> gravity
+> 01234
+> pole mass
+
+GERS 
+
+> 200 400 600 800 1000
+> Mean Reward
+
+InvertedPendulum 0 1 2 3 4
+
+> friction
+> 01234
+> torso mass
+
+PPO     
+
+> 01234
+> friction
+> 01234
+> torso mass
+
+DR     
+
+> 01234
+> friction
+> 01234
+> torso mass
+
+GERS 
+
+> 1000 2000 3000
+> Mean Reward
+
+Hopper 0 1 2 3 4
+
+> friction
+> 01234
+> torso mass
+
+PPO     
+
+> 01234
+> friction
+> 01234
+> torso mass
+
+DR     
+
+> 01234
+> friction
+> 01234
+> torso mass
+
+GERS 
+
+> 01000 2000 3000 4000
+> Mean Reward
+
+HalfCheetah 0 1 2 3 4
+
+> friction
+> 01234
+> torso mass
+
+PPO     
+
+> 01234
+> friction
+> 01234
+> torso mass
+
+DR     
+
+> 01234
+> friction
+> 01234
+> torso mass
+
+GERS 
+
+> 01000 2000 3000 4000
+> Mean Reward
+
+Ant 
+
+Fig. 3: Heatmap comparison of PPO, domain randomization (DR), and GERS across MuJoCo tasks under variations of physical parameters. Each heatmap reports the mean test return over the parameter grid. The white dashed lines demarcate the boundary between the in-distribution (in-dist) and out-of-distribution (OOD) evaluation regions. 
+
+the gains of reward shaping from the benefits of best-of-many selection. Fourth, the upper-level CMA-ES does not fully converge, as is reported in Appendix A. Future work should implement noise-aware CMA-ES variants to suppress the ranking noise that currently impedes convergence. 
+
+Acknowledgments. This study was partly funded by JSPS KAKENHI 26K02993. 
+
+Disclosure of Interests. The authors have no competing interests to declare that are relevant to the content of this article. Evolutionary Bilevel Reward Shaping for Generalization in RL 15 
+
+References 
+
+1. Akimoto, Y., Hansen, N.: Diagonal acceleration for covariance matrix adaptation evolution strategies. Evolutionary Computation 28 (3), 405–435 (2020) 2. Akkaya, I., Andrychowicz, M., Chociej, M., Litwin, M., McGrew, B., Petron, A., Paino, A., Plappert, M., Powell, G., Ribas, R., Schneider, J., Tezak, N., Tworek, J., Welinder, P., Weng, L., Yuan, Q., Zaremba, W., Zhang, L.: Solving Rubik’s cube with a robot hand. arXiv preprint arXiv:1910.07113 (2019) 3. Arulkumaran, K., Deisenroth, M.P., Brundage, M., Bharath, A.A.: Deep reinforce-ment learning: A brief survey. IEEE Signal Processing Magazine 34 (6), 26–38 (2017) 4. Bonferroni, C.: Teoria statistica delle classi e calcolo delle probabilità. Pubbli-cazioni del R. Istituto superiore di scienze economiche e commerciali di Firenze, Seeber (1936), https://books.google.co.jp/books?id=3CY-HQAACAAJ 5. Christiano, P., Leike, J., Brown, T.B., Martic, M., Legg, S., Amodei, D.: Deep re-inforcement learning from human preferences (2023), https://arxiv.org/abs/1706. 03741 6. Cobbe, K., Hesse, C., Hilton, J., Schulman, J.: Leveraging procedural generation to benchmark reinforcement learning. In: International Conference on Machine Learning. pp. 2048–2056. PMLR (2020) 7. Cobbe, K., Klimov, O., Hesse, C., Kim, T., Schulman, J.: Quantifying generaliza-tion in reinforcement learning. In: International Conference on Machine Learning. pp. 1282–1289. PMLR (2019) 8. Cobbe, K.W., Hilton, J., Klimov, O., Schulman, J.: Phasic policy gradient. In: International Conference on Machine Learning. pp. 2020–2027. PMLR (2021) 9. Dennis, M., Jaques, N., Vinitsky, E., Bayen, A., Russell, S., Critch, A., Levine, S.: Emergent complexity and zero-shot transfer via unsupervised environment design (2021), https://arxiv.org/abs/2012.02096 10. Devidze, R., Kamalaruban, P., Singla, A.: Exploration-guided reward shaping for reinforcement learning under sparse rewards. Advances in Neural Information Pro-cessing Systems 35 , 5829–5842 (2022) 11. Fu, J., Zhao, X., Yao, C., Wang, H., Han, Q., Xiao, Y.: Reward shaping to mitigate reward hacking in RLHF. In: ICML 2025 Workshop on Reliable and Responsible Foundation Models (2025) 12. Ghosh, D., Rahme, J., Kumar, A., Zhang, A., Adams, R.P., Levine, S.: Why gener-alization in RL is difficult: Epistemic POMDPs and implicit partial observability. Advances in Neural Information Processing Systems 34 , 25502–25515 (2021) 13. Gupta, D., Chandak, Y., Jordan, S., Thomas, P.S., C da Silva, B.: Behavior align-ment via reward function optimization. Advances in Neural Information Processing Systems 36 , 52759–52791 (2023) 14. Hansen, N., Müller, S.D., Koumoutsakos, P.: Reducing the time complexity of the derandomized evolution strategy with covariance matrix adaptation (CMA-ES). Evolutionary Computation 11 (1), 1–18 (2003) 15. Hansen, N., Ostermeier, A.: Completely derandomized self-adaptation in evolution strategies. Evolutionary Computation 9(2), 159–195 (2001) 16. Hasegawa, K., Hidano, S., Fukushima, K.: AutoRed: Automating red team assess-ment via strategic thinking using reinforcement learning. In: Proceedings of the Fourteenth ACM Conference on Data and Application Security and Privacy. pp. 325–336 (2024) 16 E. Usaratniwart et al. 17. Kirk, R., Zhang, A., Grefenstette, E., Rocktäschel, T.: A survey of zero-shot gener-alisation in deep reinforcement learning. Journal of Artificial Intelligence Research 
+
+76 , 201–264 (2023) 18. Kudo, M., Tanabe, T., Wachi, A., Akimoto, Y.: Sample-efficient hypergradient estimation for decentralized bi-level reinforcement learning (2026), https://arxiv. org/abs/2603.14867 19. Langosco, L.L.D., Koch, J., Sharkey, L.D., Pfau, J., Krueger, D.: Goal misgener-alization in deep reinforcement learning. In: International Conference on Machine Learning. pp. 12004–12019. PMLR (2022) 20. Ng, A.Y., Harada, D., Russell, S.: Policy invariance under reward transformations: Theory and application to reward shaping. In: International Conference on Machine Learning. pp. 278–287. PMLR (1999) 21. Nguyen, T.T., Reddi, V.J.: Deep reinforcement learning for cyber security. IEEE Transactions on Neural Networks and Learning Systems 34 (8), 3779–3795 (2023) 22. Packer, C., Gao, K., Kos, J., Krähenbühl, P., Koltun, V., Song, D.: Assessing generalization in deep reinforcement learning (2019), https://arxiv.org/abs/1810. 12282 23. Raileanu, R., Fergus, R.: Decoupling value and policy for generalization in rein-forcement learning. In: International Conference on Machine Learning. pp. 8787– 8798. PMLR (2021) 24. Raileanu, R., Goldstein, M., Yarats, D., Kostrikov, I., Fergus, R.: Automatic data augmentation for generalization in reinforcement learning. Advances in Neural In-formation Processing Systems 34 , 5402–5415 (2021) 25. Risi, S., Togelius, J.: Increasing generality in machine learning through procedural content generation. Nature Machine Intelligence 2(8), 428–436 (2020) 26. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O.: Proximal policy optimization algorithms (2017), https://arxiv.org/abs/1707.06347 27. Schwartz, J., Kurniawati, H.: Autonomous penetration testing using reinforcement learning (2019), https://arxiv.org/abs/1905.05965 28. Skalse, J., Howe, N., Krasheninnikov, D., Krueger, D.: Defining and characterizing reward gaming. Advances in Neural Information Processing Systems 35 , 9460–9471 (2022) 29. Slagell, A., Yurcik, W.: Sharing computer network logs for security and privacy: A motivation for new methodologies of anonymization. In: Workshop of the 1st International Conference on Security and Privacy for Emerging Areas in Commu-nication Networks, 2005. pp. 80–89. IEEE (2005) 30. Stadie, B., Zhang, L., Ba, J.: Learning intrinsic rewards as a bi-level optimiza-tion problem. In: Proceedings of the 36th Conference on Uncertainty in Artificial Intelligence (UAI). pp. 111–120. PMLR (2020) 31. Standen, M., Lucas, M., Bowman, D., Richer, T.J., Kim, J., Marriott, D.: Cyborg: A gym for the development of autonomous cyber agents (2021), https://arxiv.org/ abs/2108.09118 32. Sutton, R.S., Barto, A.G.: Reinforcement learning: An introduction. MIT Press, second edn. (2018) 33. Thoma, V., Pásztor, B., Krause, A., Ramponi, G., Hu, Y.: Contextual bilevel reinforcement learning for incentive alignment. Advances in Neural Information Processing Systems 37 , 127369–127435 (2024) 34. Tobin, J., Fong, R., Ray, A., Schneider, J., Zaremba, W., Abbeel, P.: Domain randomization for transferring deep neural networks from simulation to the real world. In: 2017 IEEE/RSJ International Conference on Intelligent Robots and Systems. pp. 23–30. IEEE (2017) Evolutionary Bilevel Reward Shaping for Generalization in RL 17 35. Towers, M., Kwiatkowski, A., Terry, J., Balis, J.U., Cola, G.D., Deleu, T., Goulão, M., Kallinteris, A., Krimmel, M., KG, A., Perez-Vicente, R., Pierré, A., Schul-hoff, S., Tai, J.J., Tan, H., Younis, O.G.: Gymnasium: A standard interface for reinforcement learning environments (2025), https://arxiv.org/abs/2407.17032 36. Wilcoxon, F.: Individual comparisons by ranking methods. Biometrics Bulletin 
+
+1(6), 80–83 (1945), http://www.jstor.org/stable/3001968 37. Xu, Z., van Hasselt, H.P., Silver, D.: Meta-gradient reinforcement learning. Ad-vances in Neural Information Processing Systems 31 (2018) 38. Yamaguchi, T., Akimoto, Y.: A note on the CMA-ES for functions with periodic variables. In: Proceedings of the Genetic and Evolutionary Computation Confer-ence Companion. p. 227–228. GECCO ’18, Association for Computing Machinery, New York, NY, USA (2018) 39. Zhang, C., Vinyals, O., Munos, R., Bengio, S.: A study on overfitting in deep reinforcement learning (2018), https://arxiv.org/abs/1804.06893 40. Zisselman, E., Lavie, I., Soudry, D., Tamar, A.: Explore to generalize in zero-shot RL. Advances in Neural Information Processing Systems 36 , 63174–63196 (2023) 18 E. Usaratniwart et al. 0 10 20 30 40 50 Generation 
+
+> 880
+> 900
+> 920
+> 940
+> 960
+> 980
+> 1000 Maximized Reward
+
+Best Fitness per Generation      
+
+> 010 20 30 40 50 Generation
+> 10 −2
+> 10 −1
+> 10 0
+> Standard Deviation
+
+Coordinate-wise Std (sigma * D)      
+
+> 010 20 30 40 50 Generation
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1Parameter Value
+
+Mean Vector (xmean)      
+
+> 010 20 30 40 50 Generation
+> 10 −1
+> 10 0
+> Eigenvalue
+
+Eigenspectrum of C1/2
+
+(a) InvertedPendulum 0 20 40 60 80 100 Generation 
+
+> 1500
+> 1600
+> 1700
+> 1800
+> 1900
+> 2000
+> 2100
+> 2200 Maximized Reward
+
+Best Fitness per Generation      
+
+> 020 40 60 80 100 Generation
+> 10 −1
+> 10 0
+> Standard Deviation
+
+Coordinate-wise Std (sigma * D)      
+
+> 020 40 60 80 100 Generation
+> −1.5
+> −1.0
+> −0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5Parameter Value
+
+Mean Vector (xmean)      
+
+> 020 40 60 80 100 Generation
+> 10 0
+> Eigenvalue
+
+Eigenspectrum of C1/2 (b) Hopper 0 20 40 60 80 100 Generation 
+
+> 3550
+> 3600
+> 3650
+> 3700
+> 3750
+> 3800
+> 3850
+> 3900
+> 3950 Maximized Reward
+
+Best Fitness per Generation      
+
+> 020 40 60 80 100 Generation
+> 10 −1
+> Standard Deviation
+
+Coordinate-wise Std (sigma * D)      
+
+> 020 40 60 80 100 Generation
+> −1.50
+> −1.25
+> −1.00
+> −0.75
+> −0.50
+> −0.25
+> 0.00
+> 0.25
+> 0.50 Parameter Value
+
+Mean Vector (xmean)            
+
+> 020 40 60 80 100 Generation
+> 10 0
+> 4×10 −1
+> 6×10 −1
+> 2×10 0
+> Eigenvalue
+
+Eigenspectrum of C1/2
+
+(c) HalfCheetah 0 20 40 60 80 100 Generation 
+
+> 2000
+> 2100
+> 2200
+> 2300
+> 2400
+> 2500
+> 2600
+> 2700 Maximized Reward
+
+Best Fitness per Generation      
+
+> 020 40 60 80 100 Generation
+> 10 −1
+> Standard Deviation
+
+Coordinate-wise Std (sigma * D)      
+
+> 020 40 60 80 100 Generation
+> −1.0
+> −0.5
+> 0.0
+> 0.5
+> 1.0Parameter Value
+
+Mean Vector (xmean)        
+
+> 020 40 60 80 100 Generation
+> 10 0
+> 6×10 −1
+> Eigenvalue
+
+Eigenspectrum of C1/2 (d) Ant 
+
+Fig. 4: Bilevel optimization with dd-CMA-ES. Within dd-CMA-ES, the covariance ma-trix Σ of the sampling distribution is decomposed as Σ = σ2DCD , where σ is the global step size, C is the correlation matrix, and D is a diagonal scaling matrix. When scaled by σ, the diagonal entries of D represent the coordinate-wise standard deviations of the sampling distribution. 
+
+A Convergence Issue of CMA-ES 
+
+Figure 4 shows the internal behavior of the CMA-ES reward-shaping process. The validation fitness f (ν) gradually rises in early generations before plateauing, indicating that CMA-ES finds a good region of reward parameters during train-ing. However, the sampling distribution fails to converge, as indicated by large and non-decreasing coordinate-wise standard deviations, and anisotropy persist-ing in the covariance matrix. We identify a primary factor for this convergence failure: insufficient timesteps for lower-level convergence . Due to computational constraints, estimating the optimal policy parameters θ⋆(ν(i)) by running PPO for only a limited number of timesteps ( K) typically yields sub-optimal policies. Evaluating these partially trained policies produces inaccurate fitness scores, which in turn generates a false ranking of the candidate reward parameters. Be-cause CMA-ES relies purely on this rank order to update its search distribution, these false rankings act as severe evaluation noise. CMA-ES is highly sensitive Evolutionary Bilevel Reward Shaping for Generalization in RL 19 Table 2: Wilcoxon rank-sum test comparing GERS against PPO and DR using the 5 final trial return for each task. Task p vs PPO p vs DR InvertedPendulum 0.0079 0.5476       
+
+> Hopper 0.0079 0.0159
+> HalfCheetah 0.1508 0.5476
+> Ant 0.0952 1.0000
+
+to such ranking noise, which misguides the covariance matrix adaptation and impedes upper-level convergence. However, resolving this by drastically increas-ing K is undesirable, as it introduces the competing risk of overfitting the policy to the training environments and worsening generalization. 
+
+B Train vs Validation vs Test Behavior 
+
+We observe that the improvement on the test environments closely follows the trend of the CMA-ES validation fitness curve Figure 5. After CMA-ES begins to increase the validation score, the test performance also increases in a similar way. Importantly, there is no sign of divergence between validation and test performance. This consistency indicates that the policy are not overfitting to the validation set, but instead, capture the signals that transfer well to unseen environments by the shaped reward that helps guide the policy toward behaviors that remain effective across different unseen environments. 
+
+C Statistical Analysis 
+
+Tables 1 and 2 summarize the final test performances and statistical significance across five trials. While GERS achieves higher mean returns than BasePPO across all evaluated tasks, Wilcoxon rank-sum tests [36] indicate that these im-provements are not statistically significant when adjusting for multiple compar-isons. Specifically, applying a Bonferroni-correction [4], significance threshold is 
+
+α = 0 .05 /8 = 0 .00625 . The lowest p-values for GERS versus PPO observed on the InvertedPendulum and Hopper tasks ( p = 0 .0079 ) still exceed the required alpha level. Similarly, the apparent advantage of GERS over DR on the Hopper task ( p = 0 .0159 ) is not considered significant under this stricter threshold. Fur-thermore, while DR yields higher raw mean returns than GERS on HalfCheetah and Ant, comparisons between GERS and DR reveal no significant difference (p = 0 .5476 and p = 1 .0000 , respectively). Ultimately, after correcting for multi-ple comparisons, the performance variations between the methods do not reach statistical significance, largely due to the limited number of trials constraining the statistical test results. 20 E. Usaratniwart et al. InvertedPendulum Hopper 0 10 20 30 40 Generation      
+
+> 800
+> 850
+> 900
+> 950
+> 1000 Mean Reward
+> Train Val Test 020 40 60 80 100 Generation
+> 2000
+> 3000 Mean Reward
+> Train Val Test
+
+HalfCheetah Ant 0 20 40 60 80 100 Generation      
+
+> 3500
+> 4000
+> 4500
+> 5000 Mean Reward
+> Train Val Test 020 40 60 80 100 Generation
+> 2000
+> 3000
+> 4000 Mean Reward
+> Train Val Test
+
+Fig. 5: GERS Train vs. Validation vs. Test Score. 
+
+D Continuous Space Normalization 
+
+The environment features a continuous observation space with potentially un-bounded value ranges in each dimension.To ensure numerical stability and facil-itate efficient learning, we apply a dimension-wise hybrid normalization strategy to the raw continuous state vector x ∈ Rn to yield the normalized state vector 
+
+ˆx ∈ Rn.
+
+D.1 Unbounded Continuous State Space 
+
+For unbounded continuous state variables, we apply standard Z-score normal-ization.The parameters μi and σ2 
+
+> i
+
+represent the empirical mean and variance of the i-th dimension, respectively. Unlike standard online normalization where these values are continually updated, our approach utilizes pre-computed run-ning statistics obtained from a pretrained PPO model. To ensure consistent state representations, μi and σ2 
+
+> i
+
+are frozen throughout subsequent execution and gen-erations. To maintain numerical stability in cases where the pre-computed vari-ance is near zero, a small constant ϵ = 10 −8 is added to the denominator. The normalized value is computed as: 
+
+ˆxi = xi − μi
+
+pσ2 
+
+> i
+
++ ϵ (4) Evolutionary Bilevel Reward Shaping for Generalization in RL 21 Table 3: Environment parameter variation ranges. Environment Altered Parameters Range InvertedPendulum Torso mass, Gravity [0 .1, 3.0]          
+
+> Hopper Torso mass, Floor friction [0 .1,3.0]
+> HalfCheetah Torso mass, Floor friction [0 .1,3.0]
+> Ant Torso mass, Floor friction [0 .1,3.0]
+
+D.2 Bounded Continuous Action Space 
+
+For environments parameterized with continuous action spaces, we apply a sys-tematic clipping and normalization procedure. This ensures that the actions gen-erated by the policy or environment mechanics are strictly bounded and linearly scaled to the standardized interval [−1, 1] .Let a ∈ Rda denote the raw action vector. Let Haj and Laj represent the strict upper and lower bounds of the j-th action dimension, respectively. To prevent numerical instability (division by zero) in degenerate dimensions where the upper and lower bounds are identical, we define an adjusted range denominator Daj :
+
+Daj =
+
+(
+
+1.0, if Haj − Laj = 0 
+
+Haj − Laj , otherwise (5) The normalization procedure first explicitly clips the raw action to respect the environmental bounds, and then applies Min-Max scaling. The fully normalized action ˆaj ∈ [−1, 1] for the j-th dimension is computed as: 
+
+ˆaj = 2 .0 clip (aj , L aj , H aj ) − Laj
+
+Daj
+
+!
+
+− 1.0 (6) where clip (z, min , max) bounds the continuous value z strictly within the speci-fied limits. 
+
+E Reproducibility Details 
+
+To ensure the complete reproducibility of our experiments, we detail the spe-cific network architectures and algorithmic hyperparameters utilized across all components of our framework, which are summarized in Tables 4 to 6 22 E. Usaratniwart et al. Table 4: Detailed Actor-Critic Network Architecture and Layer Specifications 
+
+Component Layer Input Dim Output Dim Activation 
+
+Shared Feature Extractor Linear Layer 1 dobs 64 ReLU Linear Layer 2 64 64 ReLU Linear Layer 3(Feature Dim) 64 64 ReLU Actor Head ( πθ )Hidden Layer 1 64 64 ReLU Hidden Layer 2 64 64 ReLU Output (Action Distribution) 64 dact Linear Critic Head ( Vϕ)Hidden Layer 1 64 64 ReLU Hidden Layer 2 64 64 ReLU Output (State Value V )64 1 Linear Table 5: Hyperparameters used for CMA-ES reward optimization. Hyperparameter Value Generation 100 
+
+m (CMA-ES initial mean) 0
+
+σ (CMA-ES initial step size) 0.1 
+
+λ (CMA-ES population size) 60 Lower bound −5.0
+
+Upper bound 5.0
+
+Table 6: PPO hyperparameters used for policy optimization. Hyperparameter Value Timestep 81,920 Learning rate 1 × 10 −4
+
+Number of steps ( nsteps ) 2048 Batch size 256 Number of epochs ( nepochs ) 10 Discount factor ( γ) 0.99 GAE parameter ( λ) 0.95 Clipping range 0.20 Entropy coefficient 0.00 Value function coefficient 0.50 Maximum gradient norm 0.50

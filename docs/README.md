@@ -6,46 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-12 ~ 2026-06-21
-- 运行时间：2026-06-21 07:55:48 UTC
+- 最新运行日期：2026-06-22
+- 运行时间：2026-06-22 23:51:26 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：4
-- 速读区：4
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今日聚焦8篇论文，重点精读了《ChatPlanner》和《OmniPlan》两篇高分（8.0/10）成果，分别攻克个性化公交路线与时效性网络优化难题。  
-最值得关注的方向：基于大语言模型的个性化公共交通规划（ChatPlanner）和自适应近最优网络规划框架（OmniPlan）。  
-建议普通读者优先精读这两篇8分论文，并速读《Congestion-Aware Robot Tour Planning》以拓展拥堵感知视角。
-- 详情：[/20260612-20260621/README](/20260612-20260621/README)
+今日速读3篇论文，均获6.0分，涵盖强化学习泛化、POMDP在线规划与多目标多智能体优化。  
+最值得关注的是《Evolutionary Bilevel Reward Shaping》中对奖励塑形的泛化改进，以及《VOiLA》利用扩散模型处理部分可观测环境的规划方法。  
+建议普通读者优先了解进化双层奖励塑形思路，对理解强化学习泛化能力提升有直接帮助。
+- 详情：[/202606/22/README](/202606/22/README)
 
 ### 精读区论文标签
-1. [ChatPlanner: A Large Language Model Framework for Personalized Public Transit Routing](/20260612-20260621/2606.15315v1-chatplanner-a-large-language-model-framework-for-personalized-public-transit-routing)  
-   标签：评分：8.0/10、query:path-preproc
-   evidence：LLM框架用于个性化路由，涉及预处理配送点信息
-2. [OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization](/20260612-20260621/2606.18105v1-omniplan-an-adaptive-framework-for-timely-and-near-optimal-network-planning-optimization)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：用于交通网络规划优化的深度强化学习框架
-3. [OmniPlan: An Adaptive Framework for Timely and Near-Optimal Network Planning Optimization](/20260612-20260621/2606.18105v2-omniplan-an-adaptive-framework-for-timely-and-near-optimal-network-planning-optimization)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：深度强化学习用于交通网络规划优化
-4. [N(CO)$^2$: Neural Combinatorial Optimization with Chance Constraints to Solve Stochastic Orienteering](/20260612-20260621/2606.18514v1-nco2-neural-combinatorial-optimization-with-chance-constraints-to-solve-stochastic-orienteering)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：使用强化学习求解随机定向问题，类似于车辆路径问题
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Congestion-Aware Robot Tour Planning in Crowded Environments](/20260612-20260621/2606.19031v1-congestion-aware-robot-tour-planning-in-crowded-environments)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：拥挤环境中配送机器人路径规划的概率性方法
-2. [Multi-Stage Stochastic Optimization and Reinforcement Learning Approaches for Dynamic Inspection of Infrastructure Systems](/20260612-20260621/2606.15840v1-multi-stage-stochastic-optimization-and-reinforcement-learning-approaches-for-dynamic-inspection-of-infrastructure-systems)  
+1. [Evolutionary Bilevel Reward Shaping for Generalization in Reinforcement Learning](/202606/22/2606.16236v1-evolutionary-bilevel-reward-shaping-for-generalization-in-reinforcement-learning)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：强化学习用于动态检测中的车辆路径调度
-3. [Evaluating Learned Spatial Indexes](/20260612-20260621/2606.19034v1-evaluating-learned-spatial-indexes)  
-   标签：评分：6.0/10、query:path-preproc
-   evidence：学习型空间索引作为预处理点数据的AI技术
-4. [AGDN: Learning to Solve Traveling Salesman Problem with Anisotropic Graph Diffusion Network](/20260612-20260621/2606.19185v1-agdn-learning-to-solve-traveling-salesman-problem-with-anisotropic-graph-diffusion-network)  
+   evidence：适用于车辆路径问题的强化学习泛化双层奖励塑造
+2. [VOiLA: Vectorized Online Planning with Learned Diffusion Model for POMDP Agents](/202606/22/2606.19729v1-voila-vectorized-online-planning-with-learned-diffusion-model-for-pomdp-agents)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：使用扩散模型进行在线规划，可应用于机器人路径规划
+3. [A Multi-Agent system for Multi-Objective constrained optimization](/202606/22/2606.20236v1-a-multi-agent-system-for-multi-objective-constrained-optimization)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：使用图神经网络学习求解旅行商问题，可应用于末端配送
+   evidence：多智能体强化学习用于多目标约束优化，可应用于物流路径规划
 
 
 <div class="dpr-home-promo-card">
