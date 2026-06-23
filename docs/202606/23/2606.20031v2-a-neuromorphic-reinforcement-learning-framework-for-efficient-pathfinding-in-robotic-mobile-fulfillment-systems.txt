@@ -1,0 +1,295 @@
+Title: A Neuromorphic Reinforcement Learning Framework for Efficient Pathfinding in Robotic Mobile Fulfillment Systems
+
+URL Source: https://arxiv.org/pdf/2606.20031v2
+
+Published Time: Tue, 23 Jun 2026 02:35:00 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# A Neuromorphic Reinforcement Learning Framework for Efficient Pathfinding in Robotic Mobile Fulfillment Systems 
+
+Junzhe Xu 1,2, Zecui Zeng 2,∗
+
+, Lusong Li 2, Yuetong Fang 1,†
+
+, Renjing Xu 1,†
+
+Abstract — Dynamic environmental changes, confined workspaces, and stringent real-time constraints make pathfinding in Robotic Mobile Fulfillment Systems (RMFS) a challenging problem for conventional search- and rule-based methods, which typically suffer from high computational complexity and long decision latency. While reinforcement learning (RL) has emerged as a powerful alternative, deploying learned policies with extreme energy efficiency on resource-constrained hardware remains an open challenge. We present SDQN-RMFS, an end-to-end framework that achieves high-fidelity deployment of an RL-trained policy from a full-precision artificial neural network (ANN) through to a neuromorphic chip. By computing only when triggered by sparse events, this framework unlocks ultra-low-power RMFS pathfinding. Our full-stack pipeline operates as follows: an ANN policy is first efficiently trained via a collision-allowing strategy to densify informative trajectories, and then converted into a spiking neural network (SNN) via a hard-label knowledge distillation approach. This effectively addresses the output distribution mismatch, preserving policy capability across the ANN-to-SNN pipeline while substantially reducing inference latency. Hardware experiments demonstrate up to 11,281 × energy savings and a nearly two-fold reduction in latency compared to a high-performance GPU baseline, while maintaining decision quality on par with the original trained policy. These results establish physical neuromorphic inference as a practical and energy-sustainable pathway for large-scale RMFS operations. 
+
+I. I NTRODUCTION 
+
+Robotic Mobile Fulfillment Systems (RMFSs) have trans-formed modern warehouse logistics by deploying fleets of Automated Guided Vehicles (AGVs) to autonomously trans-port inventory pods to picking stations on demand, dra-matically reducing reliance on manual labor and improving order throughput [1]. Large-scale RMFSs involve hundreds to thousands of AGVs operating simultaneously in shared and resource-constrained spaces, making efficient and safe autonomous navigation a critical operational bottleneck [2], [3]. AGVs must continuously plan collision-free routes through narrow passages and dynamically changing obsta-cles (including other moving AGVs) under strict real-time latency requirements. Classical graph search methods such as Dijkstra [4] and A* [5] are fundamentally ill-suited to this setting: designed for static, single-agent environments, they require complete replanning upon any state change, incurring     
+
+> This work was supported by the National Key Research and Development Program of China (No. 2024YFE0211000).
+> 1The Hong Kong University of Science and Technology (Guangzhou), Guangzhou, China.
+> 2JD Explore Academy, Beijing, China.
+> †Corresponding authors.
+> ∗Project Leader.
+
+prohibitive computational overhead as the number of agents and environment complexity grow. Extensions to the multi-agent domain [6], [7] partially address collision avoidance but retain worst-case exponential complexity with respect to agent count, rendering them computationally prohibitive for highly dynamic, large-scale RMFS deployments. Researchers have increasingly incorporated reinforcement learning (RL) into AGV pathfinding as a principled alterna-tive to classical search methods [8]. By enabling agents to it-eratively refine their decision policies through environmental interaction, RL naturally accommodates the dynamic, rule-free nature of warehouse navigation [9]. Recent advances in deep reinforcement learning (DRL) have further extended its applicability, achieving notable success in multi-agent settings [10], [3], [11]. Nevertheless, DRL inference relies on synchronous, dense floating-point operations. This remains computationally demanding and energy-intensive, fundamen-tally limiting its viability in mobile AGVs operating under strict size, weight, and power constraints at the edge [12], [13]. Spiking neural networks (SNNs) offer a compelling so-lution to this efficiency bottleneck by emulating the event-driven spike transmission mechanisms of biological neurons [14]. When deployed on neuromorphic hardware, SNNs perform computation only upon the arrival of sparse asyn-chronous spikes, yielding orders-of-magnitude reductions in energy consumption compared to conventional ANN in-ference on GPUs [15]. However, realizing this efficiency advantage within an RL framework remains non-trivial. The majority of existing RL-SNN studies operate entirely in simulation, stopping short of actual neuromorphic chip deployment and thus failing to substantiate practical energy savings [16], [12], [13], [17]. Moreover, conventional ANN-to-SNN conversion methods are designed for supervised clas-sification tasks with sparse one-hot label distributions, and do not generalize well to the dense, continuous action-value distributions that characterize RL policies. This mismatch introduces non-trivial accuracy degradation upon conversion. Building on these insights, we propose SDQN-RMFS, a framework that systematically addresses each identified challenge along the full pipeline from RL policy training to real neuromorphic chip deployment for multi-AGV pathfind-ing in RMFSs. Rather than treating training, conversion, and deployment as independent sub-problems, SDQN-RMFS establishes a unified, end-to-end pathway that rigorously preserves policy fidelity at every stage while realizing the substantial energy advantages that neuromorphic hardware uniquely affords. The main contributions of this work are:  
+
+> arXiv:2606.20031v2 [cs.RO] 22 Jun 2026 •
+
+We introduce SDQN-RMFS, a framework designed for RL-based multi-agent pathfinding in warehouse envi-ronments. To accelerate policy convergence, we devise a robust DQN architecture enabled by a collision-allowing training strategy.  
+
+> •
+
+We propose a hard-label knowledge distillation scheme for ANN-to-SNN conversion. This method aligns the continuous action-value distribution of RL with the discrete nature of SNNs, preserving high-fidelity deci-sion capability while substantially reducing inference latency.  
+
+> •
+
+We perform offline physical deployment of the con-verted SNN directly onto the SPECK2E [18] neuromor-phic chip. Comprehensive hardware evaluations confirm up to 11,281 × energy savings and reduced latency by approximately half relative to an NVIDIA RTX 4090 GPU baseline, substantiating the edge applicability of the framework. II. R ELATED WORK 
+
+A. Pathfinding in RMFSs 
+
+Traditional AGV pathfinding in Robotic Mobile Fulfill-ment Systems (RMFSs) primarily relies on search-based or rule-based algorithms. For instance, A*-based methods and hybrid heuristic strategies have been widely adopted to achieve collision-free navigation and concurrent task alloca-tion [6], [7]. While effective in controlled scenarios, these traditional algorithms often struggle with computational bot-tlenecks and scalability in highly dynamic and complex environments. Consequently, recent literature has increas-ingly shifted towards learning-based approaches. Distributed reinforcement learning, particularly when augmented with imitation learning or heuristic guidance like A*, has demon-strated superior adaptability and accelerated training speeds [2], [11]. Building upon this trajectory, our work leverages the robust decision-making capabilities of RL for complex RMFS dynamics, while further seeking breakthroughs in computational and energy efficiency. 
+
+B. RL with SNN 
+
+The deployment of deep RL in real-world robotic sys-tems is often constrained by significant energy consumption. SNNs have emerged as a biologically plausible and energy-efficient alternative. Pioneering studies have successfully integrated SNNs with RL frameworks, proving their superior robustness in discrete tasks like Atari games [16]. Subsequent research expanded this to continuous control and mapless navigation by developing hybrid spiking actor-critic archi-tectures and optimizing ANN-to-SNN conversion techniques [12], [19]. These advances demonstrate the feasibility and energy-saving potential of SNN-based RL. However, a crit-ical gap remains: existing RL-SNN works remain confined to simulation without physical deployment on neuromorphic hardware, leaving the promised energy efficiency gains em-pirically unsubstantiated. 
+
+C. ANN-to-SNN Conversion 
+
+To obtain deep SNNs, ANN-to-SNN conversion is cur-rently the mainstream approach as it effectively circum-vents the non-differentiable optimization challenges inherent in spiking dynamics. Extensive efforts have focused on minimizing conversion loss and inference latency through techniques such as threshold balancing [20], Rate Norm Layers [21], advanced quantization functions [22], and layer-wise parameter calibration [23]. Despite these significant improvements, a fundamental limitation persists: these op-timization techniques are predominantly tailored for super-vised learning tasks (e.g., image classification), which target sparse, one-hot probability distributions. In stark contrast, RL intrinsically relies on precise continuous value estimation and dense action probability distributions. Directly applying existing conversion methods to RL introduces severe discrete quantization errors at low time-steps, inevitably leading to policy degradation. Addressing this exact mismatch between the discrete spike-based representations of SNNs and the continuous action-value inherent to RL policies requirements constitutes the central technical challenge motivating the present work. III. P RELIMINARY 
+
+A. Robotic Mobile Fulfillment Systems 
+
+In a typical RMFS environment (Figure 1a), AGVs ex-ecute a three-stage transport cycle: navigating unloaded to a storage area to load a pod, transporting the loaded pod to a picking station, and finally returning it to its original location before reverting to an unloaded state. Throughout this process, AGVs must strictly adhere to boundary con-straints and collision avoidance regarding both storage units and other vehicles; moreover, a key operational advantage allows unloaded AGVs to traverse beneath storage pods to optimize pathing. Figure 1a offers a detailed representation of the optimal routes and operational states of the AGVs during these three stages. 
+
+B. Spiking Neural Networks and IF Model 
+
+Unlike traditional ANNs that communicate via continuous values, SNNs process information using discrete binary spikes, closely mimicking biological neural mechanisms. This event-driven nature allows SNNs to achieve remarkable energy efficiency when deployed on neuromorphic hardware. To circumvent the Backpropagation Through Time (BPTT) overhead, we adopt the ANN-to-SNN conversion method. Similar to prior works, we utilize the integrate-and-fire (IF) spiking neuron model [19], [24]. For an SNN with L
+
+layers, the membrane potential vl (t) updates via a subtracting mechanism: 
+
+vl (t) = vl (t − 1) + zl (t) −Vth θ l (t) (1) where zl (t) = W l θ l−1(t) + bl is the input current, Vth is the firing threshold (typically set to 1), and θ l (t) represents the output spike generated via the Heaviside step function when the potential exceeds the threshold. Anticipated route  for AGV Storage place Picking station Unloaded AGV    
+
+> Loaded AGV
+> Current position Last position Target position Flag used to indicate loading status Current positions of other AGVs
+> (a) (b) Fig. 1. (a) Sketch map of RMFS, which includes several AGVs with or without loading, storage places, and picking stations. The dashed arrows represent the anticipated routes for both loaded and unloaded AGVs as they navigate the warehouse. (b) The state input for DQN, which is represented by a set of maps that include the AGV’s current position, last position, target position, loading status, and the current positions of other AGVs.
+
+IV. M ETHOD 
+
+A. Overview 
+
+We outline the workflow of the proposed SDQN-RMFS framework, as depicted in Figure 2. The pipeline consists of three primary stages. First, a high-performance ANN agent is trained via a fundamentally enhanced DQN through continuous interactions with the RMFS environment. This phase also facilitates the collection of comprehensive state-action trajectories. Second, utilizing the collected state-action trajectories, we apply a robust ANN-to-SNN conversion incorporating parameter scaling and knowledge distillation. Finally, the resulting SNN agent is deployed onto neuro-morphic hardware, achieving highly efficient and energy-conserving pathfinding operations. To strengthen training stability, we incorporate a target net-work alongside a prioritized experience replay mechanism, and adopt the Double DQN (DDQN) formulation to decouple action selection from action evaluation [25]. For brevity, this enhanced agent is referred to simply as ’DQN’ throughout the remainder of this paper. 
+
+B. Problem Formulation 
+
+We formulate this RMFS pathfinding task as a Markov Decision Process (MDP). The agent observes a state s =
+
+{pos c, pos l , pos t , loaded , pos o}, where pos c, pos l , and pos t
+
+denote the current, previous, and target positions of the AGV, respectively; loaded indicates the operational status; and 
+
+pos o tracks the positions of other AGVs. The action space 
+
+|a| = 5 consists of four cardinal movements and a stationary action (reducing to |a| = 4 in single-agent scenarios). Despite the theoretical potential of combining DQN with SNNs for this MDP, directly applying standard methods re-veals three critical bottlenecks that our method must address:  
+
+> •
+
+Exploration Stagnation in Constrained Spaces: The RMFS environment is characterized by numerous nar-row passages. Standard random exploration in DQN fre-quently leads to immediate collisions and task failures. This prevents the agent from securing positive rewards, causing premature learning cessation and severe training inefficiency.  
+
+> •
+
+Insufficient Information Transmission at Low Time-steps: To achieve the desired ultra-low inference latency and energy efficiency on edge hardware, the SNN must operate at extremely low time-steps. However, due to the zero-initialized membrane potential ( vl (0) = 0), deep spiking neurons suffer from delayed spike emission. This prevents the effective forward transmission of information within the limited time-step window, ren-dering the SNN dysfunctional.  
+
+> •
+
+RL-SNN Output Distribution Mismatch: Standard ANN-to-SNN conversion assumes a sparse, one-hot output distribution typical of classification tasks. How-ever, RL agents output continuous action values (Q-values) that exhibit a flat distribution. At the ultra-low time-steps required for edge hardware deployment, this mismatch introduces severe discrete quantization errors, inevitably leading to policy degradation post-conversion. 
+
+C. SNN-friendly DQN with Collision-Allowing Strategy 
+
+To address the inherent complexities of the RMFS and the exploration stagnation outlined in Section IV-B, we design an enhanced DQN framework customized for neuromorphic deployment. 
+
+1) SNN-Friendly State Representation: As shown in Fig-ure 1b, the inputs are natively binary, with only a sparse fraction of elements activated as 1. This inherently discrete representation is specifically designed to be SNN-friendly: the raw state matrices act directly as spatial spikes. By entirely bypassing the need for intermediate rate- or latency-coding conversions during neuromorphic deployment, this native spike input pipeline fundamentally guarantees ultra-low inference latency and minimizes energy consumption from the ground up. 
+
+2) Reward Shaping: In RL, reward drives both goal-learning and the exploration-exploitation balance. In RMFS environments, the agent receives a positive reward Rgoal for reaching the target and a negative reward R f ail for collisions or exceeding boundaries. To discourage ineffective repetitive exploration, we implement a shaped reward Rs based on the Manhattan distance D:
+
+Rs =
+
+
+
+−0.5 if pos l = pos n
+
+0.1 if pos l̸ = pos n and D(pos n) < D(pos c)
+
+−0.1 if pos l̸ = pos n and D(pos n) = D(pos c)
+
+−0.2 if pos l̸ = pos n and D(pos n) > D(pos c)
+
+(2) where pos n and pos l represents the next and last position of the AGV. 
+
+3) Collision-Allowing Exploration: In RMFS environ-ments, narrow passages are ubiquitous and pose a far greater challenge than standard isolated obstacles. Traversing them RMFS ANN Agent Action State & Reward Reinforcement Learning  
+
+> SNN Agent RMFS State Action Deployment Fine-tuned ANN-to-SNN
+> Dataset ANN Model
+> SNN Model
+
+Fig. 2. The three-stage process of the SDQN-RMFS framework. First, an ANN agent is trained using RL to interact with the RMFS, collecting state-action trajectories. Second, a fine-tuned ANN-to-SNN conversion is applied to transform the trained ANN model into an SNN model, preserving its capabilities. Finally, the SNN agent is deployed for efficient and energy-saving action inference in the RMFS. 
+
+demands continuous precision, whereas a single random exploratory move often results in an immediate collision and task failure, rapidly causing severe exploration stagnation. To fundamentally overcome this constraint, we introduce a collision-allowing strategy. During each training episode, we allow a certain number of collisions to occur, as detailed in Algorithm 1. Rather than immediately terminating an episode upon collision, the agent is penalized and reverted to its previous position, provided the collision count remains below the limit CL . This collision-allowing strategy aims to enable exploration within a certain range, thereby preventing learn-ing stagnation resulting from frequent failures. As training progresses, the proportion of random exploration in the DQN will gradually decrease, ultimately resulting in the agent’s decisions relying entirely on the DQN’s output. 
+
+Algorithm 1 Collision-Allowing Exploration 
+
+Require: Current state st , Action at , Collision limit CL ,Current collision count ccount 
+
+1: Execute action at , observe collision status is collision 
+
+and target status is target 
+
+2: if is collision then 
+
+3: ccount ← ccount + 1
+
+4: if ccount ≤ CL then 
+
+5: rt ← R f ail {Penalize but allow continuation }
+
+6: st+1 ← st {Revert AGV to previous position }
+
+7: done ← False 
+
+8: else 
+
+9: rt ← R f ail 
+
+10: done ← True {Exceed limit, terminate episode }
+
+11: end if 
+
+12: else 
+
+13: Calculate shaped reward Rs
+
+14: if is target then 
+
+15: rt ← Rgoal 
+
+16: done ← True 
+
+17: else 
+
+18: rt ← Rs
+
+19: done ← False 
+
+20: end if 
+
+21: st+1 ← true next state 
+
+22: end if 
+
+23: return st+1, rt , done , ccount Original ANN Model Fine-tuned ANN Model State 
+
+> Forward Propagation
+> Original Output Distribution Fine-tuned Output Distribution Criterion Label
+> Backward Propagation Argmax Forward Propagation
+
+Fig. 3. The process of distillation before converting it to an SNN to alleviate conversion errors. The outputs of the original ANN are converted into a one-hot format using the argmax function, which serves as a label for training a new fine-tuned ANN. This method forces the fine-tuned ANN’s outputs to approximate a one-hot distribution. 
+
+D. Robust ANN-to-SNN Conversion and Error Alleviation 
+
+As established in Section IV-B, directly applying tra-ditional ANN-to-SNN conversion to RL agents introduces severe performance bottlenecks. The core principle of this conversion is mapping the ReLU activation of the original ANN, defined as al =
+
+ReLU (W l al−1 + bl ), to the equivalent firing rate of the converted SNN, defined as ϕl (t) = 1 
+
+> t
+
+∑tt′=1 θ l (t′). By ac-cumulating the membrane potential over t time-steps and assuming vl (0) = 0, this analytical relationship simplifies to: 
+
+ϕl (t) = W l ϕl−1(t) + bl − vl (t)
+
+t (3) Equation 3 shows theoretical equivalence with the ANN’s ReLU activation. However, the residual membrane potential term, vl (t) 
+
+> t
+
+, introduces an unavoidable conversion error. At the ultra-low time-steps required for RMFS edge deploy-ment, this error becomes critically magnified. To address the specific challenges of delayed spike emission and RL-SNN distribution mismatch caused by this error, we propose a two-stage error alleviation pipeline. 
+
+1) Parameter Scaling for Information Flow: To mitigate delayed spike emission and accelerate information flow, we introduce a hardware-aware parameter scaling mechanism. Given the asynchronous processing nature of the neuromor-phic chip’s front-end, a lack of early spikes will stall the entire inference pipeline [18]. Therefore, we amplify the weights of the first layer by a scaling factor k, such that W 1 
+
+> snn
+
+= k · W 1
+
+> ann
+
+, which forces these neurons to emit spikes earlier and with higher frequency. This increased initial spiking activity acts as a critical trigger, guaranteeing rapid forward propagation of information through the deeper layers and ensuring the decision-making signal reaches the output under strict latency requirements (also see Table II). Although this hard-label scheme inherently trades off fine-grained relative Q-value differences, it is highly advanta-geous for RMFS navigation. In such discrete spatial tasks, widening the decision margin of the optimal action to resist low-timestep quantization noise is far more critical than preserving precise continuous value rankings. Retaining bias terms on event-driven neuromorphic chips requires extra synchronization overhead, which intrinsically forces a lowered operating frequency and increases static power consumption [18]. To avoid these hardware penalties and align with the chip’s native architecture, we explicitly remove the bias components (bl = 0). This elimination sustains the low-latency performance demanded by real-time applications while ensuring optimal speed and energy efficiency without sacrificing the functional equivalence of the original ANN. 
+
+2) ANN-to-SNN Fine-tuning via Distillation: Existing ANN-to-SNN conversion methods typically focus on cali-brating layer-wise activation distributions or elaborating SNN neuron dynamics to suppress intermediate errors [26], [27], [23]. However, this indirect route is suboptimal for RL. If the true objective is a correct output decision, targeting it directly is far more efficient. Our analysis reveals that conversion mismatches primarily stem from output ambiguity rather than cumulative intermediate errors: valid actions often share similar Q-values, where minor conversion noise easily flips the final selection. Targeting this output ambiguity, we reframe the pre-conversion fine-tuning phase as a classification-like knowl-edge distillation process (Figure 3). Using trajectories col-lected from the fully trained ANN, we duplicate the model into a frozen teacher and a trainable student. The teacher’s Q-value outputs are passed through an argmax function to generate hard, one-hot pseudo-labels, against which the student is fine-tuned via cross-entropy loss. Rather than preserving intermediate activation layers layer by layer, this formulation directly incentivizes the student ANN to widen the margin between the selected action and its alternatives, sharpening the output distribution into a robust, one-hot-like form while preserving the optimal policy. As a result, the network’s decisions become inherently resilient to the unavoidable vl (t) 
+
+> t
+
+quantization noise introduced during IF neuron conversion, cleanly bridging the continuous-discrete gap without the layer-wise optimization overhead (also see Table II). V. E XPERIMENT 
+
+A. Experiment Settings 1) Environment: We developed an RMFS simulation sys-tem based on [11] to conduct experiments in a typical ware-house scenario with multiple narrow aisles, several AGVs,                                                                            
+
+> TABLE I DETAILED ARCHITECTURE OF THE DQN Layer Components Shape of feature 13×3 Conv 32 ×16 ×16 23×3 Conv 32 ×16 ×16 33×3 Conv + AvgPool 32 ×8×843×3 Conv 64 ×8×853×3 Conv + AvgPool 32 ×4×463×3 Conv 128 ×4×473×3 Conv + AvgPool 32 ×1×181×1 Conv 512 ×1×191×1 Conv 5(4)×1×1
+
+and a complex pod arrangement. The environment measures 16 × 16, holds 100 pods for transport, and features four picking stations, as shown in Figure 1. In the RMFS, we tested the effectiveness of 1, 2, 4, and 8 AGVs working collaboratively to transport all pods. Each AGV starts from a designated position, with the system ran-domly generating task objectives involving the transportation of specified pods in three stages. New objectives are created after each task until all pods are successfully transported. 
+
+2) Model Topology: The DQN we employed is designed based on a convolutional neural network, consisting of nine convolutional layers comprised of 3 × 3 and 1 × 1 convolu-tional cores. To meet hardware deployment requirements, we utilized average pooling (AvgPool). The detailed architecture of the DQN is shown in Table I. Each convolutional layer is followed by a ReLU activation, and the shape of the last layer’s feature map varies based on the number of agents, as described in Section IV-B. 
+
+3) Agent Deployment: After training the ANN and con-verting it to an SNN, we deployed the SNN in the RMFS for AGV pathfinding tasks. We implemented an action detection mechanism for the SNN agents, which checks for potential collisions before executing an action; if a collision is highly likely, the action is changed to stop. While this external rule-based safety layer is a standard engineering practice to guarantee absolute safety in physical robotic systems, our framework relies on the inherently high Conversion Rate CR 
+
+of the fine-tuned SNN to ensure accurate primary decisions, thereby minimizing the frequency of triggering these safety overrides. 
+
+B. Effect of Collision Limit 
+
+Figure 4 shows the impact of collision limits on DQN training. Here, completion degree represents the ratio of suc-cessfully transported pods to the total task. As CL increases from 1 to 40, the training curves exhibit enhanced stability and efficiency, particularly in high-density AGV scenarios. These results highlight the advantages of our collision-allowing training method, leading us to adopt CL=40 for subsequent experiments. 
+
+C. DQN Alternatives 
+
+We benchmark our RL policy against three established baselines, namely Dueling DQN, Proximal Policy Optimiza-tion (PPO), and standard Actor-Critic [28], [29], [30]. All Fig. 4. The impact of different CL on the DQN’s training process for various numbers of AGVs. The figures show the completion degree, which is the ratio of successfully transported pods. The dashed lines represent the smoothing of the completion degree and action length curves.  
+
+> Fig. 5. Comparison of different standard RL baselines such as Dueling DQN and PPO. The dashed line represents the smoothing of the episode reward.
+
+algorithms were trained within a single-AGV scenario in the same RMFS environment, using identical sparse state representations and substantially consistent model topology, with the collision limit set to 10. As illustrated in Figure 5, the experimental results re-veal a stark contrast in learning capabilities. The policy-based methods, PPO and Actor-Critic, completely failed to perform pathfinding throughout the entire training process. Conversely, value-based methods, DQN and Dueling DQN, successfully converged to high episode rewards. While Du-eling DQN exhibited slightly faster initial convergence, both algorithms eventually reached comparable final pathfinding performance. Although Dueling DQN learns slightly faster, its network architecture introduces additional complexity and potential accuracy degradation during ANN-to-SNN conversion. DQN not only reliably solves the RMFS pathfinding task but also features a straightforward architecture, serving as the most optimized and robust foundation for our low-loss ANN-to-SNN conversion pipeline. 
+
+D. Effect of ANN-to-SNN Error Alleviation 
+
+We evaluate the performance metrics of AGVs’ pathfind-ing under various configurations to demonstrate the effect of our ANN-to-SNN error alleviation method. The results are summarized in Table II, which presents the CR values, completion degree, and action lengths for different numbers of AGVs (1, 2, 4, and 8) under varying scaling factors ( k = 1, (a) (b)      
+
+> 0.27 0.32 0.48 0.68 0.79 0.84 1.00 1.00 1.00 0.75 0.28 0.33
+> Fig. 6. The ANN-to-SNN conversion rate CR under various time-step settings. (a) shows the performance of an SNN converted directly from an ANN without fine-tuning, while (b) shows the performance with fine-tuning. The colored horizontal lines represent the CR of ANN-to-SNN with different scaling factors and time-step set to 4.
+
+k = 3, k = 5, and k = 7) with and without fine-tuning. CR is the conversion rate indicating the accuracy of producing the same output for the same input between the converted SNN and the original ANN. Notably, the time-step of SNN is set to 4 for efficient inference. We compared the conversion rates under various configu-rations. As shown in Figure 6, an SNN without fine-tuning or scaling struggles to accurately represent the policy, peaking at a CR of 0.84 despite utilizing 128 time-steps, which leads to increased inference latency and energy consump-tion. Conversely, our fine-tuned ANN-to-SNN dramatically accelerates this process, achieving a perfect CR of 1.00 by 32 time-steps. By further integrating parameter scaling, the required time-steps are remarkably minimized. For example, a fine-tuned model with a scaling factor of k = 7 sustains a lossless CR of 1.00 at an ultra-low 4 time-steps. The results reveal that combining parameter scaling with ANN-to-SNN distillation significantly enhances the pathfinding performance of SNN agents, ensuring optimal efficiency and decision capability under strict latency constraints. The results reveal that parameter scaling and ANN-to-SNN distillation significantly enhance the pathfinding performance of SNN agents, both in terms of pathfinding efficiency and capability. In the context of this work, a slightly lower TABLE II EFFECT OF ANN-TO -SNN E RROR ALLEVIATION METHOD                                                                                                
+
+> AGVs Distillation CR (%) Completion Degree (%) / Action Length
+> k=1k=3k=5k=7k=1k=3k=5k=71%27.04 40.65 55.21 64.28 0.00 / – 0.00 / – 0.00 / – 0.05 / –
+> !27.91 54.45 94.51 99.60 0.00 / – 45.65 / – 100.00 / 3609.44 100.00 / 3609.38
+> 2%28.87 40.95 55.06 65.20 0.00 / – 0.02 / – 0.70 / – 12.00 / –
+> !30.36 78.58 97.98 99.44 0.00 / – 91.71 / 4049.26 97.94 / 3941.04 93.17 / 3940.52 4%26.50 28.93 38.80 48.77 0.00 / – 0.00 / – 0.00 / – 0.49 / –
+> !28.30 65.57 92.85 97.87 0.00 / – 99.98 / 3963.54 99.96 / 4012.87 99.94 / 4082.93 8%28.26 40.12 55.21 65.57 0.00 / – 0.51 / – 97.79 / 17999.70 99.66 / 6462.03
+> !28.07 71.32 95.13 97.84 0.00 / – 99.33 / 6303.03 99.67 / 5631.44 99.64 / 5416.32
+
+CR does not necessarily translate to severe performance degradation. This robustness is largely attributed to the action detection mechanism implemented during deployment. When conversion quantization errors occasionally yield a subop-timal or collision-prone action, the safety mechanism pre-emptively overrides it with a ’stop’ command. Consequently, rather than terminating the episode, the agent safely bypasses the single-step error and replans based on the updated state observation in the subsequent time-step. Crucially, because our fine-tuned distillation maintains a near-lossless CR (e.g., 0.99 to 1.00), the reliance on this safety override is strictly minimized. The converted SNN fundamentally preserves the intrinsic pathfinding capability of the original policy, while the closed-loop safety filter acts merely as a pragmatic fallback for minimal residual quantization noise. 
+
+E. Hardware Deployment and Performance 
+
+We profile the energy consumption and inference latency of the ANN and its corresponding SNN across different hardware platforms to assess the physical inference viability of the SDQN-RMFS framework at the edge. For fair com-parison, we first deployed the SNN on a GPU and recorded its trajectory data within the RMFS to create a dataset for energy measurement. Subsequently, the original ANN and the converted SNN were deployed on an NVIDIA RTX 4090 GPU and the specialized neuromorphic chip, Speck. By sequentially inputting the state data from the trajectory dataset, we measured the operational performance of the models using the respective profiling tools. For the converted SNN, the number of time-steps was set to 4 with a scaling factor of 7. The comparative results across various multi-AGV scenarios are detailed in Table III. 
+
+1) Energy Efficiency: As shown in Table III, the stan-dard ANN deployed on an RTX 4090 GPU consumes approximately 10.04 to 10.73 mJ per decision. Notably, when simulating the SNN on the same GPU, the energy consumption surges to between 182.80 and 188.47 mJ due to the inherent inefficiencies of the Von Neumann architecture, which requires extremely high-overhead serial memory reads for multiple spiking time-steps. This indicates that traditional accelerators are fundamentally ill-suited to the sparse dy-namic characteristics of SNNs. However, the immense advantages of the spiking mecha-nism are immediately unleashed when the SNN is deployed on the neuromorphic chip. The SNN on the Speck achieves an ultra-low energy consumption of only 0 .89 × 10 −3 to 1.95 × 10 −3 mJ. Compared to the GPU-ANN baseline, this represents a breakthrough energy reduction of up to 11,281 ×.Such ultra-low-power pathfinding ensures that continuous, large-scale multi-AGV operations in RMFS are not bottle-necked by computational energy constraints. 
+
+2) Real-Time Inference Latency: Table III confirms the critical importance of hardware-software alignment through the latency data. On the RTX 4090, the original ANN leverages its immense tensor computing power to achieve an inference time of only 0.13 to 0.14 ms per decision. However, when the GPU attempts to process the SNN, the iterative simulation of multiple time-steps causes the latency to deteriorate significantly to over 2.41 ms. In contrast, the Speck chip is capable of processing binary spike events natively and asynchronously, further compressing inference latency to 0.061 to 0.079 ms. Remarkably, SDQN-RMFS not only reduces energy consumption by five orders of magnitude but actually halves the latency of a powerful GPU while running on a strictly power-constrained edge chip. This breakthrough fundamentally unlocks the capability for highly reactive, large-scale multi-AGV coordination in dynamic warehouse environments. VI. C ONCLUSIONS 
+
+This study presented SDQN-RMFS, a synergistic frame-work integrating DQNs with SNNs for energy-efficient multi-AGV pathfinding. This innovative framework tackles the challenges of traditional algorithms by combining the low-power, event-driven characteristics of SNNs with the optimal policy learning capabilities of DQNs. During training, a collision-allowing strategy is employed to pretrain the ANN, preventing premature termination caused by frequent collisions and significantly improving training stability in multi-AGV scenarios. The trained ANN is subsequently converted into an SNN through a fine-tuned conversion method incorporating parameter scaling and distillation, which minimizes time-steps and accuracy loss while preserving performance comparable to the original ANN. A key contribution of this work is the successful physical offline deployment of the trained SNN onto a neuromor-phic chip for inference. By comprehensively addressing the TABLE III HARDWARE DEPLOYMENT AND PERFORMANCE 
+
+AGVs 1 2 4 8Model ANN SNN SNN ANN SNN SNN ANN SNN SNN ANN SNN SNN Device GPU GPU Speck GPU GPU Speck GPU GPU Speck GPU GPU Speck Energy (mJ) 10.04 188.47 0.89 × 10 −3 10.73 184.74 1.53 × 10 −3 10.42 186.85 1.21 × 10 −3 10.26 182.80 1.95 × 10 −3
+
+Latency (ms) 0.13 2.42 0.061 0.14 2.44 0.079 0.13 2.41 0.066 0.13 2.44 0.068 
+
+conversion mismatch and utilizing hardware-aware param-eter scaling, this work demonstrates a critical and empiri-cally validated step toward practical applicability in energy-constrained, closed-loop mobile robotic systems. REFERENCES [1] ´I. R. da Costa Barros and T. P. Nascimento, “Robotic mobile ful-fillment systems: A survey on recent developments and research opportunities,” Robotics and Autonomous Systems , vol. 137, p. 103729, 2021. [2] G. Sartoretti, J. Kerr, Y. Shi, G. Wagner, T. S. Kumar, S. Koenig, and H. Choset, “Primal: Pathfinding via reinforcement and imitation multi-agent learning,” IEEE Robotics and Automation Letters , vol. 4, no. 3, pp. 2378–2385, 2019. [3] M. Damani, Z. Luo, E. Wenzel, and G. Sartoretti, “Primal 2: Pathfind-ing via reinforcement and imitation multi-agent learning-lifelong,” 
+
+IEEE Robotics and Automation Letters , vol. 6, no. 2, pp. 2666–2673, 2021. [4] E. W. Dijkstra, A Note on Two Problems in Connexion with Graphs , 1st ed. New York, NY, USA: Association for Computing Machinery, 2022, p. 287–290. [Online]. Available: https://doi.org/10. 1145/3544585.3544600 [5] P. E. Hart, N. J. Nilsson, and B. Raphael, “A formal basis for the heuristic determination of minimum cost paths,” IEEE transactions on Systems Science and Cybernetics , vol. 4, no. 2, pp. 100–107, 1968. [6] A. Bolu and ¨ O. Korc ¸ak, “Path planning for multiple mobile robots in smart warehouse,” in 2019 7th International Conference on Control, Mechatronics and Automation (ICCMA) . IEEE, 2019, pp. 144–150. [7] Z. Chen, J. Alonso-Mora, X. Bai, D. D. Harabor, and P. J. Stuckey, “Integrated task assignment and path planning for capacitated multi-agent pickup and delivery,” IEEE Robotics and Automation Letters ,vol. 6, no. 3, pp. 5816–5823, 2021. [8] V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G. Bellemare, A. Graves, M. Riedmiller, A. K. Fidjeland, G. Ostrovski, 
+
+et al. , “Human-level control through deep reinforcement learning,” 
+
+nature , vol. 518, no. 7540, pp. 529–533, 2015. [9] R. Kamoshida and Y. Kazama, “Acquisition of automated guided vehicle route planning policy using deep reinforcement learning,” in 
+
+2017 6th IEEE international conference on advanced logistics and transport (ICALT) . IEEE, 2017, pp. 1–6. [10] K. Arulkumaran, M. P. Deisenroth, M. Brundage, and A. A. Bharath, “Deep reinforcement learning: A brief survey,” IEEE signal processing magazine , vol. 34, no. 6, pp. 26–38, 2017. [11] L. Luo, N. Zhao, Y. Zhu, and Y. Sun, “A* guiding dqn algorithm for automated guided vehicle pathfinding problem of robotic mobile fulfillment systems,” Computers & Industrial Engineering , vol. 178, p. 109112, 2023. [12] G. Tang, N. Kumar, and K. P. Michmizos, “Reinforcement co-learning of deep and spiking neural networks for energy-efficient mapless navi-gation with neuromorphic hardware,” in 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2020, pp. 6090– 6097. [13] M. Zhang, S. Wang, J. Wu, W. Wei, D. Zhang, Z. Zhou, S. Wang, F. Zhang, and Y. Yang, “Toward energy-efficient spike-based deep reinforcement learning with temporal coding,” IEEE Computational Intelligence Magazine , vol. 20, no. 2, pp. 45–57, 2025. [14] W. Maass, “Networks of spiking neurons: the third generation of neural network models,” Neural networks , vol. 10, no. 9, pp. 1659–1671, 1997. [15] M. Davies, N. Srinivasa, T.-H. Lin, G. Chinya, Y. Cao, S. H. Choday, G. Dimou, P. Joshi, N. Imam, S. Jain, et al. , “Loihi: A neuromorphic manycore processor with on-chip learning,” Ieee Micro , vol. 38, no. 1, pp. 82–99, 2018. [16] D. Patel, H. Hazan, D. J. Saunders, H. T. Siegelmann, and R. Kozma, “Improved robustness of reinforcement learning policies upon conver-sion to spiking neuronal network platforms applied to atari breakout game,” Neural Networks , vol. 120, pp. 108–115, 2019. [17] N. Salvatore, S. Mian, C. Abidi, and A. D. George, “A neuro-inspired approach to intelligent collision avoidance and navigation,” in 2020 AIAA/IEEE 39th Digital Avionics Systems Conference (DASC) . IEEE, 2020, pp. 1–9. [18] O. Richter, Y. Xing, M. De Marchi, C. Nielsen, M. Katsimpris, R. Cattaneo, Y. Ren, Y. Hu, Q. Liu, S. Sheik, et al. , “Speck: A smart event-based vision sensor with a low latency 327k neuron convolutional neuronal network processing pipeline,” arXiv preprint arXiv:2304.06793 , 2023. [19] W. Tan, D. Patel, and R. Kozma, “Strategy and benchmark for con-verting deep q-networks to event-driven spiking neural networks,” in 
+
+Proceedings of the AAAI conference on artificial intelligence , vol. 35, no. 11, 2021, pp. 9816–9824. [20] P. U. Diehl, D. Neil, J. Binas, M. Cook, S.-C. Liu, and M. Pfeiffer, “Fast-classifying, high-accuracy spiking deep networks through weight and threshold balancing,” in 2015 International joint conference on neural networks (IJCNN) . ieee, 2015, pp. 1–8. [21] S. Deng and S. Gu, “Optimal conversion of conventional artificial neural networks to spiking neural networks,” in International Conference on Learning Representations , 2021. [Online]. Available: https://openreview.net/forum?id=FZ1oTwcXchK [22] T. Bu, W. Fang, J. Ding, P. DAI, Z. Yu, and T. Huang, “Optimal ANN-SNN conversion for high-accuracy and ultra-low-latency spiking neural networks,” in International Conference on Learning Representations , 2022. [Online]. Available: https: //openreview.net/forum?id=7B3IJMM1k M [23] Y. Li, S. Deng, X. Dong, and S. Gu, “Error-aware conversion from ann to snn via post-training parameter calibration,” International Journal of Computer Vision , vol. 132, no. 9, pp. 3586–3609, 2024. [24] Z. Wang, Y. Fang, J. Cao, Q. Zhang, Z. Wang, and R. Xu, “Masked spiking transformer,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 1761–1771. [25] H. Van Hasselt, A. Guez, and D. Silver, “Deep reinforcement learning with double q-learning,” in Proceedings of the AAAI conference on artificial intelligence , vol. 30, no. 1, 2016. [26] Z. Huang, W. Fang, T. Bu, P. Xue, Z. Hao, W. Liu, Y. Tang, Z. Yu, and T. Huang, “Differential coding for training-free ann-to-snn conversion,” arXiv preprint arXiv:2503.00301 , 2025. [27] Y. Li, S. Deng, X. Dong, R. Gong, and S. Gu, “A free lunch from ann: Towards efficient, accurate spiking neural networks calibration,” in International conference on machine learning . PMLR, 2021, pp. 6316–6325. [28] Z. Wang, T. Schaul, M. Hessel, H. Hasselt, M. Lanctot, and N. Freitas, “Dueling network architectures for deep reinforcement learning,” in 
+
+International conference on machine learning . PMLR, 2016, pp. 1995–2003. [29] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Proximal policy optimization algorithms,” arXiv preprint arXiv:1707.06347 , 2017. [30] V. Konda and J. Tsitsiklis, “Actor-critic algorithms,” Advances in neural information processing systems , vol. 12, 1999.

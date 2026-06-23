@@ -1,0 +1,391 @@
+Title: MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps ?
+
+URL Source: https://arxiv.org/pdf/2606.22597v1
+
+Published Time: Tue, 23 Jun 2026 02:48:21 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps? 
+
+## Srinivas Venkatanarayanan 1,2 Clement Pakkam Isaac 1,3 
+
+> 1
+
+NVIDIA 2University of Central Florida 3University of South Florida USA 
+
+Abstract 
+
+Vision-language models (VLMs) are increasingly used to read maps for logistics, delivery, and accessible navigation, where the output is an actionable decision (a route, a pin, a parking choice) that must respect the road network. Yet most map benchmarks grade free-text or multiple-choice answers that cannot be verified against the underlying graph. We present MapReason-OSM , a benchmark and evaluation harness for graph-verifiable mobility decisions on self-rendered OpenStreetMap panels. We render fixed-style maps for ten U.S. downtowns at two aligned zoom scales, overlay a con-sistent marker grammar, and pair each panel with a hidden street graph and exact oracles, yielding 6,000 instances (12,000 panels across the two zooms) over 12 routing, facility-location, and visual-disambiguation tasks. Models return structured decisions that we snap back to the graph and score for validity, legality, optimal-ity, and constraint satisfaction, plus cross-zoom consistency . Across seven VLMs, models read maps and route simply but fail at graph-cost reasoning (single-facility pin placement is near chance even for frontier reasoning models), and are frequently scale-inconsistent. We release the benchmark, harness, and deterministic generator. 
+
+CCS Concepts 
+
+• Computing methodologies → Artificial intelligence ; Spatial and physical reasoning ; • Information systems → Geographic information systems .
+
+Keywords 
+
+vision-language models, spatial reasoning, graph-grounded evalua-tion, OpenStreetMap, route planning, facility location, benchmark 
+
+Preprint. This work has been submitted to the ACM SIGSPATIAL 2026 Industrial Track and is currently under review; this version may differ from the final published paper. Code, data, and the deterministic generator: https:// github. com/ Vi-Sri/ mapreason-osm. 
+
+1 Introduction 
+
+Vision-language models (VLMs) [ 1 , 12 , 19 , 25 ] are being deployed on maps for logistics, last-mile delivery, field operations, and acces-sible navigation. In each of these settings the output is not free text but an actionable decision : a route a vehicle will drive, a pin a driver will navigate to, a parking lot a delivery will use. Such decisions are only useful if they are legal (they follow real, connected streets and obey one-way, closure, and accessibility constraints) and near-optimal (short under network distance). Yet most map-and-VLM benchmarks grade free-text or multiple-choice answers and there-fore cannot verify any of these properties against the actual road network. This gap matters precisely where the industry wants to deploy these models. A model that “reads” a map well (identifying labels, icons, and spatial relations) may still propose a route that traverses non-adjacent streets, drives the wrong way down a one-way, or selects a facility that is far by road despite looking close on the image. Distinguishing genuine spatial reasoning from competent map reading requires scoring against a ground-truth graph, not against text similarity. We introduce MapReason-OSM , a benchmark and evaluation harness that makes this distinction measurable. 1 Every instance is a street-map panel that we render ourselves from OpenStreetMap (OSM) vector data (never scraped tiles), so that we control the cartographic style, the visible-marker grammar, and the aligned multi-zoom extents. Behind each panel sits a hidden street graph and an exact oracle. The model, seeing only the image and a prompt, returns a structured JSON decision; we snap its marker references back to the hidden graph, induce the decision on the graph, and score it for schema validity, legality, optimality, and constraint satisfaction. Our contributions are: 
+
+• A graph-grounded VLM benchmark on self-rendered OSM maps with an exact symbolic scoring chain (schema validity, then legality, optimality, and constraint satisfaction): 6,000 instances and 12,000 panels across ten U.S. downtowns and 12 tasks, fully regenerable from a fixed seed. 
+
+• Three evaluation axes not previously combined : cross-zoom consistency, accessibility-aware (step-free) routing, and graph-grounded facility-location pin placement, along-side a symbol-grounded industrial task family (drawn clo-sures, hazard zones, loading docks, attributed parking). 
+
+• A reproducible, massively parallel harness and a seven-model study (five fast, two frontier) showing a sharp perception-vs-reasoning gap: VLMs read maps and route sim-ply, but graph-cost reasoning (most cleanly, single-facility placement) stays near chance even for frontier reasoning models, and decisions are frequently scale-inconsistent. 
+
+Industrial relevance. The tasks are deliberately drawn from real logistics and assistive-mobility operations (pickup-pin selec-tion, depot siting, loading-dock and parking choice, hazard- and closure-aware rerouting, and step-free routing), so the benchmark measures exactly the decisions a deployed map-reading assistant must get right. Our headline result is a transferable lesson for prac-titioners: today’s VLMs can be trusted to read a labeled map but not to optimize over its road network, and their answers can change with zoom; both are concrete, measurable failure modes to guard against in production.   
+
+> 1Code, data, and the deterministic generator are available at https://github.com/Vi-Sri/mapreason-osm.
+> arXiv:2606.22597v1 [cs.CV] 21 Jun 2026 SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA Srinivas Venkatanarayanan 1,2 Clement Pakkam Isaac 1,3
+
+The paper is structured as follows. Section 2 positions MapReason-OSM against prior map and geospatial benchmarks. Section 3 describes the data substrate (self-rendered panels, marker grammar, hidden graph and oracles, deterministic generation). Section 4 defines the 12 tasks and Section 5 the scoring protocol. Sections 6 and 7 present the experimental setup and results, and Sections 8–10 discuss open challenges, limitations, and conclusions. 
+
+2 Related Work 
+
+Map reading and reasoning for (V)LLMs. A growing line of benchmarks asks whether multimodal models can read maps. Map-Bench evaluates pixel-space path finding on illustrated, human-readable tourist maps via a map-space scene graph [ 32 ]; ReasonMap targets fine-grained visual reasoning over high-resolution transit maps [ 10 ]; MapTab probes multi-criteria route planning over het-erogeneous graphs by fusing map images with attribute tables [ 28 ]; and MapEval spans textual, API, and visual map question answering, finding that no foundation model exceeds 67% and all trail humans by over 20 points [ 7 ]. The community’s interest in this direction is evident at SIGSPATIAL itself, which recently introduced carto-graphic and open-domain map question-answering benchmarks for (V)LLMs [ 17 , 30 ]. These benchmarks predominantly grade free-text or multiple-choice answers, or operate on illustrated/transit maps. MapReason-OSM differs by (i) using self-rendered OSM street panels, (ii) scoring structured decisions against a hidden street graph and ex-act oracle, and (iii) measuring cross-zoom consistency, accessibility-aware routing, and graph-grounded facility-location placement in a single, exactly-scored suite. We deliberately avoid first-of-its-kind claims; our contribution is the combination of axes and the industrial task framing. 
+
+Multimodal reasoning, visual perception, and graph rea-soning. Beyond maps, a broad suite of benchmarks probes whether multimodal models can reason over structured visual content: ex-pert, multi-discipline understanding [ 37 ], mathematical reasoning in visual contexts [ 20 ], and question answering over charts and documents [ 23 , 24 ]. A recurring finding is that VLMs “can see but not perceive” [ 11 ]: they handle textual cues yet falter on core per-ception, spatial relations, and object orientation [ 5, 18 ], and they hallucinate ungrounded content [ 16 ]. In parallel, work on graph reasoning shows that language models struggle to solve graph prob-lems posed in natural language and are sensitive to how the graph is encoded [ 9 , 31 ]. MapReason-OSM sits at the intersection: it de-mands both fine-grained visual perception of a cartographic scene 
+
+and cost-aware reasoning over the graph that the scene depicts, and it scores the latter exactly rather than as free text. 
+
+Geospatial knowledge and reasoning in LLMs. LLMs en-code substantial geographic knowledge, which can be extracted with auxiliary OSM context [ 22 ] but is geographically biased [ 21 ]and uneven across factual and interpretive geographic tasks [ 27 ]. Multi-task studies show text-only LLMs are weak at spatial tasks such as route planning, with large prompt-strategy effects [ 33 ]. We complement these text-centric analyses by isolating the visual 
+
+graph-grounded setting. 
+
+Route-planning agents and benchmarks. MobilityBench evaluates tool-mediated LLM route-planning agents in a determin-istic API-replay sandbox over real Amap queries [ 29 ]; GeoBenchX benchmarks LLM tool-calling on multi-step geospatial tasks [ 15 ]; and agentic LLM frameworks turn heterogeneous urban data into planner-facing spatial intelligence [ 34 ]. These are tool-augmented 
+
+or text/data pipelines; our Pure Visual Decision track requires a graph-checkable decision read directly from a rendered map, with-out tools or tabular access. 
+
+Mobility, accessibility, and data substrate. LLMs have been used to synthesize travel surveys for urban mobility assessment [ 2 ], and accessibility-first routing systems such as AccessMap demon-strate the importance of step-free, profile-aware paths [ 4 ]; we make accessibility-aware routing a benchmarked VLM task. Large re-producible spatio-temporal resources [ 36 ] reflect the community’s emphasis on rigorous benchmarks. We build street graphs and fea-tures with OSMnx [ 3] from OpenStreetMap [ 26 ], rendering our own panels (rather than scraping tiles) in compliance with the OSM tile usage policy. 
+
+3 The MapReason-OSM Benchmark 
+
+At a high level, an instance is a tuple (I , 𝑞, 𝐺, 𝜎, 𝑦 ★): one or more rendered panels I, a natural-language prompt 𝑞 , a hidden street graph 𝐺 , a snapping function 𝜎 that maps each visible marker ID to a graph node, and an oracle answer 𝑦 ★. Only (I , 𝑞 ) is shown to the model; (𝐺, 𝜎, 𝑦 ★) are held out for scoring. Figure 1 shows the deterministic dataset-generation workflow; the matching graph-grounded evaluation workflow is given later in Figure 3 (Section 5). We describe each component below. 
+
+3.1 Self-rendered panels 
+
+Each panel is a 1024 × 1024 north-up PNG. We acquire the street network and point/area features for each metro with OSMnx [ 3], project to a metric UTM CRS, and render over a fixed CartoDB Voyager raster basemap via contextily ; a faint, translucent single-color tracing of the routable graph edges (alpha 0.2) is drawn be-neath the markers so junctions and segments read clearly and markers visibly connect to the network. Rendering our own panels (rather than scraping raster tiles) gives us control over the carto-graphic style, the marker grammar, and the aligned multi-zoom extents, and keeps us compliant with the OSM tile usage policy. Every panel stores an affine transform between pixel and UTM coordinates and carries an attribution stamp (“ © OpenStreetMap contributors, © CARTO”). Each instance is rendered at two aligned 
+
+zoom scales sharing one center: a mid panel (half-extent 500 m; 
+
+≈1 km across, for street selection and POI context) and a local panel (half-extent 175 m; ≈350 m across, for turns, curbs, and fine pin placement). Because the two panels share a center and the local ex-tent is nested inside the mid extent, and because every task-critical marker is placed within a 130 m-radius window of that center (well inside both extents), the same markers and cues appear on both 
+
+panels. This guaranteed overlap is what makes cross-zoom consis-tency meaningful: the model is shown identical evidence at two scales, so a change in its answer reflects scale-sensitivity rather than missing information. MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps? SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA     
+
+> OSM via OSMnx (graph + features)
+> Project + con-solidate (10 m)
+> Sample win-dow + anchor
+> Solve oracle + anti-gaming reject
+> Place markers + visual invariants
+> Render mid + local panels
+> Public ( I , 𝑞 )/hidden (𝐺, 𝜎, 𝑦 ★)
+> reject
+
+Figure 1: Dataset-generation workflow: deterministic, anti-gaming construction from OSM to paired public panels and the hidden graph/oracle. The reject self-loop discards instances whose visual shortcut already matches the oracle (Section 3). 
+
+3.2 Street graphs: drive vs. walk 
+
+The hidden graph is task-appropriate. Vehicle and logistics tasks (legal/one-way/closure/symbol-constrained/POI routing, pin place-ment, service-area siting, reachability, attribute-aware parking, loading-dock selection) use the directed drive network, so that one-way restrictions and turn legality are meaningful. Pedestrian tasks (accessibility/step-free routing and visual disambiguation) use the walk network, which is denser and includes footways and stairs. One-way compliance specifically requires the directed drive graph: legality is defined by edge direction. Graphs are projected and intersection-consolidated at a 10 m tolerance to remove dual-carriageway artifacts; node attributes carry coordinates and, where available, OSM tags ( oneway , highway , wheelchair , kerb , incline ,
+
+smoothness ). We additionally compute per-window morphology statistics (orientation entropy, intersection density, circuity) so in-stances can be stratified across grid, organic, and sparse street fabrics. 
+
+3.3 Visible-marker grammar and symbol overlays 
+
+A fixed grammar makes the on-panel labels unambiguous and machine-checkable. Core markers are colored dots with a bold printed ID: A (green) = start, E (red) = goal, W (slate) = required way-point, I1, I2,. . . (purple) = junction/POI guides, P1, P2,. . . 
+
+(blue) = candidate pins / parking / depots, and D1, D2,. . . (slate) = demand points. Task-specific overlays extend the grammar with: icon glyphs for typed POIs (EV charger, restroom, café, pharmacy, bank, water) and building entrances (loading dock, main, service, accessible); teal directional arrows on one-way streets; a red line with an “ ×” along a closed segment; a brown line with a staircase badge on impassable stairs; price/accessibility chips ($ 𝑁 , wheelchair symbol) under parking pins; and named striped zones drawn in deliberately non-map colors (magenta “EVENT ZONE”, hatched “HAZARD ZONE”, indigo “BUILDING”) so they are not confused with basemap parks or water. A per-task legend strip names every symbol used in the panel. 
+
+3.4 Visual-consistency invariants 
+
+Because the model must read labels precisely, generation enforces strict invariants at every zoom before an instance is accepted; failing any one triggers regeneration. (i) All-markers-visible : every task-critical marker projects inside the panel bounds; we place all such markers within a 130 m-radius window of the center so they fit the tighter local panel with label margin, and a per-panel visibility test records exactly which IDs project on-frame so the consistency protocol skips any zoom that lacks the evidence to answer. (ii) Dot-collision-free : marker dots (sized adaptively per zoom: radius 11 px on the mid panel, 14 px on the local panel) must be separated by at least the sum of their outer rings plus a 3 px buffer, and a global minimum center-to-center separation of 30 px is enforced, checked independently at each zoom so coarse panels are never visually mushed together. (iii) Label-collision-free : each printed ID is placed by a layout solver that tries six candidate offsets around its dot (upper/lower-right, upper/lower-left, straight up/down), treating other dots, already-placed labels, and the reserved bounding boxes of attribute/name chips and stairs badges as obstacles; labels are drawn as bold colored text on a white halo so they remain legible over any basemap. (iv) Cue-on-top : closure, stairs, one-way, and zone cues are composited after the markers so the central constraint is never occluded. Together these invariants guarantee that a careful reader (human or model) can recover every label and cue at both scales, isolating reasoning failures from rendering artifacts. 
+
+3.5 Hidden graph and exact oracles 
+
+Each task is scored against an exact oracle computed on 𝐺 . Short-est and constrained-shortest paths use Dijkstra’s algorithm [ 8]with a forbidden-edge/node weight callable (no graph copies); near-optimality margins use Yen’s 𝑘 -shortest paths [ 35 ] on a simple-digraph projection of the multigraph. Multi-stop sequencing (e.g. POI routing through a waypoint class) uses Held–Karp dynamic programming [ 14 ]. Facility location uses an exact 1-median [ 13 ](and a minimax variant); service-area siting uses single-facility max-coverage [ 6]; reachability uses single-source shortest-path distances with a margin-aware radius. Oracle outputs include the optimal cost, the second-best cost (for tie/margin checks), and the projected 
+
+visible route (the ordered marker sequence a correct answer should produce). None of 𝐺 , 𝜎 , or 𝑦 ★ is exposed in the PVD track. 
+
+3.6 Deterministic, anti-gaming generation 
+
+The entire dataset is regenerable from a single epoch seed and the per-metro bounding boxes; all randomness uses a SHA-256-derived stable seed (not Python’s randomized hash), so generation is re-producible across machines and processes. Crucially, generation enforces per-task anti-gaming rejection filters so that the visual shortcut is never the answer. A legal route must require its way-point detour: the start-to-waypoint-to-goal path must be at least 5% 
+
+longer than the direct start-to-goal path, so the trivial endpoint pair is both illegal (it skips the required waypoint) and suboptimal, and the purple guide markers deliberately mix on-route junctions with off-route distractors. A pin-placement instance is rejected when-ever the Euclidean-nearest candidate coincides with the network 
+
+1-median, forcing genuine graph-distance reasoning rather than im-age proximity. One-way instances require the directed-legal route to be at least 5% longer than the route that would be allowed if SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA Srinivas Venkatanarayanan 1,2 Clement Pakkam Isaac 1,3 
+
+arrows were ignored, with a mandatory waypoint reachable only by obeying the arrows. Closure and symbol-constrained instances are rejected unless the drawn constraint forces a real detour, and a scorer-consistency guard discards any instance whose own oracle route would cross the drawn constraint. To guarantee a unique, checkable answer, selection tasks enforce an explicit margin be-tween the best and second-best option: 5% for pin placement, a clean integer distance gap inside a 12% band for reachability, and a 
+
+12% relative gap for POI-goal routing, loading-dock parking, and the disambiguation candidates; the latter additionally require the two same-named POIs to be separated by at least 70 m along the query axis so the spatial relation is unambiguous. Finally, the binding of a typed-POI marker to its category is stored only in the hidden snap function, never drawn as text, so a graph- or text-only baseline cannot recover icon semantics and must read the rendered glyph. 
+
+3.7 Real vs. synthesized content 
+
+The spatial substrate is always real OSM: street graphs, POI loca-tions and categories, building footprints, stairs ( highway=steps ), and one-way directions are taken directly from OpenStreetMap. A small set of attributes that OSM does not record at scale are deter-ministically synthesized and flagged in the hidden record: parking price and wheelchair-accessibility for attribute-aware parking, en-trance types for loading-dock selection, and the drawn hazard/event 
+
+zones for symbol-constrained routing and visual disambiguation. Synthesis is seeded and never changes the underlying geometry, so the visual and graph substrate remains faithful while the attribute-fusion tasks remain exactly scorable. 
+
+3.8 Coverage and provenance 
+
+The benchmark spans ten U.S. downtowns (Seattle, New York, San Francisco, Chicago, Los Angeles, Washington DC, Boston, Port-land, Denver, Houston), 12 tasks, and 6,000 instances ( ≈500 per task) rendered at two zooms for 12,000 panels. Three tasks depend on scarce real POI configurations and therefore use metro sub-sets where those configurations exist: POI-goal routing (8 metros), symbol-constrained routing (7), and visual disambiguation (4, the downtowns with multiple same-named chain POIs straddling a landmark). Every panel records its style and graph version plus a style hash for provenance and exact reproduction. 
+
+4 Tasks 
+
+The 12 tasks span three families; Table 1 summarizes their network, output, oracle, and primary metric, and Figure 2 shows a represen-tative panel for each. All routes are reported as an ordered list of visible marker IDs, which we snap back to the graph for scoring. 
+
+4.1 Routing tasks 
+
+Legal route. Shortest legal route from A to E that passes a required waypoint W, among purple junction guides that mix on-route nodes and distractors. The waypoint-detour filter guarantees the naive 
+
+[A, E] answer is both illegal and suboptimal. One-way compliance. 
+
+Shortest legal driving route on the directed graph that obeys every drawn one-way arrow and passes a waypoint reachable only by respecting arrow directions; the directed optimum is forced to be meaningfully longer than the wrong-way-allowed route. Closure Table 1: The 12 tasks. Net = hidden graph (D: directed drive, W: walk). Output: route (ordered marker IDs), pick (single ID), set (ID set), pair (two IDs). Primary metric reported in Table 2.                                        
+
+> Task Net Output Primary metric Legal route Droute legal-route rate One-way compliance Droute legal-route rate Closure replanning Droute legal-route rate Symbol-constrained Droute legal-route rate POI-goal routing Droute legal-route rate Step-free accessibility Wroute legal-route rate Pin placement Dpick exact match Service-area siting Dpick exact match Attribute-aware parking Dpick exact match Reachability Dset set-F1 Loading-dock selection Dpair exact match Visual disambiguation Wpick exact match
+
+replanning. Shortest route avoiding a road segment drawn as a red “ ×”; the model must also report whether E remains reachable. 
+
+Step-free accessibility. Shortest route for a wheelchair/walker profile that avoids all drawn stairs (real highway=steps edges); stair-dense windows are rejected to keep panels legible. Symbol-constrained routing. Shortest route from A to E avoiding a drawn closure and a striped hazard zone; the constraints exist only as rendered symbols, never as graph attributes, so the model must see 
+
+them. POI-goal routing. From A, route to the nearest goal-type icon (e.g. EV charger) while passing at least one waypoint-type icon (e.g. restroom); the model must first identify the correct icons visually, then route, so a graph-only baseline cannot pick the node. 
+
+4.2 Facility and set-selection tasks 
+
+Pin placement. Choose the candidate pin minimizing total network distance to the demand markers ( 1-median [ 13 ]); the Euclidean-nearest pin is filtered out as the answer. Service-area siting. Choose the depot covering the most demand markers within a network-distance budget (single-facility max-coverage [ 6 ]). 
+
+Reachability. List every candidate pin reachable from A within a stated network-distance budget; the radius is snapped to an integer inside a clean distance gap so the set is unambiguous. 
+
+Attribute-aware parking. Choose the cheapest wheelchair-accessible parking within a budget of A, fusing the price chip, the accessibility symbol, and the graph distance. Loading-dock selection. For an indigo striped building with several entrance icons, pick the loading-dock entrance and the nearest parking lot by street distance; entrance types are synthesized while building and parking are real. 
+
+4.3 Visual disambiguation 
+
+Two POIs share the same name (icons with name chips). Given a named striped zone, the model selects the POI in the queried spatial relation to it (e.g. the one east of, or across the river from, the zone). This isolates visual-spatial reasoning: a name lookup or a graph-cost computation alone cannot solve it. MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps? SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA          
+
+> Legal route One-way compliance Closure replanning Symbol-constrained
+> POI-goal routing Step-free accessibility Pin placement Service-area siting
+> Reachability Attribute-aware parking Loading-dock selection Visual disambiguation
+
+Figure 2: Representative local-zoom panels for all 12 tasks (one instance each). Every panel is self-rendered from OSM with the fixed marker grammar, task-specific symbol overlays (one-way arrows, closure ×, stairs badges, price/accessibility chips, named striped zones, typed POI icons), and a per-task legend. The hidden street graph and oracle answer are never shown to the model. 
+
+5 Evaluation Protocol 
+
+We evaluate a Pure Visual Decision (PVD) track: the model sees only the rendered panel(s) and a prompt containing the marker grammar and the exact JSON answer schema, and never sees the graph, the snapping function, or a manifest. Scoring proceeds as a strict chain so that each stage gates the next; Figure 3 summarizes this evaluation workflow. 
+
+5.1 Prompting and structured decoding 
+
+Every model is queried with a fixed two-part prompt (Figure 4). A system prompt teaches the visual grammar (marker colors and IDs, the faint street-graph overlay, the legend, and the special cues for closures, stairs, one-way arrows, and named zones) and the global rules: travel only along drawn streets; “distance” always means street-network distance, never straight-line; use marker IDs exactly as printed; a route asked from A to E must begin at A and end at E; reason internally but output only a single JSON object; and abstain honestly when a needed label is illegible or absent rather than guess. The user prompt then adds a one-line zoom note, the instance question, task-specific solving guidance, and a worked ex-ample of the exact JSON to return. Answers use an envelope {task, answer, abstain, confidence} ; the abstain flag and confidence let a model decline rather than fabricate, and are recorded sepa-rately from incorrect answers. We request structured output in each provider’s strongest available mode (a per-task JSON schema where supported, otherwise a generic JSON-object mode), and validate every response with a per-task Pydantic model that ignores extra-neous keys and also accepts a bare answer object; before declaring a response invalid, a tolerant parser first recovers well-formed JSON from fenced or prose-wrapped completions. Because the prompt never reveals the snap function 𝜎 (the mapping from a visible ID to SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA Srinivas Venkatanarayanan 1,2 Clement Pakkam Isaac 1,3         
+
+> Panel I+ prompt 𝑞 VLM (JSON output) Parse + val-idate (SVR)
+> Snap 𝜎 + in-duce on 𝐺
+> Score: legality, optimality, ex-act, F1, NDE
+> Per-task metrics + error taxonomy
+> Run on mid & local panels
+> Cross-zoom consistency (CZC)
+
+Figure 3: Evaluation workflow (Pure Visual Decision track). The model sees only (I , 𝑞 ); its JSON answer passes a strict gating chain (schema validity, then snapping and induction on the hidden graph, then task scoring). The lower branch runs the model independently on both zoom panels to measure cross-zoom consistency (CZC).             
+
+> System (excerpt). You are an expert cartographic reasoning agent. You read a single rendered street-map panel and output an exact, machine-checkable mobility decision. Markers are colored dots with a bold printed ID: A=green start, E=red goal, W=slate waypoint, I# =purple junction/POI guides, P## =blue candidate pins/depots, D# =slate demand points. A legend strip names every symbol used in the panel. Rules: travel only along drawn streets; “distance” means street-network distance; use IDs exactly as printed; output only a single JSON object; abstain honestly if a needed label is unreadable.
+> User (pin placement). (local panel; labels are large and legible.) TASK: Pick the one pin ( P## ) that minimizes total street-network distance to demand markers
+> D1 ,D2 ,D3 . HOW TO SOLVE: this is a 1-median choice; the straight-line-nearest pin is often not the network-optimal one, so reason about the roads. Output ONLY this JSON shape:
+> {"task":"pin_placement", "answer":{"selected_pin_id":"P04"}, "abstain":false, "confidence":0.7}
+
+Figure 4: Example Pure Visual Decision prompt (pin place-ment). The system prompt fixes the visual grammar and global rules; the user prompt adds the zoom note, the in-stance task, task-specific guidance, and the exact JSON an-swer shape. The hidden graph, snap function 𝜎 , and oracle are never shown to the model. 
+
+its graph node, and for typed POIs its hidden category), the decision cannot be produced without actually reading the panel. 
+
+(1) Schema validity (SVR). The model returns a JSON envelope; we parse it (tolerating fenced/prose-wrapped JSON) and validate against the task’s schema. Schema validity is the first scored event: malformed output zeros all downstream metrics. Parsing is crash-safe (a malformed envelope is recorded as schema-invalid, not an error). 
+
+(2) Snapping and induction. Valid answers reference visible IDs; we apply 𝜎 to map each ID to its graph node and induce the decision on 𝐺 (e.g. expand a marker sequence into the concrete edge path between consecutive nodes). Route answers must begin at A and end at E; otherwise they are flagged incomplete and earn no legality/optimality credit. 
+
+(3) Task scoring. For routes we report: legality (every induced edge exists and obeys the task constraints: one-way directions, clo-sures, stairs, hazard zones, and required waypoints), the optimality ratio 𝑐 pred /𝑐 ★ and regret 𝑐 pred − 𝑐 ★ versus the oracle cost (finite only for legal routes), edge-IoU against the oracle edge set, and normal-ized edit distance over the marker sequence. For single selections we report exact match and, for pins/docks, the network-distance error between the chosen and optimal node. For sets (reachability) we report precision , recall , and F1 ; for siting, the coverage ratio and 
+
+coverage regret . An error taxonomy attributes failures to schema, symbol-grounding (a chosen ID is not a valid candidate), incomplete route, illegality, or sub-optimality. 
+
+(4) Cross-zoom consistency (CZC). We run the model inde-pendently on the mid and local panels of the same instance and measure decision agreement: edge-Jaccard for routes, set-Jaccard for reachability, and exact agreement for single picks. CZC is com-puted independently of correctness (a model can be accurate yet scale-inconsistent), making it a distinct axis from accuracy. 
+
+6 Experimental Setup 
+
+Models and APIs. We evaluate two tiers of vision-language models behind a single OpenAI-compatible client: a fast tier (Google Gemini Flash-Lite variants, OpenAI GPT-4o-mini, Anthropic Claude Haiku, and an open-weights Gemma served on our own infrastructure) and a frontier reasoning tier (Anthropic Claude Opus and GPT-5.5). All providers (OpenAI, Anthropic, Google Gemini, and the self-hosted Gemma endpoint) are reached through one uniform chat-completions interface, so the same prompt builder, image encoder, and answer parser drive every model and adding a new model is a single registry entry that declares its provider, structured-output capability, and reasoning controls. 
+
+Harness and concurrency. The evaluation harness is fully asynchronous (Python asyncio over an AsyncOpenAI client). Re-quests are dispatched concurrently under a global semaphore that bounds the number of in-flight calls, while a round-robin rotation across multiple API keys spreads load and respects per-key rate limits. Each call is wrapped in bounded retry with exponential backoff and jitter: transient network errors, rate-limit responses, and empty completions are retried, and unsupported request fields (for example, a rejected response_format or a reasoning-effort flag) are detected and dropped before the call is re-issued, so one model’s API quirks never abort the run. Predictions are streamed to disk incrementally, making runs fully resumable and idempotent (already-graded instances are skipped on restart). 
+
+Structured output and schema validation. Every task de-clares an exact JSON answer schema. We request structured output in each provider’s strongest available mode (native JSON-schema where supported, otherwise JSON-object), and validate each re-sponse against a per-task Pydantic model. Schema validity is the first gate of the scoring chain: a response that fails to parse or vio-lates the schema is recorded as schema-invalid rather than crashing the harness, and a tolerant fallback parser first attempts to recover well-formed JSON from fenced or prose-wrapped completions. This separates output-formatting failures from genuine reasoning errors. MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps? SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Mean primary score across 5 models
+> Pin placement
+> POI-goal routing
+> Service-area siting
+> Closure replanning
+> Accessibility routing
+> Symbol-constrained routing
+> Loading-dock selection
+> Attribute-aware parking choice
+> Reachability set selection
+> Legal route planning
+> One-way compliance routing
+> Visual disambiguation
+> 0.18
+> 0.31
+> 0.34
+> 0.53
+> 0.54
+> 0.55
+> 0.56
+> 0.65
+> 0.72
+> 0.90
+> 0.91
+> 0.96
+> Per-task difficulty gradient (red = graph-cost reasoning tasks)
+
+Figure 5: Per-task difficulty gradient: mean primary score across the seven models. Graph-cost reasoning tasks (red) sit at the bottom; pin placement is near chance. Protocol. All models see identical panels, the same marker gram-mar, and the same answer schema; none is given the hidden graph, the snapping function, or a manifest. Prompts include an explicit abstain option so a model can decline rather than guess, and the reasoning tier exposes a configurable reasoning-effort setting that we tune for tractable latency. Generation is seeded for reproducibil-ity, and the full harness, prompts, schemas, and model registry are released so any model can be re-run on the same inputs. 
+
+7 Results 
+
+Table 2 reports per-task primary accuracy for all seven models; Figure 5 shows the resulting difficulty gradient, Figure 6 the full model ×task grid, and Figure 7 cross-zoom consistency by task. 
+
+VLMs read maps and route simply. Visual disambiguation is near-solved (0.79–1.00) and legal/one-way routing is strong (0.70– 0.98): models reliably read the marker grammar and trace short, connected routes. 
+
+They collapse on graph-cost reasoning. The difficulty gra-dient falls off sharply for tasks that require comparing distances 
+
+along the network. Most strikingly, single-facility pin placement (1-median) is near chance for every model (0.17–0.21, including both frontier reasoning models), because the visually nearest candidate is, by construction, often not the network-optimal one. Service-area siting (0.19–0.47) and POI-goal routing (0.08–0.71) are similarly weak in the fast tier. 
+
+Frontier reasoning helps some tasks but not the core fail-ure. GPT-5.5 lifts POI-goal routing from 0.39 (best fast) to 0.71 and service-area siting from 0.35 to 0.47, and leads the overall macro ac-curacy (0.70). Yet pin placement remains at chance, 0.20 for GPT-5.5 and 0.17 for Claude Opus; this indicates the bottleneck is graph-cost optimization, not perception or model scale. 
+
+Decisions are scale-inconsistent. Even the best model agrees with itself across zoom only ≈73% of the time (macro CZC, Table 2); for routing tasks CZC is often 0.52–0.67 despite high accuracy. High accuracy does not imply scale-invariance, motivating CZC as a distinct axis. gemini-3.1-fl                                                                         
+
+> gemini-2.5-fl
+> gpt-4o-mini
+> claude-haiku-4.5
+> gemma-4-31b
+> claude-opus-4.7
+> gpt-5.5
+> Visual disambiguation
+> One-way compliance routing
+> Legal route planning
+> Reachability set selection
+> Attribute-aware parking choice
+> Loading-dock selection
+> Symbol-constrained routing
+> Accessibility routing
+> Closure replanning
+> Service-area siting
+> POI-goal routing
+> Pin placement
+> 1.00 0.96 0.79 1.00 1.00 1.00 1.00
+> 0.95 0.78 0.96 0.83 0.92 0.94 0.98
+> 0.96 0.70 0.98 0.79 0.94 0.98 0.98
+> 0.75 0.68 0.65 0.71 0.76 0.76 0.77
+> 0.74 0.47 0.55 0.61 0.69 0.75 0.75
+> 0.63 0.51 0.38 0.49 0.58 0.62 0.69
+> 0.61 0.52 0.37 0.63 0.62 0.58 0.50
+> 0.73 0.41 0.30 0.38 0.56 0.69 0.73
+> 0.63 0.49 0.35 0.48 0.61 0.56 0.56
+> 0.34 0.34 0.18 0.23 0.34 0.45 0.47
+> 0.39 0.08 0.12 0.17 0.22 0.51 0.71
+> 0.19 0.21 0.17 0.18 0.17 0.17 0.20
+> Primary-metric accuracy (model x task)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> score
+
+Figure 6: Primary accuracy for every model and task. The bottom row (pin placement) is uniformly poor across all seven models, including the two frontier reasoning models (right). 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Mean cross-zoom agreement (zm vs zl) across models
+> POI-goal routing
+> Accessibility routing
+> Closure replanning
+> Symbol-constrained routing
+> Legal route planning
+> One-way compliance routing
+> Pin placement
+> Service-area siting
+> Loading-dock selection
+> Reachability set selection
+> Attribute-aware parking choice
+> Visual disambiguation
+> 0.48
+> 0.48
+> 0.53
+> 0.56
+> 0.61
+> 0.63
+> 0.63
+> 0.69
+> 0.70
+> 0.79
+> 0.80
+> 0.96
+> Cross-zoom consistency by task
+
+Figure 7: Cross-zoom consistency by task (mean over models): agreement between the wide and local zoom decisions on the same instance. Routing decisions frequently flip across scale even when accuracy is high. 
+
+8 Discussion and Open Challenges 
+
+The results separate two abilities that prior text-scored bench-marks conflate. VLMs are competent map readers : they parse a fixed marker grammar, recognize icons, and resolve spatial rela-tions (visual disambiguation near 1.0). They are poor map reasoners 
+
+whenever the answer depends on comparing distances along the network. Pin placement is the cleanest probe: it is a single discrete choice with no long-horizon planning, yet accuracy is at chance for all seven models because the model must integrate road-network distance rather than image proximity. This points to a concrete, industrially relevant open challenge (grounding facility-location and least-cost reasoning in the visible graph) that better percep-tion alone will not solve. Cross-zoom inconsistency compounds the problem for deployment: a system that changes its route when the map is zoomed is hard to trust. We release the benchmark and har-ness at https://github.com/Vi-Sri/mapreason-osm to make progress on these axes measurable. SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA Srinivas Venkatanarayanan 1,2 Clement Pakkam Isaac 1,3 
+
+Table 2: Per-task primary score (0–1) for all seven models (mean over both zooms). Primary metric: legal-route rate (routing tasks), set-F1 (reachability), exact selection (pin/service/parking/dock/visual). Tasks ordered by mean difficulty. Bold = best per row; ( †) marks the frontier reasoning tier. The bottom rows give macro accuracy and macro cross-zoom consistency (CZC). 
+
+Task Gemini-3.1-FL Gemini-2.5-FL GPT-4o-mini Claude-Haiku-4.5 Gemma-4-31B Claude-Opus-4.7 † GPT-5.5 †
+
+Visual disambiguation 1.00 0.96 0.79 1.00 1.00 1.00 1.00 
+
+One-way compliance routing 0.95 0.78 0.96 0.83 0.92 0.94 0.98 
+
+Legal route planning 0.96 0.70 0.98 0.79 0.94 0.98 0.98 
+
+Reachability set selection 0.75 0.68 0.65 0.71 0.76 0.76 0.77 
+
+Attribute-aware parking 0.74 0.47 0.55 0.61 0.69 0.75 0.75 
+
+Loading-dock selection 0.63 0.51 0.38 0.49 0.58 0.62 0.70 
+
+Symbol-constrained routing 0.61 0.52 0.37 0.63 0.62 0.59 0.50 Step-free accessibility 0.73 0.41 0.30 0.38 0.56 0.70 0.74 
+
+Closure replanning 0.63 0.49 0.35 0.49 0.61 0.57 0.56 Service-area siting 0.35 0.35 0.19 0.24 0.35 0.45 0.47 
+
+POI-goal routing 0.39 0.08 0.12 0.17 0.22 0.51 0.71 
+
+Pin placement (1-median) 0.19 0.21 0.18 0.18 0.17 0.17 0.20 
+
+Macro accuracy 0.66 0.51 0.48 0.54 0.62 0.67 0.70 Macro CZC 0.73 0.62 0.59 0.60 0.61 0.71 0.72 
+
+9 Limitations 
+
+Three tasks use metro subsets due to scarce real POI configura-tions, so per-task metro coverage is non-uniform. We evaluate a single visual-only prompting track; manifest-assisted and candidate-rerank tracks (to separate perception, grounding, and planning failures) are future work. Finally, model identifiers and endpoints evolve; we release the deterministic generator and harness so results can be reproduced and extended. 
+
+10 Conclusion 
+
+MapReason-OSM is a graph-grounded, exactly-scored benchmark that asks whether VLMs can turn a street-map image into a legal, near-optimal mobility decision. Across seven models, the answer is nuanced: models read maps and route simply, but fail at graph-cost reasoning (pin placement is at chance even for frontier reasoning models), and are frequently inconsistent across zoom. By isolating where map perception ends and spatial reasoning fails, and by ship-ping a reproducible generator and harness, MapReason-OSM offers the community a precise target for spatially grounded foundation models. 
+
+Acknowledgments 
+
+Generative AI tools were used to assist with code, figure generation, and manuscript drafting; all content was reviewed and verified by the authors. Map data is © OpenStreetMap contributors, available under the Open Database License (ODbL). 
+
+References 
+
+[1] Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Jun-yang Lin, Chang Zhou, and Jingren Zhou. 2023. Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond. arXiv:2308.12966 [cs.CV] [2] Prabin Bhandari, Antonios Anastasopoulos, and Dieter Pfoser. 2024. Urban Mobility Assessment Using LLMs. In Proceedings of the 32nd ACM International Conference on Advances in Geographic Information Systems (SIGSPATIAL ’24) .https://doi.org/10.1145/3678717.3691221 [3] Geoff Boeing. 2017. OSMnx: New Methods for Acquiring, Constructing, Ana-lyzing, and Visualizing Complex Street Networks. Computers, Environment and Urban Systems 65 (2017), 126–139. https://doi.org/10.1016/j.compenvurbsys.2017. 05.004 [4] Nicholas Bolten and Anat Caspi. 2019. Towards Routine, City-Scale Accessibility Metrics: Graph Theoretic Interpretations of Pedestrian Access Using Personal-ized Pedestrian Network Analysis. In Proceedings of the 27th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems .[5] Boyuan Chen, Zhuo Xu, Sean Kirmani, Brian Ichter, Dorsa Sadigh, Leonidas Guibas, and Fei Xia. 2024. SpatialVLM: Endowing Vision-Language Models with Spatial Reasoning Capabilities. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 14455–14465. [6] Richard Church and Charles ReVelle. 1974. The Maximal Covering Location Problem. Papers in Regional Science 32, 1 (1974), 101–118. https://doi.org/10. 1111/j.1435-5597.1974.tb00902.x [7] Mahir Labib Dihan et al . 2025. MapEval: A Map-Based Evaluation of Geo-Spatial Reasoning in Foundation Models. In Proceedings of the 42nd International Confer-ence on Machine Learning (ICML) .[8] Edsger W. Dijkstra. 1959. A Note on Two Problems in Connexion with Graphs. 
+
+Numer. Math. 1, 1 (1959), 269–271. https://doi.org/10.1007/BF01386390 [9] Bahare Fatemi, Jonathan Halcrow, and Bryan Perozzi. 2024. Talk Like a Graph: Encoding Graphs for Large Language Models. In The Twelfth International Con-ference on Learning Representations (ICLR) .[10] Sicheng Feng, Song Wang, Shuyi Ouyang, Lingdong Kong, Zikai Song, Jianke Zhu, Huan Wang, and Xinchao Wang. 2026. ReasonMap: Towards Fine-Grained Visual Reasoning from Transit Maps. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[11] Xingyu Fu, Yushi Hu, Bangzheng Li, Yu Feng, Haoyu Wang, Xudong Lin, Dan Roth, Noah A. Smith, Wei-Chiu Ma, and Ranjay Krishna. 2024. BLINK: Multimodal Large Language Models Can See but Not Perceive. In Computer Vision – ECCV 2024 (Lecture Notes in Computer Science, Vol. 15081) . Springer, 148–166. https: //doi.org/10.1007/978-3-031-73337-6_9 [12] Gemini Team, Google. 2023. Gemini: A Family of Highly Capable Multimodal Models. arXiv:2312.11805 [cs.CL] [13] S. L. Hakimi. 1964. Optimum Locations of Switching Centers and the Absolute Centers and Medians of a Graph. Operations Research 12, 3 (1964), 450–459. https://doi.org/10.1287/opre.12.3.450 [14] Michael Held and Richard M. Karp. 1962. A Dynamic Programming Approach to Sequencing Problems. J. Soc. Indust. Appl. Math. 10, 1 (1962), 196–210. https: //doi.org/10.1137/0110015 [15] Varvara Krechetova and Denis Kochedykov. 2025. GeoBenchX: Benchmark-ing LLMs in Agent Solving Multistep Geospatial Tasks. In Proceedings of the 1st ACM SIGSPATIAL International Workshop on Geospatial Generative Agents (GeoGenAgent ’25) . https://doi.org/10.1145/3764915.3770721 [16] Yifan Li, Yifan Du, Kun Zhou, Jinpeng Wang, Wayne Xin Zhao, and Ji-Rong Wen. 2023. Evaluating Object Hallucination in Large Vision-Language Models. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (EMNLP) . 292–305. [17] Zekun Li, Malcolm Grossman, Eric Qasemi, Mihir Kulkarni, Muhao Chen, and Yao-Yi Chiang. 2025. MapQA: Open-domain Geospatial Question Answering on Map Data. In Proceedings of the 33rd ACM International Conference on Advances in Geographic Information Systems (SIGSPATIAL ’25) .[18] Fangyu Liu, Guy Emerson, and Nigel Collier. 2023. Visual Spatial Reasoning. 
+
+Transactions of the Association for Computational Linguistics 11 (2023), 635–651. https://doi.org/10.1162/tacl_a_00566 [19] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2023. Visual Instruc-tion Tuning. In Advances in Neural Information Processing Systems (NeurIPS) .MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps? SIGSPATIAL ’26, November 3–6, 2026, Riverside, CA, USA 
+
+[20] Pan Lu, Hritik Bansal, Tony Xia, Jiacheng Liu, Chunyuan Li, Hannaneh Hajishirzi, Hao Cheng, Kai-Wei Chang, Michel Galley, and Jianfeng Gao. 2024. MathVista: Evaluating Mathematical Reasoning of Foundation Models in Visual Contexts. In 
+
+The Twelfth International Conference on Learning Representations (ICLR) .[21] Rohin Manvi, Samar Khanna, Marshall Burke, David B. Lobell, and Stefano Ermon. 2024. Large Language Models are Geographically Biased. In Proceedings of the 41st International Conference on Machine Learning (ICML) .[22] Rohin Manvi, Samar Khanna, Gengchen Mai, Marshall Burke, David B. Lobell, and Stefano Ermon. 2024. GeoLLM: Extracting Geospatial Knowledge from Large Language Models. In The Twelfth International Conference on Learning Representations (ICLR) .[23] Ahmed Masry, Do Xuan Long, Jia Qing Tan, Shafiq Joty, and Enamul Hoque. 2022. ChartQA: A Benchmark for Question Answering about Charts with Visual and Logical Reasoning. In Findings of the Association for Computational Linguistics: ACL 2022 . 2263–2279. [24] Minesh Mathew, Dimosthenis Karatzas, and C. V. Jawahar. 2021. DocVQA: A Dataset for VQA on Document Images. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) . 2200–2209. [25] OpenAI. 2023. GPT-4 Technical Report. arXiv:2303.08774 [cs.CL] [26] OpenStreetMap contributors. 2017. OpenStreetMap. https://www.openstreetmap. org. [27] Jonathan Roberts, Timo Lüddecke, Sowmen Das, Kai Han, and Samuel Al-banie. 2023. GPT4GEO: How a Language Model Sees the World’s Geography. arXiv:2306.00020 [cs.CL] [28] Ziqiao Shang, Lingyue Ge, Yang Chen, Shi-Yu Tian, Zhenyu Huang, Wenbo Fu, Yu-Feng Li, and Lan-Zhe Guo. 2026. MapTab: Are MLLMs Ready for Multi-Criteria Route Planning in Heterogeneous Graphs? arXiv:2602.18600 [cs.CV] [29] Zhiheng Song, Jingshuai Zhang, Chuan Qin, Chao Wang, Chao Chen, Longfei Xu, Kaikui Liu, Xiangxiang Chu, and Hengshu Zhu. 2026. MobilityBench: A Bench-mark for Evaluating Route-Planning Agents in Real-World Mobility Scenarios. arXiv:2602.22638 [cs.AI] KDD 2026. [30] Huy Quang Ung, Guillaume Habault, Yasutaka Nishimura, Hao Niu, Roberto Legaspi, Tomoki Oya, Ryoichi Kojima, Masato Taya, Chihiro Ono, Atsunori Mi-namikawa, and Yan Liu. 2025. CartoMapQA: A Fundamental Benchmark Dataset Evaluating Vision-Language Models on Cartographic Map Understanding. In 
+
+Proceedings of the 33rd ACM International Conference on Advances in Geographic Information Systems (SIGSPATIAL ’25) .[31] Heng Wang, Shangbin Feng, Tianxing He, Zhaoxuan Tan, Xiaochuang Han, and Yulia Tsvetkov. 2023. Can Language Models Solve Graph Problems in Natural Language?. In Advances in Neural Information Processing Systems (NeurIPS) .[32] Shuo Xing et al . 2025. Can Large Vision Language Models Read Maps Like a Human? arXiv:2503.14607 [cs.CV] MapBench. [33] Liuchang Xu, Shuo Zhao, Qingming Lin, Luyao Chen, Qianqian Luo, Sensen Wu, Xinyue Ye, Hailin Feng, and Zhenhong Du. 2024. Evaluating Large Language Mod-els on Spatial Tasks: A Multi-Task Benchmarking Study. arXiv:2408.14438 [cs.CL] [34] Yufei Xu, Gulam Kibria, and Srinivas Peeta. 2025. Agentic LLM Framework for Generating Spatial Intelligence to Support Decision-Making in Smart Cities. In 
+
+Proceedings of the 1st ACM SIGSPATIAL International Workshop on Geospatial Generative Agents (GeoGenAgent ’25) . https://doi.org/10.1145/3764924.3770899 [35] Jin Y. Yen. 1971. Finding the K Shortest Loopless Paths in a Network. Management Science 17, 11 (1971), 712–716. https://doi.org/10.1287/mnsc.17.11.712 [36] Du Yin, Hao Xue, Arian Prabowo, Shuang Ao, and Flora Salim. 2025. XXLTraffic: Expanding and Extremely Long Traffic Forecasting beyond Test Adaptation. In 
+
+Proceedings of the 33rd ACM International Conference on Advances in Geographic Information Systems (SIGSPATIAL ’25) . https://doi.org/10.1145/3748636.3762762 [37] Xiang Yue, Yuansheng Ni, Kai Zhang, Tianyu Zheng, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu Jiang, Weiming Ren, Yuxuan Sun, Cong Wei, Botao Yu, Ruibin Yuan, Renliang Sun, Ming Yin, Boyuan Zheng, Zhenzhu Yang, Yibo Liu, Wenhao Huang, Huan Sun, Yu Su, and Wenhu Chen. 2024. MMMU: A Massive Multi-discipline Multimodal Understanding and Reasoning Benchmark for Expert AGI. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . 9556–9567.

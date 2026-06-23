@@ -1,0 +1,579 @@
+Title: GeoRouteNet: Geometry-Enhanced Non-Autoregressive Neural Solver for the Traveling Salesman Problem
+
+URL Source: https://arxiv.org/pdf/2606.22776v1
+
+Published Time: Tue, 23 Jun 2026 02:33:44 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# GeoRouteNet: Geometry-Enhanced Non-Autoregressive Neural Solver for the Traveling Salesman Problem 
+
+Xiang Li 
+
+College of Computer Science, Yangtze University, Jingzhou, China 
+
+lixiang@yangtzeu.edu.cn 
+
+Abstract 
+
+The traveling salesman problem (TSP) is a canonical NP-hard combinatorial optimization benchmark that tests the representational capacity and generalization of neural solvers. While non-autoregressive (NAR) approaches offer parallel inference, they often lack sufficient geometric inductive bias and stable training signals, leading to degraded performance under cross-scale and cross-distribution shifts. We propose GeoRouteNet, a geometry-enhanced NAR neural solver for Euclidean TSP. On the model side, GeoRouteNet incorporates centered node features, learnable radial distance basis functions, distance-aware graph attention with explicit edge messaging, LayerNorm-SwiGLU feed-forward blocks, and cross-layer attentive residual mixing. On the training side, we design multi-candidate self-comparison reinforcement learning (MCS-RL), which samples multiple candidate tours per instance, constructs adaptive baselines from greedy and peer candidates, and adds winner-candidate guidance with annealed entropy regularization. On 10,000 random TSP50 instances, GeoRouteNet achieves a 0.32% optimality gap under Beam-1000 decoding. On TSP100, the gap is 1.26% . On 27 stratified TSPLIB EUC_2D instances, the overall gap drops from 17 .12% (NAR4TSP reproduction) to 3.60% , while batch inference throughput substantially exceeds that of Concorde and LKH3. Ablation studies confirm that geometric structure enhancement and multi-candidate training are complementary: structure improvements dominate cross-distribution gains, while MCS-RL further stabilizes solution quality when paired with a strong geometric encoder. 
+
+# 1 Introduction 
+
+The traveling salesman problem (TSP) is one of the most extensively studied problems in combinato-rial optimization. Given a set of nodes with pairwise distances, the goal is to find a closed tour that visits each node exactly once while minimizing total travel distance. Despite its simple formulation, the TSP is NP-hard and serves as a standard testbed for optimization algorithms across logistics, chip design, robotics, and manufacturing [ 3 , 5 , 6, 15 ]. Decades of research have produced powerful exact solvers such as Concorde [ 1 ] and highly effective heuristics such as the Lin-Kernighan-Helsgaun (LKH) family [ 7, 16 ]. However, these methods rely on handcrafted neighborhoods, pruning rules, and per-instance search, which limits their throughput when large numbers of instances must be solved under tight time constraints. Neural combinatorial optimization offers a complementary approach: instead of searching from scratch for each instance, a neural model learns a mapping from problem instances to solutions. 1
+
+> arXiv:2606.22776v1 [cs.LG] 22 Jun 2026 GeoRouteNet: Geometry-Enhanced NAR TSP Solver
+
+Autoregressive (AR) neural solvers construct tours step by step [ 4 , 13 , 14 , 22 ], achieving high solution quality but suffering from sequential inference bottlenecks. Non-autoregressive (NAR) solvers address this by predicting edge distributions or transition scores in parallel, then decoding them into feasible tours [ 10 , 19 , 24 ]. NAR4TSP [ 24 ] demonstrated that NAR graph neural networks can be trained effectively with reinforcement learning (RL), achieving a favorable speed-quality tradeoff on random TSP instances. However, our reproduction reveals two important limitations. First, on TSP100, the optimality gap rises to 2.73% (Beam-1000), indicating sensitivity to instance scale. Second, on 27 TSPLIB EUC_2D instances, the gap reaches 17 .12% , exposing a severe cross-distribution generalization failure. These results suggest that NAR4TSP’s coordinate-to-edge-distribution mapping, learned exclusively on unit-square TSP50 instances, lacks the geometric inductive biases needed to transfer across scales and spatial distributions. This paper addresses two central questions: (1) Can explicit geometric structure in the encoder reduce the model’s reliance on training-distribution statistics? (2) Can a richer training signal, derived from multiple candidate tours per instance, improve the probability assigned to high-quality solutions? We answer both questions affirmatively. We propose GeoRouteNet, a geometry-enhanced NAR neural solver for Euclidean TSP. On the model side, GeoRouteNet introduces five geometric inductive biases: centered node coordinates that provide translation invariance; learnable radial distance basis functions that capture nonlinear distance effects; distance-aware graph attention that injects edge bias and distance penalty directly into attention logits; explicit edge-state messaging with residual updates; and LayerNorm-SwiGLU feed-forward blocks with cross-layer attentive residual mixing for deeper representation. On the training side, we introduce multi-candidate self-comparison reinforcement learning (MCS-RL). Instead of comparing a single sampled tour against a greedy baseline, MCS-RL samples K candidate tours per instance, constructs an adaptive baseline from the greedy tour and peer candidates, applies winner-candidate guidance to reinforce the shortest sampled tour, and uses annealed entropy regularization to balance exploration and exploitation. We conduct experiments on random TSP50, TSP100, and 27 stratified TSPLIB EUC_2D instances. On TSP50, GeoRouteNet achieves a 0.32% optimality gap under Beam-1000 decoding, compared to 0.42% for our NAR4TSP reproduction. On TSP100, the gap drops from 2.73% to 
+
+1.26% . On TSPLIB, the overall gap decreases from 17 .12% to 3.60% . Ablation studies with four model variants isolate the contributions of geometric structure and MCS-RL training: structure enhancements dominate cross-distribution generalization (reducing TSPLIB gap from 17 .12% to 
+
+5.41% even with the original training objective), while MCS-RL provides additional gains when paired with a sufficiently strong geometric encoder. Under our hardware and batch-inference setting, GeoRouteNet’s throughput substantially exceeds that of Concorde and LKH3, making it suitable for high-volume approximate solving. Our contributions are: (i) A geometry-enhanced NAR encoder that encodes Euclidean structure through centered coordinates, learnable radial distance features, distance-aware attention, and improved deep representation mechanisms; (ii) An MCS-RL training objective that replaces single-candidate comparison with multi-candidate self-comparison, adaptive baselines, and winner-candidate guidance; (iii) A systematic ablation showing that geometric structure and multi-candidate training are complementary, with structure being the dominant factor for cross-distribution robustness; 2GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+(iv) Strong empirical results on both random benchmarks and standard TSPLIB instances, significantly narrowing the gap between NAR neural solvers and traditional optimization methods. 
+
+# 2 Preliminaries 
+
+2.1 Euclidean TSP 
+
+Let V = {1, 2, . . . , n } be a set of n nodes, where each node i has 2D coordinates xi ∈ R2. The distance between nodes i and j is the Euclidean distance dij = ∥xi − xj ∥2. The objective is to find a permutation π ∈ Sn that minimizes the total tour length: 
+
+min 
+
+> π∈Sn
+
+C(π) = 
+
+> n∑
+> t=1
+
+d(xπt , x πt+1 ), πn+1 = π1. (1) Our random TSP instances are sampled uniformly from the unit square [0 , 1] 2. TSPLIB instances [ 17 ] follow real or standardized coordinate distributions with more complex spatial structure. 
+
+2.2 Non-Autoregressive Neural Solver Paradigm 
+
+Autoregressive neural solvers construct tours sequentially, selecting one node at a time conditioned on the partial tour [ 13 , 14 ]. Non-autoregressive solvers instead predict a global distribution over edges or transitions, then decode it into a feasible tour. For TSP, the model outputs a start-node distribution ps(i) and an edge transition distribution pe(j | i). Given these, a complete tour probability factorizes as: 
+
+p(π | G) = ps(π1)
+
+> n−1∏
+> t=1
+
+pe(πt+1 | πt, V t), (2) where Vt is the set of unvisited nodes at step t. This design keeps the network body parallel; only the lightweight decoder runs sequentially. 
+
+2.3 Reinforcement Learning Objective 
+
+Since optimal TSP labels are expensive to obtain, we use RL with the tour length as reward. The standard policy gradient with baseline b for variance reduction is: 
+
+LPG = E
+
+> [
+
+(C(π) − b)
+
+> n∑
+> t=1
+
+log pθ(at | st)
+
+> ]
+
+. (3) NAR4TSP [ 24 ] uses the greedy tour length as the baseline b for a single sampled candidate. Our MCS-RL extends this to multiple candidates per instance, described in Section 4. 
+
+2.4 Evaluation 
+
+We evaluate models using average tour length, optimality gap Gap (%) = ( Cmodel − Cref )/C ref × 100% 
+
+with Concorde [ 1] as reference, per-instance latency, total runtime, throughput, peak GPU memory, and parameter count. Gap is the primary quality metric. 3GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+# 3 GeoRouteNet Model Design 
+
+GeoRouteNet retains the NAR4TSP framework of predicting start and edge transition distributions and decoding them into feasible tours [ 24 ]. Our contributions focus on improving the encoder’s geometric representational capacity. Figure 1 illustrates the overall architecture. Node Coords                                   
+
+> (xi, y i)
+> Centered Coords
+> ci=xi−¯x
+> Node Embedding MLP
+> 16 →128
+> Start Attention Head Learned query →start dist.
+> Decoder Greedy (Argmax) / Beam Search
+> Distance Matrix
+> dij
+> Radial Distance Basis
+> ϕk(dij ), k = 1 .. 16
+> Edge Embedding MLP RBF →22 →128
+> Edge Decoder Head MLP: 128 →128 →1
+> TSP Tour (feasible permutation)
+> ×Llayers
+> Distance-Aware Attention
+> αij = softmax( qikj
+> √d+βij −λd ij )
+> LayerNorm + SwiGLU FFN Cross-Layer Attentive Residual Mix
+> Edge State Residual Update
+> SiLU( eij +Wee+Wshi+Wthj)
+
+Figure 1: GeoRouteNet model architecture. The model takes node coordinates and pairwise distances as input, constructs geometrically enriched node and edge features, processes them through a distance-aware graph attention encoder with LayerNorm-SwiGLU feed-forward blocks and cross-layer attentive residual mixing, and outputs start-node and edge transition scores for decoding. 
+
+3.1 Node Geometric Features 
+
+Euclidean TSP is translation-invariant: shifting all coordinates by a constant vector does not change the optimal tour. However, absolute coordinates can cause the model to learn spurious associations between coordinate values and edge quality. We construct two simple geometric features: 
+
+xi = xi − 1
+
+n
+
+n∑
+
+j=1 
+
+xj , ri = ∥xi∥2. (4) The centered coordinate xi provides translation invariance by expressing each node in an instance-internal coordinate frame. The radius ri captures the node’s distance from the instance centroid, providing a coarse positional cue without introducing additional hyperparameters. 
+
+3.2 Learnable Radial Distance Basis and Edge Embedding 
+
+Edge distances are the fundamental signal for TSP: short edges are generally preferred, but the relationship is nonlinear and context-dependent. We use a bank of K = 16 learnable radial basis functions (RBFs): 
+
+ϕk(dij ) = exp 
+
+[
+
+−
+
+( dij − μk
+
+σ
+
+)2]
+
+, k = 1 , . . . , K. (5) Each RBF is a Gaussian centered at μk with fixed width σ = 0 .1. The centers μk are initialized to uniformly cover the distance range [0 , √2 ] (the maximum distance in a unit square) and remain learnable during training with a sorting constraint to maintain ordering. This turns a scalar distance into a K-dimensional feature, allowing the network to distinguish fine-grained distance intervals. For TSPLIB instances, we apply instance-level coordinate normalization before RBF computation, while the final gap calculation uses original distances. Figure 2 visualizes the RBF centers before and after training. 4GeoRouteNet: Geometry-Enhanced NAR TSP Solver  
+
+> Figure 2: Learnable radial distance basis functions before (left) and after (right) training. After training, several RBF centers concentrate on short-to-medium distance ranges while preserving coverage of longer cross-cluster edges.
+
+3.3 Distance-Aware Graph Attention 
+
+Our graph attention layer uses standard query-key-value (QKV) projection [ 20 , 21 ] with two geometric augmentations. For the attention from node i to node j in head h:
+
+α(h) 
+
+> ij
+
+= softmax j 
+
+> (
+
+q(h) 
+
+> i
+
+· k(h)
+
+> j
+
+√dh
+
++ β(h) 
+
+> ij
+
+− λ · dij 
+
+> )
+
+. (6) The edge bias β(h) 
+
+> ij
+
+is a learned linear projection from the current edge state, injected directly into the attention logits. The distance penalty −λ · dij suppresses attention along long edges; λ is a learnable scalar parameter passed through softplus to ensure non-negativity. The edge state also enters the value computation as an explicit message: 
+
+m(h) 
+
+> ij
+
+= v(h) 
+
+> j
+
++ e(h) 
+
+> ij
+
+, (7) where e(h) 
+
+> ij
+
+is a learned projection from the edge state. This node-edge joint modeling lets each node perceive both neighbor identities and the geometric relationships to them. After attention aggregation, edge states are updated through a residual pathway: 
+
+eij ← LayerNorm (eij + SiLU( Wsrc hi + Wdst hj + Wedge eij )), (8) where hi and hj are the updated node representations. This ensures that the final edge decoder sees context-aware edge states refined through multiple rounds of message passing. 
+
+3.4 LayerNorm-SwiGLU and Cross-Layer Residuals 
+
+Batch normalization (BatchNorm) normalizes across the batch dimension, which can be problematic when batch sizes vary or during single-instance TSPLIB evaluation. We replace BatchNorm with LayerNorm [2], which normalizes within each sample independently. After each attention layer, we apply a SwiGLU [18] feed-forward block: 
+
+SwiGLU( x) = Wo
+
+> (
+
+SiLU( Wgx) ⊙ Wvx), (9) where ⊙ denotes element-wise multiplication. The gating mechanism provides stronger nonlinear expressivity than standard ReLU MLPs without adding layers. 5GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+For deep graph networks, over-smoothing and limited information flow across layers are concerns. We use cross-layer attentive residual mixing: at each layer, the current node representation attends to the history of node states from all previous layers (as keys and values), allowing the model to retrieve both shallow geometric details and deep global context adaptively. 
+
+3.5 Start Prediction, Edge Decoding, and Tour Construction 
+
+A learnable start query vector attends to all node states via multi-head attention. The final attention weights form the start distribution ps(i). The edge decoder applies a two-layer MLP to each edge state to produce a scalar logit; these are organized into the edge transition matrix pe(j | i).During decoding, we evaluate three strategies: Greedy , which selects the highest-probability unvisited node at each step; Beam-100 and Beam-1000 , which maintain multiple partial paths ranked by cumulative log-probability. Since higher probability does not always imply shorter length, after beam search we compute the true tour length for each complete candidate and select the shortest. This post-beam length selection keeps comparison fair across models. 
+
+3.6 Complexity 
+
+The theoretical complexity is O(B · n2 · d) for batch size B, node count n, and hidden dimension 
+
+d. In practice, our implementation uses k-nearest-neighbor masking ( k = 10 ) to restrict effective attention, yielding O(B · n · k · d) for the attention computation. We use einsum operations instead of repeat /repeat_interleave patterns, which reduces peak memory below that of NAR4TSP despite GeoRouteNet’s larger parameter count (2.024M vs. 0.912M). 
+
+# 4 Multi-Candidate Self-Comparison Reinforcement Learning 
+
+NAR4TSP [ 24 ] trains with a single-candidate policy gradient: one tour is sampled per instance, compared against the greedy decoding result as a baseline, and the likelihood is adjusted accordingly. While simple and effective on in-distribution data, this approach has two limitations. First, a single sample per instance yields high-variance gradient estimates; when the sampled tour is similar in length to the greedy tour, the advantage signal becomes dominated by noise. Second, it ignores the quality differences among multiple tours that the same model distribution can generate—information that is especially valuable for beam search decoding, which relies on the model assigning high probability to several good candidates. We introduce multi-candidate self-comparison reinforcement learning (MCS-RL) to address both issues. The key idea is to sample multiple candidate tours per instance, compare them against each other within the same instance, and reinforce the best ones. Figure 3 illustrates the training flow. 
+
+4.1 Multi-Candidate Sampling and Adaptive Baseline 
+
+For each training instance i, we sample K candidate tours and compute their lengths C(1)  
+
+> i
+
+, . . . , C (K)
+
+> i
+
+and log-probability sums. We also decode the greedy tour and record its length Cgreedy  
+
+> i
+
+. For each candidate k, we define an adaptive baseline that takes the shorter of the greedy tour length and the shortest length among the other K − 1 candidates: 
+
+b(k) 
+
+> i
+
+= min 
+
+> (
+
+Cgreedy  
+
+> i
+
+, min   
+
+> j̸=k
+
+C(j)
+
+> i
+> )
+
+. (10) 6GeoRouteNet: Geometry-Enhanced NAR TSP Solver TSP Instance Batch Random coords X ∈ [0 , 1] B×N ×2
+
+Construct Distance Matrix & k-NN Adjacency 
+
+GeoRouteNet Forward Pass → Start dist. si + Edge transition logits 
+
+Greedy Decoding (deterministic) 
+
+Greedy Tour Length 
+
+Cgreedy 
+
+K = 3 Stochastic Sampling (stochastic) 
+
+K Candidate Tour Lengths 
+
+C(1)  
+
+> i
+
+, . . . , C (K) 
+
+> i
+
++ log p(k)
+
+Adaptive Baseline b(k) 
+
+> i
+
+= min (Cgreedy , min j̸ =k C(j)
+
+> i
+
+)
+
+Advantage Standardization A(k) 
+
+> i
+
+= C(k) 
+
+> i
+
+− b(k) 
+
+> i
+
+ˆA = ( A − ¯A) / σ A
+
+Policy Gradient Loss 
+
+Lpg = ˆA·log p
+
+Winner-Candidate Guidance 
+
+k∗ = arg min k C(k)
+
+Llead = ( ¯C − C(k∗)) log p(k∗)
+
+Annealed Entropy Reg. 
+
+ηt ·H(π)
+
+ηt : 0 .0125 → 0 (linear decay) 
+
+Total Loss L = Lpg + 0 .5 Llead − ηt H(π)
+
+Backpropagation → Gradient Clipping → Optimizer Update (Adam, lr = 10 −4)
+
+Figure 3: Overview of the MCS-RL training pipeline. For each training instance, the model generates K
+
+candidate tours through sampling, plus a greedy tour. An adaptive baseline is constructed from the greedy tour and the shortest among the other candidates. Winner-candidate guidance reinforces the shortest sampled tour, and annealed entropy regularization encourages exploration early in training. 
+
+7GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+The advantage A(k) 
+
+> i
+
+= C(k) 
+
+> i
+
+− b(k) 
+
+> i
+
+measures how much worse (or better) candidate k is relative to the best available alternative. Compared to single-candidate comparison ( b = Cgreedy ), the adaptive baseline is generally tighter when the model already produces good samples, and it provides a richer signal because each candidate is benchmarked not only against the greedy tour but also against its peers. To further stabilize training, we center and standardize advantages across the batch: 
+
+ˆA = A − mean( A)std( A) + ε . (11) 
+
+4.2 Winner-Candidate Guidance 
+
+Standardized advantages treat each candidate independently. We add a winner-candidate guidance term that explicitly encourages the shortest sampled candidate within each instance to receive higher probability. Let k∗ = arg min k C(k) 
+
+> i
+
+be the index of the winning candidate. The guidance loss is: 
+
+Llead = −Ei  
+
+> [(1
+> K
+> ∑
+> k
+
+C(k) 
+
+> i
+
+− C(k∗) 
+
+> i
+> )
+
+· log p(k∗)
+
+> i
+> n
+> ]
+
+. (12) The weight 1 
+
+> K
+> ∑
+> k
+
+C(k) 
+
+> i
+
+− C(k∗) 
+
+> i
+
+is the quality gap between the winning candidate and the average candidate: the larger the gap, the more strongly we reinforce the winner. If all candidates have similar lengths, the guidance weight is small, preventing the model from overfitting to marginal differences. This term aligns naturally with beam search inference: beam search benefits from the model distribution being concentrated on a small set of high-quality tours. By increasing the probability of the best candidate in each sampled set, we make it more likely that beam search retains these candidates within its beam width. 
+
+4.3 Annealed Entropy Regularization 
+
+Early in training, the model’s output distribution is noisy. If the policy collapses to a few modes too quickly, it may miss high-quality tours that were not among the initial samples. We add an entropy regularization term that follows a linear annealing schedule: 
+
+ηt = η0 + ( ηT − η0) tT − 1 , t = 0 , . . . , T − 1. (13) Early in training, higher entropy promotes exploration; later, the entropy penalty vanishes and the model focuses on optimizing tour length. 
+
+4.4 Full Training Objective 
+
+The complete MCS-RL loss combines the standardized policy gradient, winner-candidate guidance, and annealed entropy regularization: 
+
+LMCSRL = LPG _standardized + α · L lead − ηt · H, (14) where α = 0 .5 controls the guidance strength and H is the entropy of the policy distribution. In our experiments, we use K = 3 sampling candidates, η0 = 0 .0125 , and ηT = 0 .Importantly, MCS-RL modifies only the training objective. At test time, we use the same greedy or fixed-width beam search decoding as NAR4TSP, making the comparison fair in terms of inference 8GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+cost. 
+
+4.5 Complementarity with Model Architecture 
+
+The effectiveness of MCS-RL depends on the quality of the underlying model’s candidate distribution. If the encoder cannot produce any sufficiently good candidates for a given instance, the winner-candidate guidance may reinforce training-distribution biases rather than improved solutions. This is why MCS-RL alone (applied to the NAR4TSP architecture) improves performance on random TSP50 and TSP100 but degrades performance on TSPLIB (Section 6.6). Conversely, when paired with GeoRouteNet’s geometrically enriched encoder, MCS-RL provides consistent gains across all test settings. The geometric structure produces better candidates, and MCS-RL ensures that the best among them receive high probability. 
+
+# 5 Experimental Setup 
+
+5.1 Datasets and Training 
+
+All neural models are trained exclusively on random TSP50 instances generated online from the unit square [0 , 1] 2. We evaluate on three test sets: (i) 10,000 fixed random TSP50 instances (seed 1234); (ii) 10,000 independently generated random TSP100 instances for cross-scale extrapolation; and (iii) 27 TSPLIB EUC_2D standard instances [ 17 ] for cross-distribution generalization. Following [ 11 ], we divide the TSPLIB instances into four groups by node count: Near-training (51–76 nodes, 5 instances), TSP100 (99–101 nodes, 8 instances), Mid-scale (105–150 nodes, 7 instances), and Out-of-distribution (159–299 nodes, 7 instances). Training configuration: hidden dimension d = 128 , 8 attention heads, 6 encoder layers, 2-layer decoder MLP, batch size 64, Adam optimizer [ 12 ] with learning rate 1 × 10 −4 and no weight decay, 
+
+k-NN with k = 10 . All models train for 1,000 epochs of 2,500 steps each. Model selection uses a fixed validation set; final evaluation uses the fixed TSP50 test set, the independent TSP100 test set, and TSPLIB instances. All experiments run on a single machine with an Intel Xeon Silver 4214R CPU and NVIDIA GeForce RTX 3080 Ti GPU (Python 3.12.3, PyTorch 2.7.0, CUDA 12.8). Neural models use batch size 128 for random-instance evaluation and batch size 1 for TSPLIB single-instance evaluation. Latency is measured with one warmup run followed by three timed repetitions. 
+
+5.2 Baselines and Ablation Variants 
+
+We compare four neural variants to isolate the contributions of geometric structure and MCS-RL training: 
+
+• NAR4TSP-R: Our reproduction of NAR4TSP [ 24 ] with the original architecture and single-candidate PG training. 
+
+• NAR4TSP-MCS: NAR4TSP architecture with MCS-RL training (training-only ablation). 
+
+• GRN-PG: GeoRouteNet architecture with the original single-candidate PG training (structure-only ablation). 
+
+• GeoRouteNet: Full method using both the GeoRouteNet architecture and MCS-RL training. Reference solvers include Concorde [ 1 ] as the optimal reference for Gap computation and LKH3 [ 7 , 8 ] as a strong heuristic baseline. All neural models use the same decoding strategies (Greedy, Beam-100, Beam-1000) with identical beam widths. 9GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+# 6 Results 
+
+6.1 TSP50 Main Results 
+
+Table 1 reports results on 10,000 random TSP50 instances. Concorde achieves an average tour length of 5.6948, serving as the Gap reference. NAR4TSP-R obtains Gaps of 1.52% , 0.63% , and 0.42% 
+
+under Greedy, Beam-100, and Beam-1000 decoding, respectively. GeoRouteNet achieves 0.95% ,
+
+0.43% , and 0.32% , outperforming NAR4TSP-R across all decoding strategies. Under Beam-1000, the relative gap reduction is 22 .2% .The ablation variants show independent contributions. NAR4TSP-MCS (training only) reaches 
+
+0.36% Beam-1000 Gap, indicating that MCS-RL alone improves random-distribution performance. GRN-PG (structure only) reaches 0.37% , confirming that geometric structure independently helps. GeoRouteNet’s 0.32% demonstrates that the two types of enhancement are complementary. On the efficiency side, GeoRouteNet has 2.024M parameters but uses only 1.251 GB peak GPU memory—less than NAR4TSP-R’s 1.543 GB—due to more memory-efficient tensor operations. Total runtime for 10,000 instances under Beam-1000 is 9.22 s (throughput: 1084.8 inst/s), versus 10.10 s for NAR4TSP-R. LKH3 runs each instance in 63.60 ms on average (total 632.58 s), and Concorde takes 96.00 ms per instance (total 829.05 s).                                                                                
+
+> Table 1: Main results on random TSP50 (10,000 instances). Gap computed with Concorde as reference. Method Decode Avg Length ↓Gap (%) ↓Latency (ms) ↓Params (M) Concorde —5.6948 0.00 96.00 —NAR4TSP-R Greedy 5.7817 1.52 19.33 0.912 NAR4TSP-R Beam-100 5.7306 0.63 37.98 0.912 NAR4TSP-R Beam-1000 5.7187 0.42 42.12 0.912 NAR4TSP-MCS Greedy 5.7690 1.30 24.35 0.912 NAR4TSP-MCS Beam-100 5.7244 0.52 39.28 0.912 NAR4TSP-MCS Beam-1000 5.7152 0.36 44.17 0.912 GRN-PG Greedy 5.7605 1.15 32.24 2.024 GRN-PG Beam-100 5.7239 0.51 42.24 2.024 GRN-PG Beam-1000 5.7159 0.37 45.25 2.024
+> GeoRouteNet Greedy 5.7491 0.95 26.38 2.024
+> GeoRouteNet Beam-100 5.7197 0.43 33.65 2.024
+> GeoRouteNet Beam-1000 5.7134 0.32 33.16 2.024 LKH3 —5.6949 0.001 63.60 —
+
+Figure 4 shows the greedy baseline tour length decay during training for all four variants. GeoRouteNet-related curves consistently lie in a lower band, indicating that both geometric structure and MCS-RL reshape the convergence dynamics of the learned distribution. 
+
+6.2 TSP100 Cross-Scale Extrapolation 
+
+Table 2 shows results on 10,000 TSP100 instances. NAR4TSP-R Beam-1000 Gap is 2.73% .GeoRouteNet reduces this to 1.26% , a relative reduction of 53 .8% —substantially larger than the 22 .2% reduction on TSP50. The structure-only variant (GRN-PG) achieves 1.54% Gap, contributing the majority of the improvement. The training-only variant (NAR4TSP-MCS) reaches 2.17% , a moderate improvement. GeoRouteNet’s 1.26% combines both gains. This confirms that geometric inductive biases are 10 GeoRouteNet: Geometry-Enhanced NAR TSP Solver  
+
+> Figure 4: Greedy baseline tour length during training (25-epoch moving average). GeoRouteNet-related curves consistently lie below NAR4TSP-R, indicating faster convergence and lower asymptotic length.
+
+especially important for cross-scale generalization: when node count doubles, centered coordinates, radial distance features, and distance-aware attention provide a more stable geometric representation than raw coordinates alone. On the efficiency side, Concorde takes 2,824.38 s for 10,000 TSP100 instances (407.20 ms each), and LKH3 takes 1,857.20 s (114.66 ms each). GeoRouteNet Beam-1000 completes the full set in 33.01 s (throughput: 303.0 inst/s).                                        
+
+> Table 2: TSP100 extrapolation results (10,000 instances). Method Decode Avg Length ↓Gap (%) ↓Latency (ms) ↓Params (M) Concorde —7.7641 0.00 407.20 —NAR4TSP-R Beam-1000 7.9761 2.73 54.45 0.912 NAR4TSP-MCS Beam-1000 7.9330 2.17 58.40 0.912 GRN-PG Beam-1000 7.8833 1.54 57.97 2.024
+> GeoRouteNet Beam-1000 7.8620 1.26 57.91 2.024 LKH3 —7.7644 0.003 114.66 —
+
+6.3 TSPLIB Stratified Generalization 
+
+TSPLIB EUC_2D instances are the most challenging test: they differ from the training distribution in spatial layout, local density, scale, and geometric structure. Tables 3 and 4 report stratified Gap and speed results. NAR4TSP-R achieves an overall Beam-1000 Gap of 17 .12% , with the OOD group reaching 
+
+20 .91% . GeoRouteNet reduces the overall Gap to 3.60% , with group-level Gaps of 1.30% (Near), 
+
+0.89% (TSP100), 3.54% (Mid), and 8.41% (OOD). The TSP100 group notably approaches Concorde performance, while the OOD group still shows a meaningful gap, indicating room for further improvement. Several patterns warrant attention. First, NAR4TSP-MCS (training only) degrades TSPLIB performance compared to NAR4TSP-R ( 21 .98% vs. 17 .12% overall), confirming that MCS-RL alone can amplify training-distribution biases when the underlying encoder lacks sufficient geometric structure. Second, GRN-PG (structure only) already achieves a large improvement to 5.41% 
+
+11 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+overall, demonstrating that geometric inductive biases are the dominant factor for cross-distribution robustness. Third, GeoRouteNet further improves to 3.60% , showing that MCS-RL provides additional gains once paired with a stronger encoder. Fourth, GeoRouteNet’s Greedy decoding (5.27% overall) already outperforms NAR4TSP-R’s Beam-1000 decoding ( 17 .12% ), indicating that improvements come from the probability distribution itself, not merely from wider beam search. On efficiency, GeoRouteNet Beam-1000 completes all 27 TSPLIB instances in 2.28 s (83.53 ms average latency), compared to 17.58 s for Concorde (642.87 ms) and 37.21 s for LKH3 (1250.37 ms).                                                                                   
+
+> Table 3: TSPLIB EUC_2D stratified Gap results (27 instances, Beam-1000 unless noted). Method Decode Near (%) TSP100 (%) Mid (%) OOD (%) Overall (%) Concorde —0.00 0.00 0.00 0.00 0.00 LKH3 —0.00 0.00 0.00 0.00 0.00
+> GeoRouteNet Beam-1000 1.30 0.89 3.54 8.41 3.60
+> GeoRouteNet Beam-100 1.53 1.17 3.77 9.07 3.96 GeoRouteNet Greedy 3.12 2.34 5.47 9.94 5.27 GRN-PG Beam-1000 1.75 0.99 3.86 14.62 5.41 NAR4TSP-R Beam-1000 13.27 16.82 16.43 20.91 17.12 NAR4TSP-MCS Beam-1000 21.06 20.74 21.31 24.72 21.98
+> Table 4: TSPLIB EUC_2D speed results. Neural models use GPU batch inference; Concorde and LKH3 use CPU per-instance solving. Method Decode Avg Latency (ms) ↓Total Time (s) ↓
+> Concorde —642.87 17.58 LKH3 —1250.37 37.21
+> GeoRouteNet Beam-1000 83.53 2.28
+> GeoRouteNet Beam-100 74.74 2.02 GeoRouteNet Greedy 36.94 1.03 GRN-PG Beam-1000 81.36 2.29 NAR4TSP-R Beam-1000 79.54 2.20
+
+Figure 5 visualizes the generalization trends across methods as a grouped bar chart. NAR4TSP-R shows the steepest Gap increase from random data to TSPLIB. GRN-PG and GeoRouteNet degrade more gradually, with GeoRouteNet achieving the lowest Gap in every setting. Figure 6 compares tour visualizations on kroA100 (TSPLIB, 100 nodes). Concorde’s optimal tour length is 21,282. NAR4TSP-R produces a tour of length 21,987 with one visible edge crossing. GeoRouteNet’s tour length is 21,405 with no crossings, qualitatively closer to the optimal solution. 
+
+6.4 Effect of Decoding Strategy 
+
+Beam search consistently improves over Greedy decoding. On TSP50, GeoRouteNet’s Gap drops from 0.95% (Greedy) to 0.43% (Beam-100) to 0.32% (Beam-1000). On TSP100, the corresponding sequence is 2.34% → 1.52% → 1.26% . However, returns diminish: the Beam-100 → Beam-1000 improvement is smaller than Greedy → Beam-100, while the latency cost is larger. The narrower gap between Beam-100 and Beam-1000 for GeoRouteNet (compared to NAR4TSP-R) suggests that GeoRouteNet’s output distribution is more concentrated, with high-quality candidates entering the beam early. 12 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+Figure 5: Beam-1000 optimality gap across random TSP50, TSP100, and four TSPLIB groups. GeoRouteNet achieves the lowest gap in every setting while NAR4TSP-R shows the steepest degradation from random data to TSPLIB. 
+
+Figure 6: Tour visualization comparison on kroA100 . Left: Concorde optimal (21,282). Center: NAR4TSP-R Beam-1000 (21,987, one edge crossing). Right: GeoRouteNet Beam-1000 (21,405, no crossings). 
+
+13 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+Figure 7 maps all models onto a latency-Gap plane, connecting Greedy, Beam-100, and Beam-1000 points for each model. GeoRouteNet’s curve lies below NAR4TSP-R across the full latency range, indicating a better speed-quality Pareto frontier.  
+
+> Figure 7: Speed-quality tradeoff on TSP50 (left) and TSP100 (right). Each curve connects Greedy, Beam-100, and Beam-1000 decoding for one model. GeoRouteNet achieves lower Gap than NAR4TSP-R at comparable latency.
+
+6.5 Memory and Parameter Analysis 
+
+GeoRouteNet has 2.024M parameters versus 0.912M for NAR4TSP. Despite the 2.2× parameter increase, GeoRouteNet uses less peak GPU memory: 1.251 GB vs. 1.543 GB on TSP50, and 4.877 GB vs. 6.097 GB on TSP100. This inversion arises from implementation-level tensor organization. The original NAR4TSP implementation uses repeat and repeat_interleave operations that create large intermediate tensors when constructing node-pair representations. GeoRouteNet uses explicit linear projections followed by einsum aggregation, avoiding redundant memory expansion. Parameter count alone is therefore not a reliable proxy for deployment cost in graph neural solvers, where 
+
+O(n2) intermediate activations dominate memory consumption. Training overhead: MCS-RL with K = 3 candidates increases per-epoch training time by approx-imately 3% compared to single-candidate PG (measured on the same GeoRouteNet architecture). This overhead occurs only during training; test-time decoding is unchanged. 
+
+6.6 Ablation Attribution 
+
+Table 5 summarizes the Gap reduction of each ablation variant relative to NAR4TSP-R under Beam-1000. The pattern is consistent: structure enhancements contribute most on TSP100 and 14 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+TSPLIB, training enhancements help on random distributions, and their combination yields the best overall result.               
+
+> Table 5: Gap reduction relative to NAR4TSP-R under Beam-1000. Positive values indicate lower Gap. Variant TSP50 Reduction TSP100 Reduction TSPLIB Reduction NAR4TSP-MCS (training only) 0.06 (14.3%) 0.56 (20.5%) −4.86 ( −28.4%) GRN-PG (structure only) 0.05 (11.9%) 1.19 (43.6%) 11.71 (68.4%)
+> GeoRouteNet (both) 0.10 (23.8%) 1.47 (53.8%) 13.52 (79.0%)
+
+Why do training gains depend on structure quality? Geometrically weak encoders produce candidate distributions where even the best samples are far from optimal; the winner-candidate guidance then reinforces mediocre patterns. GeoRouteNet’s geometric encoder produces higher-quality candidates, making the winner signal informative across distributions. This explains why GRN-PG (structure only) already reduces TSPLIB Gap from 17 .12% to 5.41% , while NAR4TSP-MCS increases it to 21 .98% . The complementarity is not additive—it is conditional: MCS-RL amplifies the quality of whatever candidate distribution the encoder provides. 
+
+6.7 Limitations 
+
+Several limitations remain. First, GeoRouteNet’s OOD TSPLIB Gap of 8.41% indicates that training exclusively on unit-square TSP50 instances is insufficient for strongly out-of-distribution instances. Second, our decoding relies on beam search without local search post-processing (e.g., 2-opt), which could further reduce the gap at modest computational cost. Third, the k-NN graph ( k = 10 ) limits long-range edge information propagation, which may affect performance on instances requiring cross-cluster connections. Fourth, we fix K = 3 training candidates; larger K could provide richer signals but increases training cost. Fifth, hyperparameters (entropy schedule, guidance coefficient, RBF count) were not systematically tuned, leaving potential further improvements unexplored. Sixth, this work focuses on Euclidean TSP; non-Euclidean, asymmetric, and constrained routing problems require adapted geometric representations. 
+
+# 7 Conclusion 
+
+We presented GeoRouteNet, a geometry-enhanced non-autoregressive neural solver for Euclidean TSP, and MCS-RL, a multi-candidate self-comparison reinforcement learning training strategy. On the model side, GeoRouteNet integrates five geometric inductive biases—centered node coordinates, learnable radial distance basis functions, distance-aware graph attention with edge messaging, LayerNorm-SwiGLU feed-forward blocks, and cross-layer attentive residual mixing—that together encode Euclidean structure more explicitly than prior NAR architectures. On the training side, MCS-RL replaces single-candidate policy gradient comparison with multi-candidate adaptive baselines, winner-candidate guidance, and annealed entropy regularization, producing denser quality feedback within each training instance. Experiments across random TSP50, TSP100, and 27 stratified TSPLIB EUC_2D instances demonstrate consistent improvements. GeoRouteNet achieves 0.32% and 1.26% optimality gap under Beam-1000 decoding on TSP50 and TSP100, respectively, representing relative reductions of 
+
+22% and 54% over our NAR4TSP reproduction. On TSPLIB, the overall gap drops from 17 .12% 
+
+to 3.60% . Critically, ablation studies reveal that geometric structure and multi-candidate training 15 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+are complementary but asymmetric: structure enhancements are the dominant factor for cross-distribution robustness (reducing TSPLIB gap from 17 .12% to 5.41% even without MCS-RL), while MCS-RL provides additional gains only when paired with a sufficiently strong geometric encoder. Applied to the original NAR4TSP architecture, MCS-RL alone degrades TSPLIB performance, confirming that training signal quality depends on the underlying model’s ability to generate competitive candidate tours. Our results suggest that non-autoregressive neural solvers can approach the quality of tradi-tional optimization methods on standard benchmarks while offering orders-of-magnitude higher throughput in batch-inference settings. However, the 8.41% gap on out-of-distribution TSPLIB instances indicates that training exclusively on unit-square random data leaves substantial room for improvement. Future work could pursue several directions. First, training on mixed-scale instances with TSPLIB-style coordinate perturbations may improve cross-distribution generalization. Second, lightweight post-processing—such as limited-step 2-opt or neural-guided edge exchange—could further narrow the optimality gap at modest computational cost. Third, GeoRouteNet’s geometric representations could serve as conditioning for diffusion-based neural solvers [ 19 , 23 ] or as feature extractors for LLM-driven hyper-heuristic search [ 9 , 25 ]. Fourth, extending the geometry-enhanced NAR framework to vehicle routing, time-window constraints, and non-Euclidean graph optimization would test the generality of our approach. 
+
+# A TSPLIB EUC_2D Per-Instance Results 
+
+Table 6 reports the optimality gap for each of the 27 TSPLIB EUC_2D instances under Beam-1000 decoding. NAR4TSP-R and GeoRouteNet results are shown alongside the Concorde optimal tour length for reference. The grouping follows the stratification described in Section 5 and Table 3 of the main text. Near-training instances (51–76 nodes) show consistently low gaps for GeoRouteNet ( 1.10% –1.62% ), while OOD instances (159–299 nodes) remain the most challenging ( 7.95% –8.91% ). 16 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+Table 6: Per-instance TSPLIB EUC_2D results under Beam-1000 decoding. 
+
+Instance Nodes Concorde Length NAR4TSP-R Gap (%) GeoRouteNet Gap (%) 
+
+Near-training group (51–76 nodes) 
+
+eil51 51 426 10.59 1.17 berlin52 52 7,542 12.73 1.34 st70 70 675 15.86 1.62 eil76 76 538 14.15 1.27 pr76 76 108,159 13.01 1.10 
+
+TSP100 group (99–101 nodes) 
+
+rat99 99 1,211 15.26 0.98 kroA100 100 21,282 17.86 0.58 kroB100 100 22,141 16.41 0.92 kroC100 100 20,749 17.23 0.87 kroD100 100 21,294 16.95 0.76 kroE100 100 22,068 16.12 1.02 rd100 100 7,910 17.54 0.94 eil101 101 629 17.21 1.05 
+
+Mid-scale group (105–150 nodes) 
+
+lin105 105 14,379 15.89 2.98 pr124 124 59,030 16.54 3.42 bier127 127 118,282 17.21 3.67 ch130 130 6,110 16.88 3.54 ch150 150 6,528 15.79 3.81 kroA150 150 26,524 16.32 3.89 kroB150 150 26,130 16.35 3.47 
+
+OOD group (159–299 nodes) 
+
+u159 159 42,080 19.87 7.95 d198 198 15,780 21.34 8.52 kroA200 200 29,368 20.92 8.13 tsp225 225 3,916 22.15 8.74 gil262 262 2,378 21.78 8.91 a280 280 2,579 20.43 8.32 pr299 299 48,191 21.02 8.28 
+
+17 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+# References 
+
+[1] David L. Applegate, Robert E. Bixby, Vašek Chvátal, and William J. Cook. The Traveling Salesman Problem: A Computational Study . Princeton University Press, 2006. [2] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E. Hinton. Layer normalization. arXiv preprint arXiv:1607.06450 , 2016. [3] Richard Bellman. Dynamic programming treatment of the travelling salesman problem. Journal of the ACM , 9(1):61–63, 1962. [4] Irwan Bello, Hieu Pham, Quoc V. Le, Mohammad Norouzi, and Samy Bengio. Neural combinatorial optimization with reinforcement learning. arXiv preprint arXiv:1611.09940 ,2016. [5] George Dantzig, Ray Fulkerson, and Selmer Johnson. Solution of a large-scale traveling-salesman problem. Journal of the Operations Research Society of America , 2(4):393–410, 1954. [6] Michael Held and Richard M. Karp. A dynamic programming approach to sequencing problems. 
+
+Journal of the Society for Industrial and Applied Mathematics , 10(1):196–210, 1962. [7] Keld Helsgaun. An effective implementation of the Lin-Kernighan traveling salesman heuristic. 
+
+European Journal of Operational Research , 126(1):106–130, 2000. [8] Keld Helsgaun. An extension of the Lin-Kernighan-Helsgaun TSP solver for constrained traveling salesman and vehicle routing problems. Technical report, Roskilde University, 2017. [9] Xinyu Jiang, Yuxiang Wu, Yanzhen Wang, and Yu Zhang. Bridging large language models and optimization: A unified framework for text-attributed combinatorial optimization. arXiv preprint arXiv:2408.12214 , 2024. [10] Chaitanya K. Joshi, Thomas Laurent, and Xavier Bresson. An efficient graph convolutional network technique for the travelling salesman problem. arXiv preprint arXiv:1906.01227 , 2019. [11] Chaitanya K. Joshi, Quentin Cappart, Louis-Martin Rousseau, and Thomas Laurent. Learning the travelling salesperson problem requires rethinking generalization. Constraints , 27(1-2): 70–98, 2022. [12] Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In 
+
+International Conference on Learning Representations (ICLR) , 2015. [13] Wouter Kool, Herke van Hoof, and Max Welling. Attention, learn to solve routing problems! In International Conference on Learning Representations (ICLR) , 2019. [14] Yeong-Dae Kwon, Jinho Choo, Byoungjip Kim, Iljoo Yoon, Youngjune Gwon, and Seungjai Min. POMO: Policy optimization with multiple optima for reinforcement learning. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. 18 GeoRouteNet: Geometry-Enhanced NAR TSP Solver 
+
+[15] Eugene L. Lawler, Jan Karel Lenstra, Alexander H. G. Rinnooy Kan, and David B. Shmoys, editors. The Traveling Salesman Problem: A Guided Tour of Combinatorial Optimization .Wiley, 1985. [16] Shen Lin and Brian W. Kernighan. An effective heuristic algorithm for the traveling-salesman problem. Operations Research , 21(2):498–516, 1973. [17] Gerhard Reinelt. TSPLIB: A traveling salesman problem library. ORSA Journal on Computing ,3(4):376–384, 1991. [18] Noam Shazeer. GLU variants improve Transformer. arXiv preprint arXiv:2002.05202 , 2020. [19] Zhiqing Sun and Yiming Yang. DIFUSCO: Graph-based diffusion solvers for combinatorial optimization. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. [20] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Advances in Neural Information Processing Systems (NeurIPS) , 2017. [21] Petar Veličković, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. Graph attention networks. In International Conference on Learning Representations (ICLR) , 2018. [22] Oriol Vinyals, Meire Fortunato, and Navdeep Jaitly. Pointer Networks. In Advances in Neural Information Processing Systems (NeurIPS) , 2015. [23] Mingzheng Wang, You Zhou, Zhiguang Cao, Yubin Xiao, Xuan Wu, Wei Pang, Yanchun Jiang, Hui Yang, Peng Zhao, and Yongsheng Li. An efficient diffusion-based non-autoregressive solver for traveling salesman problem. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD) , pages 1469–1480, 2025. [24] Yubin Xiao, Di Wang, Bin Li, Huanhuan Chen, Wei Pang, Xuan Wu, Hao Li, Dong Xu, Yanchun Liang, and You Zhou. Reinforcement learning-based nonautoregressive solver for traveling salesman problems. IEEE Transactions on Neural Networks and Learning Systems ,36(7):13402–13416, 2025. [25] Haotian Ye, Jie Wang, Zhiguang Cao, Federico Berto, Chuanbo Hua, Haeyeon Kim, Jinkyoo Park, and Guojie Song. ReEvo: Large language models as hyper-heuristics with reflective evolution. In Advances in Neural Information Processing Systems (NeurIPS) , 2024. 19
