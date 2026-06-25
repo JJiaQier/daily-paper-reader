@@ -6,46 +6,53 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-23
-- 运行时间：2026-06-23 23:10:37 UTC
+- 最新运行日期：2026-06-24
+- 运行时间：2026-06-25 00:02:10 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：2
-- 速读区：6
+- 本次总论文数：10
+- 精读区：0
+- 速读区：10
 
 ### 今日简报（AI）
-1) 今日精读聚焦神经形态强化学习与元强化学习，分别解决机器人路径规划与多目标供应链优化难题。  
-2) 最值得关注：神经形态芯片驱动的路径规划效率提升，以及用进化元强化学习处理复杂供应链组合优化。  
-3) 建议优先精读这两篇8分论文，再浏览可微控制与地图推理速读作为补充。
-- 详情：[/202606/23/README](/202606/23/README)
+今天整理了10篇论文，速读3篇，聚焦时序行为与强化学习方向。  
+最值得关注的是《A Reward-Petri-Net Interpretation of Temporal Behavior Trees》和《Scalable Maximum Entropy Reinforcement Learning for Diffusion Policies via Adjoint Matching》，均获7.0评分。  
+建议优先精读这两篇，深入理解时序逻辑与强化学习的新结合方法。
+- 详情：[/202606/24/README](/202606/24/README)
 
 ### 精读区论文标签
-1. [A Neuromorphic Reinforcement Learning Framework for Efficient Pathfinding in Robotic Mobile Fulfillment Systems](/202606/23/2606.20031v2-a-neuromorphic-reinforcement-learning-framework-for-efficient-pathfinding-in-robotic-mobile-fulfillment-systems)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：神经形态强化学习用于机器人移动拣选系统中的高效路径规划
-2. [Meta-Reinforcement Learning via Evolution for Multi-Objective Combinatorial Supply Chain Optimisation](/202606/23/2606.22146v1-meta-reinforcement-learning-via-evolution-for-multi-objective-combinatorial-supply-chain-optimisation)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：元强化学习用于多目标组合供应链优化
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Backpropagating Through Simulation: Analytic Policy Gradients for Sample and Learning Efficient Differentiable Continuous Control](/202606/23/2606.21525v1-backpropagating-through-simulation-analytic-policy-gradients-for-sample-and-learning-efficient-differentiable-continuous-control)  
+1. [A Reward-Petri-Net Interpretation of Temporal Behavior Trees](/202606/24/2606.21350v1-a-reward-petri-net-interpretation-of-temporal-behavior-trees)  
    标签：评分：7.0/10、query:rl-path-opt
-   evidence：适用于机器人路径规划的可微连续控制分析策略梯度
-2. [MapReason-OSM: Can Vision-Language Models Make Graph-Verifiable Mobility Decisions from Street Maps ?](/202606/23/2606.22597v1-mapreason-osm-can-vision-language-models-make-graph-verifiable-mobility-decisions-from-street-maps-)  
-   标签：评分：7.0/10、query:path-preproc
-   evidence：使用视觉-语言模型读取街道地图，为物流和配送提供可验证的机动性决策
-3. [GeoRouteNet: Geometry-Enhanced Non-Autoregressive Neural Solver for the Traveling Salesman Problem](/202606/23/2606.22776v1-georoutenet-geometry-enhanced-non-autoregressive-neural-solver-for-the-traveling-salesman-problem)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：用于欧几里得TSP的神经求解器，直接与车辆路径问题相关
-4. [Two-Phase Bilevel Search for the Moving-Target Traveling Salesman Problem with Moving Obstacles](/202606/23/2606.18730v1-two-phase-bilevel-search-for-the-moving-target-traveling-salesman-problem-with-moving-obstacles)  
+   evidence：通过时序行为树进行机器人任务的RL奖励设计
+2. [Scalable Maximum Entropy Reinforcement Learning for Diffusion Policies via Adjoint Matching](/202606/24/2606.22630v1-scalable-maximum-entropy-reinforcement-learning-for-diffusion-policies-via-adjoint-matching)  
+   标签：评分：7.0/10、query:rl-path-opt
+   evidence：用于扩散策略的可扩展最大熵强化学习
+3. [Pareto Q-Learning with Reward Machines](/202606/24/2606.19134v1-pareto-q-learning-with-reward-machines)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：解决移动目标旅行商问题，属于车辆路径问题的变种
-5. [Pareto Q-Learning with Reward Machines](/202606/23/2606.19134v1-pareto-q-learning-with-reward-machines)  
+   evidence：多目标强化学习结合奖励机器，可应用于路径优化
+4. [UBP2: Uncertainty-Balanced Preference Planning for Efficient Preference-based Reinforcement Learning](/202606/24/2606.19328v1-ubp2-uncertainty-balanced-preference-planning-for-efficient-preference-based-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：基于偏好的强化学习结合不确定性推理以提高样本效率，可应用于路径优化
+5. [Formal Verification of Learned Multi-Agent Communication Policies via Decision Tree Distillation](/202606/24/2606.19632v1-formal-verification-of-learned-multi-agent-communication-policies-via-decision-tree-distillation)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：多智能体强化学习用于无人机群和自动驾驶车队的协调
+6. [FAST: A Framework for Aligned Sampling and Training in Parallel Reinforcement Learning for Autonomous Driving](/202606/24/2606.21587v1-fast-a-framework-for-aligned-sampling-and-training-in-parallel-reinforcement-learning-for-autonomous-driving)  
    标签：评分：6.0/10、query:rl-path-opt
-   evidence：使用奖励机进行多目标强化学习，可优化物流中的多个目标
-6. [Reward-free Pretraining for Reinforcement Learning via Occupancy Coverage Maximization](/202606/23/2606.21271v1-reward-free-pretraining-for-reinforcement-learning-via-occupancy-coverage-maximization)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：适用于物流强化学习场景的RL预训练方法
+   evidence：用于自动驾驶路径规划的并行强化学习框架
+7. [Learning to Place Guards by Reinforcement: A Geo-Free Neural Policy for the Vertex-Guard Art Gallery Problem](/202606/24/2606.21604v1-learning-to-place-guards-by-reinforcement-a-geo-free-neural-policy-for-the-vertex-guard-art-gallery-problem)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：强化学习用于组合优化，与车辆路径问题类似
+8. [Imagine to Ensure Safety in Hierarchical Reinforcement Learning](/202606/24/2606.22509v1-imagine-to-ensure-safety-in-hierarchical-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：分层强化学习结合世界模型进行安全探索，可应用于物流路径规划
+9. [Decentralized Autonomous Traffic Management through Corridor Networks](/202606/24/2606.23585v1-decentralized-autonomous-traffic-management-through-corridor-networks)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：多智能体强化学习用于空中走廊轨迹规划，可迁移至物流路径优化
+10. [Learning Process Rewards via Success Visitation Matching for Efficient RL](/202606/24/2606.23640v1-learning-process-rewards-via-success-visitation-matching-for-efficient-rl)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：强化学习稀疏奖励处理方法适用于车辆路径问题
 
 
 <div class="dpr-home-promo-card">
