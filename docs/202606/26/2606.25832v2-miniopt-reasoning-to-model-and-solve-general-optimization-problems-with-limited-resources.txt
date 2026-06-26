@@ -1,0 +1,824 @@
+Title: MiniOpt: Reasoning to Model and Solve General Optimization Problems with Limited Resources
+
+URL Source: https://arxiv.org/pdf/2606.25832v2
+
+Published Time: Fri, 26 Jun 2026 00:31:39 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES 1
+
+# MiniOpt: Reasoning to Model and Solve General Optimization Problems with Limited Resources 
+
+Ke Zhao ∗, Zixiang Di ∗, Hong Qian †, Xiang Shu, Yaolin Wen, Qitao Shi, Bingdong Li, Xingyu Lu, Xiangfeng Wang, Jun Zhou, Ke Tang, and Yang Yu 
+
+Abstract —Achieving strong optimization generalization across diverse optimization problems while requiring limited training re-sources remains a challenging problem for optimization-oriented large language models (LLMs). Existing approaches typically rely on large-scale supervised datasets, costly reasoning annotations, and expensive intermediate step verification, resulting in substan-tial training overhead. To address these challenges, we propose MiniOpt, a reinforcement learning framework that learns to solve optimization problems through an reasoning-to-model-and-solve paradigm. MiniOpt decomposes optimization reasoning into structured optimization modeling and executable solver genera-tion. Building upon this paradigm, we introduce OptReward, a reward function with hierarchical score structure that jointly evaluates formulation and solution, enabling effective policy learning without expert demonstrations. We further develop an optimization-oriented policy optimization strategy that improves exploration efficiency and stabilizes reinforcement learning for compact models. Extensive experiments show that MiniOpt-3B exhibits strong optimization generalization across various optimization types, problem scenarios, and task domains. For models with fewer than 10B parameters, MiniOpt series achieves the highest average solving accuracy (SA). For models with more than 10B parameters, MiniOpt still shows competitive perfor-mance. These results suggest that optimization-oriented reward design and reinforcement learning provide an effective pathway for developing compact optimization-specialized language models with strong optimization generalization capabilities. The code is available at https://github.com/Hsiang-1/MiniOpt. 
+
+Index Terms —Optimization Generalization, Reasoning to Model and Solve, Limited Resources, Large Language Models for Optimization. 
+
+I. I NTRODUCTION 
+
+# OPTIMIZATION problems are ubiquitous in real-world scenarios, profoundly affecting diverse domains, such as industrial production and transportation planning [1], [2]. 
+
+Ke Zhao and Zixiang Di are co-first authors. Corresponding author: Hong Qian. Ke Zhao, Zixiang Di, Yaolin Wen, Bingdong Li, Xiangfeng Wang, and Hong Qian are with East China Normal University, Shanghai 200062, China (E-mail: kezhao@stu.ecnu.edu.cn, 51265901113@stu.ecnu.edu.cn, 51275901100@stu.ecnu.edu.cn, bdli@cs.ecnu.edu.cn, xfwang@sei.ecnu.edu.cn, hqian@cs.ecnu.edu.cn). Xiang Shu, Qitao Shi, Xingyu Lu, and Jun Zhou are with AntGroup, Hangzhou 310000, China. (E-mail: shuxiang.shu@antgroup.com, qi-tao.sqt@antgroup.com, sing.lxy@antgroup.com, jun.zhoujun@antgroup.com). Ke Tang is with Southern University of Science and Technology, Shenzhen 518055, China. (E-mail: tangk3@sustech.edu.cn). Yang Yu is with Nanjing University, Nanjing 210023, China. (E-mail: yuy@nju.edu.cn). This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible. © 2026 IEEE. 
+
+While traditional optimization solvers are efficient, their ap-plication heavily relies on expert knowledge, requiring the manual conversion of problems described in natural language into precise mathematical formulations and executable code. This process is both time-consuming and non-generalizable. The rise of LLMs has opened new pathways for the automated modeling and solving of optimization problems using natural language descriptions [3]–[5], making them more applicable to application scenarios. Representative work like LLMOPT [6], BPP-Search [7], and Text2Zinc [8] significantly advances this field by parsing natural language descriptions into struc-tured formulation that provide a unified representation of optimization problems, and subsequently generating solver code efficiently. However, deploying such LLM-based approaches faces three critical bottlenecks. First, ensuring accurate text genera-tion with a small-scale model requires Supervised Fine-Tuning (SFT) with a large amount of high-quality training data [9], [10]. However, obtaining such data is difficult, often requires considerable time and effort, and is prone to errors [11]. Second, it is challenging to verify whether the result generated meets the requirements [12], [13]. The non-verifiability of this task also exposes the limitations of the learning-based solving paradigm. Previous methods often incorporate reflection or debugging mechanisms [14], [15] during the generation pro-cess, which significantly multiply the computational overhead. Finally, considering data privacy issues, local deployment of small-scale LLMs with strong performance and reducing training costs is important, including the volume and quality of training data. These limitations pose significant barriers to deploying LLMs with strong optimization-solving capabilities in small and medium-sized enterprises and even on mobile devices. To address these challenges, we propose MiniOpt , an RLVR-based methodology designed to enhance the optimiza-tion generalization of small-scale LLMs under limited data and training resources. Following LLMOPT [6], we use optimiza-tion generalization to denote the ability of a model to formu-late and solve previously unseen optimization problems across different optimization types and scenarios. We systematically design the training process, training data, and algorithms of the model, introducing the reasoning-to-model-and-solve 
+
+paradigm. Specifically, we adapt the classic “model and solve” paradigm of LLMs for optimization problems into a verifiable Chain-of-Thought (CoT) for Reinforcement Learning (RL), thereby facilitating effective RLVR training. To efficiently utilize limited data , we propose a two-stage RL framework  
+
+> arXiv:2606.25832v2 [cs.LG] 25 Jun 2026 JOURNAL OF L ATEX CLASS FILES 2
+
+that divides the training into progressive stages aligned with the evolution of model capabilities. Initially, we perform Mid-Training on a small subset of annotated data to prevent training collapse induced by reward sparsity. Subsequently, the first RL stage employs a training set of lower difficulty to enable the policy model to master the reasoning-to-model-and-solve 
+
+paradigm. The second stage then further enhances performance and optimization generalization on more challenging datasets. 
+
+Addressing the scarcity of annotated CoT data and the associated verification challenges , MiniOpt employs five-element tuple modeling as a verifiable structural abstraction of the CoT within the RL framework. This approach mitigates verification complexity while simultaneously enhancing result accuracy and model generalization. Furthermore, we design a hierarchical structured reward function, OptReward ,which facilitates robust RLVR. Specifically, it incorporates a modeling completeness verification mechanism to circumvent the need for content verification of the optimization modeling, while simultaneously constraining the RL reasoning trajectory in the vicinity of the correct modeling formulation to mitigate reward hacking. Building upon this systematic architectural design, we also introduce tailored modifications to the GPRO algorithm , thereby fully leveraging limited samples to conduct highly efficient training and achieve robust optimiza-tion generalization. Ultimately, the aforementioned synergis-tic design of the RLVR framework significantly reduces the reliance on annotated data, as well as the overall training and inference costs .Building upon the aforementioned methodology, this pa-per conducts extensive experiments with MiniOpt-3B on 8 benchmarks across different optimization types and problem scenarios. The results demonstrate its strong optimization generalization. Compared with baselines with fewer than 10B parameters, MiniOpt-3B achieves the best performance. When evaluated against baselines exceeding 10B parame-ters, MiniOpt-3B remains competitive compared to LLMOPT-14B, and surpasses the general thinking model GPT-5 by 2.11 percentage points. MiniOpt-3B achieves a competitive average SA compared with DeepSeek-R1 while consuming only about 24.40 percentage points of the output tokens used by DeepSeek-R1 across benchmarks of varying difficulty. Notably, MiniOpt lies on the empirical Pareto frontier of both parameter scale and the SA metric. Furthermore, results from ablation studies and discussion indicate that apply-ing RLVR within the reasoning-to-model-and-solve paradigm yields substantial performance gains. This approach enhances the model’s proficiency in solving optimization problems while preserving generalization. The subsequent sections review the related work, introduce MiniOpt, present experimental results and analysis, provide an in-depth discussion, and finally conclude the paper. II. R ELATED WORK 
+
+LLMs for Modeling and Solving Optimization Problems. 
+
+For modeling and solving optimization problems with LLMs, there are already a variety of benchmarks [14], [16], [17]. Challenging benchmarks like Mamo [16] and OptiBench [18] have led to numerous studies utilizing LLMs to solve optimiza-tion problems. Prompt-based approaches such as OptiMUS [14], CoE [19], OptiTree [20] and LEAN-LLM-OPT [21] utilize the powerful generation capability of LLMs to generate the solver code of the optimization problem through multi-stage pipeline, without performing any post-training. Learning-based methods enhance LLMs’ capabilities in modeling and solving mathematical problems. For example, LLaMoCo [22] proposes an SFT-based framework comprising a meticulously designed instruction set and a two-stage training methodology that incorporates contrastive learning warm-up followed by SFT. LLMOPT [6] and NER4OPT [8], [23] adopt a two-stage training process of modeling the optimization problems first and then solving them by generating solution code. StepORLM [24] synthesizes a large volume of process data to simultaneously learn a policy model and a Process-Reward-Model (PRM), employing alternating training to produce a modeling-and-solving model with reliable process consistency. Similarly, BPP-Search [7] generates process data and trains a PRM alongside a preference selection model under a Tree-of-Thought search paradigm, thereby simulating reasoning processes to derive robust results. 
+
+Reinforcement Learning with Verifiable Reward. While Reinforcement Learning from Human Feedback (RLHF) [25] plays a crucial role in post-training alignment, it suffers from high annotation costs and inherent human bias [11]. Reinforcement Learning with Verifiable Reward (RLVR) [26] leverages externally grounded, easily verifiable rewards (e.g., rule-based reward) to provide dense and structurally simple supervision [27]–[29]. Its practicality is especially valuable in real-world black-box systems [30]–[32], where verification is typically feasible only at the output stage, making RLVR a broadly applicable paradigm for aligning LLMs. For example, SIRL [33] and OR-R1 [34] significantly improve the model’s performance through the RLVR training paradigm. III. M ETHODOLOGY : T HE PROPOSED MINI OPT 
+
+A. Overview 
+
+This paper studies how to endow small-scale LLMs with strong optimization generalization under tight data and com-pute budgets. We introduce MiniOpt, a reasoning-driven paradigm for modeling and solving optimization problems, whose training framework is shown in Figure 1. MiniOpt integrates a five-element tuple structure into the Chain-of-Thought (CoT) and leverages a hierarchical structured Op-tReward to achieve RLVR training with strong optimization generalization. Through this framework, MiniOpt formulates the pipeline from natural language problems to executable solver code as a single, end-to-end verifiable task. 
+
+B. Reasoning-to-Model-and-Solve Paradigm 
+
+As shown in subfigure (a) in Figure 1, we introduce a 
+
+reasoning-to-model-and-solve paradigm that turns a natural language optimization problem into a single verifiable ob-jective. The paradigm is enforced by two compulsory and parsable segments <think> . . . </think> and <answer> 
+
+. . . </answer> . The first segment, enclosed by <think> JOURNAL OF L ATEX CLASS FILES 3(b) MiniOpt Training  Pipeline with SFT  Warm-up and Two-stage RL 
+
+(c) Efficient  Training  for Optimization Generalization 
+
+OptReward Make Intermediate Process Easy to  Verify 
+
+Format Score 
+
+Five-element Score 
+
+Accuracy Score 
+
+The integrity of the <think> tags in the response 
+
+The integrity of the five-element math  model 
+
+The  executability and solving accuracy of  code 
+
+OptReward 
+
+ Reasoning Rationality 
+
+ Modeling  Correctness 
+
+ Solving Accuracy 
+
+OptGRPO Adapting GRPO to RL Training for Optimization Problems   
+
+> Remove KL penalty
+> to discover high-reward behaviors quickly
+> The asymmetric clipping
+> allows the rare but crucial reasoning/code token to grow
+> Accumulate loss over tokens
+> to improve sample efficiency under limited budgets
+
+(a) Reasoning to Model and Solve Paradigm 
+
+MiniOpt                               
+
+> <answer>
+> ```python
+> from pyomo.environ import …
+> ```
+> </answer>
+> MiniOpt trains the small-scale LLM with high optimization generalization performance. The five-element math model is automatically generated and
+> a solver is adaptively selected .The Pyomo code generated by the model can accurately model and solve the original problem.
+> 𝒥𝒥 𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂𝑂 𝜃𝜃 =𝔼𝔼 𝑞𝑞 ~𝑂𝑂 𝑄𝑄 ,{ 𝑜𝑜 𝑖𝑖 }𝑖𝑖=1 𝐺𝐺 ~𝜋𝜋 𝑜𝑜𝑜𝑜𝑜𝑜 (�|𝑞𝑞 )1
+> ∑𝑖𝑖=1
+> 𝑂𝑂 |𝑜𝑜 𝑖𝑖 |�𝑖𝑖=1
+> 𝑂𝑂
+> �
+> 𝑂𝑂 =1
+> |𝑜𝑜 𝑖𝑖 |
+> min[ 𝜋𝜋 𝜃𝜃 (𝑜𝑜 𝑖𝑖 ,𝑂𝑂 |𝑞𝑞 ,𝑜𝑜 𝑖𝑖 ,<𝑂𝑂 )
+> 𝜋𝜋 𝜃𝜃 𝑜𝑜𝑜𝑜𝑜𝑜 (𝑜𝑜 𝑖𝑖 ,𝑂𝑂 |𝑞𝑞 ,𝑜𝑜 𝑖𝑖 ,<𝑂𝑂 )̂𝐴𝐴 𝑖𝑖 ,𝑂𝑂 ,𝑐𝑐𝑐𝑐𝑐𝑐𝑐𝑐 𝜋𝜋 𝜃𝜃 (𝑜𝑜 𝑖𝑖 ,𝑂𝑂 |𝑞𝑞 ,𝑜𝑜 𝑖𝑖 ,<𝑂𝑂 )
+> 𝜋𝜋 𝜃𝜃 𝑜𝑜𝑜𝑜𝑜𝑜 (𝑜𝑜 𝑖𝑖 ,𝑂𝑂 |𝑞𝑞 ,𝑜𝑜 𝑖𝑖 ,<𝑂𝑂 ) , 1 −𝜀𝜀 𝑙𝑙 𝑜𝑜 𝑙𝑙 , 1 + 𝜀𝜀 ℎ𝑖𝑖𝑖𝑖 ℎ̂𝐴𝐴 𝑖𝑖 ,𝑂𝑂 ]
+
+Optimization Problem:   
+
+> A school is planning its budget for the upcoming academic year. The main expense categories are...
+> <think>
+> We need to formulate it as an integer linear programming problem ...
+> **Five-Element Model**: - ## Variables: ...
+> - ## Objective: ... - ## Constraints: ...
+> - ## Sets: ... - ## Parameters: ...
+> ... The best choice is ``cbc`` solver ...
+> </think>
+
+Endow the model with knowledge in the operational optimization 
+
+Rapidly learn 
+
+the  model-and-solve paradigm 
+
+Optimization 
+
+generalization 
+
+improvement 
+
+Small-scale 
+
+Model 
+
+Strong Optimization Generalization & Low Inference Cost 
+
+LLM-3B  MiniOpt-3B 
+
+Mid-training  RL Stage-1  RL Stage-2 
+
+Peak-chasing SFT Warm-up  Fast-adapting  
+
+> OptReward, OptGRPO OptReward, OptGRPO
+
+Fig. 1: An overview of the proposed MiniOpt training paradigm. Sub-figure (a) demonstrates the reasoning-to-model-and-solve paradigm of MiniOpt, encompassing problem modeling and solver adaptation during the thinking (i.e., reasoning) process of RL, and solution code generation in the response. Sub-figure (b) illustrates the training pipeline of MiniOpt, which involves sequential execution of SFT (mid-training) as warm-up followed by two-stage RL (post-training). Sub-figure (c) presents the reward function OptReward and training algorithm OptGRPO used in MiniOpt’s RL training. 
+
+. . . </think> , contains all modeling-related contents. It ana-lyzes the problem statement, specifies a verifiable five-element optimization formulation, and determines an appropriate open-source solver. Specifically, the optimization problem can be described as the following formulation: 
+
+min 
+
+x∈X ⊆ RD
+
+f (x) , s.t. G (x) ≤ c , (1) where x ∈ X ⊆ RD denotes the D-dimensional decision 
+
+variable , and I = {1, 2, . . . , D } is the index set . X is the fea-sible region and c ∈ Rm provides the upper bounds. The con-stants in objective function f (x) and constraints G(x) form the parameter set, which also includes c. The five-element formulation, M =(Variables , Objective , Constraints ,Sets ,
+
+Parameters ) maps one-to-one to the components of an op-timization problem. Sets determine the dimensions and nam-ing of decision and constraint families. Parameters supply exogenous constants such as costs, coefficients, budgets, and demands. Variables specify domains and bounds (e.g., contin-uous, nonnegative, integer, or binary), which jointly define the feasible region X . Domain-type restrictions such as “positive integers” may equivalently be encoded as explicit constraints, and our parser maps both styles to X . Objective gives the mini-mization or maximization expression, and Constraints provide named families of linear or nonlinear equalities/inequalities composing G and the bound vector c.During the reasoning process, to enhance the capability of LLM for solving optimization problems across diverse optimization types, it analyzes the problem during the rea-soning phase and selects different open-source solvers for the given problem depending on the optimization types and the characteristics of the solvers, thereby improving the match be-tween the problem and the selected solver. Solver selection is guided by a prompt, which is introduced in the supplementary material. The second segment, enclosed by <answer> . . . 
+
+</answer> , converts the five-element formulation into an executable Pyomo program that models the problem, invokes the solver, solves the instance, and prints the numerical answer. By constraining responses in this manner, we collapse the action space from free-form language to a programmable artifact whose intermediate structure and final result can be deterministically parsed and verified. The <answer> segment must implement the blueprint as a single Python code fence that contains a complete Pyomo script. Because these outputs are easy to parse and verify, OptReward in Section III-D1 can automatically score the response format, the five-element formulation and the numerical accuracy based on rules through JOURNAL OF L ATEX CLASS FILES 4
+
+an automated procedure, providing low-cost supervision. The prompt used for this paradigm is provided in the supplemen-tary material. 
+
+C. Training Pipeline of MiniOpt 
+
+Based on the paradigm described in Section III-B and the key techniques introduced in Section III-D, we propose a training pipeline that enables MiniOpt to learn from limited resource constraints while achieving powerful solving perfor-mance and strong optimization generalization. This pipeline begins with a lightweight SFT as mid-training followed by a two-stage RL under OptReward. The illustration of the training pipeline is shown in subfigure (b) of Figure 1. 
+
+1) Mid-Training based on SFT: LLMs acquire broad knowledge through large-scale general pretraining. However, for specialized domains, small-scale models often struggle to cultivate the necessary capabilities effectively or comprehen-sively. Mid-training serves as a bridge between pretraining and subsequent training stages, strengthening domain-specific skills through targeted training data [35]. In the proposed training pipeline, the mid-training phase employs a small-scale and diverse dataset from the operational optimization field to conduct SFT on the base model, thereby providing effective modeling and solving trajectories for the subsequent two-stage RL training. This SFT warm-up does not adopt the reasoning-to-model-and-solve paradigm introduced in Section III-B. Instead, it establishes a starting point upon which our two-stage RL can subsequently focus on paradigm acquisition and optimization generalization. For each instance, we prompt Qwen2.5-Coder-32B-Instruct [36] using the prompt in supplementary material to rewrite the original GurobiPy program into an equivalent Pyomo implementation and to select an appropriate open-source solver according to the detected structure. Every rewrit-ten instance is executed and only those that compile, solve, and print the correct structure are retained, the obtained dataset is referred to as OptMATH-Train-Pyomo. The remaining data serves as a candidate pool for the next stage of the two-stage RL training. Based on the annotations of optimization types and problem-scenario tags assigned to each sample in this paper, the training data for mid-training are constructed from a small-scale subset of OptMATH-Train-Pyomo. Within this subset, we ensure an equal number of linear and nonlinear problems. Since nonlinear problems are scarce in OPTMATH-Train, we supplement the shortfall with MILP problems in the dataset to reach the desired equal distribution. Additionally, all samples labelled as ”unknown” are included to preserve both the difficulty and diversity of the data source during the warm-up training phase. The prompt used for data annotation is provided in supplementary material. 
+
+2) The Two-Stage RL: After the SFT phase, the models can undergo RL training more effectively. We employ a two-stage RL training under the same reward function (OptReward) for paradigm acquisition and optimization generalization, respec-tively. Both stages share the pipeline of parsing, executing, and scoring in Section III-B and the OptReward of Sections III-D1, they differ in training data and hyperparameter setting. Algo-rithmically, both stages use the same OptGRPO (cf. paragraphs in Section III-D2). Stage-1 aims to enable the model to acquire the reasoning-to-model-and-solve paradigm: the model must generate a valid 
+
+<think> / <answer> pair, produce the executable Pyomo code, and make a coherent solver choice. To this end we train on 1,585 relatively easy problems, so that most signal arises from the formatting and structural components of OptReward, rapidly improving executability and the ability to solve the optimization problem of natural language description. Stage-2 focuses on optimization generalization once the paradigm is established. The training distribution shifts to the problems with diverse optimization types and problem sce-narios, and the optimization emphasis moves to the accuracy score, encouraging refined modeling and solving behaviors (e.g., variable/constraint formulation and solver selection). We sample a data subset from the candidate pool mentioned in Section III-C1 subject to two constraints: (i) type-uniform coverage, with exactly 600 instances per type, and (ii) within each type, the scenario frequencies match the distribution in the full dataset. The resulting data serves as the Stage-2 RL training set. The dataset for the first stage is the union of the NL4Opt [37] and ICML Competition [38] training splits. Detailed information on the construction of the training set is provided in the supplementary material. Such a training strategy makes efficient use of limited data and reduces training costs, and ultimately allows for strong optimization generalization of LLMs with even small parameters and limited computational resources. 
+
+D. Efficient Training for Optimization Generalization 
+
+Building upon the reasoning-to-model-and-solve paradigm mentioned in Section III-B, we propose two key components for the RL training of MiniOpt as shown in subfigure (c) in Figure 1: An informative and easily verifiable reward function OptReward, and an improved algorithm OptGRPO builds upon GRPO [39]. 
+
+1) OptReward: Verifiable Rewards Designed for MiniOpt: 
+
+Building upon the reasoning-to-model-and-solve pipeline, we propose OptReward as the core mechanism for RLVR train-ing, serving not only as a verification tool for optimization modeling but also as a gating mechanism to control the stages of RL training. It comprises three automatically computed components: format correctness, structural completeness, and numerical accuracy. Each component is derived from the deterministic parsing or execution of the model’s output, which not only ensures the completeness of the problem modeling but also enables verification to scale with computational time, substantially reducing the overall verification cost. 
+
+Format Score: The format score Sfmt validates the response format. A response must contain exactly one <think> . . . </think> and one 
+
+<answer> . . . </answer> in the correct order. If all conditions hold, we assign Sfmt = +1 , otherwise Sfmt = −1.If the specified format is not present in the response, we deterministically set the remaining components to their error defaults, Sfive = −1 and Sacc = −2, so that the total reward JOURNAL OF L ATEX CLASS FILES 5
+
+immediately reaches the global minimum. This forces the model to adopt the correct response format early in training and prevents expensive evaluation of malformed samples. 
+
+Five-element Score: To avoid ground-truth labeling of five-element content and the bias it may introduce, we use a presence-based rule aligned with the paradigm in Sec-tion III-B. Conditional on valid formatting, we compute the five-element score Sfive . In the <think> segment, the model response is expected to include five labelled summaries start-ing with “## Sets:”, “## Parameters:”, “## Variables:”, “## Objective:”, and “## Constraints:”. Each present summary contributes 0.2 points to the score; if none is present, we assign Sfive = −1. This structure shaping keeps the modeling blueprint parsable. 
+
+Sfive =
+
+
+
+0.2
+
+> 5
+
+X
+
+> k=1
+
+Ik, if 
+
+> 5
+
+X
+
+> k=1
+
+Ik ≥ 1 ,
+
+−1, if 
+
+> 5
+
+X
+
+> k=1
+
+Ik = 0 ,
+
+(2) where Ik = 1 if the k-th required element ek is present in the <think> segment, and Ik = 0 otherwise. 
+
+(e1, . . . , e 5) = (Sets , Parameters , Variables , Objective , Con-straints ). 
+
+Accuracy Score: The accuracy score is obtained by exe-cuting the Pyomo program contained in <answer> . If the program cannot be extracted or execution fails, we assign 
+
+Sacc = −2. When execution succeeds, we retrieve the optimal objective value ˆf from the model output and compare it with the ground-truth value f ⋆; if they are equal, we assign 
+
+Sacc = 2 , otherwise Sacc = −1.5.
+
+Sacc =
+
+
+
++2 , if execution succeeds and ˆf = f ⋆,
+
+−1.5, if execution succeeds but ˆf̸ = f ⋆,
+
+−2, if no executable code or execution fails .
+
+(3) Combining the components with the formatting gate yields the total OptReward as follows: 
+
+R =
+
+(−4, if Sfmt = −1,Sfmt + Sfive + Sacc , if Sfmt = 1 . (4) By OptReward, the format score enforces the strict 
+
+<think> / <answer> format, the five-element score shapes a complete modeling blueprint in the think phase, and the accuracy score certifies correctness through equality of optimal objective values, enabling low-cost verifiable RL for problems in the field of optimization. 
+
+2) OptGRPO: Training Small-Scale LLMs with Limited Resources: Considering the specific requirements of the task, we build upon the reasoning-to-model-and-solve paradigm and OptReward to refine the GRPO algorithm, introducing the 
+
+OptGRPO . In the second stage of RL, MiniOpt is dedicated to exploring complex problem-solving patterns. In this context, a symmetrically designed upper bound for importance weight clipping can induce premature convergence, thereby hindering the model’s ability to discriminate between correct and incor-rect solutions. Similarly, the standard KL divergence penalty inherently restricts the exploration capacity of the policy model. To address these limitations, we set the coefficient on the KL penalty β = 0 to remove the KL penalty to encourage greater exploration by the model, and replace symmetric clipping with an asymmetric interval [1 − εlow , 1 + εhigh ]
+
+with a higher upper clipping threshold εhigh than the lower threshold εlow , to encourage the exploration of low-probability (yet potentially optimal) patterns. This relaxes the trust region on probability increases while keeping a firm lower bound on decreases, which empirically improves executability in stage-1 RL training and supports generalization in stage-2 RL training. Specifically, we raise εhigh to 0.28 during the training. Although a higher clipping threshold may poten-tially introduce high variance, training stability is empirically guaranteed because the modeling format of the rollouts is already strictly constrained by the five-element tuple structure within the CoT. Furthermore, we adopt a token-level policy gradient loss computation. This design amplifies the reward signals for valid solution patterns, ensuring that high-quality reasoning trajectories are not disproportionately penalized or underestimated, thereby providing a more precise and granular reward signal for the target solving behaviors. Ultimately, through OptGRPO, the reasoning-to-model-and-solve training paradigm is executed with significantly enhanced efficiency and efficacy. The final loss of OptGRPO is as follows: 
+
+JOptGRPO (θ) = Eq∼P (Q),{oi}Gi=1 ∼πθold (·| q)
+
+1
+
+PGi=1 |oi|
+
+> G
+
+X
+
+> i=1
+> |oi|
+
+X
+
+> t=1
+
+(5) 
+
+min[ ρθ ˆAi,t , clip (ρθ , 1 − εlow , 1 + εhigh ) ˆAi,t ] ,ρθ = πθ (oi,t |q, o i,<t )
+
+πθold (oi,t |q, o i,<t ) . (6) IV. E XPERIMENTS 
+
+We evaluate MiniOpt models on diverse optimization bench-marks spanning multiple types and scenarios to assess whether small-scale parameter LLMs (3B/7B) can achieve strong op-timization generalization ability. To evaluate solution correctness, we report Solving Accu-racy (SA) as the primary metric, SA measures the proportion of generated code samples whose execution results match the ground-truth optimal solutions provided by the benchmarks. A solution is deemed correct if the returned optimal objective value matches the reference solution within a tolerance of 
+
+10 −1; otherwise, it is considered unsuccessful. Comparisons cover general LLMs, general reasoning LLMs, prompting-based baselines and learning-based baselines. The experiments are designed to answer the following four research questions. 
+
+(Q1) Optimization Generalization Ability at Small-Scale LLMs. To what extent can MiniOpt at 3B/7B achieve high SA and ER across types and scenarios, and how does it compare with larger reasoning LLMs and prior learning-based approaches? JOURNAL OF L ATEX CLASS FILES 6
+
+(Q2) Pareto Front of Performance vs. Cost. What is the limit of the scale of model parameters for achieving strong optimization generalization? 
+
+(Q3) Importance of Each Stage in the Training Pipeline of MiniOpt. How critical are the lightweight SFT warm-up and the two-stage RL to the performance of MiniOpt? 
+
+(Q4) Importance of the OptReward and OptGRPO. 
+
+How does the proposed OptReward and OptGRPO in MiniOpt contribute to boost SA and ER in modeling and solving optimization problems? The four questions are answered sequentially in the fol-lowing sections. We first provide a detailed description of the experimental setup and then present extensive analyses of the results. The code is available at https://github.com/Hsiang-1/MiniOpt. 
+
+A. Experimental Setup 
+
+Since widely used packages such as Gurobi and COPT are closed-source, generating code for them may entail licensing costs, and a model’s generalization ability across different modeling languages and solvers depends on the proportion of relevant data in its pretraining and post-training corpora. Therefore, we adopted the open-source, solver-agnostic Pyomo modeling language as the language for our training and inference solver code. As for the solvers employed, the key consideration lies in their ability to select the appropriate solver for a specific optimization type. Therefore, this paper selects four types of solvers to cover the solving requirements of as many optimization problem types as possible, so as to automatically adapt to the problem types when generating the solving code. The training configuration of MiniOpt is as follows: SFT is conducted for 4 epochs; the first stage of RL involves 45 training steps, while the second stage consists of 25 steps. During inference, a temperature of 0.7 is applied. For additional experimental settings, please refer to the repository mentioned in the abstract of this paper. The evaluation encompasses eight benchmarks about oper-ational optimization: NL4Opt [37], Mamo (Easy and Com-plex subsets, abbreviated as Mamo.E and Mamo.C, respec-tively) [16], IndustryOR [40], NLP4LP [14], ComplexOR [19], OptiBench [18], and ICML Competition (ICML.C) [38]. We follow the same setting in LLMOPT [6] to ensure consistency and comparability. For the newly included dataset, OptiBench and ICML Competition, we adhere to their original data splits provided by the authors. 
+
+B. Analysis of Optimization Generalization 
+
+In this section, we compare MiniOpt with general LLMs (Qwen2.5, DeepSeek-V3), general thinking LLMs (Qwen3, DeepSeek-R1, Gemini-2.5-Pro, GPT5), prompt-based meth-ods (Chain of Experts, OptiMUS, Reflexion), learning-based methods (OptMATH-7B, LLMOPT-14B, Step-OPT-7B/3B), demonstrating the optimization generalization capability of MiniOpt. Table I summarizes SA on eight benchmarks that span 7 optimization types and 22 scenarios. The information on these methods and the statistics on problem categories and scenarios of benchmarks are provided in supplementary material, as well as the Executable Rate metrics for all the methods on the 8 benchmarks and its analysis. 
+
+Overall Performance (Answer to Q1). Across all eight benchmarks, MiniOpt-7B achieves the strongest average per-formance among all baselines. Notably, MiniOpt-3B surpasses all prompt-based and general methods. For example, com-pared to Gemini-2.5-Pro, the state-of-the-art general thinking model, MiniOpt-3B achieved an average SA of 2.26% higher. Compared to DeepSeek-V3 and DeepSeek-R1, MiniOpt-3B scored 0.49% and 1.20% lower, respectively. Furthermore, MiniOpt-7B achieves the highest average SA of 64.76%, significantly raising the performance ceiling of MiniOpt in practical applications. 
+
+Competitiveness of Small-Scale Models (Answer to Q1). 
+
+MiniOpt remains competitive even at smaller scales. MiniOpt-3B reaches an average SA of 59.65%, which already matches several much larger reasoning models (e.g., the average SA higher than GPT-5 at 57.54%) and clearly outperform-ing general-purpose 14B pre-trained models (e.g., +12.19% over Qwen2.5-14B-Instruct on average). Performance grows smoothly with scale under the same training pipeline, the average SA increase by +5.11% when the model size grows from 3B to 7B. 
+
+Challenging Benchmarks (Answer to Q1). On the most demanding sets that require faithful modeling and solver usage, MiniOpt shows clear advantages. On the latest chal-lenging benchmark Mamo.Complex, MiniOpt-3B and -7B achieve 47.39% and 51.18% SA, respectively, outperforming all the general models and general thinking models. Even on extremely high-dimensional test sets such as Indus.OR, where the smaller MiniOpt models do not achieve the highest SA because of their limited instruction-following capability, it still delivers competitive performance levels in both metrics. 
+
+Breadth across Types and Scenarios (Answer to Q1). To rigorously evaluate optimization generalization, we benchmark MiniOpt-3B and MiniOpt-7B across three difficulty tiers: sim-ple (ICML.C), medium (OptiBench), and hard (Mamo.C). The evaluation encompasses diverse application scenarios (Supply Chain, Transportation, Resource) and problem formulations (LP, IP, MILP). The results highlight a clear scaling law within our framework. While MiniOpt-3B demonstrates competent baseline performance on simpler tasks (e.g., 94% in Trans-portation and 93% in Resource on ICML.C), MiniOpt-7B consistently bridges the gap on complex reasoning tasks. On the ICML.C, the 7B variant elevates MILP accuracy from 31% to 50%. This scaling advantage persists under increased diffi-culty; on the hard-difficulty Mamo.C benchmark, MiniOpt-7B maintains a 10% to 13% absolute improvement over the 3B model in LP, IP, and MILP formulations. Furthermore, both models exhibit remarkable robustness in Resource scenarios, with the 7B model sustaining a 75% success rate even on the most complex tasks. These findings validate that MiniOpt provides a scalable and reliable foundation for LLM-based optimization modeling. 
+
+C. Pareto Front of Performance vs. Cost 
+
+Analysis of the Pareto Front (Answer to Q2). Figure 2 indicates that the MiniOpt family (represented by the solid red JOURNAL OF L ATEX CLASS FILES 7
+
+TABLE I: Comparison of the SA metric across 8 benchmarks with rankings (NL4Opt, ICML Competition, Mamo Easy, Mamo Complex, NLP4LP, ComplexOR, IndustryOR, OptiBench). Bold indicates 1st, :::: 
+
+wavy :::::::: 
+
+underline indicates 2nd, underline indicates 3rd. “Rank ∗” represents the result of sorting methods among parameter sizes below 10B.                                                                                                                                                                                                                                
+
+> Category Models / Methods Avg. Rank Rank ∗NL4Opt ICML.C Mamo.E Mamo.C NLP4LP Com.OR Indus.OR OptiBench
+> General Models Qwen2.5-3B-Instruct 11.23 18 919.13 18.78 17.18 2.37 18.60 0.00 2.00 11.74 Qwen2.5-7B-Instruct 33.20 14 653.48 51.71 35.58 4.27 55.37 16.67 13.00 35.54 Qwen2.5-14B-Instruct 47.46 10 -67.39 63.17 80.21 15.64 67.36 22.22 22.00 41.65 DeepSeek-V3 (671B) 60.14 3-78.26 77.56 84.82 26.54 79.34 44.44 26.00 64.13 General Models (Thinking) Qwen3-4B 11.16 19 816.52 17.56 13.80 6.64 15.29 5.56 2.00 11.90 Qwen3-8B 21.79 16 730.87 29.51 23.93 9.95 34.71 11.11 6.00 28.26 Qwen3-14B 23.78 15 -24.35 22.68 36.20 11.37 19.42 38.89 15.00 22.31 DeepSeek-R1 (671B) :::
+> 60.85 2-83.91 75.37 74.54 39.81 69.83 44.44 32.00 66.94
+> Gemini-2.5-Pro 57.39 7-78.26 71.22 65.95 30.81 73.55 :::
+> 50.00 28.00 61.32 GPT-5 57.54 6-80.43 73.66 58.12 23.22 73.14 61.11 26.00 :::
+> 64.63 Prompt-based Methods Chain-of-Experts 45.78 11 -66.52 56.59 63.65 22.75 59.09 33.33 19.00 45.29 OptiMUS 20.65 17 -13.48 33.17 37.27 11.85 18.18 16.67 8.00 26.61 Reflexion 45.54 12 -56.52 52.20 84.82 18.01 53.72 38.89 19.00 41.16 Learning-based Models Step-OPT-Qwen2.5-3B 39.76 13 541.30 38.54 75.31 20.85 53.31 27.78 21.00 40.00 Step-OPT-Qwen2.5-7B 52.22 9477.83 57.32 69.33 :::
+> 50.24 48.35 38.89 27.00 48.76 OptMATH-7B 54.62 8378.70 66.83 84.20 34.12 68.60 33.33 19.00 52.23 LLMOPT-14B 60.10 4-80.28 75.35 :::
+> 89.53 44.08 73.42 35.29 :::
+> 29.00 53.83
+> Ours
+> MiniOpt-3B 59.65 52:::
+> 93.04 :::
+> 78.05 84.36 47.39 74.38 27.78 17.00 55.21 MiniOpt-7B 64.76 1195.22 83.41 89.57 51.18 :::
+> 74.79 38.89 25.00 60.00
+
+TABLE II: Ablation study (MiniOpt-3B) on the SA metric across 8 benchmarks. Herein, “w” denotes “with” and “w/o” denotes “without”. 
+
+Category Model / Method Avg. NL4Opt ICML.C Mamo.E Mamo.C NLP4LP Com.OR Indus.OR OptiBench Ablations 
+
+MiniOpt-3B 59.65 93.04 78.05 84.36 47.39 74.38 27.78 17.00 55.21 MiniOpt-3B w/o SFT Warm-up 56.60 89.13 76.83 84.36 28.44 72.73 27.78 19.00 54.55 MiniOpt-3B w/o RL 27.24 40.00 35.37 50.15 3.79 41.74 11.11 7.00 28.76 MiniOpt-3B w/o Two-stage RL 55.07 89.13 73.41 79.75 33.18 74.79 22.22 16.00 52.07 MiniOpt-3B w/ Random Selection 58.33 93.04 79.02 82.06 48.34 73.97 16.67 17.00 56.53 MiniOpt-3B w/o OptReward 57.96 89.13 76.34 83.90 38.86 72.73 33.33 16.00 53.39 MiniOpt-3B w/ GRPO 56.54 90.43 77.07 80.06 45.02 73.55 16.67 14.00 55.54 
+
+line) lies on the empirical Pareto frontier among the compared open-weight methods in the performance-versus-cost trade-off. Since the parameter size of GPT-5 and Gemini-2.5-Pro have not been disclosed, we do not label these two models in the figures. As the scale of the model increases, the average SA per-formance of MiniOpt also grows steadily. It achieves a com-prehensive performance lead while having substantially fewer parameters than top-tier general reasoning models such as DeepSeek-R1 and learning-based model LLMOPT-14B. Com-pared to the similar modeling and solving model Step-OPT, Step-OPT-Qwen2.5-7B achieves an average SA of 52.22% across 8 benchmarks, while the proposed MiniOpt attains an average SA of 64.76%. When the parameter scale of both models is reduced to 3B, Step-OPT-Qwen2.5-3B exhibits a performance drop of 12.46%, while MiniOpt only decreases by 5.11%. This indicates that the key advantage of MiniOpt lies in its ability to maintain superior performance even with a reduced parameter scale. From the perspective of capability density [41], MiniOpt effectively achieves lower parameter requirements and inference costs while preserving comparable performance. 
+
+D. Ablation Study 
+
+We ablate core components of MiniOpt-3B and report results of the SA metric in Table II and the ER metric in Table S4 in supplementary material, where “w” denotes “with” and “w/o” denotes “without”. As evidenced in Table II, each module of the proposed reasoning-to-model-and-solve paradigm demonstrates substantial contributions to model and solve optimization problems with smaller-scale models under limited training resources. Among these, 
+
+Importance of the Training Pipeline of MiniOpt (Answer to Q3). In the training pipeline of MiniOpt, each module plays a distinct role in improving SA and ER. First, the SFT warm-up of mid-training phase provides a better starting point for RL training. Without it, averages for SA fall to 56.60%. The decreases are ∆SA=–3.05. Second, collapsing the two-stage RL removes the progressive training that first consolidates the paradigm (stage-1) and then targets generalization (stage-2), the average SA drop to 55.07% and the average ER of 82.73% (∆ SA=–4.58%, ∆ ER=–5.19%). Finally, reverting our Opt-GRPO to the original GRPO further decreases both metrics, the average SA of 56.54% and ER of 82.35%. Together these changes of OptGRPO improve sample efficiency and training stability, which is critical for eliciting strong optimization JOURNAL OF L ATEX CLASS FILES 8
+
+TABLE III: Comparison of the SA metric between MiniOpt-1.5B and larger scale counterparts across 8 benchmarks. 
+
+Solving Accuracy (SA) Avg. NL4Opt ICML.C Mamo.E Mamo.C NLP4LP Com.OR Indus.OR OptiBench 
+
+Number of Samples in Datasets 230 410 652 211 242 18 100 605 Ours MiniOpt-1.5B 50.33 88.7 72.2 78.99 8.06 71.07 16.67 16 50.91 MiniOpt-3B 59.65 93.04 78.05 84.36 47.39 74.38 27.78 17.00 55.21 MiniOpt-7B 64.76 95.22 83.41 89.57 51.18 74.79 38.89 25.00 60.00 10 1 10 2
+
+Parameter Size (B) 
+
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Solving Accuracy (%)
+
+Solving Accuracy vs. Parameter Size  
+
+> Qwen2.5-7B-Instruct
+> Qwen2.5-14B-Instruct
+> DeepSeek V3
+> Qwen3-4B
+> Qwen3-8B Qwen3-14B
+> DeepSeek R1
+> Chain-of-Experts
+> OptiMUS
+> Reflexion
+> Step-OPT-Qwen2.5-3B
+> Step-OPT-Qwen2.5-7B
+> OptMATH-7B
+> LLMOPT-14B MiniOpt-3B
+> MiniOpt-7B
+> General Models
+> General Models (Thinking)
+> Prompt-based Methods
+> Learning-based Models
+> Ours
+
+Fig. 2: Comparison of average SA against model parameter scales for various methods. MiniOpt is the Pareto optimal among methods (with open-weight models). generalization at small parameter scales. 
+
+Importance of the OptReward (Answer to Q4). RL provides the most significant improvement, highlighting the importance of the proposed paradigm. The reasoning-to-model-and-solve paradigm and OptReward together turn free-form generation into a verifiable formulation that is easy to verify. Removing the OptReward and keeping only a final-answer signal (w/o OptReward) drops the average to 57.96% and 85.31% ( ∆ SA=–1.69%, ∆ ER= –2.61%), respectively. The largest losses appear where the problems are challenging: Mamo Complex ( ∆ SA = –8.53%, ∆ ER = -8.52%). These patterns align with the roles of the three reward components: the format score enforces the response contains complete and properly structured <think> and <answer> sections; the five-element score shapes the intermediate blueprint, so the model learns to extract problem structure before coding; the Accuracy Score certifies numerical correctness by executing the Pyomo code and comparing the returned optimum with the reference. Although the absolute performance gain of OptReward is smaller than that of the training pipeline, OptReward is indispensable because it provides the verifiable supervision signal that enables RL training without chain-of-thought annotations. 0 5 10 15 20 25        
+
+> Step
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Reward
+> Training dynamics of reward value
+> 0510 15 20 25
+> Step
+> 0.095
+> 0.100
+> 0.105
+> 0.110
+> 0.115
+> 0.120
+> Entropy
+> Training dynamics of Policy Entropy
+> Acc. score: +2, -1.5, -2 (Miniopt-3B) Acc. score: +1, -1, -1 Acc. score: +2, -0, -1
+
+Fig. 3: Comparison of training dynamics of reward values and policy entropy for MiniOpt-3B under different reward function settings during the second stage of RL training. V. D ISCUSSIONS 
+
+Sensitivity Analysis of the Accuracy Reward Design. To investigate whether the effectiveness of OptReward depends on a specific reward assignment, we replace the original accuracy reward setting ((2,-1.5,-2)) with two alternative configurations, namely ((2,0,-1)) and ((1,-1,-1)). Figure 3 illustrates the train-ing dynamics in terms of reward convergence and policy entropy, while Table IV reports the final solving accuracy (SA). First, the ((2,0,-1)) setting achieves a noticeably higher converged reward than the original design, while yielding nearly identical SA. The increase in converged reward should not be interpreted as an improvement in optimization capabil-ity. Since incorrect solutions receive a neutral reward instead of a penalty, the expected reward distribution is shifted upward. Consequently, higher reward values are partially caused by reward rescaling rather than improved policy quality. The most significant performance drop is observed under the ((1,-1,-1)) setting, where SA decreases by 2.25%. These results demonstrate that the effectiveness of OptReward relies on maintaining a hierarchical reward structure that progressively differentiates execution failures, incorrect solutions, and cor-rect solutions. Such a design provides informative intermediate supervision and enables stable policy optimization, which is crucial for achieving strong optimization generalization under limited training resources. For more detailed analysis, please refer to the supplementary materials. 
+
+Ablation on OptGRPO and Training Dynamics Analysis. 
+
+Empirical results (Section IV-D) demonstrate that OptGRPO consistently yields higher SA on downstream benchmarks compared to the vanilla GRPO. To better understand the reason for this improvement, we monitor the training dynamics by tracking both the reward function values and the policy entropy throughout the RL training process, as illustrated in Figure 4. While both GRPO and OptGRPO eventually converge to JOURNAL OF L ATEX CLASS FILES 9
+
+TABLE IV: Sensitivity analysis of the accuracy reward design. ∆1 denotes the reward gap between correct and incorrect solutions, while ∆2 denotes the reward gap between incorrect solutions and execution failures. 
+
+Reward Setting ∆1 ∆2 Reward Entropy SA (%) 
+
+(Rc − Ri) (Ri − Rf ) Convergence Convergence 
+
+Original (2 , −1.5, −2) 3.5 0.5 2.65 0.110 59.65 Variant A (2 , 0, −1) 2.0 1.0 3.20 0.097 59.36 Variant B (1 , −1, −1) 2.0 0.0 2.35 0.101 57.40 0 5 10 15 20 25       
+
+> Step
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 2.00
+> 2.25
+> 2.50
+> 2.75
+> Reward
+> Training dynamics of reward value
+> 0510 15 20 25
+> Step
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> Entropy
+> Training dynamics of Policy Entropy
+> Ablation w/ GRPO MiniOpt-3B
+
+Fig. 4: Comparison of training dynamics of reward function values and policy entropy between GRPO and OptGRPO during the second stage of RL training. comparable reward values, their entropy trajectories diverge significantly. Standard GRPO exhibits a precipitous drop in en-tropy, indicative of premature policy collapse. In contrast, Opt-GRPO maintains a higher policy entropy throughout training, which encourages exploration of diverse reasoning trajectories. Optimization problems often possess complex, non-convex search spaces where multiple valid modeling paradigms exist. A premature drop in entropy restricts the policy to a narrow set of high-probability, yet potentially sub-optimal, reasoning trajectories. We hypothesize that maintaining higher policy entropy contributes to stronger optimization generalization by encouraging exploration of diverse reasoning trajectories. 
+
+Exploration of Models with Smaller (Fewer than 3B) Parameter Scale. To further explore the performance of Min-iOpt with smaller (fewer than 3B) parameter scales, thereby better balancing the trade-off between parameters and perfor-mance, we deploy MiniOpt-1.5B with the same reasoning-to-model-and-solve paradigm (Section III-B), OptReward (Sec-tion III-D1), and training pipeline (Section III-C). The results shown in Table III and S5 in supplementary material show that when the model scale is reduced from 3B to 1.5B, MiniOpt achieves an average SA of 50.33% and an average ER of 86.44% across the 8 benchmarks, remains competitive with learning-based methods and general-purpose models with substantially larger parameter scales. 
+
+Dimensionality Scalability Issue. Our experimental results show that MiniOpt-3B can successfully formulate optimization problems whose parameter dimensionality reaches 80. Al-though such dimensionalities are still modest from the perspec-tive of large-scale optimization, they already pose substantial reasoning and modeling challenges for compact language models . This shows a remarkably strong performance for models of such limited scale, which highlights that MiniOpt paradigm effectively enhances the model’s optimization mod-eling capacity and retains robust generalization even in high-dimensional settings. For problems with even higher dimen-sionality, the descriptions of numerical parameters typically become substantially longer. Such extended input sequences inherently pose a significant challenge to the comprehension capabilities of small-scale models. 
+
+Cost Savings of MiniOpt and Generality of Base Mod-els. To validate the high efficiency of the MiniOpt model during inference, we compare the token consumption of the two reasoning-based models, MiniOpt-3B and Deepseek-R1, across benchmarks of varying difficulty levels. Based on the average solving accuracy in the Table I, we select the easy-difficulty dataset ICML.C, the medium-difficulty benchmark OptiBench, and the hard-difficulty benchmark Mamo.C. On these three datasets, MiniOpt-3B achieves an average accuracy only 1.20 percentage points lower than Deepseek-R1, while reducing average token consumption by 75.61%. Furthermore, as problem difficulty increases, the token savings become more pronounced: from 1177.28 tokens saved on ICML.C, to 2059.25 on OptiBench, and to 4678.95 on Mamo.C. When the parameter scale is increased to 7B, MiniOpt achieves an average SA that is 4.15 percentage points higher than Deepseek-R1 across the three datasets, while consuming only 24.40% of the average output tokens required by Deepseek-R1. 
+
+General Capability Retention. To evaluate whether optimization-oriented RL training impairs other capabilities of the base model, we additionally evaluate MiniOpt-3B on six widely used benchmarks covering mathematical reasoning, knowledge understanding, reading comprehension, question answering, and code generation. The results show no degra-dation and an average improvement of 1.24%, indicating that optimization-oriented RL training does not compromise the model’s general capabilities. Detailed benchmark results are provided in the supplementary material. VI. C ONCLUSION 
+
+This paper proposes MiniOpt, a novel reasoning-to-model-and-solve paradigm and the corresponding small-scale models MiniOpt-3B and MiniOpt-7B. The proposed models achieve competitive or even superior performance under limited com-putational resources. MiniOpt requires less data volume and less detailed annotation during training, resulting in signifi-cantly lower computational costs for both training and infer-ence. We explore the optimization generalization of the model in various types of optimization, problem scenarios, and a wide range of fields. The experimental results show that MiniOpt exhibits strong generalization performance under these varying JOURNAL OF L ATEX CLASS FILES 10 
+
+conditions, and it can achieve higher performance with fewer tokens. Notably, this study explores the minimum parameter scale at which MiniOpt maintains competitive performance. Among the investigated model scales, MiniOpt-3B provides the best balance between optimization performance and com-putational efficiency. REFERENCES [1] W. Song, X. Chen, Q. Li, and Z. Cao, “Flexible job-shop scheduling via graph neural network and deep reinforcement learning,” IEEE Transactions on Industrial Informatics, vol. 19, no. 2, pp. 1600–1610, 2023. [2] K. Li, F. Liu, Z. Wang, X. Tong, X. Han, M. Yuan, and Q. Zhang, “Ars: Automatic routing solver with large language models,” CoRR, vol. abs/2502.15359, 2025. [3] H. Deng, B. Zheng, Y. Jiang, and T. H. Tran, “CAFA: Coding as auto-formulation can boost large language models in solving linear programming problem,” in The 4th Workshop on Mathematical Reasoning and AI at NeurIPS’24, 2024. [Online]. Available: https: //openreview.net/forum?id=xC2xtBLmri [4] Y. Sun, F. Ye, X. Zhang, S. Huang, B. Zhang, K. Wei, and S. Cai, “AutoSAT: Automatically optimize SAT solvers via large language models,” CoRR, vol. abs/2402.10705, 2024. [5] J. Li, Y. Chu, Y. Sun, M. Zou, and S. Cai, “AutoPBO: LLM-powered optimization for local search PBO solvers,” CoRR, vol. abs/2509.04007, 2025. [6] C. Jiang, X. Shu, H. Qian, X. Lu, J. Zhou, A. Zhou, and Y. Yu, “LLMOPT: learning to define and solve general optimization problems from scratch,” in Advances in The Thirteenth International Conference on Learning Representations, Singapore, 2025. [7] T. Wang, W. Y. Yu, Z. He, Z. Liu, H. HaileiGong, H. Wu, X. Han, W. Shi, R. She, F. Zhu, and T. Zhong, “BPP-search: Enhancing tree of thought reasoning for mathematical modeling problem solving,” in Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), W. Che, J. Nabende, E. Shutova, and M. T. Pilehvar, Eds. Vienna, Austria: Association for Computational Linguistics, Jul. 2025, pp. 821–838. [Online]. Available: https://aclanthology.org/2025.acl-long.40/ [8] A. Singirikonda, S. Kadioglu, and K. Uppuluri, “Text2Zinc: A cross-domain dataset for modeling optimization and satisfaction problems in MiniZinc,” CoRR, vol. abs/2503.10642, 2025. [9] Y. Wu, Y. Zhang, Y. Wu, Y. Wang, J. Zhang, and J. Cheng, “Training LLMs for optimization modeling via iterative data synthesis and structured validation,” in Findings of the Association for Computational Linguistics: EMNLP 2025, C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng, Eds. Suzhou, China: Association for Computational Linguistics, Nov. 2025, pp. 12 880–12 896. [Online]. Available: https://aclanthology.org/2025.findings-emnlp.691/ [10] H. Lu, Z. Xie, Y. Wu, C. Ren, Y. Chen, and Z. Wen, “OptMATH: A scalable bidirectional data synthesis framework for optimization mod-eling,” in Forty-second International Conference on Machine Learning, 2025. [11] Z. Xiao, J. Xie, L. Xu, S. Guan, J. Zhu, X. Han, X. Fu, W. Yu, H. Wu, W. Shi, Q. Kang, J. Duan, T. Zhong, M. Yuan, J. Zeng, Y. Wang, G. Chen, and D. Zhang, “A survey of optimization modeling meets LLMs: Progress and future directions,” in Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence, IJCAI-25, J. Kwok, Ed. International Joint Conferences on Artificial Intelligence Organization, 8 2025, pp. 10 742–10 750, survey Track. [12] A. Zadorojniy, S. Wasserkrug, and E. Farchi, “An agent-based framework for the automatic validation of mathematical optimization models,” 2025. [Online]. Available: https://arxiv.org/abs/2511.16383 [13] H. Zhai, C. Lawless, E. Vitercik, and L. Leqi, “Equivamap: Leveraging LLMs for automatic equivalence checking of optimization formulations,” in 2nd AI for Math Workshop @ ICML 2025, 2025. [Online]. Available: https://openreview.net/forum?id=RvdjzNlksm [14] A. AhmadiTeshnizi, W. Gao, and M. Udell, “OptiMUS: Scalable opti-mization modeling with (MI)LP solvers and large language models,” in Advances in Forty-first International Conference on Machine Learning, Vienna, Austria, 2024. [15] X. Li, J. Chen, X. Fang, S. Ding, H. Duan, Q. Liu, and K. Chen, “OPT-BENCH: evaluating LLM agent on large-scale search spaces optimization problems,” CoRR, vol. abs/2506.10764, 2025. [16] X. Huang, Q. Shen, Y. Hu, A. Gao, and B. Wang, “LLMs for mathe-matical modeling: Towards bridging the gap between natural and math-ematical languages,” in Findings of the Association for Computational Linguistics 2025, Albuquerque, New Mexico, 2025, pp. 2678–2710. [17] Z. Yang, Y. Huang, W. Shi, L. Feng, L. Song, Y. Wang, X. Liang, and J. Tang, “Benchmarking LLMs for optimization modeling and enhancing reasoning via reverse socratic synthesis,” CoRR, vol. abs/2407.09887, 2024. [18] Z. Yang, Y. Wang, Y. Huang, Z. Guo, W. Shi, X. Han, L. Feng, L. Song, X. Liang, and J. Tang, “OptiBench meets ReSocratic: Measure and improve LLMs for optimization modeling,” in The Thirteenth International Conference on Learning Representations, Singapore, 2025. [19] Z. Xiao, D. Zhang, Y. Wu, L. Xu, Y. J. Wang, X. Han, X. Fu, T. Zhong, J. Zeng, M. Song, and G. Chen, “Chain-of-Experts: When LLMs meet complex operations research problems,” in The Twelfth International Conference on Learning Representations, Vienna, Austria, 2024. [20] H. Liu, J. Wang, Y. Cai, X. Han, Y. Kuang, and J. HAO, “Optitree: Hierarchical thoughts generation with tree search for LLM optimization modeling,” in The Thirty-ninth Annual Conference on Neural Information Processing Systems, 2025. [Online]. Available: https://openreview.net/forum?id=Ej20yjWMCj [21] K. Liang, Y. Lu, J. Mao, S. Sun, C. Yang, C. Zeng, X. Jin, H. Qin, R. Zhu, and C.-P. Teo, “Llm for large-scale optimization model auto-formulation: A lightweight few-shot learning approach,” 2025. [Online]. Available: https://dx.doi.org/10.2139/ssrn.5329027 [22] Z. Ma, H. Guo, J. Chen, G. Peng, Z. Cao, Y. Ma, and Y. Gong, “LLaMoCo: Instruction tuning of large language models for optimization code generation,” CoRR, vol. abs/2403.01131, 2024. [23] P. P. Dakle, S. Kadioglu, K. Uppuluri, R. Politi, P. Raghavan, S. Ral-labandi, and R. Srinivasamurthy, “Ner4Opt: Named entity recogni-tion for optimization modelling from natural language,” in Integration of Constraint Programming, Artificial Intelligence, and Operations Research - 20th International Conference, vol. 13884, Nice, France, 2023, pp. 299–319. [24] C. Zhou, T. Xu, J. Lin, and D. Ge, “Steporlm: A self-evolving framework with generative process supervision for operations research language models,” 2025. [Online]. Available: https://arxiv.org/abs/2509.22558 [25] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. L. Wainwright, P. Mishkin, C. Zhang, S. Agarwal, K. Slama, A. Ray, J. Schulman, J. Hilton, F. Kelton, L. Miller, M. Simens, A. Askell, P. Welinder, P. F. Christiano, J. Leike, and R. Lowe, “Training language models to follow instructions with human feedback,” in Advances in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing Systems 2022, New Orleans, LA, 2022. [26] N. Lambert, J. Morrison, V. Pyatkin, S. Huang, H. Ivison, F. Brahman, L. J. V. Miranda, A. Liu, N. Dziri, S. Lyu, Y. Gu, S. Malik, V. Graf, J. D. Hwang, J. Yang, R. L. Bras, O. Tafjord, C. Wilhelm, L. Soldaini, N. A. Smith, Y. Wang, P. Dasigi, and H. Hajishirzi, “T ¨ ULU 3: Pushing fron-tiers in open language model post-training,” CoRR, vol. abs/2411.15124, 2024. [27] P. Wang, L. Li, Z. Shao, R. Xu, D. Dai, Y. Li, D. Chen, Y. Wu, and Z. Sui, “Math-Shepherd: Verify and reinforce LLMs step-by-step without human annotations,” in Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), Bangkok, Thailand, 2024, pp. 9426–9439. [28] T. Xie, Z. Gao, Q. Ren, H. Luo, Y. Hong, B. Dai, J. Zhou, K. Qiu, Z. Wu, and C. Luo, “Logic-RL: Unleashing LLM reasoning with rule-based reinforcement learning,” CoRR, vol. abs/2502.14768, 2025. [29] J. Gao, S. Xu, W. Ye, W. Liu, C. He, W. Fu, Z. Mei, G. Wang, and Y. Wu, “On designing effective RL reward at training time for LLM reasoning,” CoRR, vol. abs/2410.15115, 2024. [30] K. Zhang, G. Li, Y. Dong, J. Xu, J. Zhang, J. Su, Y. Liu, and Z. Jin, “CodeDPO: Aligning code models with self generated and verified source code,” in Advances in the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), Vienna, Austria, 2025, pp. 15 854–15 871. [31] H. Xin, Z. Z. Ren, J. Song, Z. Shao, W. Zhao, H. Wang, B. Liu, L. Zhang, X. Lu, Q. Du, W. Gao, H. Zhang, Q. Zhu, D. Yang, Z. Gou, Z. F. Wu, F. Luo, and C. Ruan, “DeepSeek-Prover-V1.5: Harnessing proof assistant feedback for reinforcement learning and monte-carlo tree search,” in Advances in the Thirteenth International Conference on Learning Representations, Singapore, 2025. [32] J. Pan, X. Wang, G. Neubig, N. Jaitly, H. Ji, A. Suhr, and Y. Zhang, “Training software engineering agents and verifiers with SWE-gym,” in ICLR 2025 Third Workshop on Deep Learning for Code, 2025. JOURNAL OF L ATEX CLASS FILES 11 
+
+[33] Y. Chen, J. Xia, S. Shao, D. Ge, and Y. Ye, “Solver-Informed RL: Grounding large language models for authentic optimization modeling,” CoRR, vol. abs/2505.11792, 2025. [34] Z. Ding, Z. Tan, J. Zhang, and T. Chen, “Or-r1: Automating modeling and solving of operations research optimization problem via test-time reinforcement learning,” 2025. [Online]. Available: https://arxiv.org/abs/2511.09092 [35] C. Tu, X. Zhang, R. Weng, R. Li, C. Zhang, Y. Bai, H. Yan, J. Wang, and X. Cai, “A survey on llm mid-training,” 2025. [Online]. Available: https://arxiv.org/abs/2510.23081 [36] B. Hui, J. Yang, Z. Cui, J. Yang, D. Liu, L. Zhang, T. Liu, J. Zhang, B. Yu, K. Dang, A. Yang, R. Men, F. Huang, X. Ren, X. Ren, J. Zhou, and J. Lin, “Qwen2.5-Coder technical report,” CoRR, vol. abs/2409.12186, 2024. [37] R. Ramamonjison, T. Yu, R. Li, H. Li, G. Carenini, B. Ghaddar, S. He, M. Mostajabdaveh, A. Banitalebi-Dehkordi, Z. Zhou, and Y. Zhang, “NL4Opt competition: Formulating optimization problems based on their natural language descriptions,” in Proceedings of the NeurIPS 2022 Competitions Track, vol. 220, 2022, pp. 189–203. [38] Ai4mathICML2024, “ICML 2024 Challenges on Automated Math Rea-soning - Track 3: Automated Optimization Problem-Solving with Code,” https://www.codabench.org/competitions/2438, 2024. [39] Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, M. Zhang, Y. K. Li, Y. Wu, and D. Guo, “DeepSeekMath: Pushing the limits of mathematical reasoning in open language models,” CoRR, vol. abs/2402.03300, 2024. [40] C. Huang, Z. Tang, S. Hu, R. Jiang, X. Zheng, D. Ge, B. Wang, and Z. Wang, “ORLM: A customizable framework in training large models for automated optimization modeling,” Operations Research, May 2025. [41] C. Xiao, J. Cai, W. Zhao, B. Lin, G. Zeng, J. Zhou, Z. Zheng, X. Han, Z. Liu, and M. Sun, “Densing law of llms,” Nature Machine Intelligence, vol. 7, no. 11, pp. 1823–1833, Nov 2025. [Online]. Available: https://doi.org/10.1038/s42256-025-01137-0 [42] A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Li, D. Liu, F. Huang, H. Wei, H. Lin, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Lin, K. Dang, K. Lu, K. Bao, K. Yang, L. Yu, M. Li, M. Xue, P. Zhang, Q. Zhu, R. Men, R. Lin, T. Li, T. Xia, X. Ren, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Wan, Y. Liu, Z. Cui, Z. Zhang, and Z. Qiu, “Qwen2.5 technical report,” CoRR, vol. abs/2412.15115, 2024. [43] DeepSeek-AI, A. Liu, B. Feng, B. Xue, B. Wang, B. Wu, C. Lu, C. Zhao, C. Deng, C. Zhang, C. Ruan, D. Dai, D. Guo, D. Yang, D. Chen, D. Ji, E. Li, F. Lin, F. Dai, F. Luo, G. Hao, G. Chen, G. Li, H. Zhang, H. Bao, H. Xu, H. Wang, H. Zhang, H. Ding, H. Xin, H. Gao, H. Li, H. Qu, J. L. Cai, J. Liang, J. Guo, J. Ni, J. Li, J. Wang, J. Chen, J. Chen, J. Yuan, J. Qiu, J. Li, J. Song, K. Dong, K. Hu, K. Gao, K. Guan, K. Huang, K. Yu, L. Wang, L. Zhang, L. Xu, L. Xia, L. Zhao, L. Wang, L. Zhang, M. Li, M. Wang, M. Zhang, M. Zhang, M. Tang, M. Li, N. Tian, P. Huang, P. Wang, P. Zhang, Q. Wang, Q. Zhu, Q. Chen, Q. Du, R. J. Chen, R. L. Jin, R. Ge, R. Zhang, R. Pan, R. Wang, R. Xu, R. Zhang, R. Chen, S. S. Li, S. Lu, S. Zhou, S. Chen, S. Wu, S. Ye, S. Ma, S. Wang, S. Zhou, S. Yu, S. Zhou, S. Pan, T. Wang, T. Yun, T. Pei, T. Sun, W. L. Xiao, and W. Zeng, “DeepSeek-V3 technical report,” CoRR, vol. abs/2412.19437, 2024. [44] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv, C. Zheng, D. Liu, F. Zhou, F. Huang, F. Hu, H. Ge, H. Wei, H. Lin, J. Tang, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Lin, K. Dang, K. Bao, K. Yang, L. Yu, L. Deng, M. Li, M. Xue, M. Li, P. Zhang, P. Wang, Q. Zhu, R. Men, R. Gao, S. Liu, S. Luo, T. Li, T. Tang, W. Yin, X. Ren, X. Wang, X. Zhang, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Zhang, Y. Wan, Y. Liu, Z. Wang, Z. Cui, Z. Zhang, Z. Zhou, and Z. Qiu, “Qwen3 technical report,” CoRR, vol. abs/2505.09388, 2025. [45] DeepSeek-AI, D. Guo, D. Yang, H. Zhang, J. Song, R. Zhang, R. Xu, Q. Zhu, S. Ma, P. Wang, X. Bi, X. Zhang, X. Yu, Y. Wu, Z. F. Wu, Z. Gou, Z. Shao, Z. Li, Z. Gao, A. Liu, B. Xue, B. Wang, B. Wu, B. Feng, C. Lu, C. Zhao, C. Deng, C. Zhang, C. Ruan, D. Dai, D. Chen, D. Ji, E. Li, F. Lin, F. Dai, F. Luo, G. Hao, G. Chen, G. Li, H. Zhang, H. Bao, H. Xu, H. Wang, H. Ding, H. Xin, H. Gao, H. Qu, H. Li, J. Guo, J. Li, J. Wang, J. Chen, J. Yuan, J. Qiu, J. Li, J. L. Cai, J. Ni, J. Liang, J. Chen, K. Dong, K. Hu, K. Gao, K. Guan, K. Huang, K. Yu, L. Wang, L. Zhang, L. Zhao, L. Wang, L. Zhang, L. Xu, L. Xia, M. Zhang, M. Zhang, M. Tang, M. Li, M. Wang, M. Li, N. Tian, P. Huang, P. Zhang, Q. Wang, Q. Chen, Q. Du, R. Ge, R. Zhang, R. Pan, R. Wang, R. J. Chen, R. L. Jin, R. Chen, S. Lu, S. Zhou, S. Chen, S. Ye, S. Wang, S. Yu, S. Zhou, S. Pan, and S. S. Li, “DeepSeek-R1: Incentivizing reasoning capability in LLMs via reinforcement learning,” CoRR, vol. abs/2501.12948, 2025. [46] G. Comanici, E. Bieber, M. Schaekermann, I. Pasupat, N. Sachdeva, I. S. Dhillon, M. Blistein, O. Ram, D. Zhang, E. Rosen, L. Marris, S. Petulla, C. Gaffney, A. Aharoni, N. Lintz, T. C. Pais, H. Jacobsson, I. Szpektor, N. Jiang, K. Haridasan, A. Omran, N. Saunshi, D. Bahri, G. Mishra, E. Chu, T. Boyd, B. Hekman, A. Parisi, C. Zhang, K. Kawintiranon, T. Bedrax-Weiss, O. Wang, Y. Xu, O. Purkiss, U. Mendlovic, I. Deutel, N. Nguyen, A. Langley, F. Korn, L. Rossazza, A. Ram´ e, S. Waghmare, H. Miller, N. Byrd, A. Sheshan, R. H. S. Bhardwaj, P. Janus, T. Rissa, D. Horgan, S. Silver, A. Wahid, S. Brin, Y. Raimond, K. Kloboves, C. Wang, N. B. Gundavarapu, I. Shumailov, B. Wang, M. Pajarskas, J. Heyward, M. Nikoltchev, M. Kula, H. Zhou, Z. Garrett, S. Kafle, S. Arik, A. Goel, M. Yang, J. Park, K. Kojima, P. Mahmoudieh, K. Kavukcuoglu, G. Chen, D. Fritz, A. Bulyenov, S. Roy, D. Paparas, H. Shemtov, B. Chen, R. Strudel, D. Reitter, A. Roy, A. Vlasov, C. Ryu, C. Leichner, H. Yang, Z. Mariet, D. Vnukov, T. Sohn, A. Stuart, W. Liang, M. Chen, P. Rawlani, C. Koh, J. Co-Reyes, G. Lai, P. Banzal, D. Vytiniotis, J. Mei, and M. Cai, “Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities,” CoRR, vol. abs/2507.06261, 2025. [47] OpenAI, “GPT-5 system card,” https://cdn.openai.com/ gpt-5-system-card.pdf, 2025. [48] N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan, and S. Yao, “Reflex-ion: language agents with verbal reinforcement learning,” in Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, New Orleans, LA, 2023. [49] K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J. Tworek, J. Hilton, R. Nakano, C. Hesse, and J. Schul-man, “Training verifiers to solve math word problems,” CoRR, vol. abs/2110.14168, 2021. [50] D. Hendrycks, C. Burns, S. Kadavath, A. Arora, S. Basart, E. Tang, D. Song, and J. Steinhardt, “Measuring mathematical problem solv-ing with the MATH dataset,” in Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track (Round 2), 2021. [51] D. Hendrycks, C. Burns, S. Basart, A. Zou, M. Mazeika, D. Song, and J. Steinhardt, “Measuring massive multitask language understanding,” in 9th International Conference on Learning Representations, 2021. [52] G. Lai, Q. Xie, H. Liu, Y. Yang, and E. H. Hovy, “RACE: large-scale ReAding comprehension dataset from examinations,” in Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing, M. Palmer, R. Hwa, and S. Riedel, Eds., 2017. [53] M. Joshi, E. Choi, D. S. Weld, and L. Zettlemoyer, “Triviaqa: A large scale distantly supervised challenge dataset for reading comprehension,” in Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics, 2017. [54] M. Chen, J. Tworek, H. Jun, Q. Yuan, H. P. de Oliveira Pinto, J. Kaplan, H. Edwards, Y. Burda, N. Joseph, G. Brockman, A. Ray, R. Puri, G. Krueger, M. Petrov, H. Khlaaf, G. Sastry, P. Mishkin, B. Chan, S. Gray, N. Ryder, M. Pavlov, A. Power, L. Kaiser, M. Bavarian, C. Winter, P. Tillet, F. P. Such, D. Cummings, M. Plappert, F. Chantzis, E. Barnes, A. Herbert-Voss, W. H. Guss, A. Nichol, A. Paino, N. Tezak, J. Tang, I. Babuschkin, S. Balaji, S. Jain, W. Saunders, C. Hesse, A. N. Carr, J. Leike, J. Achiam, V. Misra, E. Morikawa, A. Radford, M. Knight, M. Brundage, M. Murati, K. Mayer, P. Welinder, B. McGrew, D. Amodei, S. McCandlish, I. Sutskever, and W. Zaremba, “Evaluating large language models trained on code,” CoRR, vol. abs/2107.03374, 2021. JOURNAL OF L ATEX CLASS FILES 12 
+
+APPENDIX 
+
+A. The Introduction of Evaluation Datasets 
+
+In this section, we provide an overview of the datasets used for performance evaluation in our experiments. These datasets cover a wide range of optimization types and scenarios, ensuring the robustness and generalization of our proposed method. In our practice, we use the version of the benchmark datasets above from https://github.com/antgroup/LLMOPT. TABLE V: Statistics of the optimization problem datasets          
+
+> Dataset Name Number of Samples
+> NL4Opt 230 ICML.C 410 Mamo.E 652 Mamo.C 211 NLP4LP 242 Com.OR 18 Indus.OR 100 OptiBench 605
+
+NL4Opt [37] dataset is curated from the NL4Opt Com-petition. For this benchmark, we used the test split contain-ing 230 annotated linear programming word problems after manually removing 15 unsolvable problems from the original 245 problems. Each problem is sourced from domains such as sales, advertising, and investment, ensuring a balanced representation. 
+
+Mamo [16] dataset (optimization split of the original Mamo dataset) consists of two parts: Easy LP and Complex LP. These two subsets provide 652 high-school-level and 211 undergraduate-level Linear Programming (LP) and Mixed-Integer Linear Programming (MILP) problems, respectively. 
+
+IndustryOR [40] is the first industrial dataset specifically designed for optimization modeling. It incorporates data from 13 different industries and covers a variety of real-world scenarios. The dataset includes real operations research prob-lems from eight different industries, covering five types of optimization problems, and divided into three difficulty levels. The test dataset contains 100 instances with optimal solutions. 
+
+NLP4LP [14] dataset includes 242 feasible samples sourced from optimization textbooks and lecture notes. These problems cover areas such as facility location, network flow, scheduling, and portfolio management. Each instance in NLP4LP includes a description, sample parameter data file, and optimal value derived from textbook solutions or manual solving, offering a range of complex optimization challenges of varying difficulty levels. 
+
+ComplexOR [19] dataset is developed in collaboration with three specialists in operations research. It contains 18 samples sourced from diverse references such as academic papers, textbooks, and real-world industrial scenarios. These problems encompass a broad spectrum of topics, including supply chain optimization, scheduling problems, and ware-housing optimization, providing comprehensive and complex optimization challenges. 
+
+OptiBench [18] is a comprehensive benchmark for evaluat-ing large language models’ end-to-end optimization problem-solving capabilities. The dataset contains 605 carefully cu-rated optimization problems that span multiple optimization types and formats. OptiBench includes problems of Linear Programming (LP), Integer Programming (IP), and Mixed-Integer Linear Programming (MILP), encompassing a wide range of optimization complexities. 
+
+ICML Competition [38] dataset comprises data from the ICML 2024 Challenges on Automated Math Reasoning - Track 3: Automated Optimization curated from the competition’s test split. Since the original ground truth is not released by the organizers, all solutions in this dataset are manually labelled. The dataset serves as a challenging benchmark for evaluating end-to-end optimization reasoning and problem-solving capabilities of language models. 
+
+B. The Distribution of Optimization Types and Problem Sce-narios of Benchmarks 
+
+To evaluate the generalization ability of the MiniOpt across different problem scenarios through experiments, this paper has counted the number of optimization types and scenarios in 8 benchmarks. The distribution histogram of optimization types in the eight benchmarks used in this paper is shown in Figure 5, and the distribution histogram of problem scenarios is shown in Figure 6. 
+
+C. Training Datasets for SFT Warm-up and Two-Stage RL 
+
+The data volume and data sources for each stage of Min-iOpt’s training process are illustrated in Table VI. TABLE VI: The number of samples in the dataset for training. Note that all data mentioned in the table comes entirely from the training split of the corresponding dataset.         
+
+> Training Stage Dataset Size Data Source
+> SFT Warm-up 1000 OptMATH-Train RL-Stage 1 1585 NL4Opt (Train) & ICML.C (Train) RL-Stage 2 3000 OptMATH-Train
+
+D. General Models 
+
+Qwen2.5-3B/7B/14B [42]. The models of the Qwen2.5 series are widely adopted as base models or baselines. The se-ries showcases significant enhancements such as substantially improved knowledge, coding, and mathematical capabilities. Key features excel at instruction following, processing long contexts up to 128K tokens, and robustly handling structured data like JSON. 
+
+DeepSeek-V3 [43]. DeepSeek-V3 introduces a sparse Mixture-of-Experts (MoE) model with 671B total parame-ters. It achieves training efficiency through Multi-head Latent Attention (MLA) architecture and an auxiliary-loss-free load balancing strategy. Pretrained on 14.8T tokens with an SFT and reinforcement learning (RL). JOURNAL OF L ATEX CLASS FILES 13 CO 4 8 12 39 0 0 0 19 11                                                                         
+
+> IP 4211 23 11 2161 167 7291
+> LP 9175 31 123 650 69 75 16 214
+> MILP 116 30 38 00091 44
+> MOP 004000000
+> NLP 0000000045
+> SOCP 000000033 0
+> # Data 18 410 100 211 652 230 242 166 605
+> Type Com.OR ICML.C Indus.OR Mamo.C Mamo.E NL4Opt NLP4LP OptMAT
+> H-Bench Optibench
+
+Fig. 5: Histogram showing the distribution of optimization types across 8 benchmarks. We categorize the problems in the benchmarks into these types: Combinatorial Optimization (CO), Integer Programming (IP), Linear Programming (LP), Mixed-Integer Linear Programming (MILP), Multi-Objective Optimization Problems (MOP), Nonlinear Programming (NLP), Second-Order Cone Programming (SOCP). 
+
+E. General Reasoning Models 
+
+Qwen3-4B/8B/14B [44]. Qwen3 pioneers a unified archi-tecture (0.6B to 235B) integrating thinking mode (complex reasoning) and non-thinking mode (rapid responses) with dynamic switching. Its thinking budget mechanism enables adaptive computational allocation. The series outperforms larger MoE models in tasks such as coding, mathematics, and agent application. 
+
+DeepSeek-R1 [45]. DeepSeek-R1 is an enhanced model based on DeepSeek-R1-Zero presented in this work. It’s a purely RL-driven reasoning model requiring no SFT pretrain-ing. As the most representative model with thinking ability, DeepSeek-R1 is an important baseline for reasoning models. 
+
+Gemini-2.5-Pro [46]. Gemini-2.5-Pro is a powerful mul-timodal agent that has excellent programming / reasoning performance and enables the processing of long video con-tent. The Gemini-2.5 family spans the full Pareto front of capability-cost optimization. Its integration of long-context understanding, multimodality, and reasoning unlocks novel agentic applications. 
+
+GPT-5 [47]. GPT-5 is the latest unified, router-mediated system that instantiates a spectrum of language-model in-stances ranging from a high-throughput, low-latency model (gpt-5-main) to a deliberative, compute-intensive reasoning model (gpt-5-thinking). The router selects the appropriate instantiation by conditioning on conversation type, task com-plexity, tool requirements, and explicit user directives, thereby optimizing both instruction adherence and inference efficiency. 
+
+F. Prompt-based Methods 
+
+Reflexion [48]. Reflexion is an enhanced language agent framework utilizing feedback mechanisms. It enables agents to excel at sequential decision-making tasks through task feed-back analysis and memory buffering without requiring weight updates. This framework accommodates diverse feedback sig-nals and demonstrates effectiveness across programming, math problems and language reasoning domains. 
+
+OptiMUS [14]. OptiMUS is a highly modular solver that leverages the text understanding and generating capabilities of LLMs. It constructs specialized agents for entity extraction, mathematical modeling, and code generation using concise prompts, while incorporating a reflection mechanism for it-erative improvement. 
+
+Chain-of-Experts [19]. Chain-of-Experts is a multi-agent framework specifically designed for operations research opti-mization problems. The system features a central controller that coordinates an interaction sequence among specialized agents, including a term interpreter, modeling agent, and pro-gramming expert. Thus solving optimization problems through precise coordination of multiple modules. 
+
+G. Learning-based Models 
+
+LLMOPT-14B [6]. LLMOPT is a novel framework for op-timization problem solving that leverages LLMs. It begins by formulating a unified representation of optimization problems, thereby enhancing the model’s ability to generalize across diverse types of scenarios. Based on this unified description of five-element formulation, the framework generates the solving code. LLMOPT uses multi-instruction SFT and KTO align-ment during training to enhance modeling accuracy and reduce model hallucinations. 
+
+OptMATH-Qwen2.5-7B [10]. OptMATH-Qwen2.5-7B is trained end-to-end on the OptMATH-Train dataset, it gen-erates both mathematical formulations and solver code from problem descriptions. The input consists of textual problem specifications, while the target output comprises concatenated sequences. Optimization follows the standard sequence-to-sequence loss function, enabling single-stage joint optimiza-tion of formulation and code generation. 
+
+Step-OPT [9]. Step-OPT is a model trained on a metic-ulously curated high-quality dataset. The training set is en-hanced through Scope-Evolve and Complexity-Evolve tech-niques, which improve both the difficulty level and the cov-erage of application scenarios. Moreover, a multi-agent and stepwise verification mechanism is employed to enhance the quality of problems and solutions while eliminating errors present in the original dataset. Finally, supervised fine-tuning JOURNAL OF L ATEX CLASS FILES 14 Agriculture 0 37 5 4 31 13 12 0 46 
+
+Aviation 3 2 2 2 0 2 1 12 2
+
+Construction 0 1 1 1 42 1 1 0 8
+
+Education 0 5 1 0 30 0 0 0 7
+
+Energy 0 0 0 5 25 1 2 7 15 
+
+Environment 0 0 0 0 31 0 1 0 0
+
+Finance 0 16 7 5 85 5 5 6 22 
+
+Healthcare 0 15 1 5 31 23 29 0 20 
+
+Logistics 1 27 8 32 25 21 23 22 42 
+
+Manufacturing 5 169 37 12 34 77 83 56 254 
+
+Marketing 1 9 0 0 43 2 2 0 11 
+
+Military 0 0 2 0 36 0 0 0 3
+
+Public Utilities 0 9 1 4 7 2 2 2 19 
+
+Resources 0 15 0 12 9 11 8 3 17 
+
+Retail 0 16 4 2 31 8 9 1 19 
+
+Services 4 38 10 6 73 29 29 7 40 
+
+Sports 0 0 0 0 31 0 0 0 0
+
+Supply Chain 2 12 7 48 31 5 3 11 11 
+
+Technology 0 0 1 3 0 0 0 1 3
+
+Telecommunications 1 1 0 8 27 0 0 9 1
+
+Transportation 1 31 8 57 45 23 26 9 40 
+
+Other 0 7 5 5 15 7 6 20 25 
+
+# Data 18 410 100 211 682 230 242 166 605 
+
+Scenario Com.OR ICML.C Indus.OR Mamo.C Mamo.E NL4Opt NLP4LP OptMAT 
+
+H-Bench Optibench 
+
+Fig. 6: Histogram showing the distribution of optimization problem scenarios across 8 benchmarks. We categorize the problems in the benchmarks into these scenarios: Agriculture, Aviation, Construction, Education, Energy, Environment, Finance, Healthcare, Logistics, Manufacturing, Marketing, Military, Public Utilities, Resources, Retail, Services, Sports, Supply Chain, Technology, Telecommunications, Transportation, Other. was performed on this high-quality training dataset resulting in the Step-OPT-8B model. This paper proposes OptGRPO based on the improvement of the GRPO algorithm [39]. For each query, GRPO sample G
+
+responses, compute the mean and standard deviation of their scalar rewards, and form a group-normalized advantage ˆAi = 
+
+> (ri−μ)
+> σ
+
+. Specifically, GRPO optimizes the policy πθ as follows: 
+
+JGRPO (θ) = Eq∼P (Q),{oi}Gi=1 ∼πθold (·| q)
+
+" GX
+
+> i=1
+> |oi|
+
+X
+
+> t=1
+
+1
+
+|oi|
+
+
+
+min[ ρθ ˆAi,t , clip (ρθ , 1 − ε, 1 + ε) ˆAi,t ]
+
+− βD KL [πθ (·| q)∥πref (·| q)] 
+
+#
+
+, (7) 
+
+ρθ = πθ (oi,t |q, o i,<t )
+
+πθold (oi,t |q, o i,<t ) . (8) where q denotes queries sampled from the input dataset and 
+
+o denotes the model’s outputs. ε is the clipping threshold, 
+
+β is the coefficient on the KL penalty, and DKL is the KL divergence between the current policy πθ and the reference policy πref .The processing pipeline for the SFT training set is detailed in Section III. The resulting collection of this pipeline is named OptMATH-Train-Pyomo, which contains approximately 140K samples. The prompt template used in code conversion is intro-duced in Appendix G, and the prompt of the solver adapter is introduced in Appendix G. To ensure that the base model can effectively learn knowledge in the operations research domain with limited data during the mid-training stage, this paper selects 1,000 samples according to a specific distribution of optimization problem types. Specifically, nonlinear program-ming (NLP), mixed-integer linear programming (MILP), and linear programming (LP) problems account for 50%, 35%, and 15% of the samples, respectively. This distribution is designed to ensure that the model acquires sufficient expertise on challenging problem types. In the first stage of MiniOpt’s RL training, we employ a set of relatively easy and small-scale optimization problems, for which the accuracy score is more readily maximized. This, in turn, incentivizes the model to attain higher format score and five-element score, thereby accelerating mastery of the reasoning to model and solve paradigm. Concretely, the dataset of the first stage is the union of the NL4Opt [14] and ICML Competition [38] training splits, comprising 1585 problems. Each instance is presented as a natural-language prompt paired with a reference answer and is fully compatible with our pipeline of parsing, executing, and scoring, enabling straightforward computation of the OptReward. The second stage of RL targets optimization generalization [6] under a limited training budget. The objective is to construct a training set that simultaneously covers diverse JOURNAL OF L ATEX CLASS FILES 15 
+
+optimization types and scenarios, while preserving the scenario proportions observed in the real distribution. Starting from the OptMATH-Train pool containing 201K problems, we label each instance with types and scenarios using the DeepSeek-V3 [43], with prompt templates and data distributions pro-vided in Appendix G. We then sample a 3000-instance stage-2 training set subject to two constraints: (i) type-uniform coverage, with exactly 600 instances per type; and (ii) within each type, the scenario frequencies match the distribution in the full pool. Formally, letting p(s) denote the overall scenario distribution in the complete pool, the target number of samples for each scenario s under type t is allocated as 
+
+nt(s) = round  600 ·p(s), where P 
+
+> s
+
+nt(s) = 600 . To prevent leakage, problems used during the SFT warm-up are excluded from consideration. The resulting 3K training set is uniform across types and aligned with the scenario distribution of the data pool. Compared with random or non-selected baselines, this selection improves overall performance of MiniOpt under the same compute budget. This section we use Execution Rate (ER), the proportion of generated code samples that run successfully without errors. As shown in the Table VII, MiniOpt also exhibits superior text generation capabilities compared to baseline methods, which suggests its excellent code generation performance given the problem modeling. As shown in Table I from the main text and Table 3 in this supplementary material, we compared the SA and ER of three different sizes of MiniOpt (1.5B, 3B, and 7B) across 8 benchmarks, respectively. The results show that as the parameter scale of the base model decreases from 7B to 3B and then to 1.5B, performance transitions smoothly, which aligns with scaling laws. Compared to the baselines, MiniOpt-1.5B remains competitive on benchmarks with low to moderate difficulty, such as NL4OPT and OptiBench. To investigate whether the effectiveness of OptReward de-pends on a specific reward assignment, we replace the origi-nal accuracy reward setting ((2,-1.5,-2)) with two alternative configurations, namely ((2,0,-1)) and ((1,-1,-1)). Figure 3 il-lustrates the training dynamics in terms of reward convergence and policy entropy, while Table IV from main text reports the final solving accuracy (SA). Several important observations can be made. First, the ((2,0,-1)) setting achieves a noticeably higher converged re-ward than the original design, while yielding nearly identical SA. This result suggests that the performance of MiniOpt is not primarily determined by the absolute reward magnitude or the final reward value. Since incorrect solutions receive a neutral reward instead of a penalty, the average training reward naturally increases. However, this increase does not translate into improved optimization generalization, indicating that reward scale alone is not the key factor behind the effec-tiveness of OptReward. Second, both modified reward settings exhibit lower policy entropy throughout training compared with the original configuration. This observation indicates that changing the reward assignment encourages the policy to concentrate on a narrower set of behaviors, thereby reduc-ing exploration. Interestingly, although the ((2,0,-1)) setting exhibits the lowest entropy among all configurations, its final SA remains largely unchanged. Therefore, reduced exploration alone is insufficient to explain performance degradation. The most significant performance drop is observed under the ((1,-1,-1)) setting, where SA decreases by 2.25%. Unlike the other two configurations, this variant assigns identical rewards to incorrect solutions and execution failures. Consequently, the reward function can no longer distinguish partially correct trajectories from completely invalid outputs. This removes the hierarchical supervision signal provided by OptReward and weakens its gating mechanism. Overall, these results demonstrate that the effectiveness of OptReward relies on maintaining a hierarchical reward structure that progressively differentiates execution failures, incorrect solutions, and correct solutions. Such a design pro-vides informative intermediate supervision and enables stable policy optimization, which is crucial for achieving strong optimization generalization under limited training resources. In order to investigate whether the pipeline training in this paper would impair other abilities of the LLMs, we also discussed the generalization performance of MiniOpt-3B on tasks other than optimization problems. Six bench-marks across different capability dimensions are selected: GSM8K [49] and MATH [50] for general mathematical rea-soning, MMLU [51] for multi-choice questions testing broad knowledge, RACE [52] (including middle- and high-difficulty subsets) for reading comprehension, TriviaQA [53] for assess-ing the comprehension ability through question-and-answer, and HumanEval [54] (pass@1) for programming ability. Ac-curacy measured by generation quality assessment is used as the metric. After evaluation, we compare the trained MiniOpt with its base model, Qwen2.5-3B-Instruct. The results indicate that there is no performance degradation on any benchmark; instead, consistent improvements are observed, as illustrated in Figure 7. An average accuracy gain of 1.24% is achieved across all benchmarks. We attribute this to two factors. First, the two-stage RL framework coupled with a verifiable Op-tReward constrains learning to structural modeling correctness and executable solving efficacy, mitigating overfitting to super-ficial linguistic style or lengthy chain-of-thought and thereby substantially reducing the risks of catastrophic forgetting and cross-task seesaw effects. Second, the foundational competen-cies required for optimization modeling, such as mathemat-ical understanding, symbolic reasoning, program synthesis, and execution, which highly overlap with those assessed by general benchmarks such as MMLU, MATH, GSM8K, and HumanEval. Consequently, targeted reinforcement in this domain does not overwrite existing representations, instead, it yields small positive transfer on tasks closely aligned with modeling and solving, as exemplified by GSM8K. This section provides the system prompt for the large language model to convert GurobiPy code in OptMATH-Train into Pyomo code, where the content within [·] and {·} will be replaced with the corresponding parts. JOURNAL OF L ATEX CLASS FILES 16 
+
+TABLE VII: Comparison of the ER metric across 8 benchmarks with rankings (NL4Opt, ICML Competition, Mamo Easy, Mamo Complex, NLP4LP, ComplexOR, IndustryOR, OptiBench). Bold indicates 1st, :::: 
+
+wavy :::::::: 
+
+underline indicates 2nd, underline indicates 3rd. “Rank ∗” represents the result of sorting methods among parameter sizes below 10B. 
+
+Category Model / Method Avg. Rank Rank ∗ NL4Opt ICML.C Mamo.E Mamo.C NLP4LP Com.OR Indus.OR OptiBench 
+
+General Models Qwen2.5-3B-Instruct 16.57 18 8 31.30 28.54 7.11 0.60 28.93 5.56 10.00 20.50 Qwen2.5-7B-Instruct 41.86 15 6 66.09 68.54 19.43 9.04 71.90 16.67 30.00 53.22 Qwen2.5-14B-Instruct 60.64 11 - 82.17 80.73 59.24 25.90 84.71 38.89 52.00 61.49 DeepSeek-V3 81.86 8 - 97.83 97.32 71.56 63.25 97.93 72.22 70.00 84.79 General Models (Thinking) Qwen3-4B 14.02 19 9 19.57 20.00 18.48 3.61 18.18 11.11 5.00 16.20 Qwen3-8B 25.43 17 7 36.96 38.29 18.01 3.61 39.26 22.22 10.00 35.04 Qwen3-14B 30.04 16 - 28.70 25.12 30.81 17.47 22.73 61.11 27.00 27.44 DeepSeek-R1 82.24 7 - 96.09 94.15 84.83 53.01 91.32 61.11 ::: 
+
+82.00 88.92 Gemini-2.5-Pro 88.87 :
+
+3 - 94.35 96.10 86.26 ::: 
+
+81.32 96.28 77.78 87.00 ::: 
+
+91.90 GPT-5 84.73 5 - 98.08 97.32 55.92 69.88 97.52 88.89 78.00 92.07 
+
+Prompt-based Methods Chain-of-Experts 60.33 12 - 79.57 73.41 56.87 20.48 77.27 55.56 54.00 65.45 OptiMUS 49.43 14 - 45.22 75.85 43.60 27.71 44.63 44.44 48.00 65.95 Reflexion 78.28 9 - 91.74 91.46 67.77 48.80 95.45 83.33 66.00 81.65 Learning-based Models Step-OPT-Qwen2.5-3B 54.65 13 5 54.78 58.78 42.18 21.69 81.40 61.11 50.00 67.27 Step-OPT-Qwen2.5-7B 69.76 10 4 94.78 77.56 84.83 25.30 68.18 72.22 64.00 71.24 OptMATH-7B 83.39 6 2 99.13 95.85 ::: 
+
+90.05 64.46 ::: 
+
+99.17 66.67 69.00 82.81 LLMOPT-14B ::: 
+
+89.75 2 - 97.42 93.90 77.73 31.93 97.93 88.89 61.00 73.22 
+
+Ours 
+
+MiniOpt-3B 87.92 6 3 100 97.56 98.16 89.57 99.59 61.11 78 79.34 MiniOpt-7B 91.17 1 1 ::: 
+
+99.57 97.56 ::: 
+
+90.05 56.02 ::: 
+
+99.17 88.39 81.00 74.38 
+
+TABLE VIII: Ablation study (MiniOpt-3B) on the ER metric across 8 benchmarks. Herein, “w” denotes “with” and “w/o” denotes “without”. 
+
+Category Model / Method Avg . NL4Opt ICML.C Mamo.E Mamo.C NLP4LP Com.OR Indus.OR OptiBench Ablations 
+
+MiniOpt-3B 87.92 100 97.56 98.16 89.57 99.59 61.11 78 79.34 MiniOpt-3B w/o SFT Warm-up 89.09 99.57 98.05 96.63 87.68 99.59 66.67 83 81.49 MiniOpt-3B w/o RL 48.92 68.7 63.9 64.11 27.01 67.77 11.11 35 53.72 MiniOpt-3B w/o Two-stage RL 82.73 98.70 95.12 92.02 78.67 99.59 55.56 68.00 74.21 MiniOpt-3B w/ Random Selection 84.45 100 97.56 94.17 86.26 99.59 50 71 77.02 MiniOpt-3B w/o OptReward 85.31 100 97.8 96.47 81.52 99.59 61.11 67 79.01 MiniOpt-3B w/ GRPO 82.35 99.13 96.1 90.49 81.52 99.17 55.56 60 76.86 
+
+TABLE IX: Comparison of the ER metric between MiniOpt-1.5B and larger scale counterparts across 8 benchmarks. 
+
+Execution Rate (ER) Avg. NL4Opt ICML.C Mamo.E Mamo.C NLP4LP Com.OR Indus.OR OptiBench 
+
+Number of Samples in Datasets 230 410 652 211 242 18 100 605 Ours MiniOpt-1.5B 86.44 99.13 99.02 94.33 71.09 99.59 72.22 74.00 82.15 MiniOpt-3B 87.92 100 97.56 98.16 89.57 99.59 61.11 78 79.34 MiniOpt-7B 91.17 99.57 97.56 98.77 90.05 99.17 88.89 81.00 74.38 gsm8k  
+
+> math
+> mmlu
+> race_middle
+> race_high
+> triviaqa
+> humaneval
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Score
+> 74.91
+> 41.92
+> 67.07
+> 84.96
+> 80.09
+> 45.57
+> 70.73
+> 77.94
+> 42.52
+> 67.20
+> 85.72 81.88
+> 46.07
+> 72.56
+> Baseline
+> MiniOpt-3B
+
+Fig. 7: Performance variations of the MiniOpt on benchmarks from different domains. PROMPT TEMPLATE FOR CODE CONVERSION 
+
+You are an expert in optimization problems. 
+
+Your task is to convert the given gurobipy code into pyomo code. **Instructions:** 1. Don’t give any explanation, just provide the converted pyomo code in the following format: ‘‘‘python [pyomo code here] ‘‘‘ 2. Please note that the following solvers are available for use: ’glpk’, ’cbc’, ’ipopt ’, ’scip’. Other solvers should not be utilized. 3. Please add ‘from pyomo.environ import *‘ at the beginning of your code. 4. Please print the optimal objective value at the end of the code. **Gurobipy code:** {gurobipy} JOURNAL OF L ATEX CLASS FILES 17 
+
+This section provides the system prompt to guide MiniOpt models in autonomously selecting solvers after modeling op-timization problems. PROMPT FOR SOLVER SELECTION 
+
+**Solver Selection Guide:** - ‘‘glpk‘‘: Best for small-to-medium linear problems (LP). - ‘‘cbc‘‘: Recommended for mixed-integer linear programming (MILP) and larger linear problems. Handles binary/integer variables well. - ‘‘ipopt‘‘: Use for nonlinear problems (NLP) with continuous variables. Does NOT support discrete variables. - ‘‘scip‘‘: Most versatile - handles mixed-integer nonlinear problems (MINLP), large -scale problems, and complex constraints. **Select solver based on:** 1. Variable types (continuous vs integer/ binary) 2. Linearity of objective/constraints 3. Problem scale (small: glpk/cbc, large: scip/ipopt) 4. Nonlinearity presence (use ipopt/scip) 
+
+This section provides the system prompt used by MiniOpt models during reinforcement learning (RL) training. SYSTEM PROMPT FOR RL T RAINING 
+
+You are a helpful assistant. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </ think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>, please make sure to answer according to the above format. Now the user asks you to solve an optimization reasoning problem, you should: 1. Detailed reasoning about the problem within <think> </think> tags. 2. Write the corresponding five-element model (derived from your analysis). 3. Determine the mathematical properties of problem and select an appropriate solver from ’glpk’, ’cbc’, ’ipopt’, ’scip’. 4. Recheck and correct if necessary at the end of the <think> </think> section. - Verify the five-element model fully captures the problem’s requirements. - Confirm no constraints/variables are missing or over-simplified. - Ensure the solver choice aligns with the problem’s mathematical properties. 5. Provide the corresponding Pyomo code based on checked five-element model within <answer> </answer> tags. In mathematics, optimization problem can be modeled as the following expression $\\ min_{{\\boldsymbol{{x}} \\in \\mathcal{{X }}}} f(\\boldsymbol{{x}}), {{\\rm s.t.}} G(\\boldsymbol{{x}}) \\leq \\boldsymbol{{ c}}$, where $\\boldsymbol{{x}} = (x_1, 
+
+x_2, \\ldots, x_D)ˆ\\top$ is the $D$-dimensional decision variable, $\\mathcal {{X}} \\subset \\mathbb{{R}}ˆD$ is the feasible domain, $f: \\mathcal{{X}} \\ rightarrow \\mathbb{{R}}$ is the objective function and the goal is to find the minima of $f$, $G(\\boldsymbol{{ x}}) \\leq \\boldsymbol{{c}}$ are the constraints of $\\boldsymbol{{x}}$. The above definition can be mapped to a five-element consisting of ‘‘Variables, Objective, Constraints, Sets, Parameters ’’. Variables indicate what $\\boldsymbol {{x}}$ is, Objective describes the form of the objective function $f(\\boldsymbol {{x}})$, and Constraints indicates the constraints $G(\\boldsymbol{{x}})$ and $\\mathcal{{X}}$. These three can abstract the optimization problem. Sets and Parameters are their specific explanations: Sets describe and explain the subscripts of the vectors or matrices in them, and Parameters supplement their specific values. You need to give a detailed reasoning process for the problem first, and then write the corresponding five-element model based on the problem description and information provided by user. Please complete the following template to model the optimization problem into five-element: <think> Your reasoning process here... ## Sets: [You need to fill in] ## Parameters: [You need to fill in] ## Variables: [You need to fill in] ## Objective: [You need to fill in] ## Constraints: [You need to fill in] </think> In Pyomo, all constraints must be formulated using ’<=’, ’>=’, or ’==’. If you need to use ’>’ or ’<’, you can introduce a very small value to transform the inequality. Please note that the following solvers are available for use: ’glpk’, ’cbc’, ’ipopt’, ’scip’. Other solvers should not be utilized. **Solver Selection Guide:** - ‘‘glpk‘‘: Best for small-to-medium linear problems (LP). - ‘‘cbc‘‘: Recommended for mixed-integer linear programming (MILP) and larger linear problems. Handles binary/integer variables well. - ‘‘ipopt‘‘: Use for nonlinear problems (NLP) with continuous variables. Does NOT support discrete variables. - ‘‘scip‘‘: Most versatile - handles mixed-JOURNAL OF L ATEX CLASS FILES 18 
+
+integer nonlinear problems (MINLP), large -scale problems, and complex constraints. **Select solver based on:** 1. Variable types (continuous vs integer/ binary) 2. Linearity of objective/constraints 3. Problem scale (small: glpk/cbc, large: scip/ipopt) 4. Nonlinearity presence (use ipopt/scip) Please select an appropriate solver based on the type and quantity of variables, objectives, and constraints. After thinking, when you finally reach the five -element model, you should give the corresponding Pyomo code within the < answer> </answer> tags, i.e., <answer> ‘‘‘python\n code here‘‘‘ </answer>. The user will extract the complete code you provide through the regular expression r"‘‘‘python\n(.*?)‘‘‘" in the <answer> </ answer> tags. The execution result of the code should include the optimal solution and the objective value. The optimal objective value will be extracted automatically from your last printed result. 
+
+This section provides the system prompts for the large language model to label the type and scenario of prob-lems in OptMATH-Train, where {{ ·}} will be replaced with the corresponding content. After labeling, the distribution of scenarios in OptMATH-Train is displayed in Figure 8, and the distribution of types in OptMATH-Train is displayed in Figure 9 SYSTEM PROMPT FOR TYPE LABELING 
+
+Please classify the following optimization problem into one of these technical types based on the mathematical formulation and decision variables, not just surface-level descriptions: 1. Linear Programming (LP): Problems with linear objective function and linear constraints, all continuous variables 2. Integer Programming (IP): Problems with linear or nonlinear components where ALL variables are discrete/integer 3. Mixed Integer Linear Programming (MILP): Problems with linear components containing BOTH continuous and discrete variables 4. Nonlinear Programming (NLP): Problems with nonlinear objective function and/or nonlinear constraints (variables may be continuous/discrete) 5. Combinatorial Optimization (CO): Problems focused on selecting/discrete structures (graphs, permutations, sets) with typically binary variables 6. Multi-objective Programming (MOP): Problems explicitly optimizing multiple conflicting objectives simultaneously 7. Second-Order Cone Programming (SOCP): Problems with a linear objective function , linear constraints, and second-order cone constraints (e.g., \(\|Ax + b\| \leq 
+
+cˆT x + d\)) # Problem: {{Question}} # Output Analyze the mathematical structure step by step and classify its type. Finally, output the type abbreviation in the following format: Type: Abbreviation of the type Note: - Focus on the fundamental mathematical formulation, not application domain - Check variable types (continuous/discrete/ binary) and objective/constraint linearity - For MOP, there must be explicit multiple objectives - For pure discrete problems with special structures (e.g. graphs), prefer CO over IP 
+
+SYSTEM PROMPT FOR SCENARIO LABELING 
+
+Please classify the following optimization problem into one of these application domains based on the core decision-making context and primary business function, not just keywords mentioned in the problem: 1. Supply Chain: Decisions about inventory management, distribution network, warehousing operations 2. Finance: Decisions about portfolio management, investments, risk management, financial planning 3. Manufacturing: Decisions about production processes, quality control, factory operations 4. Transportation: Decisions about routing, vehicle scheduling, fleet management, traffic flow, carrier selection 5. Healthcare: Decisions about medical staff scheduling, patient flow, hospital resources 6. Energy: Decisions about power generation, energy conservation, grid distribution 7. Technology: Decisions about network design , data center operations, cloud resources 8. Retail: Decisions about store operations, pricing, inventory, equipment, store layout 9. Agriculture: Decisions about farming operations, crop planning, irrigation 10. Logistics: Decisions about delivery operations, warehouse management, distribution 11. Resources: Decisions about raw materials, equipment allocation, material management 12. Marketing: Decisions about campaign planning, budget allocation, target selection 13. Education: Decisions about course scheduling, resource allocation in schools 14. Environment: Decisions about environmental protection, emissions control, conservation JOURNAL OF L ATEX CLASS FILES 19 
+
+15. Construction: Decisions about project planning, construction resource allocation 16. Military: Decisions about military operations, deployment, supply management 17. Sports: Decisions about game scheduling, team formation, strategy 18. Telecommunications: Decisions about network coverage, bandwidth allocation 19. Aviation: Decisions about flight scheduling, crew assignment, airport operations 20. Services: Decisions about service operations, staff scheduling, capacity management 21. Public utilities: Decisions about utility services, infrastructure management, service delivery 22. Other: Problems that don’t clearly fit into above categories # Problem: {{Question}} # Output Let’s think step by step,give the analysis of the problem and classify it into one of the above application domains.Finally, output the name of the domain in the following format: Category: Name of the Domain Note: - Focus on the fundamental business function and decision-making context - Don’t be misled by secondary keywords or background story - Consider who is making the decision and what is their primary business purpose JOURNAL OF L ATEX CLASS FILES 20 Logistics 
+
+> Manufacturing
+> Healthcare
+> Supply Chain
+> Services
+> Energy
+> Aviation
+> Telecommunications
+> Transportation
+> Finance
+> Retail
+> Construction
+> Military
+> Education
+> Agriculture
+> Marketing
+> Environment
+> Other
+> Technology
+> Sports
+> Public utilities
+
+0
+
+10000 
+
+20000 
+
+30000 
+
+40000 
+
+50000 
+
+60000 
+
+70000 
+
+80000               
+
+> Count
+> 78499
+> 40632
+> 14571 14146
+> 11227 10584 8680 5675 5572 4616 3789 1002 692 405 361 298 176 117 17 10 2
+
+Fig. 8: Proportion of every scenario of instances in OptMATH-Train (201K). MILP 
+
+> LP
+> IP
+> NLP
+> SOCP
+
+0
+
+20000 
+
+40000 
+
+60000 
+
+80000 
+
+100000 
+
+120000  
+
+> Count
+> 117817
+> 54731
+> 23938
+> 3375 1106
+
+Fig. 9: Proportion of every problem type of instances in OptMATH-Train (201K).

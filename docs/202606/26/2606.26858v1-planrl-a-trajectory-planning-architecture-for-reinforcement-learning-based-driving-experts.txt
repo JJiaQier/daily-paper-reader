@@ -1,0 +1,599 @@
+Title: PlanRL: A Trajectory Planning Architecture for Reinforcement Learning-based Driving Experts
+
+URL Source: https://arxiv.org/pdf/2606.26858v1
+
+Published Time: Fri, 26 Jun 2026 00:50:04 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# PlanRL: A Trajectory Planning Architecture for Reinforcement Learning-based Driving Experts 
+
+Joonhee Lim 1,†, Yongjae Lee 2,†, Jangho Shin 3, and Dongsuk Kum 2
+
+Abstract — Reinforcement learning (RL) has become a promi-nent framework for developing driving experts in autonomous vehicles. However, most existing RL-based experts are designed to output direct control commands (e.g., throttle, steering), which suffer from a lack of interpretability, high spatial com-plexity in learning road geometries, and poor compatibility with modern end-to-end planning architectures. To address these limitations, we propose a novel trajectory planning architecture for RL driving experts that integrates an RL policy with a polynomial-based trajectory planner. By employing a Frenet-frame coordinate system, our method simplifies complex road geometries into a curvilinear framework, offering a structured coordinate prior that facilitates policy learning. Furthermore, we incorporate a kinematic feasibility check into the planning stage to ensure that generated trajectories remain within the vehicle’s physical limits, effectively mitigating cumulative tracking errors typically found in planning-based systems. We evaluate our approach on key CARLA benchmarks, where it significantly outperforms existing state-of-the-art control-based RL experts. On the CARLA Offline Leaderboard v1 and NoCrash benchmarks, our method improves the driving score by 5% and 11%, respectively, and increases the success rate by 8% and 19%. 
+
+I. INTRODUCTION Reinforcement learning (RL) has emerged as a powerful framework for developing driving experts, addressing the limitations of rule-based experts [1]. Unlike rule-based meth-ods that require laborious manual tuning and lack scalability, RL-based experts progressively accumulate driving knowl-edge by exploring diverse and challenging scenarios within simulated environments [2]. Beyond providing raw actions, these models generate rich latent features that offer more informative guidance than rule-based systems. This allows RL-based experts to provide a more effective foundation for autonomous driving compared to traditional methods. Most existing studies in this field are structured to out-put direct control commands, such as throttle, steering, and brake [1], [3]–[7]. This architectural preference exists because methods that plan and follow trajectories often suffer from cumulative tracking errors during execution, 
+
+> †
+
+J. Lim and Y. Lee contributed equally to this work. This work was supported by Hyundai Motor Company and the National Research Foundation of Korea (NRF) grant funded by the Korea government (MSIT) (RS-2026-25479609). 
+
+> 1
+
+J. Lim is with the Robotics Program, Korea Advanced Institute of Science and Technology (KAIST), Daejeon 34141, South Korea (email: 
+
+kingear3@kaist.ac.kr )
+
+> 2
+
+Y. Lee and D. Kum are with the Cho Chun Shik Graduate School of Mobility, Korea Advanced Institute of Science and Technology (KAIST), Daejeon 34141, South Korea (email: yongjae.lee@kaist.ac.kr ,
+
+dskum@kaist.ac.kr )
+
+> 3
+
+J. Shin is with Hyundai Motor Company, Hwaseong 18280, South Korea (email: jangho shin@hyundai.com )RL -based  
+
+> expert
+> Privileged input
+> (a) Existing RL -based expert: directly outputs control command
+> Control
+> Privileged input
+> (b) Proposed RL -based expert: outputs trajectory in the Frenet frame
+> Trajectory
+> Interpretability
+> Coordinate prior
+> Compatibility
+> RL
+> policy Planner
+> RL -based expert
+> High -level command
+> Interpretability
+> Coordinate prior
+> Compatibility
+
+Fig. 1. Comparison of the proposed RL expert with an existing RL expert. While conventional RL-based experts directly output control commands, the proposed method employs an RL policy to output high-level commands, which a planner uses to generate trajectories. 
+
+which significantly degrade performance on high-curvature roads [8]. Furthermore, while real-world applications can leverage model predictive control (MPC) based on vehicle dynamics [9], simulators like CARLA [10] lack the precise dynamics required to make such model-based controllers effective. Consequently, direct control has been favored as a pragmatic solution to ensure immediate responsiveness within simulated environments. However, such control-centric RL experts face signifi-cant limitations that can be summarized into three primary challenges. First, they lack interpretability; direct control commands provide no insight into the vehicle’s intended path, making it difficult to validate the decision-making process [11]. Second, they place a heavy burden on the model to internalize diverse and complex road geometries without the aid of a structured coordinate framework. This forces the model to learn spatial mappings for every vari-ation in curvature across diverse urban environments, often resulting in sub-optimal policies. Third, the reliance on raw control values severely limits their utility as experts for real-world end-to-end (E2E) autonomous driving systems. Contemporary state-of-the-art models [12], [13] on real-world planning benchmarks, such as nuScenes [14] and NAVSIM [15], predominantly adopt trajectory planning as their core architecture. Consequently, an expert model con-fined to control commands remains decoupled from these established architectural standards, failing to provide the structured supervision required to effectively guide the learn-ing of modern E2E planning pipelines [16]. To address these challenges, this study proposes a novel trajectory planning architecture for RL-based experts utiliz-ing privileged information, as shown in Fig. 1. By operating 
+
+> arXiv:2606.26858v1 [cs.RO] 25 Jun 2026
+
+within the Frenet-frame coordinate system, our architecture effectively simplifies the representation of complex road ge-ometries, ensuring robust performance even in high-curvature urban scenarios. Furthermore, the proposed framework gen-erates trajectories through feasible longitudinal and lateral motions, ensuring the planned paths remain within the vehi-cle’s physical limits. By integrating this kinematic feasibility directly into the planning stage, the architecture minimizes the cumulative tracking errors typically introduced by the addition of a planner, thereby bridging the gap between high-level planning and low-level execution. We evaluate the proposed method on key CARLA bench-marks, including the Offline Leaderboard v1 [17] and NoCrash [18], where it significantly outperforms existing state-of-the-art control-based RL experts. Specifically, our approach improves the driving score by 5% and 11%, and increases the success rate by 8% and 19% on the Offline Leaderboard v1 [17] and NoCrash [18], respectively. The key contributions of this paper are summarized below:  
+
+> •
+
+To the best of our knowledge, this study is the first to propose a trajectory planning architecture for RL-based experts within the CARLA benchmark.  
+
+> •
+
+A robust hybrid planning framework is formulated by seamlessly integrating the Frenet-frame coordinate sys-tem with a kinematic feasibility check. By projecting complex road geometries into a curvilinear framework, the spatial complexity of the environment is reduced, allowing for more stable planning.  
+
+> •
+
+The superiority of the proposed architecture is demon-strated through extensive evaluations on key bench-marks. It is shown that the proposed method sig-nificantly outperforms existing state-of-the-art control-based RL experts. II. RELATED WORK 
+
+A. Rule-based Experts for Autonomous Driving 
+
+Rule-based experts operate based on predefined decision logic and handcrafted rules, often utilizing privileged states to generate more accurate and reliable driving behaviors. They played a foundational role in early autonomous driving research. A primary example of such an expert is the CARLA Autopilot, which leverages direct access to ground-truth simulation states to achieve high performance, particularly on the CARLA Leaderboard v1 [17]. It follows handcrafted rules for surrounding vehicles, pedestrians, and traffic lights, while performing route-based planning using privileged map and state information. Recently, PDM-Lite [19] has emerged as an expert for the CARLA Leaderboard v2 [17], suc-cessfully navigating all benchmark scenarios in this version. It achieves this by identifying scenario types and applying specialized rules tailored to each case. SEED [20], the Trans-fuser variants [21], [22], CILRS [18], and NEAT [23] also develop rule-based experts designed for specific benchmarks, such as Town05 and Longest6 [21]. However, these systems face fundamental limitations in scalability and require ex-tensive manual tuning; for instance, PDM-Lite [19] adopts different hyperparameters for different scenarios, demanding heavy manual labor [5]. Furthermore, unlike learning-based experts that provide rich latent features beyond raw control commands, rule-based systems typically offer only explicit actions, limiting their ability to supply informative interme-diate representations for downstream learning. As an alterna-tive, approaches such as WOR [24] and LBC [25] leverage rule-based experts to train learning-based experts. However, these methods essentially remain heavily dependent on the performance of the underlying heuristic rule-based experts. 
+
+B. RL-based Experts for Autonomous Driving 
+
+RL has emerged as a promising paradigm for autonomous driving experts, enabling policies to be learned directly from interaction with the environment and to adapt to complex, dynamic scenarios without relying on handcrafted rules. Among such RL-based experts, Roach [1] establishes a strong foundation by demonstrating that RL can serve as an effective expert for imitation learning without requiring human demonstration datasets. Building upon Roach [1], DriveAdapter [4] combines Roach with emergency brake rules to further stabilize decision-making and significantly improve overall performance. CaRL [3] also builds upon Roach [1] and revisits its reward design, identifying the limitations of heavily shaped rewards commonly used in RL for autonomous driving. Instead of relying on complex rewards, CaRL proposes a simplified objective that primarily maximizes route completion while applying multiplicative penalties for infractions. This streamlined formulation en-ables RL to scale effectively to larger batch sizes and improves training stability over extensive training steps. In parallel, a line of research introduces model-based RL frameworks that incorporate learned world mod-els to enhance data efficiency and planning capability. Think2Drive [5] pioneers this direction in CARLA Leader-board v2 by learning a latent world model that predicts environment transitions and serves as a neural simulator for training the planner. By operating in a low-dimensional latent space with parallel tensor computation, it signifi-cantly improves training efficiency while achieving strong performance on CARLA Leaderboard v2. Subsequent works further refine this paradigm: Raw2Drive [6] extends the RL expert paradigm by transferring privileged world model knowledge to a raw sensor-based model, while AdaWM [7] proposes an adaptive world model to mitigate dynamics and policy mismatches in world model-based planning (their official source code is not publicly available, and thus we are unable to include them in our experimental comparison). Despite these advances, existing RL-based approaches still inherit fundamental limitations from their control-centric architectures. By directly outputting low-level control com-mands, they lack interpretability and require the policy to implicitly learn complex and diverse road geometries without explicit structural representations or coordinate priors. More-over, their reliance on control outputs reduces their effective-ness as experts for real-world E2E systems, where leading benchmarks such as nuScenes [14] and NAVSIM [15] pre-Ego measurement vector (𝐦 𝐞𝐠𝐨 )
+
+> Proposed RL -based Expert
+
+Tracking 
+
+Controller             
+
+> 𝐈 𝐁𝐄𝐕
+> 𝐦 𝐞𝐠𝐨
+> Trajectory
+> ∆𝒅 𝐦𝐚𝐱 <∆𝒅
+> ∆𝒅
+> ∆𝒅 𝐦𝐚𝐱
+> 𝐒𝐡𝐢𝐟𝐭𝐞𝐝
+> 𝒅 𝒇
+> Terminal State
+> 𝒅 𝒇 =𝒅 𝟎 +∆𝒅 𝐦𝐚𝐱
+> ሶ
+> 𝒅 𝒇 =ሶ𝒅 𝐦𝐚𝐱
+> ሷ
+> 𝒅 𝒇 =ሷ𝒅 𝐦𝐚𝐱
+> Boundary
+> condition
+> Feasibility Check
+
+RL Policy 
+
+Network  
+
+> High -level
+> command
+
+Feasibility 
+
+Check 
+
+Trajectory 
+
+Planning                                
+
+> Longitudinal Motion
+> Constant Acceleration
+> 𝒔 (𝒕 )=𝒃 𝟎 +𝒃 𝟏 𝒕 +𝒃 𝟐 𝒕 𝟐
+> Lateral Motion
+> Quintic Polynomial
+> 𝒅 𝒕 =𝒄 𝟎 +𝒄 𝟏 𝒕 +𝒄 𝟐 𝒕 𝟐 +
+> 𝒄 𝟑 𝒕 𝟑 +𝒄 𝟒 𝒕 𝟒 +𝒄 𝟓 𝒕 𝟓
+> Trajectory
+> Trajectory Planning
+> BEV segmentation images (𝐈 𝐁𝐄𝐕 )
+> Drivable area Desired route Lane boundary
+> Vehicles Lights and stops Pedestrians
+> ∆𝒅 𝐦𝐚𝐱 ≥∆𝒅
+> ∆𝒅
+> ∆𝒅 𝐦𝐚𝐱
+> Terminal State
+> 𝒅 𝒇 =𝒅 𝐨𝐟𝐟
+> ሶ
+> 𝒅 𝒇 =𝟎
+> ሷ
+> 𝒅 𝒇 =𝟎
+> ∆𝒅
+
+Fig. 2. Overall architecture of the proposed RL-based expert: PlanRL. The RL Policy Network Module outputs a high-level command using BEV segmentation images and an ego measurement vector as inputs. The Feasibility Check Module adjusts the terminal lateral state to satisfy kinematic constraints. The Trajectory Planning Module then generates a smooth trajectory based on the adjusted terminal state. 
+
+dominantly adopt trajectory planning architectures. Conse-quently, they fall short of delivering the structured supervi-sion required by modern E2E planning pipelines. III. METHODOLOGY 
+
+A. Overview 
+
+This study proposes a novel trajectory planning archi-tecture for RL-based experts in autonomous driving. The proposed method consists of three main components: an RL policy, a kinematic feasibility check, and a trajectory planning module (Fig. 2). The RL policy outputs high-level commands, which are converted into kinematically feasible trajectories through the feasibility check and trajectory plan-ning modules, and then tracked by a PID controller. 
+
+B. Reinforcement Learning Policy 
+
+We adopt the architecture of Roach [1], an RL-based driving expert trained via Proximal Policy Optimization (PPO) [26], as an RL policy to output high-level commands for trajectory planning. The key components of the RL policy are described below: input, output representation, reward function, network architecture, and training objective. 
+
+Input Representation. The proposed method takes as input a Bird’s-Eye View (BEV) semantic segmentation image 
+
+IBEV ∈ [0 , 1] W ×H×C with W = 192 px, H = 192 px, and 
+
+C = 15 channels at 5 px/m resolution, encoding:  
+
+> •
+
+Channels 1-2 : Drivable area and desired route (While Roach [1] represents routes as polygons, the proposed method represents them as lines, which has been exper-imentally shown to achieve higher performance.)  
+
+> •
+
+Channel 3 : Lane boundary (solid: white, dashed: gray)  
+
+> •
+
+Channels 4-7 : Vehicle bounding boxes at t ∈{− 1.5, −1.0, −0.5, 0} s 
+
+> •
+
+Channels 8-11 : Pedestrian bounding boxes at t ∈{− 1.5, −1.0, −0.5, 0} s, rendered at twice actual size  
+
+> •
+
+Channels 12-15 : Traffic lights and stop signs, with brightness encoding the state (same temporal sequence as vehicles and pedestrians) In addition to the BEV image, it takes a 6D measurement vector mego ∈ R6 as input to capture ego-vehicle states not represented in the visual observation: steering, throttle, brake, gear, and longitudinal and lateral speeds. 
+
+Output Representation. The RL policy outputs high-level commands as actions, which distinguishes it from Roach [1], which outputs direct control commands. The high-level commands include a two-dimensional action vector 
+
+a = [alon , a lat ]⊤, where alon represents the longitudinal acceleration command and alat represents the target lateral offset from the reference path. They are then passed through a feasibility check and subsequently utilized by the trajectory planning module to generate the final trajectory. We employ a Beta distribution B(α, β ) with shape pa-rameters α, β > 0 to parameterize continuous actions. This distribution naturally produces action outputs bounded within the (0 , 1) interval, which are then linearly rescaled to the ranges used for high-level commands: longitudinal acceleration alon ∈ [−3.2, 3.5] m/s 2 and target lateral offset 
+
+alat ∈ [−3.5, 3.5] m. The acceleration limits are selected to ensure a balance between motion comfort and operational maneuverability in urban environments [27]. The lateral bound of ±3.5 m is selected to encompass standard lane widths, enabling both precise lane-keeping and complete lane-change maneuvers within a single planning cycle. Unlike Gaussian distributions, which suffer from estima-tion bias in bounded action spaces due to boundary effects, the Beta distribution is inherently bounded and bias-free [28]. This eliminates the need for boundary clipping or squashing transformations such as tanh, thereby avoiding the gradient distortion typically introduced by such auxiliary layers. Fur-thermore, reduced gradient variance leads to more stable and consistent optimization. The Beta distribution also enables explicit computation of key metrics including entropy and KL-divergence, leading to more stable and efficient policy updates. This stability is particularly valuable in complex driving scenarios, where the agent must maintain high-precision control while exploring diverse strategies near the physical limits of the action space. 
+
+Reward Function. The RL policy is trained using a dense reward signal that encourages safe and smooth driving behavior. The total reward at timestep t is expressed as the sum of five components: 
+
+Rt = Rspd ,t + Rpos ,t + Rrot ,t + Ract ,t + Rterm ,t . (1) The speed reward Rspd ,t is defined as: 
+
+Rspd ,t = 1 − |vt − v⋆t |
+
+vmax 
+
+, (2) where vt is the current speed, v⋆t is the desired speed dynamically adjusted based on nearby vehicles, pedestrians, traffic lights, and active stop signs, and vmax = 6 m/s. The desired speed computation follows Roach [1]. The position reward Rpos ,t is defined as: 
+
+Rpos ,t = − 12 |e⊥,t |, (3) where e⊥,t is the lateral deviation from the route centerline, measured in meters. The rotation reward Rrot ,t is defined as: 
+
+Rrot ,t = −| ∆ψt|, (4) where ∆ψt = ψego ,t −ψroute ,t is the heading error (in radians, cast to [−π, π ]). The action reward Ract ,t is defined as: 
+
+Ract ,t =
+
+(
+
+−0.1, if |δt − δt−1| > 0.01 ,
+
+0, otherwise , (5) where δt is the steering command, and this term discourages abrupt steering changes. The terminal reward Rterm ,t is defined as: 
+
+Rterm ,t =
+
+
+
+−1 − vt, collision or traffic infraction ,
+
+−1, route deviation/blockage ,
+
+0, otherwise ,
+
+(6) where Rterm ,t applies penalties for collisions, traffic infrac-tions, route deviations, or blockages. A route deviation is triggered when the lateral distance to the desired route centerline exceeds 3.5 m, and a blockage is triggered when the ego vehicle’s speed remains below 0.1 m/s for over 90 seconds. This reward is issued upon episode termination. 
+
+Network Architecture. The policy network πθ and value network Vϕ share the same feature extractors, which consist of a BEV encoder (6 convolutional layers extracting 256-dimensional features) and a measurement encoder (2 fully-connected layers). The policy head comprises 2 FC layers with 256 hidden units each, outputting Beta distribution parameters (α, β ) ∈ R2+ for each action dimension. The value head uses a separate branch of 2 FC layers with 256 units, outputting a scalar estimate of the expected return. 
+
+Training Objective. The policy network is trained us-ing PPO augmented with entropy regularization and event-conditioned exploration priors proposed in Roach [1]. The value network is trained concurrently by minimizing the mean squared error between predicted state values and target returns. Network parameters θ (policy) and ϕ (value) are updated using a single Adam optimizer [29] with a learning rate of 10 −5. The total loss is expressed as follows: 
+
+Ltotal = Lppo (θ) + went Lent (θ) + wexp Lexp (θ) + wval Lval (ϕ), (7) where went , wexp , and wval are the respective weights for the entropy, event-conditioned exploration, and value losses. The PPO loss Lppo is defined as follows: 
+
+Lppo (θ) = −E       
+
+> h
+> min  rt(θ) ˆAt,clip (rt(θ),1−ϵ, 1 + ϵ) ˆAt
+> i
+
+, (8) where rt(θ) = πθ (at|st)  
+
+> πθold (at|st)
+
+is the ratio of probabilities under the current and old policies, ˆAt is the advantage estimate, and clip (x, a, b ) clamps x to [a, b ].The entropy loss, which encourages the action distribution toward a uniform prior, is defined as follows: 
+
+Lent (θ) = −EH(πθ (·| st)) , (9) where H(·) denotes the entropy of the action distribution and 
+
+st denotes the state at timestep t.The event-conditioned exploration loss, like the entropy loss, encourages exploration and is defined as: 
+
+Lexp (θ) = E    
+
+> h
+> I{Tterm −Nz+1 ,...,T term }(t)KL (πθ(·| st)∥pz)
+> i
+
+, (10) where I{·} (t) is an indicator function that activates over the final Nz = 100 timesteps before episode termination at timestep Tterm , KL (·∥· ) denotes the Kullback-Leibler divergence, and pz is the event-specific prior distribution. For collision events or traffic light/sign violations, we apply a longitudinal action prior pz = B(1 , 2.5) to encourage deceleration, while leaving the lateral action distribution un-changed. In blockage scenarios, a longitudinal prior B(2 .5, 1) 
+
+is used to promote forward motion. For route deviations, a uniform prior B(1 , 1) is imposed on the lateral action. The value loss is defined as follows: 
+
+Lval (ϕ) = E(Vϕ(st) − ˆRt)2, (11) where ˆRt is the target return. Both ˆAt and ˆRt are computed using Generalized Advantage Estimation (GAE) [30] with discount factor γ = 0 .99 and GAE parameter λ = 0 .9.
+
+C. Trajectory Planning in the Frenet Frame 
+
+Trajectory generation is performed in the Frenet-frame coordinate system, which provides a convenient curvilinear representation of the road and simplifies planning along complex road geometries. 
+
+Reference Path Construction. A reference path is first constructed from route waypoints used to create the BEV observation. The waypoints are interpolated and smoothed using a Cubic Spline to generate a continuous reference line 
+
+r(s) = [ rx(s), r y (s)] ⊤ parameterized by arc length s, where 
+
+τ ∈ [0 , u ] is the curve parameter and 
+
+s =
+
+Z u
+
+> 0
+
+s dr x
+
+dτ 
+
+2
+
++
+
+ dr y
+
+dτ 
+
+2
+
+dτ. (12) 
+
+Frenet Coordinate Projection. The ego vehicle’s current state is projected onto the reference line to obtain Frenet ini-tial conditions: longitudinal position s0, longitudinal velocity ˙s0, and acceleration ¨s0; lateral offset d0, lateral velocity ˙d0,and acceleration ¨d0. This projection rotates the global posi-tion (pg
+
+> x
+
+, p g 
+
+> y
+
+) relative to the nearest reference point (r∗
+
+> x
+
+, r ∗ 
+
+> y
+
+),as well as the global velocity (vg
+
+> x
+
+, v g 
+
+> y
+
+) and acceleration 
+
+(ag
+
+> x
+
+, a g 
+
+> y
+
+), into the Frenet frame using the reference heading 
+
+ψ = arctan 2( dr y /ds, dr x/ds ) at the nearest point: 
+
+s0
+
+d0
+
+
+
+=
+
+ cos ψ sin ψ
+
+− sin ψ cos ψ
+
+  pg 
+
+> x
+
+− r∗
+
+> x
+
+pg 
+
+> y
+
+− r∗
+
+> y
+
+
+
+, (13) 
+
+ ˙s0
+
+˙d0
+
+
+
+=
+
+ cos ψ sin ψ
+
+− sin ψ cos ψ
+
+  vg
+
+> x
+
+vg
+
+> y
+
+
+
+, (14) 
+
+¨s0
+
+¨d0
+
+
+
+=
+
+ cos ψ sin ψ
+
+− sin ψ cos ψ
+
+  ag
+
+> x
+
+ag
+
+> y
+
+
+
+. (15) 
+
+Longitudinal Motion Model. The Frenet-frame formula-tion decouples the two-dimensional motion planning problem into longitudinal and lateral subproblems. The longitudinal motion is modeled as a second-order polynomial under a constant-acceleration assumption: 
+
+s(t) = b0 + b1t + b2t2. (16) Following the polynomial formulation, the coefficient vec-tor [b0, b 1, b 2]⊤ is obtained as 
+
+b0
+
+b1
+
+b2
+
+ =
+
+
+
+1 0 00 1 00 0 2
+
+ 
+
+> −1
+
+
+
+s(0) ˙s(0) ¨s(0) 
+
+ . (17) The boundary conditions are given by 
+
+s(0) = s0, ˙s(0) = ˙ s0, ¨s(0) = alon , (18) where alon denotes the longitudinal acceleration by the RL policy. To prevent reversing along the reference path, non-negativity constraints are applied to position and velocity: 
+
+s(t) = max( s(t), 0) , ˙s(t) = max( ˙ s(t), 0) . (19) These quantities define the speed profile along the trajectory. 
+
+Lateral Motion Model. The lateral motion is planned as a quintic (5th-order) polynomial connecting the initial lateral state (d0, ˙d0, ¨d0) to the terminal lateral state (df , ˙df , ¨df ) over the planning horizon T = 1 .0 s: 
+
+d(t) = c0 + c1t + c2t2 + c3t3 + c4t4 + c5t5. (20) The six coefficients [c0, c 1, c 2, c 3, c 4, c 5]⊤ are uniquely de-termined by the six boundary conditions: position, velocity, and acceleration at both t = 0 and t = T . Following the standard quintic polynomial formulation, these coefficients are computed as:                                             
+
+> 
+> c0
+> c1
+> c2
+> c3
+> c4
+> c5
+> 
+> =
+> 
+> 1000000100000020001TT2T3T4T5
+> 012T3T24T35T4
+> 0026T12 T220 T3
+> 
+> −1
+> d(0) ˙d(0) ¨d(0)
+> d(T)˙d(T)¨d(T)
+> 
+> .
+
+(21) The boundary conditions are given by 
+
+d(0) = d0, ˙d(0) = ˙d0, ¨d(0) = ¨d0, (22) 
+
+d(T ) = df , ˙d(T ) = ˙df , ¨d(T ) = ¨df , (23) where df , ˙df , ¨df denote the terminal conditions determined by the feasibility check in the following section. 
+
+D. Kinematic Feasibility Check 
+
+This module ensures kinematic feasibility of the RL-generated lateral command. Subsequently, the coefficients of the quintic polynomial are determined, and the final trajectory is generated. Given the commanded offset doff =
+
+alat and the required displacement ∆d = doff − d0, the maximum achievable lateral displacement within the horizon 
+
+T under | ¨d| ≤ | ¨dmax | is 
+
+∆dmax = ˙d0 T + 12 ¨dmax T 2, (24) where ¨dmax = 3 sign (∆ d) m/s 2 and sign (∆ d) = +1 if ∆d ≥
+
+0 and −1 if ∆d < 0. The terminal lateral position, velocity, and acceleration of the quintic polynomial are then set as 
+
+(df , ˙df , ¨df ) = 
+
+
+
+(d0 + ∆ dmax ,
+
+˙dmax , ¨dmax ) if |∆dmax | < |∆d|,
+
+(doff , 0, 0) otherwise ,
+
+(25) where ˙dmax = ˙d0 + ¨dmax T . This ensures that the output paths are physically feasible, minimizing cumulative tracking errors typically introduced when adding a planner. IV. EXPERIMENTS AND RESULTS 
+
+A. Benchmarks 
+
+We evaluate the proposed method on the CARLA Offline Leaderboard v1 [17] and the NoCrash [18] benchmark to val-idate its performance under diverse urban driving scenarios. All experiments are conducted using CARLA 0.9.10.1. 
+
+CARLA Offline Leaderboard v1 [17] provides a stan-dardized evaluation protocol in complex urban environments, including dynamic traffic participants and traffic rules. Under this benchmark, we report the average performance over 76 predefined routes (Town01–Town06), with traffic density settings following [1]. It measures the ability of autonomous vehicles to complete navigation routes safely and efficiently under realistic traffic settings. Unlike the online Leaderboard, the offline benchmark strictly defines both the training and testing environments, enabling controlled and reproducible evaluation of generalization performance [1]. 
+
+NoCrash [18] is designed to evaluate the robustness of navigation policies under diverse environmental variations, including different weather conditions and maps. In this work, however, we adapt the protocol to analyze expert models that leverage privileged inputs and are trained on Town01–Town06. To eliminate unnecessary variations, we fix the weather to ClearSunset and evaluate performance on Town01 and Town02 under the dense traffic setting, with each town consisting of 25 predefined routes. The 
+
+dense traffic setting, characterized by heavy pedestrian and vehicle traffic, provides a challenging environment for col-lision avoidance and interaction handling. This setup avoids redundant experiments because our expert models leverage weather-invariant privileged inputs, allowing us to focus the evaluation on navigation performance under dense traffic. TABLE I DRIVING PERFORMANCE AND INFRACTION ANALYSIS ACROSS BENCHMARKS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+
+> Success Driving Route Infrac. Collision Collision Collision Red light Agent Benchmark Method rate score compl. penalty others pedestrian vehicle infraction blocked (%, ↑)(%, ↑)(%, ↑)(%, ↑)(#/Km, ↓)(#/Km, ↓)(#/Km, ↓)(#/Km, ↓)(#/Km, ↓)LB-all Autopilot [1] 61 ±14 72 ±390 ±480 ±10.00 ±0.00 0.00 ±0.00 0.23 ±0.10 0.54 ±0.03 1.05 ±0.39
+> Roach [1] 59 ±375 ±296 ±278 ±10.00 ±0.00 0.04 ±0.04 0.31 ±0.02 0.12 ±0.01 0.12 ±0.08
+> Roach + Rule [4] 68 ±379 ±395 ±184 ±40.00 ±0.00 0.00 ±0.00 0.14 ±0.05 0.19 ±0.06 0.15 ±0.06
+> CaRL ⋆[3] 39 ±358 ±473 ±180 ±30.22 ±0.04 0.01 ±0.01 0.27 ±0.04 0.33 ±0.18 1.44 ±0.43
+> Ours w/o KF 61 ±279 ±296 ±383 ±10.00 ±0.00 0.01 ±0.01 0.34 ±0.04 0.04 ±0.01 0.21 ±0.16
+> Ours 67 ±380 ±399 ±181 ±30.00 ±0.00 0.00 ±0.01 0.31 ±0.08 0.09 ±0.01 0.04 ±0.02
+> Ours + Rule 70 ±181 ±193 ±187 ±10.00 ±0.00 0.01 ±0.01 0.14 ±0.03 0.18 ±0.03 0.26 ±0.06
+> NCd-Town01 Autopilot [1] 91 ±681 ±292 ±784 ±10.00 ±0.00 0.00 ±0.00 0.06 ±0.06 1.29 ±0.58 0.50 ±0.40
+> Roach [1] 73 ±684 ±393 ±286 ±50.05 ±0.08 0.02 ±0.04 0.38 ±0.23 0.19 ±0.21 0.21 ±0.23
+> Roach + Rule [4] 88 ±492 ±292 ±493 ±10.00 ±0.00 0.00 ±0.00 0.04 ±0.01 0.29 ±0.06 0.15 ±0.13
+> CaRL ⋆[3] 48 ±062 ±384 ±476 ±20.45 ±0.34 0.11 ±0.05 0.28 ±0.07 0.61 ±0.07 1.13 ±0.88
+> Ours w/o KF 85 ±593 ±299 ±293 ±20.00 ±0.00 0.00 ±0.00 0.22 ±0.09 0.02 ±0.04 0.02 ±0.04
+> Ours 92 ±895 ±3100 ±095 ±30.00 ±0.00 0.00 ±0.00 0.09 ±0.10 0.12 ±0.08 0.00 ±0.00
+> Ours + Rule 95 ±695 ±699 ±296 ±50.00 ±0.00 0.00 ±0.00 0.05 ±0.05 0.13 ±0.16 0.04 ±0.06
+> NCd-Town02 Autopilot [1] 79 ±667 ±585 ±274 ±60.00 ±0.00 0.00 ±0.00 0.91 ±1.16 2.70 ±1.01 1.79 ±0.86
+> Roach [1] 65 ±580 ±585 ±10 85 ±20.00 ±0.00 0.03 ±0.05 0.94 ±0.29 0.34 ±0.32 0.78 ±0.69
+> Roach + Rule [4] 77 ±282 ±081 ±288 ±20.00 ±0.00 0.00 ±0.00 0.43 ±0.31 0.72 ±0.25 1.18 ±0.35
+> CaRL ⋆[3] 15 ±240 ±253 ±277 ±22.52 ±1.36 0.04 ±0.06 0.57 ±0.42 2.24 ±0.50 5.89 ±1.68
+> Ours w/o KF 76 ±487 ±287 ±593 ±30.00 ±0.00 0.00 ±0.00 0.50 ±0.45 0.17 ±0.07 0.86 ±0.48
+> Ours 80 ±488 ±295 ±691 ±30.00 ±0.00 0.00 ±0.00 0.58 ±0.27 0.08 ±0.09 0.95 ±1.46
+> Ours + Rule 84 ±790 ±491 ±695 ±20.00 ±0.00 0.00 ±0.00 0.36 ±0.21 0.13 ±0.11 0.67 ±0.51
+
+LB-all denotes the average performance over 76 routes across Town01–Town06 in CARLA Offline Leaderboard v1. NCd denotes the dense setting in NoCrash, reporting results on Town01 and Town02, with 25 routes each. ⋆: Results are obtained using the official checkpoint released in the authors’ GitHub repository. Boldface indicates the best performance, and underlined entries denote the second-best performance. Rule refers to the emergency brake rule proposed in DriveAdapter [4]. KF denotes the kinematic feasibility check. TABLE II RUNTIME ANALYSIS (ms ) OF DIFFERENT METHODS 
+
+Method RL Inference Planning Control Total Roach [1] 4.894 - - 4.894 
+
+Ours 4.939 1.100 0.568 6.607 
+
+RL Inference denotes the network input–output processing time. Planning represents the time for trajectory generation, and Control the time required to produce control commands. Total denotes the overall inference time. 
+
+B. Evaluation Metrics 
+
+Performance is evaluated using the standard task-completion and safety-related metrics defined in the bench-mark. All experiments are conducted with three different random seeds, and we report the mean and standard deviation to ensure statistical reliability. The definitions of the metrics are provided below (see [1] for detailed descriptions).  
+
+> •
+
+Success rate measures the percentage of routes success-fully completed without terminal infractions, such as collisions with vehicles, pedestrians, or static obstacles.  
+
+> •
+
+Driving score reflects the overall navigation perfor-mance by combining route completion with penalties incurred from traffic violations.  
+
+> •
+
+Route completion indicates the percentage of the route completed, regardless of whether terminal infractions occur.  
+
+> •
+
+Infraction penalty represents the accumulated penalty factor applied due to traffic rule violations and unsafe behaviors.  
+
+> •
+
+Collision others , Collision pedestrian , and Collision vehicle measure the number of collisions per kilometer with static objects, pedestrians, and other vehicles, respectively.  
+
+> •
+
+Red light infraction measures the number of traffic light violations, normalized per kilometer.  
+
+> •
+
+Agent blocked measures the number of episodes ter-minated due to the vehicle being stuck or unable to proceed. 
+
+C. Implementation Details 
+
+Following the training protocol of our baseline, Roach’s RL experts [1], we adopt the same network architecture and identical RL hyperparameters, modifying only the output head to accommodate the proposed planning architecture. Training is performed on six CARLA maps (Town01– Town06) under randomized numbers of traffic agents and weather conditions. During both training and evaluation, the CARLA servers run at 10 FPS. The desired route is computed via A ∗ search with start and goal points selected strictly following the protocol described in [1]. All models are trained using a single NVIDIA RTX 3090 (24 GB) GPU. For fair comparison, all baseline and competing methods are reproduced under our experimental setup. Each algorithm is evaluated using the checkpoint that achieves the best performance within a total training budget of 10M steps. In addition, we use the parameter-tuned version of Autopilot re-ported in [1], which is optimized for improved performance. 
+
+D. Main Results 
+
+Comparison with Autopilot : As shown in Table I, our method achieves superior performance compared to Autopi-lot, a strong rule-based baseline on the CARLA Leaderboard v1 and NoCrash benchmarks. Without relying on the emer-gency brake rule, our approach improves the driving score by 8–21 points and the success rate by 1–6 points across the evaluated settings. In addition, our method significantly reduces infractions, achieving markedly improved results in all collision-related metrics (except collision vehicle), red-light infraction, and agent-blocked cases. These results indicate that the proposed method can provide more effective action guidance for other end-to-end models. Furthermore, unlike Autopilot, our RL-based expert can supply informative latent features, enabling richer knowledge transfer. 
+
+Comparison with Roach : Table I also shows that the proposed method achieves consistent improvements over Roach [1], a control-centric RL expert, with gains of 5–11 points in driving score and 8–19 points in success rate. In the NoCrash benchmark, both metrics approach nearly 100%, suggesting that our method can generate substantially higher-quality ground truth compared to Roach. This improvement indicates that the proposed architecture effectively addresses the limitation of control-centric RL experts, which must implicitly internalize diverse and complex road geometries without a structured coordinate framework. However, when Roach is combined with the emergency brake rule proposed in DriveAdapter [4], it achieves a substantial performance improvement, even surpassing our method in terms of suc-cess rate on LB-all. In contrast, the performance gain from incorporating the same rule into our method is relatively marginal. This suggests that the proposed architecture al-ready possesses sufficient braking capability without relying on heuristic rule-based emergency interventions. Further-more, in terms of route completion, combining the rule with our method leads to degraded performance across all three benchmarks. We attribute this decline to overly conservative driving behavior induced by the heuristic emergency braking mechanism. 
+
+Comparison with CaRL : As shown in Table I, the proposed method is further compared with CaRL [3], which simplifies the reward formulation of Roach [1] while retain-ing the same baseline architecture. The proposed method consistently outperforms CaRL in terms of both driving score and success rate. For the evaluation of CaRL [3], we use the checkpoint officially released by the authors in their GitHub repository. However, a fully fair comparison cannot be guaranteed because the released checkpoint was trained under vehicle dynamics and simulation settings different from those used in our experiments, including a different ego vehicle model and a different CARLA version. 
+
+E. Ablation Study 
+
+Effect of the Kinematic Feasibility Check : An ablation study is conducted to evaluate the effectiveness of the proposed kinematic feasibility check (KF). As shown in the gray-highlighted entries of Table I, our method consistently outperforms the variant without KF (Ours w/o KF) in terms of success rate and driving score across all benchmarks (LB-all, NCd-Town01, and NCd-Town02). These results demon-strate that incorporating the kinematic feasibility check into the trajectory planning process enables the RL policy to generate kinematically trackable trajectories, thereby mini-mizing cumulative tracking errors that may arise when an (a)  Roach           
+
+> (b) Ours
+> 𝑡 1𝑡 2
+> 𝑡 1𝑡 2
+> Fig. 3. Visualization of driving scenarios in NCd-Town02 for (a) Roach and (b) Ours at two time steps, t1and the subsequent time step t2. Pedestrians and vehicles are shown in cyan and blue, respectively, and are visualized with their historical states up to −1.5,−1.0, and −0.5seconds. The ego vehicle is shown in white, the route in light gray, the road in dark gray, and road boundaries in magenta. The color shown at the end of the road represents the traffic light state. Yellow bounding boxes indicate vehicles approaching the ego vehicle and leading to a collision.
+
+additional planner is introduced. Ultimately, this leads to improved overall driving performance. 
+
+Runtime Analysis : We investigate how the runtime changes compared to Roach [1] when incorporating the proposed RL-based trajectory planning architecture, which introduces additional Planning and Control modules. The runtime reported in Table II is measured as the average over NCd-Town01. The results show that our method incurs an additional latency of approximately 1.713 ms compared to Roach due to the added Planning and Control stages. Nev-ertheless, this corresponds to an inference speed of around 151 FPS, which remains substantially faster than the 20– 30 FPS typically required for real-world autonomous driving decision-making systems. 
+
+F. Qualitative Analysis 
+
+We include Fig. 3 to qualitatively compare the proposed method with Roach [1]. First, the green trajectory attached to the ego vehicle in Fig. 3 illustrates the intended target direction of the proposed method, unlike Roach, thereby significantly improving the interpretability of the algorithm. Moreover, this explicit trajectory enables trajectory-level guidance for end-to-end models supervised by the proposed expert. The visualization results further show that both Roach and Ours successfully avoid the approaching vehicle that leads to a collision (yellow bounding box). However, after the avoidance maneuver, the proposed method successfully returns to the route, whereas Roach fails to rejoin the route and becomes stuck at that location. This demonstrates that the formulation of the proposed planning architecture is more effective than Roach on roads with large curvature. V. CONCLUSION AND FUTURE WORK This paper presents a trajectory planning architecture for RL-based driving experts that addresses the inherent lim-itations of control-centric approaches. By operating in the Frenet-frame coordinate system and explicitly incorporating kinematic feasibility into trajectory generation, the method simplifies the representation of complex road geometries while mitigating cumulative tracking errors introduced by an additional planner. Unlike conventional RL experts that output direct control commands, the proposed framework provides structured trajectory-based guidance, thereby im-proving interpretability and aligning expert supervision with modern end-to-end planning architectures. Extensive evalu-ations on the CARLA Offline Leaderboard v1 and NoCrash benchmarks demonstrate that the proposed approach consis-tently outperforms state-of-the-art control-based RL experts in terms of driving score and success rate. In future work, we plan to further validate the proposed architecture on more re-cent and challenging benchmarks, such as Bench2Drive [31] and Longest6 [21], to assess its generalization capabil-ity. In addition, we will investigate how effectively the proposed trajectory-centric expert can supervise end-to-end autonomous driving models—particularly those built upon planning architectures—and quantify the performance gains achieved over conventional control-based expert supervision. REFERENCES [1] Z. Zhang, A. Liniger, D. Dai, F. Yu, and L. Van Gool, “End-to-end urban driving by imitating a reinforcement learning coach,” in 
+
+Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 15 222–15 232. [2] J. Chen, B. Yuan, and M. Tomizuka, “Model-free deep reinforcement learning for urban autonomous driving,” in 2019 IEEE intelligent transportation systems conference (ITSC) . IEEE, 2019, pp. 2765– 2771. [3] B. Jaeger, D. Dauner, J. Beißwenger, S. Gerstenecker, K. Chitta, and A. Geiger, “Carl: Learning scalable planning policies with simple rewards,” arXiv preprint arXiv:2504.17838 , 2025. [4] X. Jia, Y. Gao, L. Chen, J. Yan, P. L. Liu, and H. Li, “Driveadapter: Breaking the coupling barrier of perception and planning in end-to-end autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 7953–7963. [5] Q. Li, X. Jia, S. Wang, and J. Yan, “Think2drive: Efficient reinforce-ment learning by thinking with latent world model for autonomous driving (in carla-v2),” in European conference on computer vision .Springer, 2024, pp. 142–158. [6] Z. Yang, X. Jia, Q. Li, X. Yang, M. Yao, and J. Yan, “Raw2drive: Reinforcement learning with aligned world models for end-to-end autonomous driving (in carla v2),” arXiv preprint arXiv:2505.16394 ,2025. [7] H. Wang, X. Ye, F. Tao, C. Pan, A. Mallik, B. Yaman, L. Ren, and J. Zhang, “Adawm: Adaptive world model based planning for autonomous driving,” arXiv preprint arXiv:2501.13072 , 2025. [8] P. Wu, X. Jia, L. Chen, J. Yan, H. Li, and Y. Qiao, “Trajectory-guided control prediction for end-to-end autonomous driving: A simple yet strong baseline,” Advances in Neural Information Processing Systems ,vol. 35, pp. 6119–6132, 2022. [9] J. Kong, M. Pfeiffer, G. Schildbach, and F. Borrelli, “Kinematic and dynamic vehicle models for autonomous driving control design,” in 
+
+2015 IEEE intelligent vehicles symposium (IV) . IEEE, 2015, pp. 1094–1099. [10] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun, “Carla: An open urban driving simulator,” in Conference on robot learning .PMLR, 2017, pp. 1–16. [11] J. Lim, K. Lee, J. Shin, and D. Kum, “Learning terminal state of the trajectory planner: Application for collision scenarios of autonomous vehicles,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2024, pp. 7576–7582. [12] R. Yu, X. Zhang, R. Zhao, H. Yan, and M. Wang, “Distilldrive: End-to-end multi-mode autonomous driving distillation by isomorphic hetero-source planning model,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 26 188–26 197. [13] W. Yao, Z. Li, S. Lan, Z. Wang, X. Sun, J. M. Alvarez, and Z. Wu, “Drivesuprim: Towards precise trajectory selection for end-to-end planning,” arXiv preprint arXiv:2506.06659 , 2025. [14] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Krishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuscenes: A multimodal dataset for autonomous driving,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2020, pp. 11 621–11 631. [15] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li, I. Gilitschenski, B. Ivanovic, M. Pavone et al. , “Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking,” Ad-vances in Neural Information Processing Systems , vol. 37, pp. 28 706– 28 719, 2024. [16] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin, W. Wang et al. , “Planning-oriented autonomous driving,” in 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 17 853–17 862. [17] CARLA Team, “Carla autonomous driving leaderboard,” https:// leaderboard.carla.org/, 2026, accessed: 2026-02-17. [18] F. Codevilla, E. Santana, A. M. L´ opez, and A. Gaidon, “Exploring the limitations of behavior cloning for autonomous driving,” in Proceed-ings of the IEEE/CVF international conference on computer vision ,2019, pp. 9329–9338. [19] C. Sima, K. Renz, K. Chitta, L. Chen, H. Zhang, C. Xie, J. Beißwenger, P. Luo, A. Geiger, and H. Li, “Drivelm: Driving with graph visual question answering,” in European conference on computer vision . Springer, 2024, pp. 256–274. [20] B. Jaeger, “Expert drivers for autonomous driving,” Master’s thesis, University of T¨ ubingen , vol. 1, no. 2, p. 3, 2021. [21] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger, “Transfuser: Imitation with transformer-based sensor fusion for au-tonomous driving,” IEEE transactions on pattern analysis and machine intelligence , vol. 45, no. 11, pp. 12 878–12 895, 2022. [22] B. Jaeger, K. Chitta, and A. Geiger, “Hidden biases of end-to-end driving models,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 8240–8249. [23] K. Chitta, A. Prakash, and A. Geiger, “Neat: Neural attention fields for end-to-end autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021, pp. 15 793– 15 803. [24] D. Chen, V. Koltun, and P. Kr¨ ahenb¨ uhl, “Learning to drive from a world on rails,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2021, pp. 15 590–15 599. [25] D. Chen, B. Zhou, V. Koltun, and P. Kr¨ ahenb¨ uhl, “Learning by cheating,” in Conference on robot learning . PMLR, 2020, pp. 66–75. [26] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Proximal policy optimization algorithms,” arXiv preprint arXiv:1707.06347 , 2017. [27] K. N. de Winkel, T. Irmak, R. Happee, and B. Shyrokau, “Standards for passenger comfort in automated vehicles: Acceleration and jerk,” 
+
+Applied Ergonomics , 2023. [28] P.-W. Chou, D. Maturana, and S. Scherer, “Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution,” in Proceedings of the 34th International Conference on Machine Learning , 2017, pp. 834–843. [29] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimiza-tion,” arXiv preprint arXiv:1412.6980 , 2014. [30] J. Schulman, P. Moritz, S. Levine, M. Jordan, and P. Abbeel, “High-dimensional continuous control using generalized advantage estima-tion,” in ICLR , 2016. [31] X. Jia, Z. Yang, Q. Li, Z. Zhang, and J. Yan, “Bench2drive: Towards multi-ability benchmarking of closed-loop end-to-end autonomous driving,” Advances in Neural Information Processing Systems , vol. 37, pp. 819–844, 2024.

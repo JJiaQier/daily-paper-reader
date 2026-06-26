@@ -1,28 +1,28 @@
 # 今日论文推荐
 
 阅读入口：
-https://jjiaqier.github.io/daily-paper-reader/#/20260626/2606.25480v1-rate-aware-quantum-inspired-trajectory-learning-for-interference-limited-multi-uav-networks
+https://jjiaqier.github.io/daily-paper-reader/#/20260626/2606.25832v2-miniopt-reasoning-to-model-and-solve-general-optimization-problems-with-limited-resources
 
 时间窗口：
 20260626
 
 精读文章：
-Rate-Aware Quantum-Inspired Trajectory Learning for Interference-Limited Multi-UAV Networks
+MiniOpt: Reasoning to Model and Solve General Optimization Problems with Limited Resources
 
 精读文章摘要：
-使用分散强化学习优化多无人机轨迹以提升网络容量
+强化学习框架用于求解通用优化问题，可直接应用于车辆路径问题
 
 速读文章1：
-Low-Complexity Policy Tessellations in Structured Markov Decision Processes
-一句话摘要：策略镶嵌直接学习决策区域，类似于区域划分
+Backpropagating Through Simulation: Analytic Policy Gradients for Sample and Learning Efficient Differentiable Continuous Control
+一句话摘要：利用可微模拟的分析策略梯度方法，为包含路径规划的连续控制任务提供高效RL
 
 速读文章2：
-Maturing Markov Decision Processes: Decision Making under Increasing Information and Shrinking Action Sets
-一句话摘要：MDP框架处理动作过期问题，与路径规划相关
+Mesh-RL: Coupled subgrid reinforcement learning
+一句话摘要：空间域分解的RL方法类似于区域划分
 
 速读文章3：
-Horizon Adaptive Offline Policy Learning via Value Stitching
-一句话摘要：自适应视界的离线RL方法，可应用于复杂物流规划
+Solving Markov Decision Processes with Future Information via MPC
+一句话摘要：结合MPC与RL求解MDP，可迁移至车辆路径问题
 
 生成日期：
 2026-06-26
