@@ -1,0 +1,1219 @@
+Title: Maturing Markov Decision Processes: Decision Making under Increasing Information and Shrinking Action Sets
+
+URL Source: https://arxiv.org/pdf/2606.18820v1
+
+Published Time: Thu, 18 Jun 2026 00:39:22 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Maturing Markov Decision Processes: Decision Making under Increasing Information and Shrinking Action Sets 
+
+Jiaxi Liu ∗† 
+
+Ant International School of Economics, Sichuan University 
+
+liujiaxi@stu.scu.edu.cn 
+
+Aiping Yang ∗
+
+Ant International 
+
+yangaiping.yap@ant-intl.com 
+
+Yuhang Yang ∗
+
+Ant International 
+
+yumen.yyh@ant-intl.com 
+
+Shuqi Zhang ∗
+
+Ant International 
+
+zhangshuqi.zsq@ant-intl.com 
+
+Zewei Dong †
+
+Ant International 
+
+zewei.dong@ant-intl.com 
+
+Jiangming Yang 
+
+Ant International 
+
+jiangming.yang@ant-intl.com 
+
+Xuebin Chen 
+
+School of Economics, Sichuan University School of Economics, Fudan University 
+
+chenxb@fudan.edu.cn 
+
+Abstract 
+
+Sequential decision problems often exhibit an asymmetric evolution of information and decision flexibility: as a decision cycle unfolds, the agent receives richer information while feasible actions expire due to operational cutoffs, commitments, or resource constraints. Standard MDP formulations typically flatten this structure into stage-dependent state descriptions and action masks, thereby obscuring the nested information–action asymmetry that determines which decisions are urgent and which can be deferred. We introduce Maturing Markov Decision Processes 
+
+(MMDPs), a formulation built around this information–action asymmetry. We characterize one of its key consequences through an expiring-action priority prin-ciple, which identifies the actions that must be resolved before the next stage. Motivated by this structure, we develop a structure-aware reinforcement learning framework with stage-aware policy design, expiring-action abstraction, and search-augmented learning with distillation. Experiments on a controlled multi-supplier replenishment problem, simplified cash-management environments of increasing complexity, and a production-scale simulator show that explicitly modeling this asymmetry improves learning efficiency and becomes increasingly valuable as decision problems scale. 
+
+> ∗Equal contribution.
+> †Corresponding authors: Jiaxi Liu ( liujiaxi@stu.scu.edu.cn ) and Zewei Dong ( zewei.dong@ant-intl.com ).
+> arXiv:2606.18820v1 [cs.LG] 17 Jun 2026
+
+1 Introduction 
+
+Many real-world sequential decision problems evolve in a structurally asymmetric way: as a decision cycle unfolds, the agent receives increasingly informative state signals through forecasts, observations, or operational updates, while the feasible action set contracts due to expiring opportunities, operational cutoffs, irreversible commitments, or resource constraints (see Figure 1). Such dynamics arise across domains including dynamic pricing [ 1, 2], inventory control [ 3 – 5], resource allocation [ 6 , 7], and financial liquidity management [ 8, 9]. Early decisions therefore operate under coarse information but high flexibility, whereas later decisions benefit from richer information but reduced optionality, fundamentally reshaping the exploration–exploitation trade-off. 
+
+Figure 1: Maturing Markov Decision Processes. Left: early stage with limited state information but many feasible actions. Right: later stage with increasing information while action sets shrink. Standard, constrained, non-stationary, and partially observable MDP variants address fixed dynamics, feasibility constraints, time-varying environments, or observation uncertainty [ 10 – 15 ]. Standard finite-horizon MDPs can absorb stage indices, forecast updates, and feasibility masks into an enlarged state-action representation. However, this flat encoding treats the evolution of information and action support as bookkeeping, rather than as the organizing structure of the decision problem. The key question is not merely which actions are feasible at a given stage, but which decisions must be resolved before they expire and which can be deferred until more informative signals arrive. We introduce Maturing Markov Decision Processes (MMDPs), where maturing emphasizes that the process becomes more informed while intervention opportunities progressively expire. Our contributions are fourfold. First, we formalize Maturing Markov Decision Processes as a class of sequential decision problems characterized by increasing information together with shrinking feasible action sets, and we characterize the resulting information–action asymmetry. Second, we provide a theoretical characterization of this structure through the expiring-action priority principle, which identifies the part of the action space that must be resolved before the next stage transition renders it unavailable. Third, we translate this structural insight into a structure-aware reinforcement learning (RL) framework with three components: stage-aware policy design, expiring-action abstraction, and search-augmented learning with distillation. Fourth, we validate the framework across three levels of empirical settings: a controlled multi-supplier replenishment problem, simplified cash-management environments of increasing complexity, and a larger production-scale simulator. The results show that the benefits of MMDP modeling and structure-aware learning become more pronounced as the decision problem scales. 
+
+2 Preliminaries 
+
+A finite-horizon MDP is a tuple M = ( S, A, P, r, γ ), where S and A are fixed state and action spaces, P is the transition kernel, r is the reward function, and γ ∈ (0 , 1] is the discount factor. A decision cycle consists of a horizon-H trajectory generated by a policy π. The state value function and state–action value function under policy π are defined as 
+
+V π (s) = Eπ
+
+"H−1X
+
+> k=0
+
+γkr(sk, a k) | s0 = s
+
+#
+
+, Qπ (s, a ) = Eπ
+
+"H−1X
+
+> k=0
+
+γkr(sk, a k) | s0 = s, a 0 = a
+
+#
+
+,
+
+with optimal values V ⋆(s) := max π V π (s) and Q⋆(s, a ) := max π Qπ (s, a ). Classical MDPs treat the state representation and feasible action set as fixed within a decision cycle. MMDPs relax this assumption by making both information and feasibility stage-dependent. 23 Maturing Markov Decision Processes 
+
+We now introduce Maturing Markov Decision Processes , a class of finite-horizon decision problems characterized by increasing information and shrinking action sets .
+
+Definition 3.1 (Maturing Markov Decision Process) . An Maturing Markov Decision Process (MMDP) is a finite-horizon decision process specified by 
+
+MM =
+
+
+
+{S n}Nn=0 , {A n}Nn=0 , {Pn}Nn=0 , {rn}Nn=0 , Γ, γ 
+
+
+
+,
+
+where n ∈ { 0, . . . , N } indexes stages within a decision cycle. At stage n, the agent observes a state 
+
+st ∈ S n, selects an action at ∈ A n, receives reward rn(st, a t), and transitions according to the stage-dependent kernel Pn(· | st, a t). The stage progression mechanism Γ governs the monotone evolution of the stage index across the decision cycle, either exogenously or through designated stage-termination actions. 
+
+3.1 Core Structural Properties: Information–Action Asymmetry Increasing Information. MMDPs are characterized by a sequence of stage-dependent state repre-sentations induced from an underlying full-information state space S⋆ via deterministic mappings 
+
+ϕn : S⋆ → S n, such that 
+
+S0 ≺ S 1 ≺ · · · ≺ S N . (1) That is, later stages reveal strictly more informative representations. 
+
+Shrinking Action Sets. MMDPs are also characterized by nested feasible action sets that contract over stages due to expiring opportunities and irreversible constraints: 
+
+A0 ⊃ A 1 ⊃ · · · ⊃ A N . (2) We also allow stage-level termination actions. For each boundary m < N , let aend  
+
+> m
+
+denote the action of making no further domain commitment before stage m + 1 . At stage n, all termination actions aend  
+
+> m
+
+with m ≥ n are admissible, so the augmented action sets remain nested. In particular, 
+
+aend  
+
+> n
+
+∈ A n \ A n+1 .The strictness of both structural relations is essential: if information does not increase across two consecutive stages, or if the feasible action set does not shrink, then the corresponding stage separation becomes redundant for the information–action asymmetry studied here. The following remark states this non-degeneracy convention. Appendix A.1 provides further interpretation. 
+
+Remark 3.1 (Non-Degenerate Stage Partition) . Consider two consecutive stages n and n + 1 . If either Sn = Sn+1 or An = An+1 , then the two stages collapse into a single effective stage for the purposes of the MMDP abstraction. 
+
+Trade-Off and Exploration Burden. A defining feature of MMDPs is the asymmetric co-evolution of increasing information and shrinking action sets. This creates a sequential trade-off between acting early with greater flexibility and acting later with richer information, while also altering the effective exploration burden across different stages: a stage-aware formulation only needs to reason over the representation and feasible actions relevant to the current stage. To make this intuition concrete, let Sn := |S n| and An := |A n| denote the effective state and action cardinalities at stage n. Consider a simple homogeneous scaling model in which Sn+1 = αS n and 
+
+An+1 = βA n, with α > 1 (information increasing) and 0 < β < 1 (action shrinking). 
+
+Remark 3.2 (Stage-Aware Hardness Reduction) . Under the homogeneous scaling model, the cu-mulative stage-wise state–action cardinality satisfies GMMDP < G MDP . Moreover, when αβ < 1, the geometric series converges and 
+
+GMMDP = O
+
+ S0A0
+
+1 − αβ 
+
+
+
+. (3) Remark 3.2 demonstrates the value of modeling information and actions jointly at each stage, rather than always forcing the learner to face the worst-case state–action support throughout the cycle. Furthermore, when action shrinkage dominates information growth in the sense that αβ < 1, the resulting structural hardness proxy remains bounded. The full derivation is given in Appendix A.2.1. 33.2 Expiring–Action Priority 
+
+We now turn from global stage structure to stage-wise decision making. A convenient special case of increasing information is the product refinement 
+
+Sn+1 = Sn × Z n+1 , n = 0 , . . . , N − 1,
+
+where Zn+1 denotes newly revealed information at stage n + 1 . Under shrinking action sets, we define the expiring action set by 
+
+Dn := An \ A n+1 , n = 0 , . . . , N − 1.
+
+Thus, the stage-n action space naturally splits into two parts: expiring actions Dn, which become infeasible at stage n + 1 , and persistent actions An+1 , which remain available after additional information is revealed. The expiring set also contains the boundary termination action aend  
+
+> n
+
+, which represents deferring unresolved persistent decisions to stage n + 1 .This decomposition suggests that the key structural question is not whether all actions should be decided immediately, but rather when persistent actions can be safely deferred to later stages. The following theorem shows that, if postponing persistent actions does not reduce their expected optimal value, then the optimal stage-n decision can be restricted to the expiring part of the action space. 
+
+Theorem 3.1 (Expiring-Action Priority Principle) . For an MMDP with product refinement, suppose the boundary termination action aend  
+
+> n
+
+∈ D n satisfies 
+
+Q⋆(s, a end  
+
+> n
+
+) = Ez [V ⋆(( s, z ))] .
+
+Suppose further that for any persistent action a′ ∈ A n+1 , state s ∈ S n, and newly revealed information z ∈ Z n+1 ,
+
+Q⋆(s, a ′) ≤ Ez
+
+Q⋆ (s, z ), a ′ .
+
+Then there exists an optimal policy π⋆ such that, for every stage n < N ,
+
+π⋆(s) ∈ arg max 
+
+> a∈D n
+
+Q⋆(s, a ).
+
+The key to Theorem 3.1 lies in whether persistent actions can be removed from the optimization of the current stage without sacrificing solution quality. Theorem 3.1 provides a sufficient condition for such a lossless reduction: if postponing a persistent action to the next stage does not reduce its expected optimal value after additional information is revealed, then there exists an optimal policy that focuses only on the expiring set at the current stage. A proof sketch is given in Appendix A.3. Conversely, if persistent actions interact strongly with expiring actions through shared resources, feasibility coupling, or early commitments that alter the ordering of expiring decisions, the conditions of Theorem 3.1 may not hold. In such cases, expiring-action abstraction should be treated as a structured approximation rather than an exact reduction. 
+
+Remark 3.3 (Expiring-Set Hardness Refinement) . Under the same proxy, expiring-action priority further gives 
+
+G(D) 
+
+> MMDP
+
+= O
+
+ (1 − β)S0A0
+
+1 − αβ 
+
+
+
+. (4) It yields a sharper structural hardness proxy by charging only for actions that must be resolved immediately. The derivation is given in Appendix A.2.2. 
+
+4 Structure-Aware Reinforcement Learning for MMDPs 
+
+Given the MMDP structure, our goal is to align the policy class and optimization interface with stage-dependent information and feasibility. We instantiate this idea through three components: stage-aware policies, expiring-action abstraction, and search-augmented distillation. 44.1 Stage-Aware Policy Design 
+
+In a standard episodic MDP, a stationary policy takes the form π(a | s). In an MMDP, the same underlying system requires different behavior across stages because both information and feasible actions vary with n. We therefore use a stage-aware policy πθ (a | s, n ).We construct a stage-conditioned representation xn := ϕ(s, n ), pass it through a shared backbone 
+
+hθ = fθ (xn), and use stage-specialized actor heads 
+
+πθ (a | s, n ) = Head n(hθ ).
+
+This shares representations across stages while preserving stage-local action selection. Implementa-tion details are provided in Appendix B.1. 
+
+4.2 Expiring-Action Abstraction 
+
+Theorem 3.1 motivates restricting the current-stage decision interface from An to the expiring set Dn
+
+when persistent actions can be deferred. Since Dn may be discrete, continuous, or hybrid, we use an abstraction that retains which expiring decision should be resolved while delegating lower-level parameters to a state-dependent executor. In cash management, a transfer action is a = ( u, v, ρ ), where (u, v ) is a transfer edge and ρ is the amount parameter. Our edge-only abstraction learns a policy over expiring edges (u, v ) ∼ πθ (· | s, n ),and an executor maps the selected edge to (u, v, ρ (s, u, v )) . This converts the hybrid transfer problem into a discrete stage-local action space, following the broader idea of simplifying hybrid or parameterized action interfaces for RL [16, 17]. Executor details are given in Appendix B.2. 
+
+4.3 Search-Augmented Learning 
+
+The expiring-action abstraction turns the MMDP reduction into a compact stage-local search space. Given a policy πθ (a | s, n ), let CK (s, n, π θ ) denote at most K candidate actions around the current policy. Search selects 
+
+asearch ∈ arg max   
+
+> a∈C K(s,n,π θ)
+
+bQ(s, n, a ),
+
+where bQ is computed by rollout, simulation, or task-specific scoring. At evaluation time, this gives a search-assisted controller. During training, following search-improved policy targets and expert iteration [ 18 , 19 ], we store improved decisions B = {(si, n i, a search  
+
+> i
+
+)}Mi=1 
+
+and distill them into the policy: 
+
+L(θ) = LRL (θ) + λdist Ldist (θ; B),
+
+where λdist > 0 controls the distillation strength. Search and training details are provided in Appendix B.3. 
+
+5 Experiments 
+
+We evaluate both the proposed MMDP formulation and the structure-aware RL framework in two application domains. The first is a multi-supplier replenishment problem, which provides a controlled benchmark for isolating the modeling effect of MMDPs in a repeated staged decision process. The second is a cash management problem derived from a real industrial setting. For this domain, we consider both an abstracted cash-management benchmark and a production-scale simulator that incorporates the real operational rules and constraints. Figure 2 illustrates the MMDP structure in the two domains; training protocols and hyperparameters are provided in Appendices D.1 and D.2. 
+
+5.1 Staged Replenishment Benchmark 
+
+We use a staged replenishment benchmark as the first controlled testbed for evaluating the MMDP formulation. Prior work has demonstrated the practical importance of RL for inventory control in realistic settings [ 4, 5]. However, in many real supply chains, firms procure inventory from multiple suppliers with different cost and flexibility characteristics [ 20 – 22 ]. Regular suppliers offer lower 5Refined sales             
+
+> forecast
+> One step
+> order from:
+> Coarse sales
+> forecast
+> One step
+> order(s) from:
+> Week 𝑘
+> Monday
+> Week 𝑘
+> Friday
+> Week 𝑘 +1
+> Monday
+> All orders
+> from week k
+> delivered
+> Inventory
+> updated
+> Information
+> increases
+> Next
+> cycle
+> Action set
+> shrinks
+> Cycle 𝑘
+> Stage 1
+> Cycle 𝑘
+> Stage 2
+> Regular
+> supplier
+> Flexible
+> supplier
+> Flexible
+> supplier
+
+(a) Replenishment problem. Multi -step           
+
+> transfers from:
+> Multi -step
+> transfers from:
+> End -of -cycle
+> balances
+> realized
+> Interest
+> settled
+> Information
+> increases
+> Action set
+> shrinks
+> Stage 1 Stage 2
+> 00:00 -11:59 12:00 -23:59 24:00
+> all accounts
+> Coarse cash
+> demand forecast
+> available accounts
+> Refined cash
+> demand forecast
+
+(b) Cash management problem. 
+
+Figure 2: MMDP structure in the two application domains. (a) the replenishment problem unfolds over repeated cycles with a single decision at each stage. (b) the cash management problem unfolds over a daily decision cycle with multiple transfer steps within each stage. procurement cost but require earlier commitment, whereas more flexible suppliers allow later orders at a higher price. Each trajectory consists of multiple weekly replenishment cycles. As illustrated in Figure 2a, each cycle contains two stages. In the first stage, the agent observes a coarse sales forecast and may place orders from both a regular supplier and a more flexible supplier. Later in the same cycle, the agent receives a refined forecast and may place an additional order, but only through the flexible supplier. All orders placed within the cycle are delivered at the beginning of the next cycle. We compare two standard RL algorithms, deep Q-networks (DQN) [ 23 ] and proximal policy optimization (PPO) [ 24 ], under two modeling formulations: a standard MDP formulation (denoted as Flat-MDP in figures) and the proposed MMDP formulation. Under Flat-MDP, the two-stage replenishment cycle is represented as a single unified decision problem over the full within-cycle action space. Under MMDP, by contrast, the decision process is modeled stage-wise: the early stage captures the regular-supplier commitment together with the initial flexible order under a coarse forecast, while the later stage exposes only the remaining flexible adjustment after the refined forecast is revealed. Detailed environment specifications are provided in Appendix C.1; Appendix C.3 further summarizes the effective decision complexity of each benchmark. Figure 3 compares PPO and DQN under the Flat-MDP and MMDP formulations. Across both algorithms, MMDP modeling starts from higher rewards, accelerates early learning, yields smoother trajectories, and reaches high-reward thresholds with fewer environment interactions. The effect is especially pronounced for DQN: the Flat-MDP agent never reaches the highest threshold shown in Figure 3b, whereas the MMDP formulation reaches it and converges to a higher final reward. These results indicate that explicit stage structure improves sample efficiency and can also improve final policy quality when the flat discrete action space is difficult to explore. 0 20000 40000 60000 80000 100000 
+
+> Timesteps
+> 25000
+> 20000
+> 15000
+> 10000
+> 5000
+> 0
+> 5000
+> Mean Episode Reward
+> MMDP PPO
+> Flat-MDP PPO
+> MMDP DQN
+> Flat-MDP DQN
+
+(a) Learning dynamics under flat MDP and MMDP parameterizations. 0 500 1000 1500 2000 2500 3000 3500 
+
+> Reward Threshold
+> 10000
+> 20000
+> 30000
+> 40000
+> 50000
+> 60000
+> Steps to First Reach Threshold (lower is better)
+> Flat-MDP DQN
+> MMDP DQN
+> Flat-MDP PPO
+> MMDP PPO
+
+(b) Timesteps required to reach different reward thresholds. Lower values indicate faster learning. 
+
+Figure 3: Performance comparison between flat MDP and MMDP formulations in the staged replenishment benchmark. (a) Learning curves for PPO and DQN policies. (b) Time required to reach a set of reward thresholds. Across both algorithms, the MMDP formulation consistently accelerates learning and reduces the number of interactions required to obtain high-reward policies. 60.0 0.1 0.2 0.3 0.4 0.5 
+
+> Timesteps (×10 6)
+> 1100
+> 1000
+> 900
+> 800
+> 700
+> 600
+> 500
+> 400
+> Fixed-Seed Evaluation Reward
+> Flat-MDP PPO
+> MMDP PPO
+> MMDP-SA PPO
+> MMDP-Attn PPO
+> Flat-MDP PO-Rec PPO
+> Flat-MDP Random
+> Flat-MDP FGR
+
+(a) Five-account setting 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5  
+
+> Timesteps (×10 6)
+> 1200
+> 1000
+> 800
+> 600
+> 400
+> Fixed-Seed Evaluation Reward
+> Flat-MDP PPO
+> Flat-MDP PPO (Search)
+> MMDP PPO
+> MMDP PPO (Search)
+> MMDP-SA PPO
+> MMDP-SA PPO (Search)
+> MMDP-AA PPO
+> MMDP-AA PPO (Search)
+> Flat-MDP Random
+> Flat-MDP FGR
+
+(b) Ten-account setting 
+
+Figure 4: Training dynamics in simplified cash-management benchmarks. MMDP-based methods outperform Flat-MDP PPO in both settings, and search further improves performance. Shaded areas indicate standard deviation over n = 5 seeds. 
+
+5.2 Cash Management Case Study 
+
+We next evaluate the proposed framework in a cash-management problem derived from a real industrial application. Corporate cash management has long been studied [ 8 , 25 – 28 ] and our setting focuses on multi-account intraday cash rebalancing: the agent sequentially moves funds across a network of accounts within a daily decision cycle so as to satisfy uncertain liquidity needs, preserve yield, and avoid end-of-day shortfalls. The problem can also be viewed as a sequential combinatorial control problem over a financial network, which is consistent with recent uses of RL for graph-structured and combinatorial decision problems [ 29 – 31 ]. As the cycle progresses, account-level cash-demand information becomes more accurate while feasible transfer decisions become increasingly constrained, making this a natural MMDP. We study this domain at two levels. First, we use simplified five-account and ten-account environments to enable controlled comparisons of flat modeling, MMDP modeling, action abstraction, and search. Second, we evaluate the same ideas in a larger production-scale simulator with the account scale and operational constraints of the real deployment setting. Detailed environment descriptions are provided in Appendix C.2, and training protocols and hyperparameters are summarized in Appendix D. 
+
+5.2.1 Five-account setting. 
+
+We begin with the five-account environment, which contains one master account, one high-yield investment account, and three operational accounts with uncertain end-of-day liquidity demand. The daily decision cycle consists of two stages: at the first stage, a broader transfer graph is available under a coarse forecast, whereas at the second stage, after additional information is revealed, only a restricted subset of transfer routes remains feasible. We compare Flat-MDP PPO with MMDP-based PPO variants, the implementation of the stage-aware policy (SA-MMDP) introduced in Section 4.1, and attention-based actors (Attn-MMDP). To test whether explicit staged modeling can be replaced by generic recurrent memory under partial observability, we also include a recurrent partial-observation PPO baseline (PO-Rec), following [ 32 ]. Auxiliary baselines include random actions and a forecast-guided rebalancing policy (FGR), inspired by forecast-aware cash-management policies [ 27 , 33 ]. Baseline details are provided in Appendix D.3 and Appendix D.4. Figure 4a shows a clear hierarchy across methods. Flat-MDP PPO improves over random and FGR baselines only gradually, whereas explicit MMDP modeling leads to faster learning and stronger final performance. SA-MMDP achieves the best overall result. Attn-MMDP also improves over the flat formulation. By contrast, the recurrent partial-observation baseline does not recover the benefit of explicit staged structure, suggesting that generic memory is not an adequate substitute for modeling the information–action asymmetry directly. 71000 900 800 700 600 500 400 300 200  
+
+> Best validation reward (higher is better)
+> MMDP-AA PPO (Search)
+> Flat-MDP-AA PPO (Search)
+> MMDP-AA PPO
+> Flat-MDP-AA PPO
+> MMDP Kimi-K2.5
+> Flat-MDP Kimi-K2.5
+> MMDP GLM-4.7
+> Flat-MDP GLM-4.7
+> MMDP Qwen3-Max
+> Flat-MDP Qwen3-Max
+> MMDP FGR
+> Flat-MDP FGR
+> MMDP PPO
+> Flat-MDP PPO
+> MMDP Random
+> Flat-MDP Random
+> -268.6
+> -286.7
+> -429.7
+> -447.3
+> -361.2
+> -427.8
+> -364.8
+> -441.2
+> -458.2
+> -640.6
+> -592.0
+> -624.7
+> -559.1
+> -677.7
+> -885.7
+> -1024.2 MMDP
+> Flat-MDP
+
+(a) Ten-account benchmark 17500 15000 12500 10000 7500 5000 2500 0  
+
+> Best validation reward (higher is better)
+> MMDP-AA GRPO (Search)
+> Flat-MDP-AA GRPO (Search)
+> MMDP-AA GRPO
+> Flat-MDP-AA GRPO
+> MMDP-AA PPO (Search)
+> Flat-MDP-AA PPO (Search)
+> MMDP-AA PPO
+> Flat-MDP-AA PPO
+> MMDP FGR
+> Flat-MDP FGR
+> MMDP Kimi-K2.5
+> Flat-MDP Kimi-K2.5
+> MMDP GLM-4.7
+> Flat-MDP GLM-4.7
+> MMDP Qwen3-Max
+> Flat-MDP Qwen3-Max
+> MMDP Random
+> Flat-MDP Random
+> -624.8
+> -1459.1
+> -2265.3
+> -4718.5
+> -852.8
+> -1208.0
+> -3338.0
+> -3973.3
+> -5054.7
+> -5930.1
+> -9750.2
+> -9861.0
+> -12116.3
+> -13856.9
+> -13879.0
+> -15188.4
+> -18623.2
+> -18531.9 MMDP
+> Flat-MDP
+
+(b) Production-scale simulator 
+
+Figure 5: Final performance in larger cash-management settings. MMDP-style interfaces improve matched direct-LLM baselines, while structure-aware RL with abstraction and search performs best. Higher values indicate better final evaluation reward. 
+
+5.2.2 Ten-account setting. 
+
+We next consider the ten-account environment, which scales the same cash-management problem to a substantially larger account network and a correspondingly larger transfer decision space. The network still contains one master account, one high-yield investment account, but eight operational accounts. Detailed environment specifications are also provided in Appendix C.2.1. In this part, we further evaluate the action-abstraction component introduced in Section 4.2 through MMDP-AA, which reduces the original hybrid transfer decision to a discrete abstracted action space. We also include the search-augmented variants introduced in Section 4.3 to test the contribution of search-augmented learning under a harder decision regime. Figure 4b shows that performance differences widen substantially as the problem scales. Flat-MDP learns slowly and remains weak throughout training, while explicit MMDP modeling continues to provide a clear improvement. Search brings additional gains, but its effect depends strongly on the underlying representation: the largest benefits arise when search is combined with structure-aware formulations rather than with the flat baseline alone. Among the learned methods, MMDP-AA is the strongest non-search policy, and MMDP-AA (Search) achieves the best overall performance by a wide margin. The smaller gap between MMDP-AA and Flat-MDP-AA reflects the strength of the ablation: Flat-MDP-AA already uses the proposed edge-only action interface and state-dependent executor, which absorb much of the hybrid-action optimization difficulty. Even under this strong ablation, the MMDP interface remains consistently better, including when combined with search. Overall, the ten-account results show that as the action space grows, the benefits of combining staged modeling, action abstraction, and search become more pronounced. 
+
+Generality beyond RL policies. As a supplementary interface-level test, we also evaluate direct-LLM policies on the ten-account benchmark, where the model receives a textual state description and admissible actions and outputs one transfer action (detailed in Appendix D.5). Figure 5a shows that MMDP-style prompting improves over flat prompting across the tested API-accessible models, although all direct-LLM policies remain below the strongest structure-aware RL methods. Table 1 summarizes the ten-account results in a more compact form. Across learned policies, rule-based baselines, random policies, and direct-LLM policies, the MMDP interface consistently improves over the corresponding Flat-MDP interface. The strongest result is obtained by combining MMDP, action abstraction, PPO, and search. Because these results depend on provider-side models and prompt sensitivity, we treat them as exploratory evidence. 8Table 1: Best validation performance on the ten-account cash-management benchmark. For trained RL methods, we report the best validation checkpoint selected on fixed held-out seeds. For rule-based, random, and direct-LLM baselines, we report fixed multi-seed evaluation results. The paired gap row reports MMDP minus Flat-MDP over matched seeds; positive values indicate improvement from the MMDP interface. Higher reward is better. Category RL Benchmark Direct LLM Interface PPO PPO (Search) AA-PPO AA-PPO (Search) FGR Random Kimi-K2.5 GLM-4.7 Qwen3-Max MMDP −559 .1 ± 87 .3 −473 .8 ± 16 .7 −429 .7 ± 17 .2 −268 .6 ± 10 .4 −592 .0 ± 5.8 −885 .7 ± 19 .7 −361 .2 ± 13 .9 −364 .8 ± 6.7 −458 .2 ± 6.6                                                      
+
+> Flat-MDP −677 .7±112 .7−666 .6±13 .1−447 .3±58 .7−286 .7±10 .4−624 .7±6.3−1024 .2±30 .3−427 .8±7.9−441 .2±8.8−640 .6±5.9
+> Paired gap +118 .6±109 .6+192 .8±19 .0+17 .6±55 .4+18 .1±10 .8+32 .6±3.9+138 .4±30 .7+66 .5±8.1+76 .5±3.2+182 .4±4.6
+
+5.2.3 Production-scale setting 
+
+We further evaluate the proposed framework in a production-scale cash-management simulator derived from the real operational environment. Compared with the simplified benchmarks, this setting contains a larger account network and real constraints. Detailed environment specifications are provided in Appendix C.2.2. While the simplified benchmarks use PPO as the base policy optimizer, in the production-scale simulator we additionally experiment with a GRPO-style optimizer, following the group-relative normalization idea in [ 34 ]. This is suitable for the production-scale simulator because we can evaluate multiple candidate trajectories under the same initial condition and construct relative advantages from their realized returns, while avoiding reliance on a highly accurate critic in a delayed and noisy reward environment. As shown in Figure 5b, MMDP modeling again provides a stronger learning signal than the Flat-MDP formulation. Notably, the GRPO-style optimizer improves over PPO under MMDP, but underperforms PPO under Flat-MDP, suggesting that group-relative updates benefit from the cleaner stage-local comparison induced by MMDPs. We also evaluate direct-LLM baselines; unlike in the ten-account benchmark, they are less competitive than compact RL policies, likely due to the much larger and more constrained action space. Beyond offline evaluation, we also conduct a preliminary production validation. In a one-month backtest over September 2025, the MMDP-GRPO policy improves estimated revenue by 5.3% relative to the existing forecast-guided production workflow under the same historical demand and constraint traces. After deployment, we further observe an 18.6% increase in the business adoption rate of model-generated recommendations during the first online week, compared with the month before deployment. 
+
+6 Related Work 
+
+Relation to standard and constrained MDPs. Classical MDPs provide the dominant formalism for sequential decision making under fully observed Markovian dynamics [ 10 , 11 ]. Constrained MDPs further incorporate feasibility or safety requirements [ 12 ]. A sufficiently augmented finite-horizon MDP can in principle encode stage indices, time-dependent observations, and admissible-action masks. The goal of MMDPs is therefore not to claim greater representational generality, but to isolate a recurring structure in which information is progressively refined while feasible actions expire. This makes the central object the coupled evolution of information revelation and action availability, rather than generic time dependence alone. 
+
+Relation to POMDPs. MMDPs are related to partially observable MDPs [ 14 , 35 , 36 ], since early stages may expose coarser information than later stages. Recurrent model-free RL can therefore serve as a practical baseline in such settings [ 32 ]. However, POMDP methods focus primarily on hidden-state inference and belief tracking, whereas MMDPs emphasize the interaction between information refinement and action expiration. The key question is which actions must be resolved before they disappear, and which persistent actions can be deferred until richer information is available. 
+
+Relation to non-stationary and continual RL. MMDPs also relate to non-stationary MDPs and non-stationary RL, where rewards, transitions, or task distributions change over time [ 37 –40 ]. They are also connected to continual RL and continual learning, which study adaptation, transfer, catastrophic forgetting, and loss of plasticity across changing tasks or environments [ 41 – 44 ]. In contrast, an 9MMDP studies a fixed decision problem within a cycle: the non-stationarity is structured by known information refinement and action-set contraction, rather than arbitrary drift or a sequence of unrelated tasks. 
+
+Relation to structured actions and search-augmented RL. MMDPs are connected to RL for structured decision problems, including graph-based combinatorial optimization and routing [ 29 – 31 ], as well as hybrid or parameterized action spaces [ 16 , 17 ]. These works typically treat the action representation as fixed. MMDPs instead exploit the stage-dependent distinction between expiring and persistent decisions. Our search-augmented component is also related to methods that use search to generate improved decisions and distill them into a learned policy [ 18 , 19 ]; in our setting, the MMDP structure makes such search more tractable by reducing the stage-local decision space. 
+
+7 Discussion 
+
+The central message of this paper is that some sequential decision problems are not well described by a single fixed state representation and a single fixed action space. Instead, they exhibit a structured within-cycle evolution in which information becomes more refined while intervention flexibility contracts. Making this structure explicit is useful not only descriptively, but also algorithmically: it motivates stage-aware policies, expiring-action abstraction, and search-augmented learning, with the empirical gains becoming larger as the decision problem scales. The strength of this reduction depends on the assumptions behind Theorem 3.1. Expiring-action abstraction is exact only when persistent actions can be safely deferred; when persistent and expiring actions are coupled through shared resources, early commitments, or feasibility interactions, the abstraction should be interpreted as a structured approximation. Our simplified benchmarks are therefore the primary vehicle for isolating the modeling effect, while the production-like simulator provides supporting evidence that the same structural ideas remain useful under more realistic operational constraints. 
+
+References 
+
+[1] Serguei Netessine. Dynamic pricing of inventory/capacity with infrequent price changes. 
+
+European Journal of Operational Research , 174(1):553–580, 2006. [2] Wang Chi Cheung, David Simchi-Levi, and He Wang. Dynamic pricing and demand learning with limited price experimentation. Operations Research , 65(6):1722–1731, 2017. [3] Tong Wang and Beril L Toktay. Inventory management with advance demand information and flexible delivery. Management Science , 54(4):716–732, 2008. [4] Jiaxi Liu, Shuyi Lin, Linwei Xin, and Yidong Zhang. Ai vs. human buyers: A study of alibaba’s inventory replenishment system. INFORMS Journal on Applied Analytics , 53(5):372–387, 2023. [5] Yaqi Xie, Xinru Hao, Jiaxi Liu, Will Ma, Linwei Xin, Lei Cao, and Yidong Zhang. Deepstock: Reinforcement learning with policy regularizations for inventory management. arXiv preprint arXiv:2603.19621 , 2026. [6] Itai Ashlagi, Maximilien Burq, Chinmoy Dutta, Patrick Jaillet, Amin Saberi, and Chris Sholley. Maximum weight online matching with deadlines. arXiv preprint arXiv:1808.03526 , 2018. [7] Alexandre Jacquillat and Michael Lingzhi Li. Learning to cover: online learning and optimiza-tion with irreversible decisions. arXiv preprint arXiv:2406.14777 , 2024. [8] M Elisabeth Pate-Cornell, George Tagaras, and Kathleen M Eisenhardt. Dynamic optimization of cash flow management decisions: a stochastic model. IEEE Transactions on Engineering Management , 37(3):203–212, 1990. [9] Pablo Castro, Ajit Desai, Han Du, Rodney Garratt, and Francisco Rivadeneyra. Estimating policy functions in payment systems using reinforcement learning. ACM Transactions on Economics and Computation , 13(1):1–31, 2025. 10 [10] Martin L Puterman. Markov decision processes: discrete stochastic dynamic programming .John Wiley & Sons, 2014. [11] Richard S Sutton, Andrew G Barto, et al. Reinforcement learning: An introduction . MIT press Cambridge, 1998. [12] Eitan Altman. Constrained Markov decision processes . Routledge, 2021. [13] Erwan Lecarpentier and Emmanuel Rachelson. Non-stationary markov decision processes, a worst-case approach using model-based reinforcement learning. Advances in neural information processing systems , 32, 2019. [14] Leslie Pack Kaelbling, Michael L Littman, and Anthony R Cassandra. Planning and acting in partially observable stochastic domains. Artificial intelligence , 101(1-2):99–134, 1998. [15] Michael L Littman. A tutorial on partially observable markov decision processes. Journal of Mathematical Psychology , 53(3):119–125, 2009. [16] Matthew Hausknecht and Peter Stone. Deep reinforcement learning in parameterized action space. arXiv preprint arXiv:1511.04143 , 2015. [17] Warwick Masson, Pravesh Ranchod, and George Konidaris. Reinforcement learning with pa-rameterized actions. In Proceedings of the AAAI conference on artificial intelligence , volume 30, 2016. [18] David Silver, Julian Schrittwieser, Karen Simonyan, Ioannis Antonoglou, Aja Huang, Arthur Guez, Thomas Hubert, Lucas Baker, Matthew Lai, Adrian Bolton, et al. Mastering the game of go without human knowledge. nature , 550(7676):354–359, 2017. [19] Thomas Anthony, Zheng Tian, and David Barber. Thinking fast and slow with deep learning and tree search. Advances in neural information processing systems , 30, 2017. [20] David Simchi-Levi, Philip Kaminsky, and Edith Simchi-Levi. Designing and managing the supply chain: Concepts, strategies, and cases . McGraw-hill New York, 1999. [21] Paul H. Zipkin. Foundations of Inventory Management . McGraw-Hill, New York, 2000. [22] Senthil Veeraraghavan and Alan Scheller-Wolf. Now or later: A simple policy for effective dual sourcing in capacitated systems. Operations Research , 56(4):850–864, 2008. [23] Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Bellemare, Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level control through deep reinforcement learning. nature , 518(7540):529–533, 2015. [24] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. [25] William J Baumol. The transactions demand for cash: An inventory theoretic approach. The Quarterly journal of economics , 66(4):545–556, 1952. [26] Merton H Miller and Daniel Orr. A model of the demand for money by firms. The Quarterly journal of economics , 80(3):413–435, 1966. [27] Fionnuala M Gormley and Nigel Meade. The utility of cash flow forecasts in the management of corporate cash balances. European journal of operational research , 182(2):923–935, 2007. [28] Robert Ferstl and Alex Weissensteiner. Cash management using multi-stage stochastic program-ming. Quantitative Finance , 10(2):209–219, 2010. [29] Elias Khalil, Hanjun Dai, Yuyu Zhang, Bistra Dilkina, and Le Song. Learning combinatorial optimization algorithms over graphs. Advances in neural information processing systems , 30, 2017. [30] Mohammadreza Nazari, Afshin Oroojlooy, Lawrence Snyder, and Martin Takác. Reinforcement learning for solving the vehicle routing problem. Advances in neural information processing systems , 31, 2018. 11 [31] Arthur Delarue, Ross Anderson, and Christian Tjandraatmadja. Reinforcement learning with combinatorial actions: An application to vehicle routing. Advances in Neural Information Processing Systems , 33:609–620, 2020. [32] Tianwei Ni, Benjamin Eysenbach, and Ruslan Salakhutdinov. Recurrent model-free rl can be a strong baseline for many pomdps. arXiv preprint arXiv:2110.05038 , 2021. [33] Francisco Salas-Molina, Francisco J Martin, Juan A Rodriguez-Aguilar, Joan Serrá, and Josep Ll Arcos. Empowering cash managers to achieve cost savings by improving predictive accuracy. 
+
+International Journal of Forecasting , 33(2):403–415, 2017. [34] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Guo. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. [35] Richard D. Smallwood and Edward J. Sondik. The optimal control of partially observable markov processes over a finite horizon. Operations Research , 21(5):1071–1088, 1973. doi: 10.1287/opre.21.5.1071. [36] Matthijs TJ Spaan. Partially observable markov decision processes. In Reinforcement learning: State-of-the-art , pages 387–414. Springer, 2012. doi: 10.1007/978-3-642-27645-3_12. [37] Peter Auer, Thomas Jaksch, and Ronald Ortner. Near-optimal regret bounds for reinforcement learning. Advances in neural information processing systems , 21, 2008. [38] Omar Besbes, Yonatan Gur, and Assaf Zeevi. Stochastic multi-armed-bandit problem with non-stationary rewards. Advances in neural information processing systems , 27, 2014. [39] Wang Chi Cheung, David Simchi-Levi, and Ruihao Zhu. Reinforcement learning for non-stationary markov decision processes: The blessing of (more) optimism. In International conference on machine learning , pages 1843–1854. PMLR, 2020. [40] Sindhu Padakandla. A survey of reinforcement learning algorithms for dynamically varying environments. ACM Computing Surveys (CSUR) , 54(6):1–25, 2021. [41] German I. Parisi, Ronald Kemker, Jose L. Part, Christopher Kanan, and Stefan Wermter. Continual lifelong learning with neural networks: A review. Neural Networks , 113:54–71, 2019. [42] Khimya Khetarpal, Matthew Riemer, Irina Rish, and Doina Precup. Towards continual rein-forcement learning: A review and perspectives. Journal of Artificial Intelligence Research , 75: 1401–1476, 2022. [43] Wesley Chung, Lynn Cherif, David Meger, and Doina Precup. Parseval regularization for continual reinforcement learning. In Advances in Neural Information Processing Systems ,volume 37, 2024. [44] Arthur Juliani and Jordan T. Ash. A study of plasticity loss in on-policy deep reinforcement learning. In Advances in Neural Information Processing Systems , volume 37, 2024. [45] Chi Jin, Zeyuan Allen-Zhu, Sebastien Bubeck, and Michael I Jordan. Is q-learning provably efficient? Advances in neural information processing systems , 31, 2018. 12 A Additional Details on MMDP Structure 
+
+A.1 Interpretation of non-degenerate stages. 
+
+Remark 3.1 should be read as a statement about the information–action asymmetry isolated by the MMDP abstraction. If Sn = Sn+1 but An ⊃ A n+1 , then stage n + 1 provides no informational advantage, and waiting only removes feasible actions; the corresponding disappearing decisions can therefore be resolved at stage n. Conversely, if An = An+1 but Sn ≺ S n+1 , then delaying sacrifices no action availability while revealing richer information; the corresponding decision can therefore be deferred to stage n + 1 . Thus, in either case, the boundary does not represent the joint trade-off between increasing information and shrinking action sets. This convention does not rule out stage boundaries that are decision-relevant for other reasons, such as stage-dependent rewards, transitions, or timing costs; it only identifies when a boundary is redundant with respect to the MMDP structure studied in the paper. 
+
+A.2 Structural Hardness Proxy Analysis A.2.1 Coarse Stage-Aware Proxy 
+
+We provide here the derivation underlying Remark 3.2. Exploration over the state–action space is a central challenge in reinforcement learning (RL) [ 11 ]. In finite-horizon episodic RL, classical regret and sample-efficiency bounds scale explicitly with the sizes of the state and action spaces together with the trajectory length [ 45 ]. Motivated by this dependence, we analyze the exploration burden induced by MMDP structure using the effective stage-wise state–action cardinality as a coarse structural hardness proxy. Let Sn := |S n| and An := |A n| denote the effective state and action cardinalities at stage n. We consider a stage-dependent multiplicative scaling model in which 
+
+Sn+1 = αnSn, An+1 = βnAn,
+
+with αn > 1 (information increasing) and 0 < β n < 1 (action shrinking). For analytical clarity, we study the homogeneous case αn ≡ α and βn ≡ β, which induces a geometric hardness profile. 
+
+Stage-aware MMDP scaling. When increasing information and shrinking action sets are explicitly modeled, we have 
+
+Sn = S0αn, An = A0βn,
+
+leading to 
+
+GMMDP ∝
+
+> N
+
+X
+
+> n=0
+
+SnAn = S0A0
+
+> N
+
+X
+
+> n=0
+
+(αβ )n = SN A0
+
+> N
+
+X
+
+> n=0
+
+βn
+
+αN −n . (5) 
+
+Generic MDP baseline. If the stage structure is ignored and the learner must operate with the maximal state and action cardinalities throughout the horizon, let 
+
+Smax := max  
+
+> 0≤n≤N
+
+Sn = SN , Amax := max  
+
+> 0≤n≤N
+
+An = A0.
+
+A naive exploration burden then scales as 
+
+GMDP ∝ (N + 1) Smax Amax = ( N + 1) SN A0. (6) 
+
+Implication. Since 0 < β < 1 and α > 1, the stage-aware proxy is strictly smaller than the flat worst-case baseline: 
+
+GMMDP < G MDP .
+
+Moreover, when αβ < 1, the geometric series in (5) converges, which yields 
+
+GMMDP = O
+
+ S0A0
+
+1 − αβ 
+
+
+
+.
+
+Thus, unlike the generic MDP baseline, which scales linearly with the worst-case state–action cardinality, the MMDP proxy remains bounded when action shrinking dominates information growth. We stress that this is a structural hardness proxy rather than a formal regret bound; its role is to explain why stage-aware modeling can reduce the effective exploration burden relative to a flat formulation. 13 A.2.2 Expiring-Set Refinement 
+
+The stage-wise complexity proxy can be further tightened when only expiring actions must be resolved at stages n = 0 , . . . , N − 1, while the final stage still evaluates the full remaining action set 
+
+AN . In this case, the effective proxy becomes 
+
+G(D) 
+
+> MMDP
+
+∝ 
+
+> N−1
+
+X
+
+> n=0
+
+SnDn + SN AN , (7) where 
+
+Dn := |D n| = An − An+1 .
+
+Under the homogeneous scaling model 
+
+Sn = S0αn, An = A0βn,
+
+we have 
+
+Dn = An − An+1 = (1 − β)An = (1 − β)A0βn.
+
+Substituting into the stage-wise proxy gives 
+
+G(D) 
+
+> MMDP
+
+∝ 
+
+> N−1
+
+X
+
+> n=0
+
+SnDn + SN AN (8) 
+
+= (1 − β)S0A0 
+
+> N−1
+
+X
+
+> n=0
+
+(αβ )n + S0A0(αβ )N . (9) When αβ < 1, the geometric series converges, and therefore 
+
+G(D) 
+
+> MMDP
+
+= O
+
+ (1 − β)S0A0
+
+1 − αβ 
+
+
+
+.
+
+Compared with the coarse proxy GMMDP in (3) , this refinement is strictly sharper because it charges only for the part of the action space that must be resolved immediately. 
+
+A.3 Proof of the Expiring-Action Priority Principle 
+
+Proof sketch. For a stage n < N . Under product refinement, 
+
+Sn+1 = Sn × Z n+1 ,
+
+and under shrinking action sets, 
+
+Dn := An \ A n+1 .
+
+Thus, the stage-n action space decomposes into expiring actions Dn and persistent actions An+1 .Because stage transitions are explicit in an MMDP, the stage-n decision problem naturally includes the option of ending the current stage and deferring unresolved persistent actions to stage n + 1 . We denote this stage-termination action by aend  
+
+> n
+
+. Therefore 
+
+aend  
+
+> n
+
+∈ A n, aend  
+
+> n
+
+∈ D n.
+
+Its optimal action-value is 
+
+Q⋆(s, a end  
+
+> n
+
+) := Ez [V ⋆(( s, z ))] ,
+
+where z ∈ Z n+1 and 
+
+V ⋆(s) := max 
+
+> a∈A n
+
+Q⋆(s, a ), Q⋆(s, a ) := sup 
+
+> π
+
+Qπ (s, a ).
+
+Because aend  
+
+> n
+
+is a stage-transition action, its value is defined by the continuation value induced by ending stage n and moving to stage n + 1 . Executing aend  
+
+> n
+
+does not commit to any persistent action; instead, it advances the process to the next stage, where additional information z is revealed and subsequent decisions are again made optimally. Therefore, its optimal action-value is the expected next-stage optimal value. 14 Now consider any persistent action a′ ∈ A n+1 in stage n + 1 . By the assumption of Theorem 3.1, 
+
+Q⋆(s, a ′) ≤ Ez [Q⋆(( s, z ), a ′)] .
+
+Since at state (s, z ) the optimal value is obtained by maximizing over all admissible next-stage actions, 
+
+Q⋆(( s, z ), a ′) ≤ V ⋆(( s, z )) .
+
+Therefore, 
+
+Q⋆(s, a ′) ≤ Ez [V ⋆(( s, z ))] = Q⋆(s, a end  
+
+> n
+
+).
+
+Hence every persistent action is weakly dominated by the stop action: committing to a persistent action already at stage n is never better than deferring it to stage n + 1 .It follows that an optimal stage-n decision only needs to compare two cases: 
+
+Case 1: execute an expiring action in Dn \ aend  
+
+> n
+
+immediately; 
+
+Case 2: choose aend  
+
+> n
+
+and defer persistent decisions to stage n + 1 .Therefore, 
+
+π⋆(s) ∈ arg max 
+
+> a∈D n
+
+Q⋆(s, a ).
+
+This proof clarifies the role of the stage-termination action: it is part of the stage-level action set, but its purpose is to represent deferral rather than a domain commitment. The result shows that persistent domain actions need not be optimized at stage n; the stage-n maximization can be restricted to the expiring set Dn, which includes the boundary termination action. 
+
+B Structure-Aware RL Implementation Details 
+
+B.1 Stage-Aware Policy Implementation 
+
+All MMDP policies receive the current stage index together with the stage-local state representation and feasible-action information. In the SA-MMDP architecture, a shared multilayer perceptron first encodes the stage-conditioned observation. The actor then applies a stage-specific output head, while the critic is shared across stages unless otherwise specified. This design keeps representation learning shared across related stages but avoids forcing a single actor head to model qualitatively different decision regimes. 
+
+B.2 Expiring-Action Abstraction and Executor 
+
+In the cash-management environments, the full transfer action is hybrid: the agent must choose both a transfer edge and an amount parameter. MMDP-AA exposes only the expiring edge decision to the learned policy. Once the policy selects an edge (u, v ), a deterministic executor computes the transfer amount from the current balances, predicted account gaps, source-account buffers, and a minimum-transfer threshold. If the target account has a predicted funding gap, the executor transfers a bounded fraction of the smaller of the source surplus and target gap. If the target is the investment account, it transfers only from available source surplus after preserving the source buffer. Infeasible or negligible transfers are mapped to the stage-termination action. 
+
+B.3 Search-Augmented Optimization 
+
+Search is applied on top of the stage-local abstract action interface. For each decision state selected for search, the candidate set contains the policy proposal and feasible alternatives from the current expiring set. In cash-management experiments with amount parameters, candidate transfer ratios are drawn from {0.25 , 0.5, 0.75 , 1.0} together with the policy-proposed ratio when applicable. Each candidate is converted to an executable action by the executor and scored using rollout, simulation, or task-specific scoring. The best candidate is used directly at evaluation time and is also stored in a distillation buffer during training. The distillation loss is a supervised negative log-likelihood over the search-selected abstract action, combined with the base PPO or GRPO objective. 15 Table 2: MMDP-AA search-augmented policy optimization with PPO or GRPO. 
+
+Input: MMDP environment, stage-aware policy πθ (a | s, n ), value model Vψ , base optimizer 
+
+O ∈ { PPO , GRPO }, executor E, search budget K, and distillation weight λdist .1 Initialize πθ , Vψ , and an empty distillation buffer B.2 for each training iteration do 
+
+3 Collect on-policy trajectories using the stage-aware interface. At stage n, mask infeasible actions and, for MMDP-AA, expose only abstract expiring decisions in Dn.4 Compute returns and advantages for O; for GRPO, normalize trajectory returns within sampled groups. 5 For selected visited states (s, n ), form CK (s, n, π θ ) ⊆ D n from policy proposals and feasible stage-local candidates. 6 Convert each abstract candidate a ∈ C K to an executable action E(s, n, a ) and estimate bQ(s, n, a )
+
+by rollout, simulation, or task-specific scoring. 7 Store asearch = arg max a∈C K bQ(s, n, a ) in B.8 Update θ, ψ with the base PPO/GRPO objective and the combined policy loss LRL + λdist Ldist (B).9 end for ; at evaluation time, use either the raw policy or the same search step as a test-time improvement operator. 
+
+C Environment Details 
+
+C.1 Staged Replenishment Environment 
+
+This section provides the full specification of the staged replenishment benchmark used in the main experiments. 
+
+Decision timeline Time is organized into weekly decision cycles indexed by k = 1 , 2, . . . . Each cycle contains two decision stages. At Stage (k, 1) , which occurs at the beginning of cycle k, the agent observes a coarse demand forecast for the upcoming week and may place replenishment orders from both the regular supplier and the flexible supplier. At Stage (k, 2) , which occurs later within the same week, the agent observes a refined demand forecast and may place an additional order from the flexible supplier only. All orders placed during cycle k are delivered at the beginning of cycle k + 1 .Within each cycle, demand is realized daily over seven days. We index days by t, where each cycle k
+
+corresponds to a block of seven consecutive days. 
+
+Demand process Daily demand is generated from a stochastic process with multiple components capturing both low-frequency and short-term fluctuations. Specifically, demand is decomposed into four additive components: 
+
+dt = bt + st + ht + ϵt,
+
+where bt represents a slowly evolving weekly base demand, st captures weekday seasonality, ht
+
+denotes occasional holiday or event shocks, and ϵt is residual noise. The weekly base demand follows a mean-reverting stochastic process to capture low-frequency variation in overall demand levels. Weekday seasonality introduces systematic demand differences across days of the week, while holiday shocks randomly occur in certain weeks and primarily affect weekend demand. Short-term fluctuations are generated through an autoregressive component that produces high-frequency demand bursts. Weekly demand for cycle k is defined as the aggregation of daily demand over the seven days in that cycle. 
+
+Forecast signals The two decision stages receive demand forecasts with different information sets. 16 At Stage (k, 1) the agent observes a coarse forecast ˆDk+1 ,1 of the total demand in cycle k + 1 . This forecast is primarily based on low-frequency signals such as the weekly base level and weekday seasonality, while holiday effects are only weakly observable. Consequently, the forecast contains substantial noise. At Stage (k, 2) the agent receives a refined forecast ˆDk+1 ,2 of the demand in cycle k + 1 . In addition to the low-frequency signals available earlier, this forecast incorporates recent realized demand observations and stronger visibility of holiday shocks. As a result, the Stage (k, 2) forecast provides a more accurate estimate of the remaining demand in the current cycle. This forecast structure creates a natural information refinement across stages, which aligns with the MMDP setting where the information set expands over time. 
+
+Actions At Stage (k, 1) the agent selects replenishment quantities from the two suppliers: 
+
+ak, 1 = ( qreg  
+
+> k
+
+, q flex1  
+
+> k
+
+)
+
+where qreg  
+
+> k
+
+and qflex1  
+
+> k
+
+denote the order quantities from the regular and flexible suppliers respectively. At Stage (k, 2) the agent may place an additional order from the flexible supplier: 
+
+ak, 2 = qflex2  
+
+> k
+
+.
+
+All three orders qreg  
+
+> k
+
+, qflex1  
+
+> k
+
+, and qflex2  
+
+> k
+
+are delivered at the beginning of cycle k + 1 .Under the flat MDP formulation, the action space is treated as a unified decision space across stages. Under the proposed MMDP formulation, however, the admissible action set becomes stage-dependent, consistent with the decision sets Dn defined in Theorem 3.1. In particular, at Stage (k, 1) only the regular-supplier decision remains active, while the flexible adjustment decision is deferred to Stage 
+
+(k, 2) .
+
+Inventory dynamics Inventory evolves on a daily basis. Let It denote the on-hand inventory at the beginning of day t. Demand during day t reduces inventory according to 
+
+It+1 = max {0, I t − dt},
+
+which corresponds to a lost-sales setting. At the beginning of the first day of cycle k + 1 , the replenishment orders placed during cycle k arrive and inventory is updated as 
+
+It+ = It + qreg  
+
+> k
+
++ qflex1  
+
+> k
+
++ qflex2  
+
+> k
+
+.
+
+Here It+ denotes the inventory level immediately after order arrivals but before demand realization on that day. 
+
+State variables At each decision stage (k, i ), the environment maintains internal state variables including the current week index, the stage indicator, the current on-hand inventory, and outstanding replenishment orders scheduled to arrive at the next cycle. In addition, the environment computes stage-dependent demand signals from recent demand history and the current forecast. Specifically, the agent observes a unified state vector 
+
+sk,i =  k, i, I t, P k,i , ˆDk+1 ,i , H t
+
+,
+
+where It denotes the current on-hand inventory, Pk,i denotes the total pipeline inventory scheduled to arrive at the beginning of the next cycle, ˆDk+1 ,i is the stage-specific demand forecast (coarse at Stage (k, 1) and refined at Stage (k, 2) ), and Ht is a recent-demand summary computed from the previous seven days. 17 The pipeline inventory is defined as the sum of all replenishment orders placed in the current cycle that have not yet arrived: 
+
+Pk,i = qreg  
+
+> k
+
++ qflex1  
+
+> k
+
++ 1{i=2 } qflex2  
+
+> k
+
+.
+
+The recent-demand summary is computed as 
+
+Ht =
+
+> t−1
+
+X 
+
+> τ=t−7
+
+dτ .
+
+This additional signal helps the agent infer short-term demand bursts beyond the stage forecast alone. 
+
+Reward function The reward associated with cycle k consists of three components. First, procurement costs are incurred when orders are placed in cycle k:
+
+Cproc (k) = creg qreg  
+
+> k
+
++ cflex (qflex1  
+
+> k
+
++ qflex2  
+
+> k
+
+).
+
+Second, inventory holding costs accumulate during cycle k + 1 based on the realized inventory levels: 
+
+Chold = X 
+
+> t∈cycle k+1
+
+h I t.
+
+Third, shortage penalties are incurred for lost sales: 
+
+Cshort = X 
+
+> t∈cycle k+1
+
+p (dt − It)+.
+
+The total reward for cycle k is defined as 
+
+Rk = −Cproc (k) − αC hold − βC short ,
+
+where α and β are weighting parameters controlling the relative importance of holding costs and shortage penalties. 
+
+Episode length Each trajectory consists of multiple decision cycles, allowing the learning algorithm to observe repeated staged decision patterns under rolling inventory dynamics. Using multiple cycles within a trajectory allows the inventory process to stabilize and reduces the influence of the initial inventory condition, ensuring that the learned policy reflects steady-state operational behavior. 
+
+C.2 Cash Management Environment C.2.1 Simplified Cash-Management Environments 
+
+This section specifies the simplified cash-management environment family used in the main experi-ments, including the five-account and ten-account settings. 
+
+Decision timeline Each trajectory corresponds to a single day and therefore contains one decision cycle. The cycle is divided into two decision stages. At Stage (1), which occurs in the morning, the agent observes a coarse forecast of end-of-day account outflows and performs an initial round of cash rebalancing. At Stage (2), which occurs later in the day, the agent observes additional information after part of the true outflows has been realized, and may perform a second round of adjustment. Within each stage, the agent may execute multiple transfer steps. Each transfer is settled immediately once executed. At the end of the day, the remaining outflows are realized and the final account balances are settled. 18 Account structure The simplified environment family contains one master account, one investment account, and a set of operational accounts. The master account A0 initially holds the largest balance and serves as the main funding source. The investment account A1 has the highest overnight yield. The remaining accounts A2, . . . , A K−1 are operational accounts that face uncertain end-of-day cash outflows, where K = 5 in the five-account setting and K = 10 in the ten-account setting. The objective is to reallocate cash across accounts so as to avoid end-of-day shortages in operational accounts, while also preserving overnight yield and limiting unnecessary transfer costs. 
+
+Outflow process Let Lj denote the true end-of-day outflow of operational account Aj , for j ∈{2, . . . , K − 1}. For each operational account, the total daily outflow is generated from a stochastic distribution and then decomposed into two components: 
+
+Lj = Lmorn  
+
+> j
+
++ Laft  
+
+> j
+
+,
+
+where Lmorn  
+
+> j
+
+is the outflow realized before Stage (2), and Laft  
+
+> j
+
+is the remaining outflow realized at the end of the day. This decomposition creates a natural sequential information structure: after the morning outflows have been realized, the agent obtains more accurate information about the remaining afternoon cash needs. 
+
+Forecast signals The two decision stages receive forecasts with different information sets. At Stage (1), the agent observes a coarse forecast 
+
+ˆL(1) = ( ˆL(1) 2 , . . . , ˆL(1) 
+
+> K−1
+
+)
+
+of the full-day outflows of the operational accounts. This forecast is noisy and only provides an approximate estimate of end-of-day liquidity needs. At Stage (2), after the morning outflows Lmorn  
+
+> j
+
+have been realized, the agent observes a refined forecast ˆL(2) = ( ˆL(2) 2 , . . . , ˆL(2) 
+
+> K−1
+
+)
+
+of the remaining afternoon outflows. This forecast is generated from a richer information set and is therefore more accurate than the Stage (1) forecast. This forecast structure creates the information refinement required by the MMDP setting. 
+
+Actions At each transfer step, the agent selects a directed transfer edge and a transfer ratio. Formally, an action takes the form 
+
+a = ( e, ρ ),
+
+where e = ( u, v ) specifies a transfer from source account u to target account v, and ρ ∈ [0 , 1] is a transfer ratio. The transfer amount is determined heuristically as 
+
+x = ρ · min {source surplus , target predicted gap },
+
+where the source surplus and target predicted gap are computed from the current balances and stage-specific forecasts. If the target account is the investment account, the transfer amount is instead based only on the available source surplus. At Stage (1), the admissible transfer graph is largest. At Stage (2), only a restricted subset of these edges remains admissible, reflecting a shrinking action set due to channel closures or operational cutoffs later in the day. Thus, the second stage preserves only a limited set of emergency or still-feasible transfer routes. 
+
+Balance dynamics Let B(m) 
+
+> j
+
+denote the balance of account Aj after the m-th transfer step within a stage. If a transfer of amount x is made from account u to account v, balances are updated immediately as 
+
+B(m+1)  
+
+> u
+
+= B(m) 
+
+> u
+
+− x, B(m+1)  
+
+> v
+
+= B(m) 
+
+> v
+
++ x. 
+
+19 After Stage (1), the realized morning outflows are deducted: 
+
+Bj ← Bj − Lmorn  
+
+> j
+
+.
+
+After Stage (2), the remaining afternoon outflows are deducted: 
+
+Bj ← Bj − Laft  
+
+> j
+
+.
+
+Negative balances are allowed during settlement and are interpreted as end-of-day funding shortfalls. 
+
+State variables At each decision step, the environment maintains the current stage, the within-stage step index, the current account balances, and the stage-specific forecast of remaining cash outflows. Specifically, the agent observes a state vector of the form 
+
+s =  i, m, B 0, . . . , B K−1, ˆLi
+
+,
+
+where i ∈ { 1, 2} denotes the current stage, m is the within-stage step index, (B0, . . . , B K−1) are the current account balances, and ˆLi is the stage-specific forecast of remaining operational-account outflows. Thus, the state summarizes both the current liquidity position of the account network and the currently available information about future cash needs. 
+
+Reward function The reward consists of transfer costs incurred during decision making and end-of-day settlement terms. For each transfer of amount x, the agent incurs a transaction fee 
+
+Cfee = cfee x. 
+
+At the end of the day, positive balances generate overnight yield, while negative balances incur shortage penalties. Let rj denote the yield rate of account Aj , and let pj denote the shortage penalty rate. Then the terminal settlement components are 
+
+Cyield =
+
+> K−1
+
+X
+
+> j=0
+
+rj max( Bj , 0) , Cgap =
+
+> K−1
+
+X
+
+> j=0
+
+pj max( −Bj , 0) .
+
+The terminal reward is defined as 
+
+Rterminal = αC yield − βC gap ,
+
+where β ≫ α > 0, reflecting that avoiding end-of-day shortages is the primary objective, while preserving overnight yield is secondary. The total trajectory reward is therefore 
+
+R = − X
+
+> transfers
+
+Cfee + Rterminal .
+
+This reward design induces the intended trade-off: the agent should first avoid costly shortfalls, then preserve cash in the highest-yield account whenever possible, while avoiding unnecessary transfers. 
+
+Environment scaling The five-account setting uses a deliberately simple transfer graph so that the staged structure remains easy to interpret: the master account serves as the main funding source, and only a small number of operational transfer routes are exposed. The ten-account setting preserves the same staged logic but introduces a denser operational transfer graph and more operational-account interactions, thereby creating a substantially larger and more combinatorial rebalancing problem while retaining stage-dependent route contraction. 
+
+Episode length Each trajectory contains exactly one daily decision cycle with two stages. This design focuses attention on the intraday staged decision structure itself, rather than on cross-day inventory or cash carryover dynamics. As a result, the environment isolates the role of increasing information and shrinking action sets in staged cash rebalancing. 20 C.2.2 Production-Scale Cash-Management Simulator 
+
+In addition to the releasable five-account and ten-account benchmarks, we evaluate the proposed framework in a larger production-scale cash-management simulator derived from the target opera-tional environment. This simulator is not released, but it preserves the same core decision structure studied in the main paper: liquidity must be rebalanced sequentially across an account network under progressively improving information and stage-dependent action constraints. 
+
+Decision timeline Each trajectory corresponds to a single business day and contains one intraday decision cycle. The cycle is divided into three decision stages aligned with progressively later operational cutoffs. At each stage, the agent may execute multiple transfer steps before either advancing to the next stage or reaching the stage-specific step limit. Transfers are settled immediately once executed. Final account outflows are settled once at the end of the day. 
+
+Account network The simulator contains a 27-account network with heterogeneous account roles and operational functions. These include funding accounts, liquidity-consuming operational accounts, and accounts with different overnight yield characteristics. To preserve confidentiality, we do not disclose the exact account identities or the institution-specific account taxonomy. For the purposes of learning and evaluation, the key property is that accounts differ both in expected liquidity needs and in the value of retaining residual balances overnight. 
+
+Forecast refinement At each stage, the agent observes a forecast of the remaining same-day outflows for the account network. Early-stage forecasts are noisier and reflect only partial operational information, while later-stage forecasts incorporate progressively richer updates from realized activity and internal operational signals. Consequently, the information set expands over the day, and the agent gains a more accurate estimate of the remaining liquidity demand as the decision cycle unfolds. 
+
+Stage-dependent route availability Transfers are executed over a sparse directed route graph rather than a fully connected account network. The admissible route set is stage-dependent and shrinks over time due to operational cutoffs and channel availability. Formally, if E0, E1, and E2
+
+denote the admissible transfer edges at the three stages, then 
+
+E2 ⊂ E 1 ⊂ E 0.
+
+In contrast to the simplified benchmarks, many business-critical routes remain available across multiple stages, while more peripheral or time-sensitive routes expire earlier. This makes the production-scale simulator a weaker but more realistic form of the MMDP structure: information still increases and action flexibility still contracts, but the contraction is less extreme and more uneven across routes. 
+
+Actions At each transfer step, the agent chooses a directed transfer edge together with a transfer magnitude parameter. In the full simulator, this corresponds to selecting both where liquidity should be moved and how much should be transferred under the currently available route and balance constraints. In the structure-aware edge-only abstraction used in the main experiments, the learned policy selects only the transfer edge, while the amount is supplied by a lower-level stage-aware executor based on the current balances, predicted remaining outflows, and account-specific protection buffers. 
+
+Balance dynamics Let B(m) 
+
+> j
+
+denote the balance of account Aj after the m-th transfer step in the current stage. A transfer of amount x from account u to account v updates balances immediately according to 
+
+B(m+1)  
+
+> u
+
+= B(m) 
+
+> u
+
+− x, B(m+1)  
+
+> v
+
+= B(m) 
+
+> v
+
++ x. 
+
+No cross-stage holding queue is introduced for transfers in the reported simulator; the main source of temporal asymmetry is instead the shrinking route set and the improving forecast of remaining outflows. After the final stage, the true total end-of-day outflows are realized and settled against the final balances. 
+
+Reward structure The reward used in the production-scale simulator combines per-transfer op-erating costs with an end-of-day settlement objective. Each executed transfer incurs a transaction-dependent cost and a per-step execution penalty. At the end of the day, positive balances generate 21 overnight yield, while negative balances incur shortage penalties. The resulting terminal objective has the same qualitative form as in the simplified environments: avoiding end-of-day shortfalls is the dominant priority, while preserving yield is secondary. In the reported experiments, additional stage-level shaping terms may be included to stabilize learning under the larger action space and longer intraday control horizon. 
+
+Scope of disclosure Because this simulator is derived from a real operational environment, we do not release the exact route tables, account semantics, or internal parameter calibration. Nevertheless, the simulator preserves the structural features that matter for the present study: a multi-account intraday cash-rebalancing problem, progressively refined information, and stage-dependent route availability over a sparse financial network. Its role in the paper is therefore to test whether the same MMDP-based modeling and structure-aware learning principles remain informative under more realistic operational conditions. 
+
+C.3 Benchmark Scale and Decision Complexity 
+
+Table 3 summarizes the effective decision complexity of the experimental environments. For a cash-transfer action (e, ρ ) with edge e and ratio ρ ∈ [0 , 1] , a search procedure with K candidate ratios has approximate stage-local branching factor |E n|K + 1 , including the stage-end action. Table 3: Scale and effective decision complexity of the experimental environments.                                         
+
+> Environment Scale and horizon Flat formulation MMDP formulation Replenishment 13 weekly cycles; two stages per cycle PPO action dim. 4; DQN table size 44= 256
+> PPO action dim. 2; DQN table size 42= 16
+> Cash-5 5accounts; at most
+> 10 + 10 transfer steps; state dim. 28
+> Stage edges 14 →8;hybrid action (e, ρ )
+> Stage edges 6→8;branching about 6K+ 1 at stage 0 Cash-10 10 accounts; at most
+> 16 + 16 transfer steps; state dim. 53
+> Stage edges 74 →58 ;branching about 74 K+ 1
+> at stage 0 Stage edges 16 →58 ;branching about 16 K+ 1
+> at stage 0 Production-scale Production-scale account network with real cutoffs and constraints Large constrained transfer network under the flat formulation Stage-local action support with production feasibility rules
+
+For the ten-account benchmark, the effect is especially clear at the first stage. A Flat-MDP search procedure must consider 74 transfer edges, whereas the MMDP formulation only considers the 16 
+
+expiring edges. If each edge is paired with K candidate transfer ratios, the stage-0 branching factor is approximately 74 K + 1 for Flat-MDP and 16 K + 1 for MMDP, including the stage-end action. Thus, MMDP reduces the first-stage branching factor to roughly (16 K + 1) /(74 K + 1) of the flat formulation, which approaches 16 /74 ≈ 21 .6% as K grows. This reduction becomes more important for multi-step search, where branching factors multiply across depth. 
+
+D Supplementary Experimental Details 
+
+D.1 Training and Evaluation Protocols 
+
+Unless otherwise stated, all learned RL methods are trained with five random seeds 
+
+{42 , 43 , 44 , 45 , 46 }. Evaluation uses environment seeds disjoint from the training rollouts. During training, checkpoints are evaluated at a fixed frequency, and final reported scores are computed using deterministic policies over 20 evaluation episodes per training seed. Learning curves report the mean evaluation reward across seeds, with shaded regions denoting one standard deviation across seed-level means. For search-augmented methods, “Search” denotes both search-assisted evaluation and search-distillation during training, following Section 4.3. In the cash-management experiments, search enumerates candidate transfer ratios from {0.25 , 0.5, 0.75 , 1.0} and also includes the policy-proposed 22 Table 4: Training and evaluation protocol summary.                              
+
+> Benchmark Train seeds Timesteps Checkpoint eval Final eval Replenishment 5100 Kevery 5K steps; 10
+> episodes
+> 20 episodes/seed Cash-5 5500 Kevery 5K steps; 10
+> episodes
+> 20 episodes/seed Cash-10 50.6M– 1.5Mevery 5K steps;
+> 10 –20 episodes
+> 20 episodes/seed Production-scale 5up to 1.5Mevery 20 K steps;
+> 10 episodes
+> 20 episodes/seed
+
+ratio when applicable. Baseline policies and direct-LLM policies are evaluated under the same fixed-seed protocol as the learned policies. 
+
+D.2 Hyperparameter Summary 
+
+Table 5 summarizes the main RL hyperparameters. We use the same settings for Flat-MDP and MMDP variants within each benchmark unless a method-specific architecture is explicitly introduced, such as SA-MMDP, MMDP-AA, or GRPO. Table 5: Main hyperparameters for learned RL methods.                               
+
+> Setting Algorithm LR Rollout/batch Discount Network Replenishment PPO 3×10 −4256 /64 0.99 [128 ,128]
+> Replenishment DQN 5×10 −5batch 128 0.99 [256 ,256]
+> Cash-5 PPO 3×10 −4256 /64 0.99 [128 ,128]
+> Cash-10 PPO 3×10 −4256 /64 or
+> 512 /128 0.99 [256 ,256]
+
+All PPO variants use GAE with λ = 0 .95 for the simplified benchmarks, clipping parameter 0.2,value-loss coefficient 0.5–0.7, and gradient clipping at 0.5. DQN uses a replay buffer of 50 Ktransitions, 8K warm-up steps, target-network update interval 4K, and ϵ-greedy exploration annealed from 1.0 to 0.1. For GRPO, each update samples a group of 32 trajectories and normalizes returns within subgroups of size 8. Search distillation uses a replay buffer of 256 –2048 improved decisions, one distillation epoch per rollout, mini-batch size 64 , and distillation coefficient 0.05 –0.3 depending on the benchmark. 
+
+D.3 Heuristic Baseline Policy 
+
+As a strong non-learning benchmark, we implement a stage-aware heuristic policy for the cash-flow control environment. The heuristic follows a simple operational principle: at the early stage, it reacts conservatively to coarse forecasts and avoids over-committing liquidity; at the later stage, after refined information is revealed, it performs more aggressive corrective transfers. Thus, the policy follows a 
+
+conservative planning + late adjustment logic. At each step, the heuristic first checks whether any operational account is predicted to face a funding gap. If so, it prioritizes the account with the largest predicted gap and transfers funds from an account with available surplus, giving priority to the master account and then to a designated operational pivot account. If no urgent gap remains, the heuristic transfers residual surplus to the investment account in order to improve overnight yield. If no meaningful transfer is available, the stage terminates. To avoid overreaction to noisy early-stage forecasts, the heuristic applies a discounted gap estimate and uses a smaller transfer ratio at Stage 1. At Stage 2, it uses the refined forecast directly and adopts a larger transfer ratio. In both stages, a liquidity buffer is retained in the source account, and very small transfers are suppressed. In our implementation, Stage 1 uses a discounted gap estimate and a conservative transfer ratio, while Stage 2 uses the refined forecast directly and a more aggressive transfer ratio. This heuristic therefore 23 serves as a transparent benchmark that already exploits staged information, but does so through fixed rules rather than learning. 
+
+D.4 Recurrent Partial-Observation Baseline 
+
+As an additional baseline, we evaluate a recurrent flat partial-observation PPO policy. The purpose of this baseline is to test whether the benefits of MMDP modeling can be recovered simply by giving a flat policy recurrent memory under partial observability, without explicitly encoding the staged information structure. This baseline uses the same flat action semantics as the Flat-MDP formulation, but restricts the observation to operationally observable quantities and removes explicit stage-identifying metadata. In particular, the policy observes within-stage progress, current account balances, predicted remaining outflows, and the implied gap/surplus signals, but does not receive an explicit stage indicator or explicit shock metadata. We train this baseline using recurrent PPO with an LSTM policy. Thus, the comparison is not against a classical POMDP solver with belief-state planning, but against a learned recurrent controller operating on a partially observed flat decision interface. This makes it a useful baseline for separating the effect of recurrent memory from the effect of explicit MMDP structure. 
+
+D.5 Exploratory Direct-LLM Baselines 
+
+To probe whether general-purpose language models can solve the cash-control task without explicit structure-aware RL, we additionally evaluate a small set of direct-LLM baselines on the ten-account benchmark. These experiments are exploratory and are not part of the main comparison in the paper. Their purpose is not to define a new methodological axis, but to contextualize the difficulty of the task: can a commercial LLM, given a textual description of the state and admissible actions, directly output a competitive transfer decision? For fairness, we use a direct-policy protocol. At each decision step, the model receives a structured textual summary of the current state, including stage index, account balances, forecast information, and the currently admissible transfer edges. It must then return a single action in a constrained JSON format. We do not provide tool use, external search, hand-crafted reranking, or access to a downstream heuristic executor beyond the same action interface already used by the RL agents. In particular, these baselines are intended to test direct sequential control , rather than hybrid systems that rely on additional symbolic planning components. We evaluate three representative API-accessible models: Qwen3-Max, GLM-4.7, and Kimi-K2.5. All direct-LLM baselines are tested on the same fixed-seed ten-account environment used in the main evaluation protocol, using five seeds and twenty episodes per seed. Each request uses the same ratio options {0.25 , 0.5, 0.75 , 1.0} and a JSON-object response constraint. Table 6 summarizes the API-level settings. Table 6: API settings for exploratory direct-LLM baselines.               
+
+> Provider Model Decoding setting Output constraint DashScope Qwen3-Max temperature 0.0; thinking disabled JSON object Zhipu GLM-4.7 temperature 0.01 ; thinking disabled JSON object Moonshot Kimi-K2.5 provider-default temperature; thinking disabled JSON object
+
+Table 7 reports prompt-size statistics reconstructed from the logged evaluation trajectories. Since provider-reported token usage was not stored in the cache, we report estimated input tokens using character count divided by four, including both system and user messages. The key difference is at the first stage: under Flat-MDP prompting the model sees all 74 transfer edges, whereas under MMDP prompting it sees only the 16 expiring edges. Thus, the MMDP prompt is substantially shorter at the coarse-information stage where action reduction matters most. At the second stage, both formulations expose the same 58 persistent edges, so their prompt sizes are comparable; the MMDP prompt is slightly longer because it includes additional stage-semantics guidance. 24 Table 7: Estimated prompt sizes for direct-LLM decisions on the ten-account benchmark.                
+
+> Formulation Stage Feasible edges Estimated input tokens Flat-MDP Stage 0 74 3.5KMMDP Stage 0 16 1.6KFlat-MDP Stage 1 58 3.0KMMDP Stage 1 58 3.1K
+
+In our experiments, some LLMs outperform weak non-learning baselines and produce nontrivial transfer behavior, indicating that they can partially exploit the semantic structure exposed by the prompt. However, the best direct-LLM policies remain clearly below the strongest structure-aware RL methods, especially relative to MMDP-based policies augmented with search. We emphasize that these results should be interpreted with caution. Direct-LLM performance depends on provider-side model updates, API stability, formatting reliability, and prompt sensitivity, all of which are substantially less controlled than the training and evaluation pipeline for the RL baselines. For this reason, we treat them as supplementary evidence rather than as a central claim of the paper. 25
