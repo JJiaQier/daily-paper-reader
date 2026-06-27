@@ -1,0 +1,440 @@
+Title: Solving Markov Decision Processes with Future Information via MPC
+
+URL Source: https://arxiv.org/pdf/2606.24991v1
+
+Published Time: Thu, 25 Jun 2026 00:05:58 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# Solving Markov Decision Processes with Future Information via MPC 
+
+Shambhuraj Sawant ∗ Akhil S Anand ∗ Dirk Reinhardt ∗
+
+Sebastien Gros ∗∗ Norwegian University of Science and Technology (NTNU), Trondheim, Norway. E-mail: {shambhuraj.sawant, akhil.s.anand, dirk.p.reinhardt, sebastien.gros }@ntnu.no 
+
+Abstract: Model Predictive Control (MPC) is widely used in industrial and robotic systems for enforcing constraints and embedding domain knowledge through finite-horizon optimization-based planning. However, despite these strengths, an MPC scheme typically does not yield optimal policies for sequential decision-making problems formulated as Markov Decision Processes (MDPs). Recent combinations of MPC with Reinforcement Learning (RL) alleviate this issue by treating MPC as a parameterized model of the optimal policy of an MDP and adjusting its parameters using data. While these approaches typically consider classical MDPs, many real-world problems include future information—such as forecasts, prices, or reference trajectories—at decision time, which must be included in the MDP state for optimal decision-making. Current MPC-RL approaches do not directly account for this augmented-state structure, raising the question of how to incorporate future information into MPC to obtain an optimal policy. This work establishes the structural requirements under which a parameterized MPC can exactly represent the optimal value functions and policy of an MDP with future information. We further demonstrate that such a parameterized MPC can serve as a structured function approximator, with its parameters learned using RL. The approach is illustrated on a point-mass racing task with future reference information. 
+
+Keywords: Markov Decision Process, Model Predictive Control, Reinforcement Learning. 1. INTRODUCTION Model Predictive Control (MPC) is a widely adopted methodology for sequential decision-making in industrial and robotic systems, as it can satisfy constraints and performance objectives through finite-horizon optimiza-tion [Rawlings et al., 2017]. Its strength lies in repeatedly solving an Optimal Control Problem (OCP) in a receding-horizon fashion, enabling constraint enforcement and the systematic incorporation of domain knowledge. An MPC, when viewed as a solution method for a Markov Decision Process (MDP) modeling the sequential decision-making problem, typically provides only an approximate solution. Despite strong empirical performance, an MPC rarely yields optimal decisions, as it relies on several simplifications to keep the optimization problem tractable. Learning-based MPC methods attempt to mitigate these limitations by adapting or correcting MPC formula-tions using data. Approaches such as Gaussian-process MPC [Hewing et al., 2020a] and Bayesian MPC [Waber-sich and Zeilinger, 2020] focus on improving predictive accuracy or quantifying model uncertainty, with broader surveys in [Hewing et al., 2020b, Mesbah et al., 2022]. Alternatively, an MPC can be viewed as a model of an    
+
+> ⋆This work was supported by the Research Council of Norway through the project Safe Reinforcement Learning using MPC .
+> ⋆⋆ ©2026 the authors. This work has been accepted to IFAC for publication under a Creative Commons Licence CC-BY-NC-ND.
+
+MDP which can deliver optimal value functions and pol-icy even with an inaccurate dynamics model [Gros and Zanon, 2019, Reinhardt et al., 2025]. This perspective motivates the use of a parameterized MPC as a structured function approximator to solve MDPs. Recent approaches combine the structured function-approximation capabil-ities of MPC with Reinforcement Learning (RL) meth-ods to improve closed-loop performance, viz. Actor–Critic MPC [Romero et al., 2024], and an overview of MPC-RL combination approaches appears in [Reiter et al., 2025]. The existing results in [Gros and Zanon, 2019, Reinhardt et al., 2025] assume the classical MDP setting, where decisions depend solely on the current physical state of the system. In contrast, many real-world problems include future information at decision time—such as weather-dependent renewable energy forecasts, fluctuating elec-tricity prices in smart grids, or reference trajectories for autonomous racing—that is relevant to optimal decision-making. In such problems, the available future information must be incorporated into the state definition to satisfy the 
+
+Markov property [Powell, 2019, de Chalendar and Glynn, 2021]. Existing results in [Gros and Zanon, 2019] do not trivially extend to such MDPs with future information. In contrast, classical MPC extensions incorporate future information in a stage-wise or heuristic manner, without explicitly accounting for the augmented state required by the underlying MDP, and may fail to optimally exploit the available information. This raises the key question of how 
+
+> arXiv:2606.24991v1 [eess.SY] 23 Jun 2026
+
+an MPC should be formulated to represent the optimal policy of an MDP with future information. In this work, we address the structure and parameteriza-tion required for an MPC to deliver an optimal policy for an MDP with future information. Our contributions are: 
+
+• We establish conditions under which an MPC can represent the optimal value functions and optimal policy for an MDP with future information. 
+
+• We propose a practical parameterized MPC formula-tion that incorporates future information and can be combined with RL to learn its parameters. 
+
+• We demonstrate the proposed formulation on a point-mass racing task with future reference information us-ing Proximal Policy Optimization (PPO) [Schulman et al., 2017] to learn the MPC parameters. The article is organized as follows. Section 2 reviews MDPs, MPCs, and their treatment of future information. Section 3 formulates the augmented-state MPC scheme and establishes conditions under which it can represent the optimal value functions and policy of an MDP with future information. Section 4 presents a practical parameterized formulation, discusses its use within an RL pipeline, and illustrates the approach on a point-mass racing task. Section 5 concludes the paper. 2. BACKGROUND In this section, we provide an overview of MDPs, MPCs, outline how an MPC can approximate optimal policies, and then discuss their treatment of future information. 
+
+2.1 Markov Decision Processes 
+
+An MDP provides a mathematical framework for model-ing discrete-time sequential decision-making under uncer-tainty [Puterman, 2014]. It is defined over a state space S
+
+and an action space A, with a transition kernel P giving the conditional probability (or density) of an action a ∈ A 
+
+taken in a state s ∈ S leading to a next state s+ ∈ S ,
+
+P[ s+ | s, a ], (1) and a stage cost, L. Here, the state s is Markovian , i.e., state s together with the transition kernel P provides complete statistics for the distribution of the successor-state s+ for any action a. A policy function π then gives an action a to execute in a state s, i.e. π : S → A .Solving an MDP consists of finding an optimal policy that minimizes the objective J, typically given as, 
+
+J(π) = Eτ ∼(π,P)
+
+" ∞X
+
+> t=0
+
+γtL(st, at) s0 ∼ ρ0
+
+#
+
+, (2) where, τ = {s0, a0, s1, a1, ... } denotes the trajectory gen-erated by a policy π under P, ρ0 is the given initial state distribution, γ ∈ (0 , 1] is the discount factor, and t denotes the time index. Then the optimal policy is, 
+
+π⋆ = arg min  
+
+> π
+
+J(π). (3) Finding an optimal policy typically involves computing the value functions, namely the state value function V π
+
+and the state–action value function Qπ , associated with a policy π [Sutton and Barto, 2018]. Here, V π denotes the expected cumulative cost when starting from a state 
+
+s and following a policy π, and Qπ denotes the expected cumulative cost when taking an action a in a state s and thereafter following π,
+
+V π (s) = Eτ ∼(π,P)
+
+" ∞X
+
+> t=0
+
+γtL(st, at) s0 = s
+
+#
+
+, (4) 
+
+Qπ (s, a) = L(s, a) + γEP [ V π (s+) | s, a] . (5) We label Q⋆ as the optimal state-action value function and 
+
+V ⋆ as the optimal state value function associated with π⋆.The optimal value functions and policy are related through Bellman equations [Sutton and Barto, 2018]. 
+
+2.2 Model Predictive Control 
+
+An MPC repeatedly solves a finite-horizon OCP using a dynamics model to produce constrained control sequences, possibly subjected to constraints [Rawlings et al., 2017]. For a state s, an MPC scheme is typically cast as, min 
+
+u, x γN T (xN ) +  
+
+> N−1
+
+X
+
+> k=0
+
+γkL(xk, uk) (6a) s.t. xk+1 = f (xk, uk), (6b) 
+
+h(xk, uk) ≤ 0, (6c) 
+
+hf (xN ) ≤ 0, (6d) 
+
+x0 = s (6e) where L is the stage cost, T is the terminal cost, f is the dynamics model approximating (1), and h, hf are the constraints of the controlled system, with the prediction horizon N and the discount factor γ. The solution of (6) yields an optimal control sequence u⋆. An MPC operates in a receding-horizon manner, applying only u⋆
+
+> 0
+
+and resolving at the next state. Then an MPC policy is, 
+
+πMPC (s) = u⋆
+
+> 0
+
+. (7) The objective is for πMPC to approximate the optimal policy π⋆ in (3). Next, we briefly discuss when πMPC can deliver π⋆ to yield a solution to an MDP. 
+
+2.3 MPC as a solution to MDP 
+
+In practice, πMPC delivers satisfactory performance and enforces constraints provided that f adequately represents (1) and T and N are appropriately chosen. However, πMPC 
+
+often falls short of optimality due to simplifications in its formulation relative to (2), namely, the finite-horizon for-mulation, optimization over fixed input sequences u rather than a policy, and approximating stochastic dynamics via a deterministic model f . While these simplifications are necessary for a tractable optimization problem, selecting 
+
+f to achieve good closed-loop performance is particularly challenging. Models suited for decision-making generally differ from those optimized for prediction accuracy, except for specific classes of problems [Anand et al., 2024, 2025]. Taken together, these simplifications often cause an MPC to fail to deliver an optimal policy for an MDP. Alternatively, an MPC, even with an inaccurate dynamics model, can deliver an optimal policy for an MDP if its stage and terminal costs are suitably modified [Gros and Zanon, 2019]. However, computing the required cost modi-fications is as complex as obtaining an accurate representa-tion of (1) and solving the underlying MDP. Hence, [Gros and Zanon, 2019] further proposed parameterizing the MPC scheme as a whole and learning its parameters using RL techniques to optimize its closed-loop performance. This approach leads to the following parameterized MPC for approximating a state–action value function, 
+
+QMPC  
+
+> θ
+
+(s, a) = min 
+
+u, x γN Tθ (xN ) +  
+
+> N−1
+
+X
+
+> k=0
+
+γkLθ (xk, uk) (8a) s.t. xk+1 = f θ (xk, uk), (8b) 
+
+hθ (xk, uk) ≤ 0, (8c) 
+
+hf 
+
+> θ
+
+(xN ) ≤ 0, (8d) 
+
+x0 = s, (8e) 
+
+u0 = a (8f) where θ collects all the parameters introduced to the costs, dynamics, and constraints. The corresponding state value function and the MPC policy are then given as, 
+
+V MPC  
+
+> θ
+
+(s) = min  
+
+> a
+
+QMPC  
+
+> θ
+
+(s, a), (9) 
+
+πMPC  
+
+> θ
+
+(s) = arg min  
+
+> a
+
+QMPC  
+
+> θ
+
+(s, a) = u⋆ 
+
+> 0
+
+. (10) For brevity, we write Vθ , Q θ , π θ to represent MPC-based value functions and policy. Next, we discuss how future information is handled in MPCs and MDPs. 
+
+2.4 Future information in MPC and MDP 
+
+In many real-world decision-making problems, partial in-formation about the future, such as forecasts or reference trajectories, is available at decision time and can signifi-cantly improve decision quality. In the following section, we first review how MPC typically handles available future information and then contrast it with the MDP viewpoint. Let zt,i denote the information available at time t for the future time t+i. Then, (6) is typically extended in a stage-wise manner as, min 
+
+u, x γN T (xN , zt,N , . . . ) +  
+
+> N−1
+
+X
+
+> k=0
+
+γkL(xk, uk, zt,k ) (11a) s.t. xk+1 = f (xk, uk, zt,k ), (11b) 
+
+h(xk, uk, zt,k ) ≤ 0, (11c) 
+
+hf (xN , zt,N ) ≤ 0, (11d) 
+
+x0 = st (11e) where the terminal cost T is expected to account for the effect of future information beyond the prediction horizon, which can be difficult to model accurately. In an MDP, the state should be Markovian and contain all information necessary for optimal decision-making [Put-erman, 2014]. When future information is available, it can be interpreted as a latent representation of complex real-world data, condensed into information relevant for decision-making. Defining an MDP in such settings there-fore necessitates an augmented state definition [Powell, 2019, de Chalendar and Glynn, 2021]. Moreover, future information evolves according to its own stochastic dynam-ics and update mechanisms; for example, weather forecasts are periodically revised in response to new observations. Consider the augmented state at time t as, ˜st := [ st, ZHt, 0 ]⊤, ˜st ∈ ˜S, (12) where ˜S denotes the augmented state space and ZHt,i =[zt,i , . . . , zt,i +H ] indicates future information sequence at 
+
+k-th stage with H as the length of relevant future in-formation. In principle, H may be arbitrarily large, but future information typically becomes less informative as its statistics regress toward their steady-state distribution over time. Thus, beyond a problem-dependent length, the choice of H is a modeling decision, and only the relevant portion needs to be included. The transition kernel ˜P
+
+then governs the evolution of ˜ st; it includes both the transition of the physical state st and the stochastic update of the future information ZHt, 0. With ˜ st and ˜P, an MDP with future information can be defined for the underlying stochastic decision process. All associated value functions and policies for such an MDP are then defined over ˜ st.This motivates formulating MPC directly over the aug-mented state, as developed in the next section. 3. OPTIMAL POLICIES WITH MPC In this section, we establish conditions under which a parameterized MPC can yield optimal value functions and an optimal policy for an MDP with future information. The MPC in (11) incorporates future information in a stage-wise manner. Such a formulation may be sufficient in special cases where the dynamics model is exact, and the terminal cost fully accounts for the remaining future information. In practice, however, this requires accurately modeling the dynamics and capturing, through the ter-minal cost, the effect of future information beyond the prediction horizon; otherwise, an optimality gap may arise. To address this, we build on the perspective in [Gros and Zanon, 2019], treating MPC as a parameterized model of the value functions and policy of an MDP with future information. Since the Markov property requires an aug-mented state, any MPC intended to represent the opti-mal policy must also operate on ˜ s. This augmented-state construction aligns the MPC recursion with the Bellman recursion, which is essential for extending the optimality argument of [Gros and Zanon, 2019, Theorem 1]. This leads to the following parameterized MPC scheme, 
+
+Qθ (˜ st, a) = min 
+
+u, ˜x γN Tθ (˜ xN ) +  
+
+> N−1
+
+X
+
+> k=0
+
+γkLθ (˜ xk, uk) (13a) s.t. ˜xk+1 = ˜f (˜ xk, uk), (13b) 
+
+hθ (˜ xk, uk) ≤ 0, (13c) 
+
+hf 
+
+> θ
+
+(˜ xN ) ≤ 0, (13d) ˜x0 = ˜ st, (13e) 
+
+u0 = a (13f) where ˜f is a deterministic model of the transition kernel ˜P
+
+and propagates the predicted augmented state ˜ xk. Then the state value function and the MPC policy are, 
+
+Vθ (˜ st) = min  
+
+> a
+
+Qθ (˜ st, a), (14) 
+
+πθ (˜ st) = arg min  
+
+> a
+
+Qθ (˜ st, a) = u⋆
+
+> 0
+
+. (15) We now show that the parameterized MPC scheme in (13)–(15) can represent the optimal value functions and policy of an MDP with future information. Theorem 1. Consider the parameterized stage cost, ter-minal cost, and constraints in (13)–(15) as function ap-proximators with parameters θ. Let ˜ x⋆ = {˜x⋆k}Nk=0 denote the predicted augmented state trajectory generated by the dynamics model ˜f under the optimal policy π⋆.Then, there exist parameters θ⋆ such that: (1) Vθ⋆ (˜ st) = V ⋆(˜ st), ∀ ˜st ∈ ˜X ,(2) πθ⋆ (˜ st) = π⋆(˜ st), ∀ ˜st ∈ ˜X ,(3) Qθ⋆ (˜ st, a) = Q⋆(˜ st, a) for all ˜ st ∈ ˜X and all a ∈ A 
+
+such that V ⋆
+
+˜f (˜ st, a)
+
+
+
+< ∞.where ˜X := 
+
+n
+
+˜st ∈ ˜S |V ⋆(˜ x⋆k)| < ∞ for all k ≤ N
+
+o
+
+. (16) 
+
+Proof. Consider θ satisfying the following, 
+
+Lθ (˜ st, a) = 
+
+(Q⋆(˜ st, a) − γV +(˜ st, a), if |V +(˜ st, a)| < ∞,
+
+∞, otherwise ,
+
+(17a) 
+
+Tθ (˜ st) = V ⋆(˜ st), (17b) where V +(˜ st, a) = V ⋆(˜f (˜ st, a)). Since ˜f is a deterministic model of ˜P, the Bellman recursion unfolds as a telescoping sum along the predicted trajectory. The result then follows from [Gros and Zanon, 2019, Theorem 1]. 2
+
+Theorem 1 characterizes the existence of an MPC param-eterization that yields the optimal value functions and policy. The augmented state formulation is essential for this result: it allows the stage and terminal costs in (17) to depend on the same information as the optimal value functions of the underlying MDP. Consequently, suitable cost modifications can reproduce the Bellman recursion and compensate for inaccuracies in the prediction model, as in [Gros and Zanon, 2019], for MDPs with future infor-mation. This result implies several requirements on how the MPC formulation must be constructed: 
+
+• An MPC scheme must operate on the augmented state: Since future information influences optimal decisions, the MPC components must all be defined over ˜ s, moti-vating the MPC formulation in (13). In contrast to (11), (13) thus aligns with the Bellman structure of an MDP with future information and can, in principle, represent its optimal value functions and policies. 
+
+• Optimality is defined in the augmented state space: The Bellman operator is well-posed only when defined over ˜ s.Any MPC or RL architecture that ignores the forecast component of the state violates the Markov property and hence cannot recover V ⋆, Q⋆, or π⋆ in theory. 
+
+• Value function approximators must use the augmented state: Any critic must approximate V π (˜ s) or Qπ (˜ s, a), rather than functions of the physical state alone. 
+
+• Future information must be propagated consistently: To match the Bellman recursion, the MPC prediction model must evolve the full augmented state, updating 
+
+ZHt,k to ZHt,k +1 as in (13b). A simple strategy is to shift a precomputed sequence of future information. In summary, Theorem 1 shows that a sufficiently param-eterized MPC can represent the optimal value functions and policy of an MDP with future information, provided it operates on the augmented state and propagates fore-cast information through its horizon. Although finding the optimal parameters is as hard as solving the MDP itself, this result motivates treating MPCs in (13)–(15) as function approximators. Section 4 presents a practical implementation and racing example. 4. MPC AS A FUNCTION APPROXIMATOR This section presents a decomposed augmented-state MPC formulation for MDPs with future information and its use as a function approximator within an RL pipeline. In practice, the evolution of future information is often independent of the MPC optimization variables. This mo-tivates decomposing ˜f in (13) into the physical state dy-namics and the future information update, represented by 
+
+f θ and gθ , respectively. We parameterize both components to provide RL with additional flexibility to tune θ for achieving (1)–(3) of Theorem 1. We then formulate a parameterized MPC scheme as, 
+
+Qθ (˜ st, a) = min 
+
+u, x γN Tθ (xN , ZN ) +  
+
+> N−1
+
+X
+
+> k=0
+
+γkLθ (xk, uk, Zk)(18a) s.t. xk+1 = f θ (xk, uk, Zk),
+
+(18b) 
+
+Zk+1 = gθ (Zk), (18c) 
+
+hθ (xk, uk, Zk) ≤ 0, (18d) 
+
+hf 
+
+> θ
+
+(xN , ZN ) ≤ 0, (18e) [x0, Z0] = ˜ st, (18f) 
+
+u0 = a (18g) where Zk := ZHt,k within the MPC horizon, for compact-ness. Then the state value function and policy are, 
+
+Vθ (˜ st) = min  
+
+> a
+
+Qθ (˜ st, a), (19) 
+
+πθ (˜ st) = arg min  
+
+> a
+
+Qθ (˜ st, a) = u⋆
+
+> 0
+
+. (20) The formulation in (18) is a structured instance of (13). Theorem 1 does not require ˜f to match the true transition kernel ˜P exactly; hence, it remains applicable even when f θ
+
+and gθ are approximate or learned models. In particular, with suitable cost modifications of the form (17), an MPC of the form (18) can still represent the optimal value functions and policy of the MDP with future information. This decomposition is useful in practice as the future information update can often be handled outside the optimization problem. For example, gθ may simply shift a precomputed future information sequence, so that each stage receives the appropriate sequence ZHt,k . Alternatively, 
+
+gθ may be parameterized and tuned together with the rest of the MPC scheme using RL. Next, we describe how the parameterized MPCs can be embedded within an RL pipeline. 
+
+4.1 RL and MPC sensitivities 
+
+Learning a parameterized MPC with RL requires gradients of the value functions and policy with respect to θ.For the MPC schemes in (18)-(20), these gradients are obtained through standard MPC sensitivity analysis by differentiating the Lagrangian and KKT conditions; see [Gros and Zanon, 2019] for details. Here, the sensitivities are computed for MPCs defined over the augmented state ˜s. Consequently, the gradients account for the dependence of the value functions and policy on both the physical state and the available future information. These sensitivities allow the parameterized MPC to be embedded in standard RL updates. For example, in a policy-gradient method such as Deterministic Policy Gra-dient (DPG) [Silver et al., 2014], the MPC in (15) directly serves as a policy and is updated using, 
+
+θ ← θ + α∇θ πθ (˜ s)∇aQπθ (˜ s, a)|a=πθ (˜ s), (21) where Qπθ is estimated separately. In stochastic policy-gradient methods [Sutton et al., 1999], the same con-struction can be used by inducing a stochastic policy, for instance by randomly perturbing the MPC cost objective as in [Gros and Zanon, 2021] or by simply sampling actions from a Gaussian distribution centered at the MPC output. The MPC schemes in (18)–(20) incorporate future infor-mation into learning and decision-making through their structured optimization problems. Since this information enters through the MPC cost, dynamics, and constraints, the resulting policy can exploit future information mean-ingfully even before learning. This provides a useful in-ductive bias compared with generic policy approximators that receive the augmented state directly and must infer the relevant structure from data. In actor–critic methods, a separate value function approx-imator is still required. Neural networks remain a natural choice for this role due to their expressiveness, but they must approximate V π (˜ s) or Qπ (˜ s, a) over the augmented state. Thus, while the MPC structure provides a strong inductive bias for the policy, value-function learning may still suffer from the increased dimensionality of ˜ s.
+
+4.2 Illustrative example 
+
+We evaluate the proposed MPC in (20) on a point-mass racing task. In this task, a sequence of future reference positions (the track centerline) is available at decision time and constitutes the future information component of the augmented state. We deploy the parameterized MPC within a PPO [Schulman et al., 2017] training loop and show that the learned policy exploits this future informa-tion to achieve high-performing closed-loop behavior. 
+
+Point-Mass Racing Environment: The controlled sys-tem is a planar point-mass with physical state, s =[px, p y , v x, v y ]⊤ where p = ( px, p y ) are positions and v =(vx, v y ) are velocities. The control input is the applied force 
+
+a = [ Fx, F y ]⊤. The dynamics follow a discretized double-integrator with Gaussian noise, 
+
+st+1 = A st + B at + N (0 , 10 −3I),
+
+with 
+
+A =
+
+
+
+1 0 0 .1 00 1 0 0.10 0 0 .9 00 0 0 0.9
+
+ , B =
+
+
+
+0 00 00.1 00 0.1
+
+ .
+
+The goal is to traverse a racing track as quickly as possible (as shown in fig. 1b). The environment provides a sequence of future reference positions, ZMt, 0 = [ zt, 0, . . . , zt,M ], where 
+
+zt, 0 ∈ R2 denotes the track centerline closest to st with 
+
+M = 60. Here, we keep the future information length at 
+
+H = 50 (i.e., ˜ st = [ st, Z50 
+
+> t, 0
+
+]) with the rest used to shift ZHt,k 
+
+over the optimization horizon. The task is encoded through the stage cost, 
+
+L(˜ st, at) = − prog( st), (22) where prog( ·) measures forward progress along the track. Exceeding the track half-width of 0.4 terminates the episode. Additionally, the discount factor γ is set to 0 .99. 
+
+MPC formulation: We adopt the parameterized MPC policy in (20) (with N = 10). For demonstration, we parameterize only the MPC stage cost as, 
+
+Lθ (xk, uk, ZHt,k ) = Wp∥pk − ZHt,k wk∥2
+
++ Wv∥vk∥2 + Wu∥uk∥2,
+
+where wk ∈ RH+1 weights the columns of ZHt,k to form the latent reference ZHt,k wk, i.e., ZHt,k wk = PHi=0 wk,i zt,k +i.Note that the term ZHt,k wk acts as a latent reference and can be tuned by updating wk, enabling the MPC to exploit future information more flexibly. Then, θ =
+
+{Wp, W z, W v, W u} with Wz = [ w0, . . . , wN ]⊤ forms the parameter vector to be learned with PPO. We compare three controllers: (1) Nominal MPC: A baseline MPC controller using the naive formulation in (11) with fixed cost weights. (2) PPO–MPC: A parameterized MPC with only the cost weights, {Wp, W v, W u}, learned using PPO, and naive future information usage, similar to (11). (3) PPO–MPCi: The proposed parameterized MPC in (20) with θ = {Wp, W z, W v, W u} learned using PPO. A stochastic policy is formed by sampling actions from a Gaussian distribution centered around the MPC output, 
+
+π′ 
+
+> θ
+
+(˜ st) = N  πθ (˜ st), σ2I ,
+
+with σ as the standard deviation. 
+
+PPO Training: The actor is an MPC-based stochastic policy π′ 
+
+> θ
+
+, while the critic is a two-layer neural network with 128 units per layer, trained to approximate V π′ 
+
+> θ
+
+(˜ s). The PPO objective employs clipped likelihood ratios and generalized advantage estimation. Training is conducted for 1 × 10 4 time steps with minibatch SGD. 
+
+Discussion: Fig. 1a shows the cumulative cost during training, averaged over five seeds. PPO-MPCi achieves the lowest cost, followed by PPO-MPC, while the nominal MPC performs worst. The trajectories in Fig. 1b show that nominal MPC follows the track conservatively, whereas PPO-MPC learns more aggressive tracking and reaches farther along the track, as indicated by the × markers. In contrast, PPO-MPCi learns a latent reference through 
+
+ZHt,k wk, allowing it to exploit the future reference infor-mation sequence more flexibly and cut corners to increase progress. The latent representation used here is only a weighted average over the future reference information sequence, yet already yields a clear performance gain. In more complex domains, richer latent representations, such as variational 0 20 40 60 80 100      
+
+> Training iteration
+> −205
+> −200
+> −195
+> −190
+> −185
+> J(a) Cumulative Cost −2 −1 012
+> x position (m)
+> −2.0
+> −1.5
+> −1.0
+> −0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> y position (m)
+> PPO-MPCi
+> PPO-MPC
+> MPC
+> Track centerline (b) State Trajectory
+
+Fig. 1. Closed-loop performance and state trajectory for (i) MPC, (ii) PPO-MPC, and (iii) PPO-MPCi autoencoders [Kingma and Welling, 2019], could compress long-horizon future information into low-dimensional fea-tures suitable for MPC. Such settings may also require alternative critic architectures, since the augmented state can become high-dimensional. 5. CONCLUSION This work establishes conditions under which a param-eterized MPC scheme can represent the optimal value functions and optimal policy of an MDP with future in-formation. In particular, we show that future information must be incorporated through the augmented state and propagated through the optimization horizon for the MPC to align with the Bellman structure of the underlying MDP. This formulation naturally enables MPC to serve as a structured function approximator within an RL pipeline. We further demonstrate, through a racing example, that RL can learn the MPC parameters in practice and that the learned MPC exploits future information more effectively than naive use of future information. Overall, the results highlight MPC as an effective structured function approx-imator for decision problems with future information. DECLARATION OF GENERATIVE AI AND AI-ASSISTED TECHNOLOGIES IN THE WRITING PROCESS During the preparation of this work, the authors used ChatGPT to refine the text. After using this tool/service, the authors reviewed and edited the content as needed and take full responsibility for the content of the publication. REFERENCES Anand, A.S., Sawant, S., Reinhardt, D., and Gros, S. (2024). Data-driven predictive control and mpc: Do we achieve optimality? IFAC-PapersOnLine , 58(15), 73–78. Anand, A.S., Sawant, S., Reinhardt, D., and Gros, S. (2025). All ai models are wrong, but some are optimal. 
+
+arXiv preprint arXiv:2501.06086 .de Chalendar, J.A. and Glynn, P.W. (2021). On incorpo-rating forecasts into linear state space model markov decision processes. Philosophical Transactions of the Royal Society A , 379(2202), 20190430. Gros, S. and Zanon, M. (2019). Data-driven economic nmpc using reinforcement learning. IEEE Transactions on Automatic Control , 65(2), 636–648. Gros, S. and Zanon, M. (2021). Reinforcement learn-ing based on mpc and the stochastic policy gradient method. In 2021 American Control Conference (ACC) ,1947–1952. IEEE. Hewing, L., Kabzan, J., and Zeilinger, M.N. (2020a). Cautious model predictive control using gaussian pro-cess regression. IEEE Transactions on Control Systems Technology , 28(6), 2736–2743. Hewing, L., Wabersich, K.P., Menner, M., and Zeilinger, M.N. (2020b). Learning-based model predictive control: Toward safe learning in control. Annual Review of Control, Robotics, and Autonomous Systems , 3(1), 269– 296. Kingma, D.P. and Welling, M. (2019). An introduction to variational autoencoders. Foundations and Trends in Machine Learning , 12(4), 307–392. Mesbah, A., Wabersich, K.P., Schoellig, A.P., Zeilinger, M.N., Lucia, S., Badgwell, T.A., and Paulson, J.A. (2022). Fusion of machine learning and mpc under uncertainty: What advances are on the horizon? In 2022 American Control Conference (ACC) , 342–357. Powell, W.B. (2019). Reinforcement Learning and Stochas-tic Optimization: A Unified Framework for Sequential Decisions . John Wiley & Sons. Puterman, M.L. (2014). Markov decision processes: dis-crete stochastic dynamic programming . John Wiley & Sons. Rawlings, J.B., Mayne, D.Q., and Diehl, M. (2017). Model predictive control: theory, computation, and design , vol-ume 2. Nob Hill Publishing Madison, WI. Reinhardt, D., Anand, A.S., Sawant, S., and Gros, S. (2025). Economic model predictive control as a solution to markov decision processes. In Model Predictive Control: Engineering Methods for Economists , 157–189. Springer. Reiter, R., Hoffmann, J., Reinhardt, D., Messerer, F., Baumg¨ artner, K., Sawant, S., Boedecker, J., Diehl, M., and Gros, S. (2025). Synthesis of model predictive control and reinforcement learning: Survey and classi-fication. URL https://arxiv.org/abs/2502.02133 .Romero, A., Song, Y., and Scaramuzza, D. (2024). Actor-critic model predictive control. In 2024 IEEE Interna-tional Conference on Robotics and Automation (ICRA) ,14777–14784. IEEE. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. (2017). Proximal policy optimization algo-rithms. arXiv preprint arXiv:1707.06347 .Silver, D., Lever, G., Heess, N., Degris, T., Wierstra, D., and Riedmiller, M. (2014). Deterministic policy gradient algorithms. In International conference on machine learning , 387–395. PMLR. Sutton, R.S. and Barto, A.G. (2018). Reinforcement learning: An introduction . MIT press. Sutton, R.S., McAllester, D., Singh, S., and Mansour, Y. (1999). Policy gradient methods for reinforcement learning with function approximation. Advances in neural information processing systems , 12. Wabersich, K.P. and Zeilinger, M. (2020). Bayesian model predictive control: Efficient model exploration and re-gret bounds using posterior sampling. In Proceedings of the 2nd Conference on Learning for Dynamics and Control , volume 120 of Proceedings of Machine Learning Research , 455–464. PMLR.
