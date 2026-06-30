@@ -1,0 +1,905 @@
+Title: Dual-Flow Reinforcement Learning with State-Aware Exploration
+
+URL Source: https://arxiv.org/pdf/2606.29820v1
+
+Published Time: Tue, 30 Jun 2026 02:04:49 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> 1
+
+# Dual-Flow Reinforcement Learning with State-Aware Exploration 
+
+Qijun Li, Zheng Fu, Qi Song, Yifei He, Weitao Zhou, Hao Gao, Kun Jiang, and Diange Yang 
+
+Abstract —In complex continuous-control reinforcement learn-ing tasks, multimodal optimal actions often coincide with un-certain, multimodal return distributions, making reliable value estimation and multimodal exploration challenging. Existing value estimation methods using unimodal Gaussians restrict expressiveness and yield biased estimates. Recent generative policies can represent multimodal actions but often collapse to a few modes and under-explore high-value areas of the action space. Motivated by these challenges, we propose Dual-Flow RL, a unified actor-critic framework that jointly models a continuous return distribution and a multimodal policy dis-tribution using conditional flow matching (CFM). This design supports reliable value estimation and sustained multimodal exploration. To further enhance exploration, we introduce an Entropy-Covariance Exploration Regulator (ECER) that enables state-aware exploration regulation leveraging policy entropy and action-uncertainty covariance. Experiments on DeepMind Control Suite and Humanoid-Bench show that Dual-Flow RL achieves state-of-the-art performance on most tasks, significantly outperforming prior diffusion-based and flow-based methods. 
+
+Index Terms —Continuous control, distributional reinforcement learning, exploration, flow matching, generative policy. 
+
+I. I NTRODUCTION 
+
+# RECENT years have witnessed the widespread application of reinforcement learning (RL) to continuous control tasks [1], [2], with broad applications to real-world domains such as industrial control [3] and autonomous driving [4], [5]. To obtain optimal action sequences, an RL model is expected to capture a multimodal policy distribution while ensuring diversity among high-value modes. However, traditional de-terministic or diagonal Gaussian policies [6] are inherently unimodal, which inevitably confines their sampling probability to low-value transitional regions between modes. Moreover, conventional value estimation methods in RL typically regress toward a single expected return [7], [8], failing to represent multimodal structure of the value function and thus often converging to spurious local optima.                                                  
+
+> This work was supported in part by the National Natural Science Foundation of China (52394264, 52472449, 52372414), Independent Research Project of the State Key Laboratory of Intelligent Green Vehicle and Mobility, Tsinghua University (No. ZZ-PY-20250408), the Tsinghua University-Toyota Joint Center, and Tsinghua University–SAIC GM Wuling Joint Research Center. Qijun Li, Zheng Fu, Qi Song, Yifei He, Weitao Zhou, Kun Jiang, and Diange Yang are with the School of Vehicle and Mobility and the State Key Laboratory of Intelligent Green Vehicle and Mobility, Tsinghua University, Beijing 100084, China (e-mail: lqj25@mails.tsinghua.edu.cn; fuzheng039@gmail.com; qisong@link.cuhk.edu.cn; heyf25@mails.tsinghua.edu.cn; zhouwt801@gmail.com; jiangkun@tsinghua.edu.cn; ydg@mail.tsinghua.edu.cn). Hao Gao is with the Nanjing University of Posts and Telecommunications, Nanjing, China (e-mail: tsgaohao@gmail.com). (Corresponding author: Diange Yang, Zheng Fu.) This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible.
+
+Fig. 1: Comparison of performance and efficiency across benchmark groups. Left: Normalized scores for Dual-Flow, flow-based (FlowRL), and diffusion-based (QVPO) methods on DMCeasy (the three Walker tasks), DMChard (other DMC tasks), and HumanoidBench. Right: Computational efficiency on the Dog-run task: 2M-step training time and single env step inference time. To address these limitations, recent work has introduced separate improvements, focusing on either the value estimation or the policy representation side alone. On the value side, a line of research employs parametric distribution families [9] or quantile-based approximations [10] to model the distribution of returns, rather than a single expected value. However, such parametric approaches remain confined to a fixed distribu-tional form (e.g., Gaussian), which limits their representational flexibility. On the policy side, recent studies try to param-eterize complex action distributions via generative models, such as flow-based or diffusion-based architectures [11], [12]. These methods enable effective modeling of multimodal policy distributions. Nevertheless, the exploration mechanisms used within these generative policies, like temperature tuning and entropy-guided noise scaling, are typically global and fixed, making it difficult to achieve state-adaptive and controllable exploration. Overall, existing approaches are constrained in two key aspects: (1) limited expressive capacity in value estimation, and (2) non-adaptive exploration mechanisms in generative policies. Specifically, we present a unified framework that jointly models a continuous return distribution and a multimodal pol-icy distribution via CFM. This design supports more accurate and reliable value estimation and sustained multimodal explo-ration. We further derive a value signal from the distributional critic to score actions and weight the alignment objective, guiding the policy toward actions preferred by the learned return distribution while preserving multimodal exploration. To the best of our knowledge, this work is the first to jointly parameterize both the policy and the value function with flow-
+
+> arXiv:2606.29820v1 [cs.LG] 29 Jun 2026 2
+
+based models and train both via flow matching in a unified framework. Additionally, we propose an Entropy-Covariance Exploration Regulator (ECER) attached to the policy net-work to facilitate state-aware and controllable exploration. The ECER adaptively regulates state-aware exploration by integrating policy entropy and action-uncertainty covariance, thereby maintaining multimodal exploration and stabilizing the training process. We evaluate our method on DeepMind Control Suite (DMC) [13], Humanoid-Bench (H-Bench) [14] and MuJoCo Gym (MuJoCo) [15]. Fig. 1 provides an overview across the bench-mark groups and shows that Dual-Flow consistently outper-forms diffusion- and flow-based baselines. We further conduct extensive evaluations on these benchmarks. Notably, Dual-Flow RL achieves state-of-the-art performance, surpassing FlowRL [16] by 31.6% and SAC [6] by 112.3% on Humanoid-run in DMC. II. R ELATED WORK 
+
+Distributional Critic in RL. Distributional critic reinforce-ment learning models the full return distribution rather than only the expected return. Early methods such as C51 [17] ap-proximate the return distribution with a categorical distribution over a fixed discrete support. Quantile-based methods like QR-DQN [10] and IQN [18] model return distributions via fixed or continuously sampled quantiles, but limited quantile resolution and truncation can introduce approximation errors in the distri-bution tails. In continuous-action control, D4PG [19] combines distributional critics with deterministic policy gradients and prioritized replay. In offline reinforcement learning, CODAC [20] mitigates extrapolation error by imposing conservative penalties on quantile estimates of out-of-distribution actions. A more lightweight line of work introduces explicit parametric assumptions on Z(s, a ) to simplify learning. For instance, DSAC [9] models return distributions as Gaussians, which restricts expressiveness to unimodal moment matching and fails to capture multimodal or heavy-tailed returns. In contrast, recent work has explored generative modeling approaches to directly learn return distributions. Bellman Diffusion em-ploys diffusion models to represent continuous return dis-tributions [21], while normalizing-flow-based methods sup-port unbounded support and offer greater expressive power for modeling multimodal and heavy-tailed structures [22]. Despite their expressiveness, these approaches typically rely on Gaussian base distributions or higher-order density field estimation, leading to increased computational overhead and greater sensitivity to hyperparameter choices. 
+
+Generative Policies in RL. Generative policies aim to address the limited expressivity of deterministic policies in multimodal scenarios. Early work explored deep generative models such as VAEs, EBMs, and GANs to represent multi-modal action distributions [23]–[25]. In recent years, diffusion-based policies have become widely used for modeling complex multimodal action distributions. A variety of methods integrate value information into the denoising process. Approaches such as QVPO [26] and QIPO [27] leverage value signals to shape the evolving action distribution along the intermediate denoising steps. In contrast, others impose value constraints primarily on the final generated actions, as exemplified by Diffusion-QL [28], QSM [29] and DiffCPS [30]. More re-cently, flow-based models emerged as an effective tool for constructing expressive policy distributions. Flow Q-Learning (FQL) incorporates flow models as behavior-cloning priors for offline and offline-to-online settings [31], while FlowRL repa-rameterizes policies with flow models and trains them through constrained policy search and Wasserstein regularization [16]. ReinFlow [32] introduces an online fine-tuning framework that injects learnable noise into deterministic generation paths to stabilize policy gradients, and SAC Flow [33] examines gradient stability in off-policy learning and proposes sequential modeling and reparameterization strategies. Beyond control-focused reinforcement learning, Flow-GRPO, DanceGRPO, and MixGRPO extend flow and rectified-flow models to image and video generation [34]–[36]. 
+
+Exploration Regulation in RL. Exploration regulation in continuous-control RL is commonly implemented by control-ling policy stochasticity. SAC [6] regulates exploration through entropy regularization with an automatically adjusted temper-ature. gSDE [37] further introduces state-dependent explo-ration by modulating action noise through a state-conditioned transformation. Similar structured-exploration approaches also incorporate correlated or state-conditioned noise to shape exploration in continuous control [38], [39]. Building on these foundations, recent studies have investigated exploration regulation for generative policies. DACER [12] estimates action entropy by fitting a GMM to multiple samples per state to adaptively scale exploration noise. However, existing exploration regulation methods generally rely on global en-tropy schedules or fixed noise structures, offering only limited state-aware control and lacking fully closed-loop, adaptive adjustment. III. P RELIMINARIES 
+
+A. Distributional Reinforcement Learning 
+
+Notation. We consider an MDP (S, A, P, R, γ ) with contin-uous S and A, transition density P (s′|s, a ), reward R(s, a ),and discount γ ∈ [0 , 1) . We write rt ≜ R(st, a t) and let π(a|s)
+
+be a stochastic policy. We denote by Zπ (s, a ) the state–action return distribution under π.The state–action return distribution under π can be defined as 
+
+Zπ (st, a t) ≜
+
+> ∞
+
+X
+
+> k=0
+
+γkrt+k,st+1 ∼ P (·| st, a t), a t+1 ∼ π(·| st+1 ).
+
+(1) The conventional action-value function Qπ is obtained as the expectation of the return random variable: Qπ (s, a ) = 
+
+E[Zπ (s, a )] .The distributional Bellman operator T πD is defined as: 
+
+(T πD Z)( s, a ) D
+
+= r(s, a ) + γZ (s′, a ′),s′ ∼ P (·| s, a ), a ′ ∼ π(·| s′), (2) where D
+
+= denotes equality in distribution. The goal of distri-butional RL is to match the return-distribution critic Z with 3
+
+the Bellman target distribution induced by the operator T πD .Given replay data D, the objective is formulated as: 
+
+Znew = arg min 
+
+> Z∈Z
+
+E(s,a )∼D 
+
+d Z(s, a ), (T π Z−)( s, a ) , (3) where d(·, ·) is a distributional discrepancy, and Z− denotes a delayed copy used to form a stable Bellman target for training. 
+
+B. Flow Matching 
+
+Flow Matching (FM) learns a time-dependent velocity field 
+
+v(x, t ) that transports a base distribution p0 to a target distribu-tion p1 over t ∈ [0 , 1] . The objective is to construct a reference trajectory from the base distribution to the target distribution, governed by the continuity equation. For paired samples (x0, x 1) with x0 ∼ p0 and x1 ∼ p1, we define the linear interpolation path: 
+
+xt = ψt(x0, x 1), ψt(x0, x 1) = (1 − t)x0 + tx 1. (4) The corresponding reference velocity is: 
+
+ut(x0, x 1) = ∂∂t ψt(x0, x 1). (5) To train the velocity field, Flow Matching minimizes the following loss function: 
+
+LF M = E t∼U [0 ,1] 
+
+> x0∼p0, x 1∼p1
+
+h
+
+∥v(xt, t ) − ut(x0, x 1)∥22
+
+i
+
+. (6) Minimizing this objective enables the learned flow to trans-port samples from p0 toward the target distribution p1.IV. M ETHODOLOGY 
+
+Here, we detail our flow-based distributional critic and policy, both defined via probability-flow ODEs. We use the distributional critic to support policy improvement, and further introduce ECER to adapt exploration based on policy entropy and action-uncertainty covariance. 
+
+A. Flow-based Distributional Critic and Policy 
+
+For value evolution, we model the critic as a state–action conditional return distribution Z(s, a ) on the scalar return axis. For any (s, a ), we draw a base sample z0 ∼ N (0 , 1) and evolve it over t ∈ [0 , 1] via ODE: 
+
+dz t
+
+dt = vz (s, a, z t, t ), t ∈ [0 , 1] , (7) where vz is the return velocity field. The return sample z1 ∼
+
+Z(s, a ) is then obtained by: 
+
+z1 = z0 +
+
+Z 10
+
+vz (s, a, z t, t )dt. (8) The terminal sample z1 thus follows the return distribution 
+
+Z(s, a ).For the policy, we build a symmetric flow-based policy and introduce an exploration regulator to enhance exploration. Given a state s, Policy-flow draws a base variable a0 ∼
+
+p0 = N (0 , I ) and evolves the action trajectory on t ∈ [0 , 1] 
+
+via the flow ODE: 
+
+da t
+
+dt = vπ (s, a t, t ), t ∈ [0 , 1] , (9) where vπ is the policy velocity field. The policy action aπ is then defined as the terminal state a1 through integration: 
+
+aπ = a1 = a0 +
+
+Z 10
+
+vπ (s, a t, t )dt. (10) To modulate exploration, we introduce an Entropy-Covariance Exploration Regulator (ECER) atop the flow-based policy. ECER augments the deterministic mapping aπ by applying a learned exploration scale σ(s) ∈ Rd
+
+> +
+
+. Specifically, the agent executes an exploration-augmented action ae:
+
+ϵ ∼ N (0 , I ), ae = aπ + σ(s) ⊙ ϵ. (11) The scale σ(s) is produced by a learned regulator, trained using policy entropy and action-uncertainty covariance in Sec. IV-C. This enables adaptive, state-aware control of ex-ploration intensity. 
+
+B. Flow-based Policy Iteration 
+
+For policy evaluation, given any conditional return distribu-tion Z(· | s, a ) and a fixed policy π, we define the one-step distributional TD operator that maps Z to a target distribution at (s, a ):
+
+(T π Z)( · | s, a ) d
+
+= r(s, a ) + γZ (· | s′, a ′),s′ ∼ P (· | s, a ), a ′ ∼ π(· | s′). (12) We define the resulting TD target distribution as: 
+
+ptd (· | s, a ) .
+
+= ( T π Z)( · | s, a ). (13) We evaluate the current policy by fitting Z(· | s, a ) to the TD target distribution ptd (· | s, a ) through CFM along the linear path between base noise and TD targets. Concretely, draw z0 ∼ N (0 , 1) , t ∼ U [0 , 1] , y ∼ ptd (· | s, a ), and define 
+
+zt = (1 − t)z0 + ty, uz = y − z0. (14) The distributional evaluation objective is 
+
+min E(s,a,r,s ′)∼D Ez0,t,y 
+
+∥vz (s, a, z t, t ) − uz ∥22
+
+ . (15) By optimizing Eq. (15) to its optimum, we obtain a Bellman-consistent return distribution under the distributional TD oper-ator T π , as stated in the following assumption and proposition. 
+
+Assumption 4.1 (CFM realizability) . There exists a velocity field v∗ 
+
+> z
+
+(t, z ) ∈ V that attains the global minimum of the flow-matching loss. 
+
+Assumption 4.2 (Lipschitz continuity for critic) . The optimal velocity field v∗ 
+
+> z
+
+(t, z ) is continuous and bounded, and satisfies Lipschitz condition: ∥vz (t, z ) − vz (t, z ′)∥ ≤ Lzv ∥z − z′∥, ∀t ∈
+
+[0 , 1] , ∀z, z ′ ∈ R.
+
+Proposition 4.3 (Distributional Bellman consistency) . Let 
+
+ptd (· | s, a ) .
+
+= ( T π Z)( · | s, a ) be defined by Eqs. (12) –
+
+(13) . If the distributional evaluation objective Eq. (15) attains its global minimum, then the induced return distribution is Bellman-consistent under π:
+
+Z(· | s, a ) = ( T π Z)( · | s, a ).
+
+Proof: See Appendix B. 4
+
+For policy improvement, we use the mean value signal de-rived from the distributional critic. Specifically, let {z(k)}Kk=1 
+
+be samples drawn from Z(s, a ). Let μ(s, a ) denote the empir-ical mean computed from these samples. The value used for policy improvement is defined as 
+
+Q(s, a ) ≜ μ(s, a ) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+z(k). (16) Furthermore, we define the advantage of replay action a over the current policy-flow action aπ (s) and assign each (s, a ) abounded exponential weight: 
+
+∆( s, a ) .
+
+= max( Q(s, a ) − Q(s, a π (s)) , 0) ,w(s, a ) = exp  ∆( s, a ) − ¯∆ , (17) where ¯∆ is the mini-batch mean of ∆. We construct the interpolation path between sample a0 and the reference action 
+
+a:
+
+at = (1 − t)a0 + ta, t ∼ U [0 , 1] , u π = a − a0, (18) where a0 ∼ N (0 , I ). The policy training objective can be expressed as: 
+
+min E(s,a )∼D 
+
+h
+
+− Q(s, a π (s)) + w(s, a ) ∥vπ (s, a t, t ) − uπ ∥22
+
+i
+
+.
+
+(19) Objective (19) comprises two parts. The former drives the policy toward higher-value actions, while the latter guides the update by aligning the policy distribution with high-quality behavior actions in the replay buffer. 
+
+C. Entropy-Covariance Exploration Regulator 
+
+We adapt exploration intensity using two diagnostics: pol-icy entropy and action-uncertainty covariance. Policy entropy reflects how dispersed the action distribution is, while the co-variance diagnostic quantifies the covariance between action-density concentration and return uncertainty. To estimate policy entropy, we fit a Km-component diagonal GMM q(a|s) to N actions sampled from buffer states {sb}Bb=1 
+
+and approximate the state-conditioned entropy H(s) following [40]. Detailed derivations are provided in Appendix A. Next, we introduce an action-uncertainty covariance. 
+
+Definition 4.4 (Action-Uncertainty Covariance) . For a state 
+
+s, {ai}Ni=1 ∼ π(· | s). Let log q(a | s) denote the log-density evaluated under the fitted Km-component diagonal GMM q(a | s). We define the standardized action-uncertainty covariance as 
+
+ρ(s) ≜ corr(log q(a | s), σ (s, a )) , (20) 
+
+σ(s, a ) = 
+
+vuut 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+ z(k) − μ(s, a )2 , (21) where σ(s, a ) is the uncertainty of the return distribution. Here corr( ·, ·) denotes the Pearson correlation computed over 
+
+{ai}Ni=1 . ρ(s) characterizes the concentration of the explo-ration distribution on high-uncertainty action regions. To regulate the exploration strength, we construct two gates from the policy entropy and the action-uncertainty covariance diagnostic. First, the entropy gate and covariance gate are defined jointly as 
+
+gH = exp(max(0 , H tgt − ˆH)) , gD = exp( ρ − ρthr ), (22) where Htgt = −c·d and d denotes the action dimension. These components are integrated into a combined gate and effective regularization mechanism, where the global gate g = gH gD
+
+determines the effective regularization coefficient: 
+
+λeff = λ0
+
+g2 + ϵ , (23) where λ0 is the base regularization coefficient. gH , gD , and 
+
+λeff are updated periodically during training. The final ECER objective is formulated to maximize the gain-weighted log-likelihood while regularizing the exploration scale: 
+
+LECER = −Es∼D ,a e∼p(·| s) [Ae(s) log p(ae|s)] + λeff Es∼D 
+
+∥σ(s)∥22
+
+ . (24) Gain Ae(s) is defined as the advantage of the interaction action 
+
+ae relative to the reference policy aπ (s):
+
+Ae(s) ≜ Q(s, a e) − Q(s, a π (s)) . (25) 
+
+log p(ae|s) is the log-likelihood of a diagonal Gaussian dis-tribution N (aπ (s), σ (s)2I). Together, the entropy gate gH
+
+and covariance gate gD enable closed-loop regulation of the exploration scale. 
+
+D. Practical Dual-Flow RL Algorithm 
+
+To obtain a practical algorithm, we adopt parameterized function approximation for the distributional critic, the flow-based policy, and the exploration regulator. Specifically, we model the return distribution with a conditional flow Zθ (· | 
+
+s, a ) and parameterize the return and policy velocity fields as 
+
+vz,θ (s, a, z, t ) and vπ,ϕ (s, a, t ), respectively. We further learn a state-aware exploration scale σψ (s) for ECER. For approximate policy evaluation, we minimize the distri-butional Bellman residual by fitting Zθ (· | s, a ) to the one-step TD target distribution ptd (· | s, a ) ≜ (T π Zθ )( · | s, a ) using the flow-matching objective in Sec. IV-B: 
+
+LQ(θ) = E(s,a,r,s ′)∼D Ez0,t,y 
+
+h
+
+∥vz,θ (s, a, z t, t ) − uz ∥22
+
+i
+
+,
+
+(26) where y ∼ ptd (· | s, a ). For policy improvement, we update the policy flow by minimizing the objective in Sec. IV-B, 
+
+Lπ (ϕ) = E(s,a )∼D Ea0,t 
+
+h
+
+− Q(s, a π (s)) + w(s, a ) ∥vπ,ϕ (s, a t, t ) − uπ ∥22
+
+i
+
+.
+
+(27) Finally, ECER is trained to increase the expectation of the return distribution while adaptively regulating the exploration intensity via the entropy-covariance gate g and the effective coefficient λeff :
+
+LECER (ψ) = −Es∼D ,a e∼pψ (·| s) [Ae(s) log pψ (ae | s)] + λeff (t)Es∼D 
+
+h
+
+∥σψ (s)∥22
+
+i
+
+. (28) The full training loop is given in Alg. 1. 5Dual-Flow (Ours) FlowRL DACER QVPO QSM 
+
+(a) Humanoid-v3 (b) Ant-v3 ECER(Ours) Dacer-regulator Noise scale = 2 Noise scale = 4 None (c) Training curves (d) Evaluation curves 
+
+Fig. 2: Ablations. (a–b) Evaluation curves on MuJoCo: We compare Dual-Flow with various diffusion and flow baselines on 
+
+Humanoid-v3 and Ant-v3 . Dual-Flow outperforms most baselines and achieves stronger overall performance. (c–d) Exploration-strength regulation: Dual-Flow on Humanoid-run with different exploration regulators, including ECER (ours), DACER-style entropy regulator , and fixed initial noise scale tuning (ξ). None denotes Dual-Flow without any exploration regulator. 
+
+Fig. 3: Visualizing the return distribution. Columns from left to right show the predicted return distributions of Dual-Flow, C51, IQN, and DSAC, followed by the corresponding 1-Wasserstein distance. Dual-Flow better matches the ground-truth distributions and achieves the lowest error. V. E XPERIMENTS 
+
+A. Experimental Setup 
+
+Baselines . Our method is compared and evaluated against 13 model-free continuous-control baselines. We consider four generative-policy methods: FlowRL [16], QVPO [26], DACER [12], QSM [29]; seven well-known model-free RL algorithms: SAC [6], TD3 [7], D4PG [19], MPO [41], A2C [42], TRPO [43], and DDPG [44]; as well as the state-of-the-art RL variants BRO and BRO-Fast [45]. All baselines are trained using their official implementations with the default training pipelines. 
+
+Benchmarks . We evaluate our method on continuous-control locomotion benchmarks drawn from the DeepMind Control Suite (DMC) [13], Humanoid-Bench (H-Bench) [14], and MuJoCo Gym (MuJoCo) [15]. All environment settings are provided in Appendix C. 
+
+B. Experimental Results 
+
+All curves are presented in Fig. 4, and the detailed numer-ical results are summarized in Table I. On the DMC Suite, Dual-Flow RL improves over BRO by +6.6% and FlowRL by +10.8% on Dog-run . For Humanoid-run , Dual-Flow RL achieves a clear margin over FlowRL by +31.6% and over SAC by +112.3% . Moreover, Dual-Flow RL exhibits faster convergence across these tasks. On the H-Bench benchmark, Dual-Flow RL outperforms FlowRL and QVPO by +30.5% 
+
+and +56.8% on H1-reach . These results further confirm the superior empirical performance of Dual-Flow RL. We additionally compare Dual-Flow RL against strong generative baselines on MuJoCo Gym. As shown in Fig. 2(a) and (b), Dual-Flow RL consistently outperforms diffusion-and flow-based methods on both Humanoid-v3 and Ant-v3 ,demonstrating its advantage over competitive generative policy approaches. Furthermore, we visualize the predicted return distributions on Dog-run . As shown in Fig. 3, we consider C51 [17], 6Dual-Flow RL (Ours) QVPO BRO SAC D4PG TD3 A2C                  
+
+> FlowRL QSM BRO-Fast DDPG MPO TRPO
+> (a) Humanoid-run (b) Humanoid-stand (c) Dog-run (d) Dog-trot
+> (e) Dog-stand (f) Dog-walk (g) Walker-stand (h) Walker-walk
+> (i) Walker-run (j) Quadruped-walk (k) H1balance simple (l) H1sit hard
+> (m) H1balance hard (n) H1crawl (o) H1maze (p) H1reach
+
+Fig. 4: Evaluation curves on benchmarks. Solid lines denote the mean and shaded regions indicate the 95% confidence interval. IQN [18], and DSAC [9]. For ground truth, we fix the policy and estimate the distribution by performing repeated rollouts. For fair comparison, we use 5000 return samples and 60 bins for each histogram. These results demonstrate that our method provides a more accurate characterization of the return distribution. 
+
+C. Ablation Studies 
+
+We conduct ablation studies to assess the contribution of each core component of Dual-Flow RL. Specifically, we investigate three questions: 1) Does distributional value modeling provide a meaningful advantage over a standard expected-value critic? 2) How does the proposed ECER influence exploration and overall performance? 3) How sensitive is the method to key hyperparameters? 
+
+Distributional Critic and Expected-Value Critic. We further evaluate the effect of the value evaluation module on 
+
+Dog-trot and Humanoid-run while keeping the policy archi-tecture unchanged. As shown in Fig. 5(a) and (b), replacing the expected-value critic with our flow distributional critic leads to faster learning, higher final returns, and more stable performance, which supports the effectiveness of distributional 7
+
+TABLE I: Total Average Return. Performance is reported as the average of the maximum returns observed during the last 10% of training iterations. Mean ± Std over 5 seeds. The best results are highlighted in Bold .                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+
+> Task Dual-Flow (ours) FlowRL QVPO QSM BRO BRO-Fast SAC TD3 DDPG D4PG MPO TRPO A2C
+> Humanoid-run 433 ±7329 ±46 1±198 ±132 376 ±2364 ±1204 ±18 329 ±12±140 ±42 2±12±11±1Humanoid-stand 951 ±21 960 ±312 ±1746 ±42 966 ±2962 ±2964 ±2929 ±12 5±17±19±19±18±1Dog-run 628 ±33 567 ±30 153 ±14 138 ±114 589 ±68 448 ±110 585 ±21 598 ±56 19 ±11 106 ±41 83 ±38 45 ±10 22 ±1Dog-trot 938 ±7916 ±14 96 ±1171 ±123 935 ±5935 ±2916 ±8899 ±11 16 ±7146 ±44 98 ±97 49 ±12 23 ±1Dog-stand 961 ±9977 ±12 590 ±86 864 ±64 967 ±18 987 ±13 965 ±24 973 ±454 ±27 445 ±111 390 ±95 209 ±15 86 ±5Dog-walk 966 ±8941 ±11 429 ±132 491 ±412 976 ±23 936 ±5944 ±10 941 ±17 195 ±12 245 ±18 163 ±44 60 ±427 ±4Walker-stand 990 ±4985 ±4974 ±1997 ±1995 ±3995 ±4991 ±2990 ±2985 ±4983 ±2977 ±5302 ±77 239 ±2Walker-walk 988 ±13 977 ±1942 ±11 983 ±5978 ±4981 ±6973 ±2976 ±1967 ±5972 ±4917 ±46 189 ±49 121 ±6Walker-run 809 ±1645 ±9612 ±24 730 ±11 818 ±0763 ±45 785 ±6794 ±8466 ±355 636 ±154 392 ±48 69 ±17 45 ±7Quadruped-walk 957 ±27 950 ±14 434 ±6986 ±7972 ±9963 ±14 949 ±20 943 ±9385 ±274 945 ±2383 ±21 422 ±43 367 ±88 H1balance simple 354 ±71 314 ±89 221 ±154 ±11 20 ±216 ±2231 ±82 225 ±33 13 ±112 ±112 ±110 ±113 ±1H1sit hard 837 ±45 728 ±60 696 ±31 399 ±21 17 ±318 ±210 ±414 ±15 15 ±217 ±411 ±46±28±2H1balance hard 73 ±955 ±357 ±850 ±259 ±647 ±054 ±356 ±846 ±549 ±349 ±439 ±346 ±2H1crawl 961 ±8884 ±11 589 ±6600 ±5428 ±4263 ±42 731 ±175 607 ±117 177 ±25 226 ±26 212 ±25 198 ±28 161 ±25 H1maze 458 ±2389 ±112 304 ±9420 ±88 170 ±3140 ±11 294 ±112 169 ±20 118 ±50 156 ±48 145 ±49 143 ±46 114 ±48 H1reach 6757 ±278 5179 ±1789 4310 ±310 4421 ±1617 2323 ±283 1855 ±848 3893 ±865 4431 ±194 1686 ±809 2142 ±1008 2015 ±937 1952 ±986 1616 ±751
+
+Dual Flow (Ours) Q-critic M1 = 1, M2 = 1 M1 = 1, M2 = 8 M1 = 8, M2 = 1 
+
+(a) Dog-trot (b) Humanoid-run (c) Learning curve (d) IQM 
+
+Fig. 5: Ablation studies. (a)–(b) Distributional critic vs. expected-value critic: Replacing the expected-value critic with our flow distributional critic leads to faster learning and higher final returns on Dog-trot (a) and Humanoid-run (b). (c)–(d) Sensitivity to flow steps on Dog-run : Learning curves (c) and IQM (d) across different M1 and M2 settings show that the method is robust to the choice of flow-step counts. 
+
+Algorithm 1 Dual-Flow RL 
+
+1: Input: replay buffer D; discount γ; Q-flow critic θ and target 
+
+¯θ; policy flow φ; regulator ψ; target rate ρ; learning rates 
+
+βQ, β π , β σ .
+
+2: for each training iteration do 
+
+3: for each sampling step do 
+
+4: Observe s; Sample a flow action a ∼ πφ(·| s).
+
+5: Sample ϵ ∼ N (0 , I ) and execute ae =clip( a + σψ (s) ⊙ ϵ).
+
+6: Observe (r, s ′, d ) and store (s, a e, r, s ′, d ) into D.
+
+7: end for 
+
+8: for each update step do 
+
+9: Sample mini-batch B ∼ D .
+
+10: θ ← θ − βQ∇θ LQ(θ);
+
+11: φ ← φ − βπ ∇φLπ (φ);
+
+12: ψ ← ψ − βσ ∇ψ LECER (ψ)
+
+13: ¯θ ← ρ¯θ + (1 − ρ)θ
+
+14: if update mod U = 0 then 
+
+15: Update gH , gD , and λeff .
+
+16: end if 
+
+17: end for 
+
+18: end for 
+
+value modeling for reliable policy improvement. 
+
+Exploration Regulator. We compare different regulation mechanisms to assess the advantage of our ECER. Concretely, we consider the DACER entropy regulator [12] and initial noise-scale tuning [46]. For the DACER regulator, we isolate its entropy-based exploration module and integrate it into our framework: the policy output is augmented by a learned diagonal noise σout (t) = λnoise ·α(t), where α(t) is updated via a proportional entropy feedback loop targeting Htgt = −c · d.For initial noise-scale tuning, we replace a0 ∼ N (0 , I ) with 
+
+a0 ∼ N (0 , ξI ) and sweep ξ.As shown in Fig. 2(c) and (d), the DACER regulator brings modest gains, while initial noise-scale tuning yields little improvement. In contrast, ECER achieves higher final returns. We attribute this benefit to ECER’s state-aware closed-loop regulation: through state-aware exploration regulation, ECER injects noise more effectively into high-value action regions, improving the quality of target samples for flow policy training and yielding consistent gains. 
+
+Flow steps. We examine the method’s sensitivity to flow steps on Dog-run by independently varying the step counts 
+
+M1, M2 for the flow-based critic and flow-based policy, respectively. As shown in Fig. 5(c) and (d), the resulting learning curves are largely indistinguishable across configura-tions, exhibiting similar convergence behavior and final perfor-mance. In contrast, increasing the number of flow steps yields longer backpropagation-through-time (BPTT) chains through the time-unrolled flow transformations, which substantially increases computational and memory costs and prolongs train-ing. Overall, our method appears robust to the choice of flow-step counts, and shallow inference is generally sufficient in practice for stable and efficient learning. 80.05 0.1 0.5 1 5   
+
+> (a) Learning curve (b) IQM Return (c) Learning curve (d) IQM Return
+
+Fig. 6: Sensitivity analysis to the base regularization parameter λ0. (a,c) show learning curves on Humanoid-run and Dog-run for different λ0. (b,d) report the corresponding aggregated final performance (IQM return) with 95% stratified bootstrap confidence intervals. Larger λ0 (e.g., 1, 5) restricts exploration and degrades performance, while smaller values (e.g., 0.05 , 0.1)behave similarly. 
+
+Regularization coefficient λ0. We analyze sensitivity to the base regularization parameter λ0 in ECER, which sets the baseline penalty on the exploration scale. We sweep λ0 ∈{0.05 , 0.1, 0.5, 1, 5} on Humanoid-run and Dog-run; results are shown in Fig. 6. Large values restrict exploration and degrade performance, while excessively small values introduce nuisance variance. The method is robust within a moderate range. VI. C ONCLUSION AND FUTURE WORK 
+
+We propose Dual-Flow RL, a unified flow-based actor-critic framework that jointly parameterizes the policy and the return distribution via CFM, aiming to provide more accurate and reliable value estimates while promoting multimodal explo-ration. To further strengthen exploration in online learning, we introduce an Entropy-Covariance Exploration Regulator (ECER) that enables state-aware exploration. Experiments on three benchmarks demonstrate clear improvements over strong baselines. Future work will focus on improving value-estimation efficiency and extending the framework to more challenging, risk-sensitive control domains. APPENDIX AGMM-B ASED ENTROPY ESTIMATION 
+
+To obtain a tractable and differentiable estimate of policy entropy in continuous action spaces, we periodically approx-imate the state-conditioned action distribution of the current policy πϕ(· | s) using a Gaussian Mixture Model (GMM) with diagonal covariances. For each state s sampled from a batch {sb}Bb=1 , we draw N action samples {a(i)}Ni=1 from the current policy to fit a Km-component diagonal GMM: 
+
+q(a | s) = 
+
+> Km
+
+X
+
+> km=1
+
+πkm (s)N (a; μkm (s), diag (vkm (s))) ,
+
+> Km
+
+X
+
+> km=1
+
+πkm (s) = 1 , π km (s) ≥ 0
+
+(29) where πkm (s) denotes the mixture weights, μkm (s) ∈ Rd is the mean vector, and vkm (s) ∈ Rd 
+
+> +
+
+represents the diagonal variance vector (i.e., Σkm (s) = diag (vkm (s)) ) for a d-dimensional action space. 
+
+Analytical Approximation of State-Conditioned Entropy. 
+
+Since the differential entropy of a GMM lacks a closed-form expression, we adopt a standard approximation [40]: introduc-ing a component indicator Z with P (Z = km | s) = πkm (s),the entropy decomposes as: 
+
+H(s) ≈ − 
+
+> Km
+
+X
+
+> km=1
+
+πkm (s) log πkm (s)+ 
+
+> Km
+
+X
+
+> km=1
+
+πkm (s)H(N (μkm (s), diag (vkm (s)))) .
+
+(30) 
+
+Simplification for Diagonal Gaussian Components. For a diagonal Gaussian, |diag( v)| = Qdj=1 vj , so the component entropy reduces to: 
+
+H(N (μ, diag (v))) = 12 log 
+
+(2 πe )ddY
+
+> j=1
+
+vj
+
+
+
+= 12
+
+> d
+
+X
+
+> j=1
+
+log(2 πev j ).
+
+(31) Substituting into the approximation above yields the final entropy estimate: 
+
+H(s) ≈ − 
+
+> Km
+
+X
+
+> km=1
+
+πkm (s) log πkm (s)+ 12
+
+> Km
+
+X
+
+> km=1
+
+πkm (s)
+
+> d
+
+X
+
+> j=1
+
+log(2 πev km,j (s)) .
+
+(32) To estimate the global policy entropy over a batch of states 
+
+{sb}Bb=1 , we compute the individual H(sb) for each state and take the empirical mean: 
+
+ˆH ≜ 1
+
+B
+
+> B
+
+X
+
+> b=1
+
+H(sb). (33) 9
+
+The estimator ˆH characterizes the average exploration inten-sity of the current policy and serves as a primary input signal for subsequent adaptive exploration tuning mechanisms. APPENDIX BPROOF OF PROPOSITION 4.3 (D ISTRIBUTIONAL BELLMAN 
+
+CONSISTENCY AT THE OPTIMUM )Fix (s, a ), all arguments below are conditional on (s, a ).
+
+Lemma 1 (Optimal velocity under CFM) . Notation simplifica-tion. For readability, we denote the optimal return-axis velocity field by v∗, i.e., v∗ ≜ v∗ 
+
+> z
+
+.For any fixed (t, z ), define the conditional objective 
+
+J(v; t, z ) = E(v − u)2 | t, z t = z, v ∈ R,zt = (1 − t)z0 + tz 1, t ∈ [0 , 1] . (34) 
+
+Then 
+
+v∗(t, z ) = arg min  
+
+> v∈R
+
+J(v; t, z ) = Eu | t, z t = z, (35) 
+
+and the minimizer is unique. Proof: Expand the square: 
+
+(v − u)2 = v2 − 2vu + u2. (36) Taking conditional expectation given (t, z t = z) yields 
+
+J(v; t, z ) = E[v2 − 2vu + u2 | t, z t = z]= v2 − 2v E[u | t, z t = z] + E[u2 | t, z t = z]. (37) The term E[u2 | t, z t = z] is constant with respect to v, hence 
+
+J(·; t, z ) is a quadratic function of v. Differentiate: 
+
+ddv J(v; t, z ) = 2 v − 2 E[u | t, z t = z]. (38) Setting the derivative to zero gives the unique stationary point 
+
+v = E[u | t, z t = z]. (39) Moreover, the second derivative satisfies 
+
+d2
+
+dv 2 J(v; t, z ) = 2 > 0. (40) Therefore, J(·; t, z ) is strictly convex and the stationary point is the unique global minimizer. Therefore 
+
+v∗(t, z ) = arg min  
+
+> v∈R
+
+E[( v − u)2 | t, z t = z] = E[u | t, z t = z].
+
+(41) Thus, the optimal velocity field at each fixed (t, z ) is given by the conditional expectation v∗(t, z ) = E[u | t, z t = z], and its uniqueness is guaranteed by the strict convexity of the loss function. 
+
+Lemma 2 (Weak transport of interpolation marginals) . Let μt
+
+denote the marginal law of zt = (1 − t)z0 + tz 1. Then for any test function φ ∈ C∞ 
+
+> c
+
+(R),
+
+ddt 
+
+Z
+
+φ(z) dμ t(z) = 
+
+Z
+
+φ′(z) v∗(t, z ) dμ t(z), μ0 = p0.
+
+(42) 
+
+Proof: Define F (t) ≜ E[φ(zt)] . Since zt = (1 −t)z0 +tz 1
+
+is differentiable in t for each fixed (z0, z 1), we have 
+
+dz t
+
+dt = z1 − z0 = u. (43) By the chain rule, for each realization, 
+
+ddt φ(zt) = φ′(zt) dz t
+
+dt = φ′(zt)u. (44) Under standard integrability conditions, we can interchange the derivative and expectation to obtain 
+
+F ′(t) = ddt E[φ(zt)] = E
+
+h ddt φ(zt)
+
+i
+
+= E[φ′(zt)u]. (45) Apply the tower property conditioning on (t, z t):
+
+E[φ′(zt)u] = E E[φ′(zt)u | t, z t] . (46) The inner conditional expectation E[φ′(zt)u | t, z t] averages over the randomness in (z0, z 1) given (t, z t), aggregating con-tributions from all endpoint pairs that satisfy the interpolation condition zt = (1 − t)z0 + tz 1. The outer expectation then averages this quantity over the marginal law of (t, z t), where 
+
+zt follows μt.Since φ′(zt) is a deterministic function of zt, it is fixed once 
+
+(t, z t) is given. Hence it can be taken outside the conditional expectation: 
+
+E[φ′(zt)u | t, z t] = φ′(zt) E[u | t, z t]. (47) Therefore 
+
+F ′(t) = E[φ′(zt) E[u | t, z t]] = E[φ′(zt)v∗(t, z t)] , (48) where the last equality uses Lemma 1: E[u | t, z t] = v∗(t, z t).Rewriting this expectation using the marginal μt gives 
+
+F ′(t) = 
+
+Z
+
+φ′(z) v∗(t, z ) dμ t(z).
+
+Finally, μ0 is the law of zt=0 = z0, hence μ0 = p0.In summary, Lemma 2 proves that the interpolation 
+
+zt = (1 − t)z0 + tz 1 induces marginals {μt}t∈[0 ,1] that satisfy the weak transport equation ddt 
+
+R φ(z) dμ t(z) =R φ′(z) v∗(t, z ) dμ t(z). By construction, the interpolation end-points match μ1 = ptd .
+
+Lemma 3 (Weak transport of the ODE flow) . Let z(t) solve the ODE dz dt = v∗(t, z ), z(0) ∼ p0, (49) 
+
+and let νt be the marginal law of z(t). Then for any φ ∈
+
+C∞ 
+
+> c
+
+(R),
+
+ddt 
+
+Z
+
+φ(z) dν t(z) = 
+
+Z
+
+φ′(z) v∗(t, z ) dν t(z), ν0 = p0.
+
+(50) 
+
+Proof: Define G(t) ≜ E[φ(z(t))] = R φ(z) dν t(z). For each sample path, the chain rule gives 
+
+ddt φ(z(t)) = φ′(z(t)) dz (t)
+
+dt . (51) Using the ODE dz (t) 
+
+> dt
+
+= v∗(t, z (t)) , we obtain 
+
+ddt φ(z(t)) = φ′(z(t)) v∗(t, z (t)) . (52) For any test function φ ∈ C∞ 
+
+> c
+
+, we can differentiate under the expectation; it follows that 
+
+G′(t) = E
+
+h ddt φ(z(t)) 
+
+i
+
+= E[φ′(z(t)) v∗(t, z (t))] . (53) 10 
+
+Rewriting the expectation with respect to the marginal νt
+
+yields 
+
+G′(t) = ddt 
+
+Z
+
+φ(z) dν t(z) = 
+
+Z
+
+φ′(z) v∗(t, z ) dν t(z). (54) The initial condition ν0 = p0 holds because z(0) ∼ p0.In summary, Lemma 3 shows that the ODE-induced marginals {νt} satisfy the same weak transport identity as in Lemma 2, with ν0 = p0.
+
+Lemma 4 (Uniqueness of weak solutions via the backward transport equation) . Under Assumption 4.2, the weak solution curve of the transport equation driven by v∗(t, z ) is unique: if two probability-measure curves {ηt} and {˜ηt} satisfy, for all 
+
+φ ∈ C∞ 
+
+> c
+
+(R),
+
+ddt 
+
+Z
+
+φ(z) dη t(z) = 
+
+Z
+
+φ′(z)v∗(t, z ) dη t(z),ddt 
+
+Z
+
+φ(z) d˜ηt(z) = 
+
+Z
+
+φ′(z)v∗(t, z ) d˜ηt(z),
+
+(55) 
+
+and η0 = ˜ η0, then ηt = ˜ ηt for all t ∈ [0 , 1] .Proof: Fix any T ∈ (0 , 1] and any φ ∈ C∞ 
+
+> c
+
+(R). Let ψ
+
+denote the solution to the backward transport equation 
+
+∂tψ(t, z ) + v∗(t, z )∂z ψ(t, z ) = 0 , ψ(T, z ) = φ(z), (56) whose existence and uniqueness are guaranteed by Assump-tion 4.2. First, we define 
+
+H(t) ≜
+
+Z
+
+ψ(t, z ) dη t(z).
+
+We compute H′(t). Because ψ depends on t explicitly and ηt
+
+varies with t, we write 
+
+ddt 
+
+Z
+
+ψ(t, z ) dη t(z) = 
+
+Z
+
+∂tψ(t, z ) dη t(z)+ 
+
+ddt 
+
+Z
+
+ψ(t, z ) dη t(z) ψ(t, ·)fixed 
+
+.
+
+(57) For the second term, treat ψ(t, ·) as a test function in z at fixed t. Applying the weak identity with φ = ψ(t, ·) gives 
+
+ddt 
+
+Z
+
+ψ(t, z ) dη t(z) ψ(t, ·)fixed 
+
+=
+
+Z
+
+∂z ψ(t, z ) v∗(t, z ) dη t(z).
+
+(58) Hence 
+
+H′(t) = 
+
+Z
+
+∂tψ(t, z ) dη t(z) + 
+
+Z
+
+∂z ψ(t, z ) v∗(t, z ) dη t(z)=
+
+Z  ∂tψ + v∗∂z ψ dη t.
+
+(59) Since ψ solves the backward PDE, ∂tψ +v∗∂z ψ = 0 , and thus 
+
+H′(t) = 0 . Therefore H(t) is constant and H(T ) = H(0) .Next, we relate the terminal and initial expectations. Using 
+
+ψ(T, z ) = φ(z), we have 
+
+H(T ) = 
+
+Z
+
+ψ(T, z ) dη T (z) = 
+
+Z
+
+φ(z) dη T (z),H(0) = 
+
+Z
+
+ψ(0 , z ) dη 0(z).
+
+(60) Thus Z
+
+φ(z) dη T (z) = 
+
+Z
+
+ψ(0 , z ) dη 0(z). (61) Applying the same argument to ˜ηt yields 
+
+Z
+
+φ(z) d˜ηT (z) = 
+
+Z
+
+ψ(0 , z ) d˜η0(z). (62) If η0 = ˜ η0, then for all φ ∈ C∞ 
+
+> c
+
+(R),
+
+Z
+
+φ(z) dη T (z) = 
+
+Z
+
+φ(z) d˜ηT (z). (63) Finally, since two probability measures agree on all test functions φ ∈ C∞ 
+
+> c
+
+(R), then the measures are equal. Hence 
+
+ηT = ˜ ηT . Since T is arbitrary, ηt = ˜ ηt for all t ∈ [0 , 1] .By Lemma 2 and Lemma 3, both μt (interpolation marginals) and νt (ODE pushforward marginals) satisfy the same weak transport identity with the same initial condition 
+
+p0. By Lemma 4 (uniqueness), it follows that 
+
+μt = νt ∀ t ∈ [0 , 1] . (64) In particular, ν1 = μ1. Under the interpolation construction, 
+
+zt=1 = z1 ∼ ptd , hence μ1 = ptd . Therefore ν1 = ptd , i.e., the probability-flow ODE induced by the globally optimal CFM field transports p0 to ptd . Since ptd (· | s, a ) .
+
+= ( T π Z)( · | s, a )
+
+and Z(· | s, a ) is the distribution obtained by transporting p0
+
+through ODE, we have Z(· | s, a ) = ( T π Z)( · | s, a ).APPENDIX CIMPLEMENTATION DETAILS 
+
+Environments: We evaluate our method on continuous-control benchmarks from the DeepMind Control Suite (DMC), Humanoid-Bench (H-Bench), and MuJoCo Gym; all envi-ronments are visualized in Fig. 7. All experiments use four NVIDIA RTX 3090 GPUs and results are averaged over five random seeds. 
+
+Policy Flow Network: The policy is parameterized as a time-conditioned velocity field vϕ, with parameters indepen-dent of all other modules. The network takes as input the concatenation of state, action, and time, [s, a, t ] ∈ Rds+da+1 ,where the time variable t is directly concatenated as a raw scalar without any additional time embeddings or Fourier features. The architecture is a three-layer fully connected MLP with two hidden layers of width H = 256 , each followed by Layer Normalization and an ELU activation, and a linear output layer producing a vector in Rda . The network outputs an action-space velocity field. 
+
+Flow Distributional Critic Network: The flow distri-butional critic is implemented as a one-dimensional condi-tional flow, with its velocity field network vθ parameter-ized independently from the policy. The input consists of the concatenation of state, action, return variable, and time, 
+
+[s, a, z, t ] ∈ Rds+da+2 , where the time variable is again provided as a raw scalar. The network is a three-layer fully connected MLP with two hidden layers of width H = 256 ,each followed by Layer Normalization and ELU activations, and a linear output layer producing a single scalar. This architecture directly parameterizes the velocity field of the 11 
+
+Fig. 7: Visualizations of the considered environments. From the DeepMind Control Suite (DMC) [13], we include ten locomotion tasks: Humanoid (Run/Stand), Dog (Run/Trot/Stand/Walk), Walker (Run/Walk/Stand), and Quadruped (Walk). From H-Bench [14], we include H1-sit hard and H1-balance simple . From MuJoCo Gym [15], we include Humanoid-v3 and 
+
+Ant-v3 . These environments are characterized by high-dimensional state-action spaces and complex contact dynamics. TABLE II: Hyperparameter settings for Dual-Flow RL (ours). 
+
+Hyperparameter Value Hyperparameter Value Training 
+
+Discount γ 0.99 Polyak rate τ 0.005 Replay buffer size |D| 1e6 Batch size B 256 Optimizer Adam Learning rate (βQ, β π ) 3 × 10 −4
+
+Target entropy Htgt −2.2 dim( A) Warmup updates Tdistill 2e5 Update interval U of λeff 1e4 Warmup updates TECER 2e5 
+
+Network Architecture 
+
+Critic depth / width 2 / 256 Policy depth / width 2 / 256 Critic flow steps M1 1 Policy flow steps M2 1Prior distribution p0 N (0 , I ) Samples K 16 
+
+Entropy-Covariance Exploration Regulator (ECER) 
+
+Entropy update interval U 1e4 GMM state batch size BH 32 Actions per state N 200 GMM components Km 3Entropy EMA βH 0.95 EMA βρ 0.97 Cov gate coeff. kD 10.0 Cov gate cap gD, max 2.0 Threshold ρthr 0.10 Threshold ∆ρthr 0.003 Combined gate cap gmax 3.0 λ0 0.1 
+
+conditional return distribution, rather than its expectation or quantiles. 
+
+Entropy-Covariance Exploration Regulator: The ECER is implemented as a state-conditioned exploration scale net-work σψ (s), with parameters independent of both the policy and value networks. The network takes s ∈ Rds as input and employs a 3-layer MLP with two hidden layers of width 
+
+H = 256 , each followed by Layer Normalization and ELU, and a linear output layer producing a vector of dimension da.The output is mapped via an exponential function and clipped to a preset range, serving as the per-dimension exploration scale to modulate the injected noise intensity. All hyperpa-rameters used across experiments are summarized in Table II. REFERENCES [1] Y. Wei, C. Zuo, and Y. Sui, “Scalable exploration for high-dimensional continuous control via value-guided flow,” arXiv preprint arXiv:2601.19707 , 2026. [2] N. Ma, J. Xuan, G. Zhang, and J. Lu, “Global–local decomposition of contextual representations in meta-reinforcement learning,” IEEE Transactions on Cybernetics , vol. 55, no. 3, pp. 1277–1287, 2025. [3] D. Liu, Y. Wang, C. Liu, B. Luo, and B. Huang, “Ekg-ac: A new paradigm for process industrial optimization based on offline reinforce-ment learning with expert knowledge guidance,” IEEE Transactions on Cybernetics , pp. 1–11, 2025. [4] P. Ning, L. Duan, and C. Hua, “Optimal tracking control of uncertain nonlinear systems using simplified reinforcement learning,” IEEE Trans-actions on Cybernetics , vol. 56, no. 6, pp. 3200–3209, 2026. [5] B. Wijaya, M. Yang, K. Jiang et al. , “Exploring the application of blockchain technology in crowdsource autonomous driving map updat-ing,” Communications in Transportation Research , vol. 4, p. 100140, 2024. [6] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor,” in International conference on machine learning . Pmlr, 2018, pp. 1861–1870. [7] S. Fujimoto, H. Hoof, and D. Meger, “Addressing function approxi-mation error in actor-critic methods,” in International conference on machine learning . PMLR, 2018, pp. 1587–1596. [8] A. Kumar, A. Zhou, G. Tucker, and S. Levine, “Conservative q-learning for offline reinforcement learning,” Advances in neural information processing systems , vol. 33, pp. 1179–1191, 2020. [9] J. Duan, Y. Guan, S. E. Li, Y. Ren, Q. Sun, and B. Cheng, “Distributional soft actor-critic: Off-policy reinforcement learning for addressing value estimation errors,” IEEE transactions on neural networks and learning systems , vol. 33, no. 11, pp. 6584–6598, 2021. [10] W. Dabney, M. Rowland, M. Bellemare, and R. Munos, “Distributional reinforcement learning with quantile regression,” in Proceedings of the AAAI conference on artificial intelligence , vol. 32, no. 1, 2018. [11] J. Brahmanage, J. Ling, and A. Kumar, “Flowpg: action-constrained policy gradient with normalizing flows,” Advances in Neural Information Processing Systems , vol. 36, pp. 20 118–20 132, 2023. [12] Y. Wang, L. Wang, Y. Jiang, W. Zou, T. Liu, X. Song, W. Wang, L. Xiao, J. Wu, J. Duan et al. , “Diffusion actor-critic with entropy regulator,” Advances in Neural Information Processing Systems , vol. 37, pp. 54 183–54 204, 2024. [13] Y. Tassa, Y. Doron, A. Muldal, T. Erez, Y. Li, D. d. L. Casas, D. Budden, 12 
+
+A. Abdolmaleki, J. Merel, A. Lefrancq et al. , “Deepmind control suite,” 
+
+arXiv preprint arXiv:1801.00690 , 2018. [14] C. Sferrazza, D.-M. Huang, X. Lin, Y. Lee, and P. Abbeel, “Humanoid-bench: Simulated humanoid benchmark for whole-body locomotion and manipulation,” in Robotics: Science and Systems , 2024. [15] G. Brockman, V. Cheung, L. Pettersson, J. Schneider, J. Schul-man, J. Tang, and W. Zaremba, “Openai gym,” arXiv preprint arXiv:1606.01540 , 2016. [16] L. Lv, Y. Li, Y. Luo, F. Sun, T. Kong, J. Xu, and X. Ma, “Flow-based pol-icy for online reinforcement learning,” arXiv preprint arXiv:2506.12811 ,2025. [17] M. G. Bellemare, W. Dabney, and R. Munos, “A distributional perspec-tive on reinforcement learning,” in International conference on machine learning . PMLR, 2017, pp. 449–458. [18] W. Dabney, G. Ostrovski, D. Silver, and R. Munos, “Implicit quantile networks for distributional reinforcement learning,” in International conference on machine learning . PMLR, 2018, pp. 1096–1105. [19] G. Barth-Maron, M. W. Hoffman, D. Budden, W. Dabney, D. Horgan, A. Muldal, N. Heess, and T. Lillicrap, “Distributed distributional de-terministic policy gradients,” in International Conference on Learning Representations , 2018. [20] Y. Ma, D. Jayaraman, and O. Bastani, “Conservative offline distribu-tional reinforcement learning,” Advances in neural information process-ing systems , vol. 34, pp. 19 235–19 247, 2021. [21] Y. Li, C.-H. Lai, C.-B. Sch¨ onlieb, Y. Mitsufuji, and S. Ermon, “Bellman diffusion: Generative modeling as learning a linear operator in the distribution space,” arXiv preprint arXiv:2410.01796 , 2024. [22] R. Kaddah, J. Read, M.-P. Cani et al. , “Flow models for unbounded and geometry-aware distributional reinforcement learning,” arXiv preprint arXiv:2505.04310 , 2025. [23] S. Fujimoto, D. Meger, and D. Precup, “Off-policy deep reinforcement learning without exploration,” in International conference on machine learning . PMLR, 2019, pp. 2052–2062. [24] I. Kostrikov, A. Nair, and S. Levine, “Offline reinforcement learning with implicit q-learning,” in International Conference on Learning Representations , 2022. [25] J. Ho and S. Ermon, “Generative adversarial imitation learning,” Ad-vances in neural information processing systems , vol. 29, 2016. [26] S. Ding, K. Hu, Z. Zhang, K. Ren, W. Zhang, J. Yu, J. Wang, and Y. Shi, “Diffusion-based reinforcement learning via q-weighted variational pol-icy optimization,” Advances in Neural Information Processing Systems ,vol. 37, pp. 53 945–53 968, 2024. [27] S. Zhang, W. Zhang, and Q. Gu, “Energy-weighted flow matching for offline reinforcement learning,” arXiv preprint arXiv:2503.04975 , 2025. [28] Z. Wang, J. J. Hunt, and M. Zhou, “Diffusion policies as an expressive policy class for offline reinforcement learning,” in International Confer-ence on Learning Representations , 2023. [29] M. Psenka, A. Escontrela, P. Abbeel, and Y. Ma, “Learning a diffusion model policy from rewards via q-score matching,” in International Conference on Machine Learning , 2024. [30] L. He, L. Zhang, J. Tan, and X. Wang, “Diffcps: Diffusion model based constrained policy search for offline reinforcement learning,” in 
+
+International Conference on Learning Representations (ICLR) , 2024. [31] S. Park, Q. Li, and S. Levine, “Flow q-learning,” in International Conference on Machine Learning , 2025. [32] T. Zhang, C. Yu, S. Su, and Y. Wang, “Reinflow: Fine-tuning flow matching policy with online reinforcement learning,” arXiv preprint arXiv:2505.22094 , 2025. [33] Y. Zhang, S. Yu, T. Zhang, M. Guang, H. Hui, K. Long, Y. Wang, C. Yu, and W. Ding, “Sac flow: Sample-efficient reinforcement learning of flow-based policies via velocity-reparameterized sequential modeling,” arXiv preprint arXiv:2509.25756 , 2025. [34] J. Liu, G. Liu, J. Liang, Y. Li, J. Liu, X. Wang, P. Wan, D. Zhang, and W. Ouyang, “Flow-grpo: Training flow matching models via online rl,” 
+
+arXiv preprint arXiv:2505.05470 , 2025. [35] Z. Xue, J. Wu, Y. Gao, F. Kong, L. Zhu, M. Chen, Z. Liu, W. Liu, Q. Guo, W. Huang et al. , “Dancegrpo: Unleashing grpo on visual generation,” arXiv preprint arXiv:2505.07818 , 2025. [36] J. Li, Y. Cui, T. Huang, Y. Ma, C. Fan, M. Yang, and Z. Zhong, “Mixgrpo: Unlocking flow-based grpo efficiency with mixed ode-sde,” 
+
+arXiv preprint arXiv:2507.21802 , 2025. [37] A. Raffin and F. Stulp, “Smooth exploration for robotic reinforcement learning,” in Conference on Robot Learning . PMLR, 2021, pp. 1634– 1644. [38] A. S. Chiappa, A. Marin Vargas, A. Huang, and A. Mathis, “Latent exploration for reinforcement learning,” Advances in Neural Information Processing Systems , vol. 36, pp. 56 508–56 530, 2023. [39] J. Hollenstein, G. Martius, and J. Piater, “Colored noise in ppo: improved exploration and performance through correlated action sampling,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 11, 2024, pp. 12 466–12 472. [40] M. F. Huber, T. Bailey, H. Durrant-Whyte, and U. D. Hanebeck, “On entropy approximation for gaussian mixture random vectors,” in 2008 IEEE International Conference on Multisensor Fusion and Integration for Intelligent Systems . IEEE, 2008, pp. 181–188. [41] A. Abdolmaleki, J. T. Springenberg, Y. Tassa, R. Munos, N. Heess, and M. Riedmiller, “Maximum a posteriori policy optimisation,” in 
+
+International Conference on Learning Representations , 2018. [42] V. Mnih, A. P. Badia, M. Mirza, A. Graves, T. Lillicrap, T. Harley, D. Silver, and K. Kavukcuoglu, “Asynchronous methods for deep rein-forcement learning,” in International conference on machine learning .PmLR, 2016, pp. 1928–1937. [43] J. Schulman, S. Levine, P. Abbeel, M. Jordan, and P. Moritz, “Trust region policy optimization,” in International conference on machine learning . PMLR, 2015, pp. 1889–1897. [44] T. P. Lillicrap, J. J. Hunt, A. Pritzel, N. Heess, T. Erez, Y. Tassa, D. Silver, and D. Wierstra, “Continuous control with deep reinforcement learning,” in International Conference on Learning Representations ,2016. [45] M. Nauman, M. Ostaszewski, K. Jankowski, P. Miło´ s, and M. Cygan, “Bigger, regularized, optimistic: scaling for compute and sample efficient continuous control,” Advances in neural information processing systems ,vol. 37, pp. 113 038–113 071, 2024. [46] V. Jain, T. Akhound-Sadegh, and S. Ravanbakhsh, “Sampling from energy-based policies using diffusion,” arXiv preprint arXiv:2410.01312 ,2024.
