@@ -1,0 +1,1593 @@
+Title: Sampling-Based Coordination-Informed Multi-Objective Multi-Robot Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2606.30893v1
+
+Published Time: Wed, 01 Jul 2026 00:19:05 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+> IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 1
+
+# Sampling-Based Coordination-Informed Multi-Objective Multi-Robot Reinforcement Learning 
+
+Antonio Marino, Esteban Restrepo, Soon-Jo Chung, Paolo Robuffo Giordano, Claudio Pacchierotti 
+
+Abstract —Multi-robot systems must simultaneously optimize competing objectives while maintaining coordinated behavior. Ex-isting multi-agent reinforcement learning approaches often rely on fixed or centralized coordination, which limits adaptability and violates distributed constraints. This work introduces the Coordination-Informed Multi-Objective Reinforcement Learning (CIMORL) framework, integrating a distributed weight pre-diction mechanism, a privileged expert training strategy, and theoretical guarantees for Pareto-optimal solutions. We present the base CIMORL method alongside two sampling-based vari-ants, CIMORL-TS (Tree Search) and CIMORL-MPPI (MPPI), which leverage privileged global information during training to enable fully decentralized deployment. Experimental validation in cooperative and adversarial scenarios demonstrates a 21 .2% 
+
+hypervolume improvement and superior policy stability com-pared to state-of-the-art baselines. Real-world experiments with Crazyflie drones further validate the framework’s robustness in resource allocation and multi-attacker multi-defend scenarios under partial observability. 
+
+Index Terms —Distributed Control, Graph Neural Network, Resource Assignment 
+
+I. I NTRODUCTION 
+
+Multi-robot systems operating in complex environments must simultaneously optimize multiple competing objectives while maintaining coordinated team behavior. Contemporary robotic applications, from heterogeneous drone swarms in search and rescue operations to collaborative manipulation tasks, require balancing conflicting objectives including task completion time, energy consumption, communication band-width, and collision avoidance. Multi-objective multi-agent systems (MOMAS) provide realistic models that capture the complexity of inter-agent interactions and the multi-dimensional nature of their objectives [1]. While multi-agent reinforcement learning (MARL) has emerged as a powerful paradigm for robotic team coordination [2], its extension to multi-objective settings introduces significant theoretical and practical complexities. The fundamental challenge lies in determining appropriate objective weightings that guide robot teams toward globally optimal solutions while respecting 
+
+A. Marino is with University of Cambridge — Cambridge, United King-dom. E-mail: antonio.marino@cl.cam.ac.uk E. Restrepo, C. Pacchierotti and P. Robuffo Giordano are with CNRS, Univ Rennes, Inria, IRISA — Rennes, France. E-mail: {esteban.restrepo, claudio.pacchierotti, prg }@irisa.fr Soon-Jo Chung is with the Division of Engineering and Applied Science, California Institute of Technology — Pasadena, CA 91125 USA. E-mail: 
+
+{sjchung@caltech.edu }
+
+This work was supported by the ANR-20-CHIA-0017 project “MULTI-SHARED” 
+
+distributed decision-making processes, limited communication bandwidth, and heterogeneous sensor capabilities. Existing multi-objective multi-agent approaches fail to tackle these challenges properly as they predominantly rely on fixed trade-off schemes or centralized coordination mechanisms [3]. These methods lack adaptability to dynamic environmental conditions, violate distributed execution requirements and suffer from poor scalability. To address these limitations, we introduce the Coordination-Informed Multi-Objective Re-inforcement Learning (CIMORL) framework. Our approach bridges the gap between theoretical optimality and practical deployment constraints by integrating three key innovations: (i) a fully distributed weight prediction mechanism that dy-namically adapts objective preferences relying solely on local observations and neighbor communication; (ii) a privileged expert training strategy employing multi-objective extensions of Monte Carlo Tree Search (MCTS) [4] and Model Pre-dictive Path Integral control (MPPI) [5]; and (iii) theoretical guarantees for Pareto-optimal solutions through proper weight synchronization among robot subgroups. Our sampling-based variants, CIMORL-TS and CIMORL-MPPI, leverage privi-leged global information during training, yet execute in a fully decentralized manner under realistic partial observability and communication constraints at deployment. Ultimately, our framework provides a principled, scalable solution for deploying adaptive, multi-objective robotic teams in complex environments. II. R ELATED WORKS 
+
+Multi-objective reinforcement learning (MORL) extends classical RL to optimize multiple, often conflicting, objec-tives concurrently [6], [7]. Traditional reinforcement learning seeks to maximize a single scalar reward, an approach that suffices when task priorities reduce cleanly to one metric. However, collapsing multiple criteria into a fixed linear scalar-ization risks to mask key trade-offs and producing biased or brittle behavior [8], [9]. MORL addresses this limitation by representing the reward as a vector, preserving feedback for each objective and shifting the learning target to a set of mutually non-dominated, Pareto-optimal policies. Existing single-agent MORL methods generally follow two paradigms. Outer-loop methods treat each preference weight as a separate task, optimizing them sequentially. While algorithms like MORL/D [10], PGMORL [11], and GPI-LS [12] improve sam-ple efficiency by sharing information across nearby weights  
+
+> arXiv:2606.30893v1 [cs.RO] 29 Jun 2026 IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 2
+
+or prioritizing promising preferences, they often require ex-tensive retraining for new targets. Inner-loop methods instead condition a single policy on the weight, amortizing learning across weightings. Approaches such as CAPQL [13] and MOPDERL [14] achieve markedly higher sample efficiency for continuous robotic control tasks. Our solution falls in this latter category, finding a continuous weight-dependent policy manifold. Despite this progress, MORL research has largely focused on isolated agents, overlooking the non-stationarity, partial ob-servability, and credit assignment issues that arise when mul-tiple robots interact [15]. The intersection of these fields de-fines multi-objective multi-agent reinforcement learning (MO-MARL), where agents interact in a shared environment under vector-valued rewards and must reconcile individual prefer-ences with joint dynamics. This challenge is compounded by the need for coordination under partial observability and non-stationarity, together with optimization across multiple conflicting objectives [1]. Early approaches to MOMARL often sidestepped its full complexity by scalarizing vector rewards with fixed weights and applying existing MARL algorithms [16]. While tractable, this produced only a single policy per preference and relied on fully decentralized learn-ing, leading to instability in the face of non-stationarity. Recent works have begun to explore multi-policy learning in multi-agent settings. For discrete-action domains, MO-MIX [17] utilizes a centralized training with decentralized execution (CTDE) architecture and mixing logic to tackle credit assignment in cooperative tasks. For continuous-action frameworks, algorithms such as MO-AIM [18] and MOAVOA-MADDPG [19] extend learning to asynchronous agents; how-ever, their outer-loop nature requires training separate policies for fixed preferences, lacking a unified preference-conditioned solution capable of covering the Pareto front in a single training run. Furthermore, while recent continuous-domain approaches like MOMA-AC [20] use actor-critic training for centralized coordination, they fail to synchronize preference weights, a mechanism we demonstrate in Section III is essential for solving global team multi-objective problems. Similarly, the contemporary MOMAPPO framework [3] adapts multi-agent PPO via weighted-sum scalarization and weight sampling strategies (e.g., OLS [21], GPI-LS [12]). However, these static sampling methods fail to account for dynamic environmental conditions that fundamentally shift optimal preference trade-offs. Addressing these limitations requires algorithms that pro-vide support for continuous state and action spaces, decentral-ized execution of preference-conditioned policies, and central-ized coordination mechanisms that adaptively reshape weights in response to evolving tasks. Consequently, we introduce a dynamic weight prediction methodology based on agent observations and inter-agent communication [22]. Inspired by graph clustering and opinion dynamics [23], [24], [25], we design a Graph Neural ODE framework [26] that distinctly models objective preferences as evolving consensus states for distributed weight prediction. Furthermore, we establish a novel theoretical guarantee, proving that cluster-based syn-chronization is sufficient and necessary condition for team-                              
+
+> TABLE I: Summary of Key Notation
+> Symbol Description
+> Vs,NsTeam of cooperative agents and its total size
+> s∈ S ,u∈ U Joint environment state and joint control action
+> z∈ Z Local partial observation vector
+> rw iMulti-objective reward vector for agent i
+> Jπi,JπExpected return for agent iand global team objective under policy πVπ,VϕValue function and its neural network approximator
+> w,¯wDistributed predicted weights and static reference weights
+> | · | ,∥ · ∥ Absolute value (element-wise) and Euclidean norm
+> (·)|Column-wise matrix vectorization operator
+> ⊗Kronacker product So xSoftmax attention coefficient on the variable x
+
+wide Pareto optimality when agents specialize in specific sub-objectives. Complementarily, we propose a training paradigm enhanced by sampling-based planning, which provides high-quality su-pervisory signals to accelerate convergence toward compre-hensive Pareto approximations. We leverage privileged infor-mation during training via established search methodologies like MCTS [27], [28] and MPPI [5], [29]. To overcome the established limitations of linear scalarization, our final architectural contribution integrates the predicted weights into a Tchebycheff problem formulation. This strategic formula-tion effectively captures non-convex Pareto fronts while fully preserving the decentralized execution required for scalable multi-robot autonomy. Collectively, these components form a unified framework that adapts weights via distributed opinion dynamics, exploits search-based supervision, and preserves the decentralized ex-ecution required for scalable multi-robot autonomy. III. P ROBLEM STATEMENT 
+
+In this section, we formulate the multi-objective problem within the Markov games framework, following established reinforcement learning (RL) literature. We consider a convex environment Q ⊂ Rn where a fully cooperative multi-agent team Vs composed of Ns agents operates. The system state   
+
+> s∈ S
+
+represents the agents’ joint states and evolves according to the dynamics ˙s = Ω( s, u ) : S × U Ns → S , where u ∈ U Ns
+
+denotes the joint action of all agents. Each agent has access to partial observations z ∈ Z , defined by its sensing set Si =       
+
+> {x∈Q|d(x, v i)≤ϱ}
+
+with d the euclidean distance, i.e., the environment confined within a sphere of radius ϱ centered at that agent. We assume that cooperative agents within the sensing set are allowed to communicate therefore forming a communication graph G.The team is tasked with a multi-objective problem, where each agent receives an individual reward vector rw i(s, u ) :   
+
+> S × U → RK
+
+, whose K entries quantify performance across different objectives. The problem can be formally mod-eled as a Decentralized Partially Observable Markov Deci-sion Process (Dec-POMDP) [30], represented by the tuple IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 3      
+
+> ⟨S ,U,Ω,{rw 0, . . . , rw Ns},Z, γ ⟩
+
+, where γ ∈ [0 , 1) is the dis-count factor. Given a policy distribution πi(zi) for each agent, the ex-pected discounted return over a finite horizon T is defined as       
+
+> Ji=Es0∼P0, s ′∼P, u ∼π
+> TX
+> t=0
+> γtrw i(st, u t)
+> 
+> ,J=
+> NsX
+> i=1
+> Ji.(1)
+
+The objective is to find the optimal agent policies πi(zi) that maximize the collective team performance J:    
+
+> max
+> π< J π
+> 1, . . . , J πK> . (2)
+
+where each Jπi is an element of the objective Jπ in (1). This type of problem is typically solved by scalarizing the multiple objectives and consequently casting it as a single-objective problem. To this end, we employ the augmented weighted Tchebycheff scalarization [31]. Unlike simple linear scalarization, which fails to find solutions in non-convex re-gions of the Pareto front, the Tchebycheff approach formulates a min-max problem that can discover the entire Pareto fron-tier by evaluating solutions based on their worst-performing weighted objective. Therefore, we can reformulate the problem as follows:          
+
+> max
+> πmin
+> i¯wiJπi+ρ
+> KX
+> i=1
+> Jπi= max
+> πU( ¯ w, J π)(3)
+
+for some weights ¯w ∈ ∆ satisfying PKi=1 ¯wi = 1 and a small ρ > 0. We call U (·) the team utility. The augmentation parameter ρ plays a critical role in this formulation. Standard Tchebycheff scalarization (i.e., when ρ = 0 ) can sometimes yield weakly Pareto optimal solutions due to flat regions in its objective contours. Adding the linear sum term, weighted by a strictly positive ρ, creates a monotonic slope along these contours. This prevents the selection of weakly dominated points and mathematically guarantees strict Pareto optimality for the team. To characterize the solutions to problem (3), we first provide the following definitions: 
+
+Definition III.1. (Dominated solution): Consider a multi-objective problem and two joint policy solutions π, π ′. A policy π is said to dominate a policy π′ if Jπk ≥ Jπ′ 
+
+> k
+
+for all  
+
+> k∈ { 1, . . . , K }
+
+, and Jπj > J π′ 
+
+> j
+
+holds for at least one objective with j ∈ { 1, . . . , K }.
+
+Definition III.2. (Pareto-front): Given a multi-objective prob-lem, the set of Pareto-optimal solutions—called Pareto-front— is the subset of all solutions that are not dominated by another solution. 
+
+All optimal solutions to the Tchebycheff problem are Pareto-optimal and also Pareto-complete, meaning they fully capture the Pareto front even when it is non-convex [31]. In contrast, the weighted sum formulation captures only convex portions of the Pareto front; therefore, there might be Pareto-optimal solutions that are not solutions of the weighted sum problem. However, Tchebycheff problem is NP-hard, therefore intractable. On the other hand, the team weights ¯w are also crucial for obtaining high-quality solutions, as they define the multi-objective trade-off, i.e., how the team evaluates the relative importance of each objective for the specific problem. As we are assuming a dynamic environment, these weights should adapt to the environment with the agent’s objectives devel-oping in the environment. Formally, we can represent the team weights as a function of the joint observations of all agents, ¯w(z1, . . . , z N ). However, under partial observability, joint weights cannot be directly computed and must instead be estimated locally by each agent using its own observation and information exchanged through team communication. In a cooperative multi-agent setting, this motivates redefin-ing the problem with distributed weights :           
+
+> max
+> πmin
+> iNsX
+> j=1
+> wji Jπi
+> ji +ρ
+> KX
+> i=1
+> NsX
+> j=1
+> Jπi
+> ji = max
+> πU(w, Jπ),
+> (4)
+
+where J πj is defined in (1), the weights satisfy PKi=1 wji = 1 
+
+and w represents the stack of agents’ weights. The team maximizes the utility of the worst-performing weighted ob-jective. This incentivizes a balanced performance across all goals, promoting altruistic behaviors where agents support a lagging objective for the overall benefit of the team. The key challenge that arises is: How should these weights be derived in a distributed manner? 
+
+To achieve Pareto-optimal solutions, the team weights must satisfy specific constraints in a cooperative setting. Consider a case where each agent can achieve a combination of the objectives, and each agent j is assigned a weight vector wj .Let J ∗ 
+
+> j
+
+denote the solution of agent j on its local Pareto front for the given Tchebycheff problem. For simplicity, consider two agents with respective optimal solutions J ∗    
+
+> 1,J∗
+> 2
+
+. In general, there does not exist a common weight vector w such that           
+
+> u
+>  w1i
+> w2i
+> ,
+> J∗
+> 1i
+> J∗
+> 2i
+> 
+> =U(w, J∗
+> 1i+J∗
+> 2i)
+
+Indeed, the left-hand side does not correspond to the original problem (3) and may over- or under-estimate points on the Pareto front, as illustrated in Figure 1. Therefore, Pareto-optimal solutions for the team can only be achieved when the weights are shared across agents. For analysis purposes, let’s assume the theoretical lower bound of Jij is Jij = 0 . We can formally derive the following Lemma: 
+
+Lemma 1. When the agents can achieve any combination of the K objectives, i.e., they can attain any objective vector with strictly non-zero elements, Pareto-optimal solutions for the team Vs can be obtained through problem (4) if and only if the agents’ weight vectors w are synchronized across the team. Proof. Let J ∗ 
+
+> ji
+
+denote the optimal return for objective i ∈{1, . . . , K } achieved by agent j ∈ { 1, . . . , N s}. The centralized team problem under the augmented Tchebycheff scalarization minimizes the worst-performing weighted objective over the sum of team returns. To achieve the exact same Pareto-optimal solutions for any arbitrary environment, the decentralized ag-gregation must perfectly recover this centralized formulation:      
+
+> min
+> iNsX
+> j=1
+> wji J∗
+> ji = min
+> iwiNsX
+> j=1
+> J∗
+> ji .(5)
+
+If the agent weights are synchronized such that wji = wi for IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 4
+
+all j, the weight wi becomes a constant with respect to the summation over the agents. It can be factored out, yielding   
+
+> min i(wi
+> PNs
+> j=1 J∗
+> ji )
+
+. This exactly matches the centralized team objective, proving the synchronization to be a sufficient con-dition. Moreover, we can show that if the equality in (5) holds over the entire space of achievable returns, then wji = wi must be true. Because we assume the agents can achieve any combina-tion of the K objectives, the variables J ∗ 
+
+> ji
+
+are independent and can take arbitrary non-zero values. For the outputs of the two  
+
+> min
+
+operators to be identical across this entire independently spanning continuous domain, their respective inner arguments must be algebraically equivalent for every i. Therefore, we can focus on the linear combinations equality:     
+
+> NsX
+> j=1
+> wji J∗
+> ji =
+> NsX
+> j=1
+> wiJ∗
+> ji ∀i.
+
+Rearranging the terms yields:      
+
+> NsX
+> j=1
+> (wji −wi)J∗
+> ji = 0 ∀i.
+
+Since this equation must hold for any arbitrary combination of returns J ∗
+
+> ji
+
+, the coefficients of these independent variables must be strictly zero. This requires wji −wi = 0 , which implies    
+
+> wji =wi
+
+for all agents j and objectives i. This proves the statement of the lemma. In scenarios where individual agents can only contribute to a specific subset of the K objectives (e.g., due to orthogonal task assignments or spatial constraints), the strict necessity of global weight synchronization established in Lemma 1 is relaxed. Instead, agents naturally form coalitions to satisfy different objective subsets. Formally, a coalition partition     
+
+> C={C1, . . . , C Nc}
+
+divides the team Ns into non-empty, disjoint subsets ( SNc    
+
+> q=1 Cq=Ns
+
+and Cp ∩ Cq = ∅ for p̸ = q)such that agents within the same coalition Cq tackle the same subset of objectives. Therefore, the global team problem can be treated as a set of independent sub-teams, leading to the following relaxation: 
+
+Lemma 2. Assume the team Ns is partitioned into a set of coalitions C, where each coalition strictly influences a disjoint subset of the K objectives. Pareto-optimal solutions for the global team can be achieved if and only if agents synchronize their weight vectors locally within their respective coalitions. Consequently, different coalitions do not need to share the same weights, allowing the team’s weight vectors to diverge into distinct clusters. Proof. Let C = {C1, . . . , C Nc } be the coalition partition. Let   
+
+> J∗
+> ji
+
+be the optimal return for objective i ∈ { 1, . . . , K } achieved by agent j ∈ { 1, . . . , N s}. Because the subset of objectives influenced by each coalition is disjoint (orthogonal), for any given objective i, there is exactly one corresponding coalition, denoted C(i), capable of achieving it. For all agents outside this coalition ( j / ∈ C(i)), the return is strictly zero ( J ∗ 
+
+> ji = 0
+
+). Therefore, to perfectly recover the centralized Tchebycheff objective for the global team, we can restrict the same argu- 
+
+> Fig. 1: Pareto Front representations : Pareto Front representation for (a) two-objective and two-agent problem and (b) three-objective and a generic team.
+
+ment of Lemma 1 to each individual coalition:      
+
+> X
+> j∈C(i)
+> wji J∗
+> ji =X
+> j∈C(i)
+> wiJ∗
+> ji ∀i.
+
+Rearranging the terms yields:      
+
+> X
+> j∈C(i)
+> (wji −wi)J∗
+> ji = 0 ∀i.
+
+Because the agents within C(i) can achieve arbitrary combi-nations of their specific active objectives, the variables J ∗
+
+> ji
+
+are non-zero and independent. This requires (wji − wi) = 0 ,strictly enforcing wji = wi for all agents j ∈ C(i). Crucially, for any agent j′ /∈ C(i), their weight wj′i is multiplied by zero. Therefore, its value has no impact on the algebraic equivalence of the team objective. This proves that weight synchronization is a necessary and sufficient condition only within the active coalition C(i) for any given objective. Iterating this reasoning across all Nc coalitions and K
+
+objectives demonstrates that agents only need to synchronize weights locally within their coalition, proving the lemma. The lemma 2 reveals in a multi-agent team Vs =  
+
+> {1,2, . . . , N s}
+
+operating under partial observability constraints, where agents may form coalitions C = {C1, . . . , C Nc } to optimize different subsets of K objectives, the weights w have to cluster into Nc equal vectors corresponding to the Nc robot multi-objective coalitions. Therefore, in this paper we seek to: 1) Learn a distributed weight prediction model Wψ : Z →  
+
+> ∆
+
+that maps agent observations to weight distributions over objectives, ensuring intra-coalition weight synchro-nization while allowing inter-coalition weight diversity. 2) Develop a reinforcement learning framework that ap-proximates the NP-hard optimization problem (4) through sampling-based policy search, enabling uniform exploration of the Pareto front via the weight distribu-tion W.3) Ensure the learned policies satisfy the coalition con-straints derived in Lemma 2, where agents within each coalition Cj ∈ C maintain synchronized weights wCj
+
+while different coalitions may adopt distinct weight vectors. The solution we propose (CIMORL) addresses all these challenges and operates under partial observability constraints, enabling distributed execution. IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 5
+
+IV. M ULTI -O BJECTIVE WEIGHT PREDICTION 
+
+In this section, we develop a distributed dynamical system for predicting agent weight distributions that enables effective multi-objective coordination. The proposed weight prediction framework addresses two fundamental requirements: (i) pro-moting local consensus among neighboring agents with similar observations to form cohesive coalitions, and (ii) allowing divergence between distinct groups to ensure comprehensive coverage of all objectives across the team. This design di-rectly satisfies the synchronization conditions established in Lemma 2, where agents within coalitions must coordinate their weights to achieve Pareto-optimal solutions. When weights naturally cluster into subgroups corresponding to different ob-jectives, the team achieves improved objective coverage while maintaining the distributed structure required by problem (4). First, we report the proposed opinion dynamics to predict the weights, a core component of our CIMORL approach. 
+
+A. Weight Opinion Dynamics 
+
+For simplicity, we present the model using the stack ob-servation vector z, defined as the concatenation of individ-ual agent observations in a shared feature space. However, all computations are implemented in a fully decentralized manner, with agents relying only on local observations and neighbor communication. To predict the weights, each agent first processes its local observation through a shared nonlinear mapping g:     
+
+> Ξ = g(z)∈RNs×K,(6)
+
+where Ξ is used as an observation-dependent preference em-bedding that simultaneously governs agent clustering, con-vergence rates, and the final weight distribution. Rather than directly predicting the final weights, Ξ serves as a continuous input that influences how the weight distribution evolves over time based on the current environmental observations. The function g(·) learns to map observations to objective-specific driving signals, enabling the dynamical system to adapt the weight preferences as the environment changes. To ensure numerical stability and bounded dynamics, the output Ξ is normalized using either min-max normalization (as employed in our experiments) or a softmax transformation So (·) = Softmax (·).The weight evolution is modeled as an opinion formation process where the agents iteratively refine their weight es-timates through neighbor interactions. Two agents influence each other if their Ξ are sufficiently similar, formally defined by the condition dist (Ξ i, Ξj ) < ϵ for some distance metric dist (·, ·) and threshold ϵ > 0. This similarity-based interaction mechanism naturally facilitates coalition formation among agents with compatible objective preferences. To implement this similarity criterion, we define a continu-ous similarity matrix that approaches unity for similar weight estimates and zero otherwise:       
+
+> σΞ=σWΞ
+> ΞΞ ⊤
+> || Ξ|| 2−bΞ
+> !
+
+where WΞ and bΞ are trainable parameters that define the similarity threshold and sensitivity. The bias term bΞ es-tablishes a configurable basin of attraction between agents, allowing adaptation to different multi-objective task require-ments. The sigmoid function σ ensures smooth transitions between independent signal and coalition attraction regimes. Let S ∈ RNs×Ns represent the adjacency matrix of the communication graph, encoding which agents can directly exchange information. The effective similarity matrix is then constrained by the communication topology:      
+
+> So Ξ=S◦So
+> 
+> WσσΞ
+> 
+
+where ◦ denotes the Hadamard product and Wσ provides addi-tional learnable scaling. This formulation ensures that opinion exchange occurs only between agents within communication range, maintaining the distributed nature of the system. The complete weight dynamics are characterized by a two-state system comprising a primary weight state x2 ∈ RNs×K
+
+and an auxiliary coordination state x1 ∈ RNs×K . This second-order dynamics is strictly required to achieve exact clustering agreements; specifically, x1 acts as an integrator that accumu-lates disagreement to compensate for the differences between dynamically changing neighboring signals, ensuring x2 con-verges to a stable consensus. The final weight distribution for each agent follows a Dirichlet distribution with concentration parameters determined by the softmax transformation of x2.Inspired by the Liquid Graph Time-Constant (LGTC) frame-work [26], we define the coupled opinion dynamics as:                     
+
+> 
+> ˙x1=−(IN−So Ξ)x2WB
+> ˙x2=−(τ+ Ξ) ◦x2−(IN−So x)x2WA
+> + ( IN−So Ξ)x1WB+ Ξ Bpw=So (x2)
+> .(7)
+
+Here, WB and WA are learnable weight matrices that act uniquely as coupling gains between agents to govern the in-ternal state coordination and the network consensus dynamics, respectively. We emphasize that these matrices do not encode any inter-objective trade-offs; their sole purpose is to facilitate network synchronization. To ensure positive definiteness and stability, we impose W = ˜W ⊤ ˜W > 0 for the system matrices. The bias parameters τ , bΞ, and B are implemented as 1N ⊗ b
+
+to ensure equal biases across all agents while maintaining learnable adaptation capabilities. The system also incorporates an attention mechanism for x2
+
+communication, defined as:      
+
+> So x=S◦So (Wxx2x⊤
+> 2
+> || x2|| 2
+> !
+> )
+
+This attention matrix ensures subgroup constant row sum [32], which is essential for proving convergence. This is because the softmax, applied over communicating agents with similar states, effectively selects the agents with similar states leading to potential coalition, which is a key condition for stable clustering [32]. In this system, Ξ appears in multiple roles: it determines the similarity-based coupling structure through So Ξ, provides damping in the x2 dynamics through the (τ + Ξ) ◦ x2 term, and drives the system evolution via the ΞB input term. This multivalent role allows the observation-dependent signal Ξ to simultaneously influence agent clustering, convergence rates, and the target weight distribution. Before stating the main theorem of this section, we provide IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 6
+
+the following definition of clustered trajectories: 
+
+Definition IV.1. Given N agent state trajectories ¯xc =[xc 
+
+> 1, . . . , x cN]
+
+, agents are grouped into clusters if they follow the same time-evolving state. Formally, agents i and j belong to the same cluster Cm if and only if xci = xcj , ∀i, j ∈    
+
+> Cm,m∈ { 1, . . . , M }.
+
+That is, the cluster set is defined as         
+
+> Cm=i, j ∈ V xci=xcj.
+
+The clustered team state can then be represented as ¯xc = [ xc1 ⊗ 1C1 , . . . , x cM ⊗ 1CM ]⊤ where  
+
+> xcm
+
+is the representative state trajectory for cluster Cm.
+
+Considering the communication graph G, the following result is derived by making the following assumption on the agent connectivity: 
+
+Assumption 1. We assume the agent communication graph G
+
+is connected throughout the task episode. 
+
+We are now ready to state the theorem about the conver-gence properties of the system in (7). 
+
+Theorem 1. The distributed system in (7) clusters in different stable equilibria ¯xc given by Definition IV.1 and dictated by the communication graph topology and observed environment. 
+
+We reported the proof in the Appendix IX-A. Figure 2 illus-trates an example of 20 agents weight concentration parameter trajectories for three objectives randomly initialized (a) and the resulting distributions. The trajectories follow agents’ periodic preference embeddings with a different phase per agent. The clustering trajectories are highlighted in different colors and result very stable and distinct. However the trajectories get noisier when the clusters are close as expected since So Ξ and So x will have similar value across the agents. We note that even if the assumption 1 is not satisfied, the convergence is guaranteed for the connected subgroups. While Theorem 1 guarantees that agents within a connected subgroup will reach a stable consensus on their concentration parameters pw, the dynamical system relies on learnable components, such as the observation mapping g(·), to dictate where these equilibria form. For the team to effectively solve the underlying task, these parameters must be optimized so that the resulting clustered states translate into policies that adequately cover the objective space. Consequently, we must map the converged states to actionable agent weights and establish a training objective that guides the system toward optimal multi-objective performance. This is discussed in the next section. 
+
+B. Weight Distribution Training 
+
+The concentration parameters pw define a Dirichlet dis-tribution Wi(w|pw) from which agent weights are sampled during training and execution. To train the weight distribution  
+
+> W
+
+effectively, we develop a regret-based loss function that encourages sampling of high-quality weights while ensuring uniform exploration of the Pareto front [33]. During training, we estimate the Pareto front PF achieved by the current joint policy π(z, w ), which depends on the weight samples utilized during the rollouts. The set PF is comprised of the optimal value functions V π,w obtained throughout the training process. In the following, we will use V π , to indicate a value function given w and the policy π.We reformulate the Tchebycheff problem as a minimization to accommodate mixed positive-negative reward scenarios:          
+
+> Lw(V) =
+> NsX
+> j=1
+> max
+> iwji
+> |Vπji −v∗
+> i||v∗
+> i|(8)
+
+where v∗ 
+
+> i
+
+represents the ideal (utopian) value for objective 
+
+> i
+
+. Following common practice in empirical multi-objective reinforcement learning [6], this reference point is not fixed but continuously estimated online during training. Specifically,  
+
+> v∗
+> i
+
+is defined as the maximum return achieved for each objective across the historical estimated Pareto front PF . To prevent optimization distortion from noisy value estimates early in training, we apply a monotonic update rule after each rollout iteration: v∗       
+
+> i←max  v∗
+> i,max V∈PF Vji
+> 
+
+, ensuring the reference point only shifts when genuinely superior policies are discovered. A small constant ϵ = 10 −6 is added to the denominator to prevent division by zero. Let w∗ denote a set of uniformly sampled weights available prior to training. We associate each weight w∗ with a value V ∗ ∈ PF as the argument that minimizes min V ∈PF Lw(V ). In this manner, we define the optimal weight w∗ for the achievable value V π . Let    
+
+> Vπ(z, w )
+
+be the value estimated through the rollout of the current policy for observation z. We project V π (z, w ) onto the Pareto front to obtain V ∗π = arg min V ∈PF || V − V π (z, w )|| .The regret incurred by using a sampled weight ˆw ∼ W (·| pw)
+
+instead of the optimal weight w∗ for the associated optimal value V ∗π is defined as:        
+
+> r( ˆ w|w∗) = min
+> w∗
+> 
+> Lw∗(V∗π)− L ˆw(V∗π)
+> 
+> .
+
+This choice encourages the distribution W to cover the entire Pareto front, as a sampled weight is only penalized for its distance to its nearest optimal counterpart, not to a single, arbitrarily chosen one. We therefore minimize the expected regret over the weight distribution W to encourage sampling of weights that yield low regret relative to the optimal Pareto front. Furthermore, since the weight distribution also influ-ences the policy, we seek to maximize the expected reward obtained by the sampled weights. Given the rollouts dataset  
+
+> D
+
+and the agent advantage estimation per objective Aπi 
+
+> ij
+
+[34], we minimize the following loss according to objective (4):                 
+
+> jmax = arg max
+> jNsX
+> i=1
+> wij
+> |Vij (z, ˆwi)−v∗|
+> v∗
+> Lw=E(a,z, ˆw)∼D [log W( ˆ w|z)·r( ˆ w|w∗)]
+> −E(u,z )∼D
+> "
+> log W( ˆ w|pw)·
+> NsX
+> i=1
+> Aπi
+> ij max
+> #
+
+The preceding loss function employs the log-likelihood trick for computational convenience. Note that this loss formulation is compatible with the clipped update mechanism utilized in PPO [35]. This loss function balances two goals: minimizing regret to ensure comprehensive exploration of the Pareto front, and maximizing the policy’s advantage to exploit high-performing weight regions. 
+
+Remark 1. The weight distribution loss can be extended to in-corporate human preferences for specific objectives. This can IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 7    
+
+> (a) Concentration parameters trajectories (b) Final Dirichlet distributions Fig. 2: Weight clustering trajectories : (a) 20 agents concentration parameters trajectories for 3objectives starting from random state and clustering in three subgroups while subjected to a periodic preference embedding with a different phase for each agent. (b) Dirichlet distribution for three objectives at the end of clustering trajectories.
+
+be achieved by adding a cross-entropy term that encourages  
+
+> W
+
+to align with desired objective priorities, enabling human-guided multi-objective optimization. 
+
+V. P OLICY TRAINING 
+
+In this section, we describe our approach for training agent policies using local observations and predicted weights to address the multi-objective optimization problem in (4). We introduce two sets of parameters: θ encoding the policy approximator πθ , and ϕ encoding the value function approx-imator Vϕ. The base CIMORL method trains these networks directly using proximal policy optimization. However, the training of the weight distribution depends critically on both the exploration of Pareto-optimal solutions and the quality of the learned policy. To enhance policy optimality and create our advanced variants, CIMORL-TS and CIMORL-MPPI, we employ a privileged expert framework [36] during training. Our approach constructs a high-quality dataset using an expert sampling methodology that generates approximately optimal policy distributions for collection in an expert dataset. The privileged expert identifies optimal policies for the entire team by leveraging full system dynamics and environmental state information over a finite planning horizon. We implement two complementary sample-based expert algorithms to drive these variants: Multi-Objective Neural Tree Search (MONTS) to generate the CIMORL-TS policy, and Multi-Objective Model Predictive Path Integral (MOMPPI) control to generate the CIMORL-MPPI policy. MONTS extends Neural Tree Expansion (NTE) search [37] by incorporating predicted weights to scalarize the multi-objective value function. For a given node n in the search tree with accumulated team value V (n), we define the scalarized node value as:       
+
+> Vmax (n)←max
+> iNsX
+> j=1
+> wij
+> |Vij (n)−v∗
+> i|
+> v∗
+> i
+> (9)
+
+Here, Vmax (n) represents the worst-case weighted deviation from the ideal performance across all objectives, acting as the scalarized heuristic value for node n. The term Vij (n)
+
+denotes the accumulated value for agent j on objective i at that specific node, while wij is the corresponding predicted weight. The parameter v∗ 
+
+> i
+
+represents the ideal, utopian ref-erence value (estimated during training), which normalizes the deviations. By minimizing this maximum normalized de-viation, the formulation strictly aligns with the Tchebycheff scalarization defined in (4). This design preserves standard tree search exploration rules while enabling branches to evaluate gains across all objectives simultaneously. Algorithm 1 details this implementation, which crucially returns a new optimal Gaussian action distribution over the root’s child nodes rather than selecting a single best action. In contrast, MOMPPI extends Model Predictive Path In-tegral (MPPI) control [5] by integrating the learned neural policy for action sampling during rollout simulations. Given the team’s accumulated rewards V across T parallel rollout trajectories, we apply the vectorized Tchebycheff utility func-tion:        
+
+> Vmax ←max
+> iNsX
+> j=1
+> wij
+> |Vij −v∗
+> i|
+> v∗
+> i
+> ∈RT(10)
+
+Importance weights are computed using a softmax transfor-mation with temperature λ: IS ← exp( −Vmax /λ ) ∈ RT . Un-like traditional MPPI that iteratively updates noisy reference actions, our approach leverages the pre-trained policy πθ to directly yield near-optimal action distributions, eliminating the need for iterative refinement. Both algorithms operate as privileged experts during train-ing by accessing global states and utilizing substantial, iden-tical computational resources to perform deep searches, en-suring a fair algorithmic baseline free from hardware limita-tions. At runtime, agents execute a localized, computationally-bounded version of these strategies using only partial observa-tions. We introduce both methods because their fundamental mechanisms present complementary trade-offs. MONTS pri-oritizes the deep expansion of the most promising search paths through selective node evaluation. Consequently, MONTS can achieve faster theoretical convergence, with approxima-tion errors decreasing as O(1 /T 1−c3/c 2 ) [38] compared to MOMPPI’s O(1 /√T ) [5], but incurs higher sequential com-putation costs. Conversely, MOMPPI performs broad, uniform exploration across the action space, trading sample efficiency for massive parallelization that scales exceptionally well on modern GPU hardware. As illustrated in Figure 3, the optimal choice between these experts depends entirely on the envi-ronment’s complexity and the target system’s parallelization capabilities, making a simple tabular comparison inadequate. Given a weight sample w ∼ W ψ (z) from the agent’s predicted IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 8
+
+Fig. 3: Comparison of MPPI and NTS : on the left, the selection strategy of the Neural Tree Search (NTS); on the right, the Monte-Carlo sampling of Model Predictive Path Integral control. 
+
+distribution, we generate multiple trajectory rollouts by sam-pling actions from the policy πθ . Using these trajectories, we compute the optimal policy distribution through one of our sampling search (SS) methods: 
+
+π∗ ← SS (z, π θ , V ϕ, w, T, D ) (11) 
+
+where T denotes the number of rollout samples and D rep-resents the planning horizon depth. The complete dataset D
+
+stores the expert-derived optimal policy distribution π∗, the current joint policy πθ , rollout observations z, joint actions u,value function estimates Vϕ, and the corresponding weights w.At the k-th training iteration, we assume Gaussian policy distributions where parameters θ encode both the mean μθ
+
+and standard deviation σθ . The policy training for agent i
+
+minimizes the following supervised learning objective: 
+
+Jπ∗ 
+
+> i
+
+(θ) = E(u,z )∼D 
+
+"
+
+|| μ∗ 
+
+> i
+
+− μiθ (z)|| 2 + || σ∗ 
+
+> i
+
+− σiθ (z)|| 2
+
+#
+
+− αHH(πiθ )
+
+where H(πiθ ) represents the policy entropy and αH is a temperature parameter controlling policy stochasticity to main-tain adequate action space exploration. To accelerate initial convergence, we incorporate an auxiliary loss term based on the scalarized advantage function: 
+
+jmax = arg max 
+
+> jNs
+
+X
+
+> i=1
+
+wij 
+
+|Vij (z, w i, ϕ ) − v∗|
+
+v∗
+
+Jπi (θ) = −E(u,z )∼D 
+
+"
+
+πi(zi, θ ) · Aπi(·,θ k )
+
+> ij max
+
+#
+
+The final loss for policy training combines both objectives: 
+
+Jπi (θ) = (1 − α∗)Jπ∗ 
+
+> i
+
+(θ) + α∗Jπi (θ) (12) 
+
+with α∗ decaying from 1 to 0 over the training process. This supervised expert loss provides a strong implicit regularization effect. The learned policy is trained to predict the expert coordination strategies at deployment while relying strictly on local, partial observations without requiring the expert’s heavy computational overhead. The value function network 
+
+Vi(z, w i, ϕ ), which outputs the vector of objective values, is trained by minimizing the squared L2 norm of the temporal difference error across all objectives: 
+
+JVi (ϕ) = 
+
+E(u,z )∼D 
+
+" 
+
+Vi(z, w i, ϕ ) −
+
+
+
+Aπi(ui,θ k ) 
+
+> i
+
++ Vi(z, w i, ϕ k )
+
+ 2
+
+#
+
+Algorithm 1: MONTS 
+
+Data: zs, θ, ϕ, w , T samples, D horizon 
+
+Result: Find the initializer.  
+
+> 1
+
+create root node n0 with state zs 
+
+> 2
+
+store the initial value prediction v0 ← Vϕ(zs) 
+
+> 3
+
+ni ← n0 
+
+> 4
+
+for t = 1 . . . T do  
+
+> 5
+
+rw ← [ ]  
+
+> 6
+
+for i = 1 . . . D do  
+
+> 7
+
+ni, rw i ← TreePolicy (ni) 
+
+> 8
+
+stores rw i in the list rw  
+
+> 9
+
+end  
+
+> 10
+
+append the terminal state value Vϕ(zs(ni)) to rw  
+
+> 11
+
+Backup (ni, rw ) 
+
+> 12
+
+end  
+
+> 13
+
+return π∗ ← GetDistribution (n0) 
+
+> 14
+
+function TreePolicy( n) 
+
+> 15
+
+if n not fully expanded then  
+
+> 16
+
+return Expand (n) 
+
+> 17
+
+else  
+
+> 18
+
+n ← arg max 
+
+> n′∈Child( n)
+
+h Vmax (n′)
+
+N (n′) + c1
+
+N (n)c3
+
+N (n′)c2
+
+i 
+
+> 19
+
+return Expand (n) 
+
+> 20
+
+end  
+
+> 21
+
+function Expand( n,w) 
+
+> 22
+
+get observation vector zn ← n 
+
+> 23
+
+sample an action u ∼ πθ (zn, w ) 
+
+> 24
+
+create a new child node n′ ← f (z′
+
+> n
+
+|zn, u ) 
+
+> 25
+
+compute the reward rw( z′
+
+> n
+
+) 
+
+> 26
+
+return n′, rw( z′
+
+> n
+
+) 
+
+> 27
+
+function Backup( n, rw ) 
+
+> 28
+
+while n̸ = null do  
+
+> 29
+
+d ← DEPTH (n) 
+
+> 30
+
+for i = d . . . D do  
+
+> 31
+
+V (n) ← V (n) + γdrw[ d] 
+
+> 32
+
+end  
+
+> 33
+
+N (n) ← N (n) + 1  
+
+> 34
+
+n ← PARENT (n) 
+
+> 35
+
+end  
+
+> 36
+
+function GetDistribution( n) 
+
+> 37
+
+N ← P 
+
+> c∈CHILD (n)
+
+N (c) 
+
+> 38
+
+μ ← 1
+
+> N
+
+P 
+
+> c∈CHILD (n)
+
+N (c) · W (c) 
+
+> 39
+
+σ2 ← 1
+
+> N
+
+P 
+
+> c∈CHILD (n)
+
+N (c) · (W (c) − μ)2 
+
+> 40
+
+return (μ, √σ2)
+
+VI. C LOSED -L OOP STABILITY 
+
+In this section, we analyze the closed-loop stability of the overall system when the multi-agent team employs the learned policy πθ (z, w ). Since the observations are part of the environment state and the team state, we can focus only on the overall team dynamics, i.e. where the agent interactions happen. We will make two further assumptions to provide closed-loop stability insights. 
+
+Assumption 2. Given the joint team observation z, The joint policy is described by πθ (z, w ) = μθ (z, w ) + σθ (z, w )ϵ with IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 9
+
+Algorithm 2: MOMPPI 
+
+Data: zs, θ, ϕ, w , T samples, D horizon 
+
+Result: Optimal policy ϕ∗ 
+
+> 1
+
+Sample T control actions u0 ∼ πθ (zs, w ) 
+
+> 2
+
+Reconstruct the initial state s0 from zs 
+
+> 3
+
+Initialize cumulative reward V = 0  
+
+> 4
+
+for i = 1 to D do  
+
+> 5
+
+Get new state from environment simulation and reward si, rw i ← f (si−1, u i−1) 
+
+> 6
+
+Get new observation zsi ← h(si) 
+
+> 7
+
+Accumulate reward V ← V + γirw i 
+
+> 8
+
+Get action ui ∼ πθ (zsi , w ) 
+
+> 9
+
+end  
+
+> 10
+
+Add terminal reward V ← V + γdVϕ(zsD ) 
+
+> 11
+
+Compute MPPI importance weights      
+
+> IS ←exp( −Vmax /λ )∈RT
+> 12
+
+return π∗ ← GetDistribution (u0, IS ) 
+
+> 13
+
+function GetDistribution( u0, IS )                   
+
+> 14 W←PTi=1 IS i
+> 15 μ←1
+> W
+> PTi=1 IS i·u0,i
+> 16 σ2←1
+> W
+> PTi=1 IS i·(u0,i −μ)2
+> 17
+
+return (μ, √σ2)  
+
+> ϵ∼ N (0 , I )
+
+. Moreover, sup z,w || σθ || ≤ σg .
+
+Assumption 3. We assume that the robots’ observation tran-sition dynamics are deterministic, which is a common sim-plification for tractable stability analysis, and thus attribute all stochasticity to the control policy. The system dynamics under control π can therefore be described by the it ˆo stochastic differential equation:           
+
+> dz =f(z, t )dt +μθ(z, w )dt +σθ(z, w )ϵ(13)
+
+Note that this system model also captures the state transition experienced in the sampling search. Since the weights w serve as objective selectors that focus the observation vector on the objectives while preserving the underlying processing func-tions, we can analyze the closed-loop stability by considering each weight-induced subsystem individually. This approach leverages contraction theory [39] for switching systems [40], where each ’subsystem’ corresponds to the agent dynamics (13) under a fixed weight vector w. The overall system’s stability is then analyzed as these weights evolve over time. For the stability analysis, we require a contraction matrix     
+
+> M(z, t )≻0
+
+that is Lipschitz continuous with constant LM
+
+and satisfies mI ⪯ M ⪯ mI for positive scalars m and m.The matrix M (z, t ) defines a state-dependent Riemannian metric. Unlike standard Lyapunov theory which measures the energy or distance of a single trajectory to a fixed equilibrium, contraction analysis utilizes M (z, t ) to continuously measure the differential distance between any two neighboring system trajectories. If the vector field of the system ensures that this differential distance is strictly shrinking with respect to the metric defined by M (z, t ), all trajectories will exponentially converge toward each other, regardless of their initial condi-tions. Under this contraction matrix, the agent dynamics with policy πθ satisfies the contraction condition:                
+
+> ˙M+MT∂(f+μθ)
+> ∂z +∂(f+μθ)
+> ∂z
+> ⊤
+> M⪯ − αM −αsI
+
+where α > 0 represents the contraction rate, αs =    
+
+> LM(2 σ2
+> g)/(αg+ 0 .5)
+
+accounts for stochastic perturbations, and    
+
+> αg>0
+
+is a design parameter. Under these conditions, results in stochastic contraction theory [41] guarantee exponential convergence in expectation between any two system trajectories ξ1 and ξ2:         
+
+> E[∥ξ2(t)−ξ1(t)∥]≤
+> E
+> hRξ2|(0)
+> ξ1|(0) δz ⊤M δz
+> i
+> me−2αt +C
+> 2αmm
+
+where C = (2 σ2   
+
+> g)/(2 α−1
+> g+ 1)
+
+bounds the steady-state error due to stochastic noise. The overall system’s contraction rate is given by a = min i αi across all weight-induced subsys-tems. Additionally, let Lw denote the Lipschitz constant of system (13) with respect to the weight parameters w.To establish bounded behavior of the weight dynamics, we first present the following result: 
+
+Lemma 3. The weight state x2 of system (7) remains bounded in the invariant set [−B, B ]N ×K for all t ≥ 0 if initialized within this set. Furthermore, the auxiliary state x1 evolves within a bounded set X1.
+
+The proof is reported in the Appendix IX-B. Given the Lipschitz constant LZ of the function g in (6), the closed loop system is contracting under the following Theorem: 
+
+Theorem 2. Under the joint control policy πθ and weight dy-namics (7) , the closed-loop multi-agent system is contracting if the small-gain condition      
+
+> λmax (F22 )·a > L G·Lw(14)
+
+is satisfied, where       
+
+> LG= 2 LZ
+> 
+> ∥W∥∞+ 1 + 116 ∥WB∥∞
+> 
+> (15)
+
+represents the coupling strength between the weight and observation dynamics. 
+
+We provide a proof in the appendix IX-C 
+
+Remark 2. The Lipschitz constant LZ can be readily com-puted for neural networks g employing standard activation functions such as ReLU or Tanh. Furthermore, LZ has a well-defined analytical form when g is spectrally-normalized [42], providing practical computational advantages for stability verification. 
+
+Alternatively, we can apply the same stability analysis framework to the weight selection dynamics under w. This leads to the following equivalent characterization: 
+
+Corollary 1. The stability condition in Theorem 2 is equiva-lent to ensuring that each subsystem of (13) induced by a fixed weight selection w exhibits contractive behavior, along with the weight dynamics system (7) having its own contraction rate. The reverse implication also holds. Proof. This equivalence follows directly from Theorem 2by considering each subsystem individually with Lw = 0,which decouples the weight dynamics from the observation IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 10            
+
+> (a) Multi-resource assignment scenario
+> (b) Multi-team attacker-defender scenario Fig. 4: Experimental scenarios : (a) Agents must deliver resources to consumer locations (red) while avoiding collisions and maintaining connectivity. (b) Multiple teams compete against each other to infiltrate multiple opponent safe areas while defending their own territory against opposing teams.
+
+dynamics. When Lw = 0 , the small-gain condition reduces to verifying contraction of each subsystem independently. The conditions stated in Theorem 2 and the agent dynamics contraction can be enforced during training by adding aregularization term to the policy and weight-predictor loss functions that penalizes the spectral norms of the network parameters. This helps control their Lipschitz constants and satisfy the small-gain condition. 
+
+Remark 3. Assumptions 2 is a standard policy exploration assumptions derived from the learning framework while As-sumption 3 is a direct controlled consequence of our learning formulation. However, the deterministic observation dynamics might be restrictive even if our contraction analysis inher-ently guarantees robustness against bounded additive distur-bances [41]. We reserve to future works the extension of the formal analysis to encompass general stochastic dynamics and observation. 
+
+VII. E VALUATIONS 
+
+We evaluate our base method, CIMORL, and its sampling-augmented variants (CIMORL-TS and CIMORL-MPPI) on two multi-agent domains: multi-resource assignment and multi-team attacker-defender. Detailed hardware, training, and architectural setups are deferred to the Appendix. We compare against state-of-the-art multi-policy baselines MOMAPPO [3] and MO-MIX [17], which generate discrete sets of policies. To ensure a fair algorithmic comparison against our continuous conditioned approach, we evaluate all methods over a uniformly sampled batch of evaluation preference weights w∗. For the multi-policy baselines, for each weight vector in the evaluation batch, we select the specific policy from their generated set that maximizes the expected scalarized utility under that weight. Furthermore, we introduce MOMAPPO-TS, an on-policy baseline augmented with Tree Search that incorporates privileged expert data via the loss defined in Eq. (12). This further baselines serves as further validation of our method when the baseline is trained under the same privileged expert conditions. To evaluate the quality, coverage, and distribution of the solutions, we report the hypervolume indicator [43], spacing, and diversity metrics [17]. Policy adaptability and performance are assessed via the Expected Scalarized Return (ESR) for-mulation of expected utility (4). Because exhaustive empirical rollouts in continuous multi-objective spaces are intractable and suffer from high variance, we efficiently approximate the Pareto front by evaluating the trained value function Vϕ over identical, uniformly sampled weights w∗ consistently across all methods [3]. The final front is then refined using a pruning K-means clustering method [44]. Furthermore, to empirically validate Lemma 1 and Lemma 2, we evaluate two ablation baselines derived from our method: CIMORL w/o Sync (which bypasses consensus, directly mapping the embedding Ξ to the weight distribution) and CIMORL w/o Clust (which sets So Ξ = S and So x = S in Eq. (7) to force a single global consensus rather than distinct coalitions). The following sections detail each scenario, presenting both the simulated training results and the real-world experimental validation using a team of Crazyflie 2.1 drones. 
+
+A. Multi-Resource Assignment 
+
+We consider a multi-resource assignment scenario involving a fully cooperative multi-agent team Vs comprising Ns agents. The task requires delivering r distinct resource types to K
+
+consumer locations situated within a confined operational space Q, where each consumer may demand a specific subset of the available resources. Each consumer is associated with an interaction region of radius Rk, within which an agent may release its carried resources to satisfy the consumer’s demand, as illustrated in Figure 4. Furthermore, agents experience col-lisions when their inter-agent distance falls below a threshold 
+
+> Rcl
+
+.The information structure enforces partial observability con-straints, where each agent i has access to limited observations   
+
+> zi∈ Z
+
+comprising: (i) its current position pi, velocity vi, and carried resources so i ∈ Rr ; (ii) the locations of all target areas  
+
+> ds k
+
+and their corresponding demanded resources de k ∈ Rr ;and (iii) a restricted set of teammate positions Os = {pj |   
+
+> j∈Ni}
+
+within the agent’s sensing range. To ensure the existence of a unique resource allocation solution, we assume that the aggregate available supply PNs  
+
+> i=1 so i
+
+does not exceed the total demand PKk=1 de k. The objective of this scenario is to determine a collaborative control policy that enables the agents to optimally satisfy the resource demands within the environment while maintaining network connectivity and avoiding inter-agent collisions. These objectives inherently conflict; optimizing delivery speed requires spatial dispersion that compromises connectivity, while aggressive movement increases spatial density and collision risks. Each agent receives a vector reward rw i(s, u ) : S × U →  
+
+> RK+2
+
+where the first K components reward the successful fulfillment of the K consumer demands, and the final two com-ponents incentivize connectivity maintenance and collision avoidance, respectively. Note that the reward rw i depends on the joint state and actions of all agents, reflecting the inherently cooperative nature of the task. Specific details regarding the mathematical formulation of these rewards and the neural network architectures are deferred to the Appendix. IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 11                
+
+> Fig. 5: Multi-resource assignment training comparison : Hypervolume indicator and expected utility results for all methods across multiple training runs.
+> Fig. 6: Normalized return for resource-allocation task for number of agents in the team N= [5 ,10 ,20] and 6objectives ( 4demanding locations, obstacle avoidance and connectivity) reported as bar plots with their standard deviation as black lines. TABLE II: Disconnection rate in multi-resource allocation experiment
+> MOMAPPO CIMORL CIMORL-MPPI CIMORL-TS
+> 0.0% 0.0% 0.2% 2.8%
+
+1) Training Results: For the multi-resource assignment scenario, we conducted training with 5 agents, 3 resource types, and 4 target locations. All sampling-based algorithms were trained with identical simulation budgets and planning horizons to ensure fair comparison. The learning rate was scheduled to decrease during training to promote convergence stability. Figure 5 presents the training comparison across all methods using four key metrics: Pareto Front hypervolume, sparsity and diversity, and expected utility. The results demonstrate clear performance distinctions between the proposed methods and baseline approaches. The sampling-based variants of our approach, CIMORL-MPPI and CIMORL-TS, achieved superior performance with statistically equivalent results. Both methods attained hyper-volume values of approximately 8.0×10 4 ±4.0×10 3, indicating excellent Pareto front coverage, sparsity and diversity. Their expected utility performance was similarly strong, reaching   
+
+> 12 .0±0.5
+
+, demonstrating consistent policy quality across  
+
+> Fig. 7: 3D trajectories in multi-resources allocation experiment :3D trajectory comparison of the four methods.
+
+multiple evaluation runs. CIMORL-MPPI and CIMORL-TS perform comparably, proving that both MPPI and Monte Carlo Tree Search offer effective expert guidance. With 2000 
+
+simulation samples and a horizon of 25 , there is no statistically significant difference between the two approaches. The base CIMORL method, while employing the same weight prediction framework, achieved moderately lower per-formance with a hypervolume of 6.4 × 10 4 ± 6.0 × 10 3 and expected utility of 11 .0 ± 0.3. This performance gap of ap-proximately 20% in hypervolume compared to the sampling-based variants highlights the importance of privileged expert guidance during training. Nevertheless, CIMORL still outper-formed the baseline methods, demonstrating the effectiveness of the proposed weight prediction mechanism. All these meth-ods reach similar levels of Pareto Front and Sparsity, showing high diversity of the weight that span very different points on the Pareto Front. Among the baseline methods, MOMAPPO-TS showed im-proved performance over standard MOMAPPO, achieving a hypervolume of 6.6×10 4 ±8.0×10 3 compared to MOMAPPO’s IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 12   
+
+> Fig. 8: Demanding resource evolutions in multi-resources alloca-tion experiment
+> 5.8×10 4±5.0×10 3
+
+. This 13 .8% improvement demonstrates that tree search integration provides meaningful benefits even for fixed-weight approaches. Moreover, the improvement of 21 .2% 
+
+in hypervolume achieved by CIMORL-MPPI and CIMORL-TS over MOMAPPO-TS shows the impact of the weight prediction model. However, all baseline methods exhibited substantially lower expected utility performance, with MOMAPPO achieving   
+
+> 8.5±0.5
+
+, similar to MO-MIX and MOMAPPO-TS reaching   
+
+> 10 .5±1.0
+
+. The significantly higher variance in MOMAPPO-TS’s expected utility ( σ = 1 .0) indicates inconsistent policy performance, likely due to the fixed weight selection strategy’s inability to adapt to varying environmental conditions. Without synchronization, our framework’s Pareto Front converges to a low, stable hypervolume alongside a marked decline in sparsity and diversity. This plateau demonstrates that lacking explicit coordination yields stable, albeit lower-quality solutions, as reflected by the expected utilities. Conversely, the dynamic synchronization in CIMORL w/o Clust effectively generates adaptive, high-value solutions. This configuration achieves a hypervolume of 6.0±0.5×10 4 and expected utilities of approx-imately 9.0 ± 0.4, outperforming MOMAPPO while remaining subordinate to the complete CIMORL model. Furthermore, this variant maintains sparsity and diversity levels compa-rable to both CIMORL and its sampling-based counterpart. Ultimately, while this method produces an evenly distributed Pareto Front, its solutions remain strictly dominated by those discovered by the full CIMORL framework. In Figure 6 , we present the results of scaling the team size from 5 to 20 agents. To facilitate comparison, returns were shifted and normalized to [0 , 1] based on the maximum return achieved for each objective across all 10 random seeds. As expected, overall returns decrease with larger teams. However, connectivity (Objective 6) improves, as the denser environment naturally makes this objective easier to satisfy. In general, CIMORL-TS and CIMORL-MPPI maintain returns above 0.9
+
+across all objectives, whereas performance drops to approx-imately 0.8 under the base CIMORL policy. This suggests that the sampling search achieves broader coordination than what is observed during training. Furthermore, performance remains remarkably consistent across the different objectives, demonstrating that roles are evenly assigned and the clustering mechanism effectively distributes tasks among agents as the team size grows. 
+
+2) Experimental Comparison: We performed real lab ex-periments to evaluate our approach. The experimental setup utilized 50 simulations for the three search-based methods and 1000 simulations for the MPPI-based approach with a horizon length of 10 steps to maintain computation within the identical hardware time budget of 50 ms. This discrepancy is not an artificial setting but the natural outcome of the methods’ inherent mechanisms: MONTS requires sequen-tial node expansion that bottlenecks parallelization, whereas MOMPPI evaluates independent trajectories, allowing massive GPU batching within the same latency constraint. Figure 7 reports the 3D trajectories of the experiments while the resource allocation dynamics are illustrated in Figure 8, for the four methods, MOMAPPO, CIMORL, CIMORL-TS, and CIMORL-MPPI. The results reveal significant behavioral differences among the methods. MOMAPPO demonstrated the most severe limitations, with agents colliding almost imme-diately upon mission initiation, preventing any meaningful resource allocation. CIMORL exhibited marginally better per-formance, allowing agents to operate for a brief period before collision occurred, yet still failing to complete the resource allocation task. In contrast, CIMORL-TS successfully avoided inter-agent collisions throughout the experiment, demonstrating that the sampling-based search mechanism effectively adapts to real drone dynamics. However, despite collision avoidance, CIMORL-TS failed to achieve complete resource alloca-tion even during extended flight operations. CIMORL-MPPI emerged as the only method capable of both collision avoid-ance and successful resource allocation, validating the ef-fectiveness of the proposed coordination-informed approach. This shows the compromise of CIMORL-TS in real-time applications as we had to drastically reduce the number of simulations to stay within the time budget. Consequently, the asymmetric search tree is computationally starved un-der finite sampling; it lacks the iterative depth necessary to reliably balance exploration and exploitation, systematically leading to brittle decisions based on unrefined leaf evaluations. Conversely, the 1000 uniform parallel samples achieved by CIMORL-MPPI generate a robust, smoothed approximation of the objective landscape, inherently producing safer, average-case optimal decisions under the identical time constraint. Table II provides insights into the connectivity objective. MOMAPPO and CIMORL both exhibit 0% disconnection rates, as the flights terminate so rapidly due to collisions that insufficient time elapses for agents disconnection to manifest. CIMORL-MPPI achieves the most favorable disconnection performance with only 0.2% disconnection rate, demonstrating robust coordination capabilities. CIMORL-TS experiences a higher disconnection rate of 2.8% . Because agents take longer to fly and spread out further to allocate the remaining re-sources, the increased distance between them leads to more frequent link failures. The experimental results validate several key aspects of our IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 13         
+
+> Fig. 9: Normalized returns for the attacker-defender task for varying team sizes of 5,10 , and 20 agents, evaluated across 4teams ( therefore 4objectives). Results are reported as bar plots with their standard deviation as black lines.
+
+approach: (i) the proposed weight prediction framework con-sistently outperforms fixed-weight baselines across both met-rics; (ii) privileged expert guidance through sampling-based algorithms provides substantial performance improvements; and (iii) both MPPI and MCTS variants achieve comparable results, offering flexibility in computational resource allocation based on specific deployment constraints. 
+
+B. Multi-team Attackers-Defenders 
+
+We consider a complex multi-team adversarial scenario featuring asymmetric attack and defense objectives. The en-vironment consists of a fully cooperative attacking team Vs
+
+comprising Ns agents that must simultaneously accomplish the following objectives: penetrate K distinct opponent safe areas 
+
+> Rk
+
+, each defended by teams Vk of size Nk, while protecting their own territorial zone Rs located at position ds. The complete set of opposing teams is denoted as K = {1, . . . , K }.Each agent possesses a circular interaction zone of radius  
+
+> R
+
+within which it can eliminate an opponent agent through direct engagement, resulting in mutual destruction of both participants. Figure 4 illustrates this multi-objective adversarial configuration. The information structure enforces partial observability con-straints, where each agent i has access to limited observations   
+
+> zi∈ Z
+
+comprising: (i) its current position pi and velocity vi;(ii) the locations of all safe areas ds k; (iii) a restricted set of teammate positions Os = {pj | j ∈ N i} within sensing range; and (iv) a limited collection of opponent positions         
+
+> Ok={pok|k∈ N k,∀k∈ K}
+
+across all opposing teams. The primary objective is to derive a collaborative control policy that enables team Vs to successfully capture all ad-versarial safe areas while maintaining control of their own territory under partial observability constraints. Each agent receives a multi-dimensional reward signal    
+
+> rw i(s, u ) : S × U → RK+1
+
+that evaluates performance across  
+
+> K
+
+attack objectives (corresponding to opponent safe areas) and one defense objective (protecting the home territory). The reward structure must carefully balance individual agent                                     
+
+> TABLE III: Multi-Objective Scores with Alternating Policies. The assigned policy rotates across the Blue, Red, and Green teams for each scenario.
+> Scenario Red Team Green Team Blue Team aCIMORL MOMAPPO CIMORL-MPPI
+> (−694 ,992 ,379) (−2499 ,0,0) (−379 ,694 ,1507)
+> bCIMORL-MPPI CIMORL MOMAPPO
+> (0 ,727 ,0) (−727 ,0,0) (0 ,0,0)
+> cMOMAPPO CIMORL-MPPI CIMORL
+> (0 ,0,0) (−418 ,0,0) (0 ,0,418)
+
+contributions with collective team achievements, incorporating coordination incentives for collaborative attack and defense strategies while enforcing operational constraints such as collision avoidance. Full architectural parameters and reward function aggregations are detailed in the Appendix. 
+
+1) Training Results: For the multi-team attacker-defender scenario, we conducted experiments with 20 agents distributed equally across 4 teams, creating a complex adversarial environ-ment with multiple competing objectives. The sampling-based algorithms maintained identical simulation budgets and plan-ning horizons as in the resource assignment experiments, with the same decreasing learning rate schedule to ensure training stability. Figure 10 presents the performance comparison for this challenging scenario, revealing how different algorithms navigate the trade-offs between hypervolume, utility, sparsity, and diversity in competitive dynamics. CIMORL-MPPI achieved the strongest overall performance with a hypervolume of 7.25 × 10 3 ± 0.25 × 10 3 and expected utility of 11 .0±0.45 . The relatively low variance in both metrics indicates consistent performance across evaluation runs, sug-gesting that the MPPI-based approach provides stable policy learning in adversarial settings. This stability can be attributed to MPPI’s uniform exploration strategy, which systematically samples the action space without making overly optimistic assumptions about opponent behavior. CIMORL-TS achieved comparable hypervolume performance ( 7.25 ×10 3 ±0.33 ×10 3)but exhibited slightly lower expected utility ( 10 .7 ± 0.5) and higher variance during training. This performance profile suggests that Monte Carlo Tree Search’s optimistic selection strategy drives excellent exploration, establishing the highest upward trajectories in both Pareto sparsity (reaching near 450 )and diversity (peaking above 110 ), but leaves the policy more sensitive to unpredictable adversarial shifts, as evidenced by the higher variance ( σ = 0 .33 vs. 0.25 for hypervolume, σ = 0 .5
+
+vs. 0.45 for utility).The base CIMORL method demonstrated strong performance with a hypervolume of 7.0×10 3 ±0.5×10 3
+
+and expected utility of 9.5 ± 0.3. Notably, the performance gap between CIMORL and the sampling-based variants is smaller in this adversarial scenario compared to the coopera-tive resource assignment task. Its sparsity and diversity metrics closely mirror those of CIMORL-MPPI, maintaining a strong middle-to-high position throughout training. Among the baseline methods, MOMAPPO-TS achieved IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 14   
+
+> Fig. 10: Multi-team attacker-defender performance comparison
+> Fig. 11: 3D trajectories in multi-team attacker-defender experiments.
+
+superior performance compared to standard MOMAPPO, with hypervolume values of 6.9 × 10 3 ± 0.4 × 10 3 versus 6.7 ×    
+
+> 10 3±0.3×10 3
+
+, representing a 3% improvement. MOMAPPO-TS exhibited significantly higher variance in expected utility (9.6 ± 1.0 vs. 8.4 ± 0.25 ), indicating that while tree search integration improves average performance, it also introduces inconsistency in policy execution. MO-MIX is subjected more to the non-stationarity in adversarial games, as it is an off-policy method. Therefore, it reaches the worst performances in all the metrics. Consequently, these baselines exhibit notably lower sparsity, plateauing early in the 250 to 300 range, and cluster in the bottom tier for diversity. Additionally, all metrics display wide, heavily overlapping confidence intervals across these algorithms, reflecting the substantial variance inher-ent in competitive multi-agent environments. Both CIMORL w/o Sync and CIMORL w/o Clust converge to a similar hypervolume of 6.65 ± 0.2 × 10 3. However, consistent with the previous scenario, the w/o Sync variant yields lower expected utilities compared to the other baselines and suffers a sharp, early plateau in sparsity. Furthermore, the expected utilities produced by CIMORL w/o Clust clearly illustrate the performance gap between full synchronization and isolated clustering dynamics, amounting to an average difference of approximately 0.8. Without clustering, the model also remains confined to the lower tier of Pareto diversity, further underscor-ing the necessity of the proposed coordination mechanisms. We also evaluated the proposed approach on larger teams, with results presented in Figure 9. As with the resource-allocation task, we normalized the returns to a [0 , 1] scale. We observed that the baseline CIMORL policy struggles to maintain performance across objectives as the team size increases, regardless of whether the agents are assigned at-tacker or defender roles. In contrast, both MPPI and tree search successfully sustain their performance. This confirms that the proposed multi-objective online search effectively extends coordination capabilities to larger teams than those encountered during training. 
+
+2) Experimental Comparison: We conducted experiments with three competing teams, each composed of three drones, rotating the policies among them in three different experi-ments. Again due to time budget, MPPI uses 1000 simulations with an horizon length of 10 steps for computational efficiency. Figure 11 reports the 3D trajectory across the three distinct experimental configurations, each showcasing different team-policy assignments. In experiment (a), the blue team employs CIMORL-MPPI, the green team uses MOMAPPO, and the red team implements CIMORL. In experiment (b), policy assignments rotate with the red team utilizing CIMORL-MPPI, blue team employing MOMAPPO, and green team imple-menting CIMORL. Experiment (c) completes the rotation with the green team using CIMORL-MPPI, red team employing MOMAPPO, and blue team implementing CIMORL. IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 15 
+
+Table III quantifies team performance through a comprehen-sive scoring system that awards at every time step +1 points for each agent successfully infiltrating opponent areas and -1 points for allowing enemy agents into their own territory for the corresponding objectives. In experiment (a), the blue team (CIMORL-MPPI) demon-strates superior strategic coordination, achieving scores of (-379, 649, 1507) through a circular patrol pattern that simulta-neously enables area protection and coordinated attacks. This was an emergent behavior from the policy not pre-programmed or searched during training. This behavior exemplifies the adaptive weight dynamics’ capability to balance competing objectives dynamically. The red team (CIMORL) exhibits a more conservative strategy with scores of (-649, 992, 379), distributing drones uniformly among safe areas, which demon-strates effective weight distribution across objectives but lacks a robust coordination pattern. The green team (MOMAPPO) experiences catastrophic failure due to inter-agent collisions, resulting in severely negative performance with a score of (-2499, 0, 0). This failure mode is characteristic of fixed-weight architectures: lacking the ability to dynamically down-weight aggressive territorial infiltration in favor of immediate spatial de-confliction, the agents exhibit rigid, brittle behavior that easily collapses into physical gridlock when facing heteroge-neous opponents. Experiment (b) reveals distinct strategic adaptations, where the red team (CIMORL-MPPI) with scores of (0, 727, 0) de-velops an advanced enclosure strategy, effectively surrounding and neutralizing green team drones protecting their territory. The blue team (MOMAPPO) suffers immediate collision-induced failure, achieving null scores (0, 0, 0), while the green team (CIMORL), with scores of (-727, 0, 0), demonstrates improved collision avoidance compared to MOMAPPO but fails to mount effective defensive strategies, allowing com-plete territorial infiltration. Crucially, CIMORL’s failure mode is distinct from MOMAPPO’s immediate physical gridlock. Instead of colliding, the green team’s trajectories exhibit severe spatial oscillation (as seen in Figure 11.b). This oscilla-tory hesitation occurs because the dynamic weight consensus mechanism is attempting to adapt to the adversarial pressure, but without expert demonstrations, the model has found an oscillatory strategy. The agents constantly shift their priority weights between attacking and defending, delaying decisive cooperative actions. This behavior is consistent with our theo-retical analysis in Sec. VI, illustrating a system that is provably contracting, but where the contraction rate is bottlenecked by the baseline training parameters. The sampling-based search in CIMORL-MPPI overcomes this by utilizing privileged expert examples to rapidly smooth the objective landscape, inducing a much higher contraction rate that translates to decisive, rather than hesitant, spatial maneuvers. In experiment (c), coordinated aggression from red and blue teams against the green team creates a unique defensive scenario. The green team (CIMORL-MPPI) adopts a sacrifice-based defensive strategy, concentrating all resources on terri-torial protection. The blue team achieves modest success with scores of (0, 0, 418) through effective resource allocation, while the red team’s escape attempts ultimately fail, resulting in null scores (0, 0, 0). The green team’s defensive sacrifice yields scores of (-418, 0, 0), demonstrating CIMORL-MPPI’s ability to adapt strategy based on overwhelming adversarial pressure. A critical observation from these real-world experiments is the substantial behavioral differences compared to training scenarios. During training, policies are developed through self-play, where agents learn to coordinate against opponents employing identical strategies and behavioral patterns. How-ever, in the heterogeneous real-world experimental setup, each team employs fundamentally different policies with distinct coordination mechanisms and strategic approaches. Transition-ing from homogeneous self-play in training to heterogeneous open-play in reality creates a significant deployment gap. This gap exposes the limitations of traditional reinforcement learning and proves that online adaptation is crucial. Specif-ically, it reveals two distinct suboptimal failure modes in the baselines: (i) the rigid brittleness of fixed-weight approaches (MOMAPPO), which leads to unresolvable spatial conflicts and collisions, particularly in tight resource-assignment sce-narios, and (ii) the oscillatory hesitation of unaugmented dy-namic approaches (base CIMORL), which successfully avoid collisions but fail to commit to a decisive strategy due to slow weight consensus. The sampling-based search integration in CIMORL-MPPI demonstrates remarkable online adaptation abilities, enabling real-time strategy adjustment when confronted with unfamiliar opponent behaviors that were not encountered during training. This adaptive capacity explains CIMORL-MPPI’s consistent superior performance across all experimental configurations, as it can dynamically recalibrate its coordination patterns, weight distributions, and tactical decisions based on observed opponent strategies. In contrast, fixed-weight approaches like MOMAPPO and weight-distribution methods like CIMORL struggle to adapt beyond their training distributions, leading to suboptimal performance or catastrophic failures when facing novel adversarial strategies. VIII. C ONCLUSION 
+
+This work introduced a coordination-informed multi-objective reinforcement learning (CIMORL) framework ad-dressing fundamental challenges in balancing competing ob-jectives within multi-robot systems. The approach integrates three key innovations: distributed weight prediction through opinion dynamics, privileged expert training via sampling-based search methods, and theoretical guarantees for Pareto-optimal coordination through coalition formation. The ex-perimental validation demonstrated significant improvements over state-of-the-art baselines, with our sampling-based vari-ants demonstrating strong performance in complex real-world drone experiments where baseline methods failed, highlighting the critical role of online adaptation. Future research directions will include improving the con-vergence speed of the proposed weight model, which currently converges slowly to the equilibria, by imposing a higher contraction rate. Investigating methods to enforce this higher contraction rate while maintaining the numerical stability of IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 16 
+
+the integration presents a challenging but important direction. Second, we aim to evaluate the implications of the hier-archical scheme in the proposed weight-policy model and explore more efficient training methods to minimize policy variance. Additionally, we plan to conduct a formal theoretical and empirical analysis of the weight adaptation mechanism’s robustness against explicit communication delays and network noise. Finally, while our current formulation successfully scales to four simultaneous objectives—including inter-agent collision avoidance—extending this coordination framework to explicitly handle advanced path-planning in cluttered layouts with static and dynamic environmental obstacles remains an exciting avenue for our future research. IX. A PPENDIX 
+
+A. Proof to Theorem 1 
+
+In this section, we report the proof for Theorem 1 
+
+Proof. The proof strategy is twofold: first, we show that a clustered state, where agents in a coalition share the same trajectory, is a valid equilibrium solution for the system’s dynamics; second, we prove that the system is contracting, which guarantees that any initial state will globally converge to such a stable, clustered trajectory. Consider M < N s clusters of team Vs, where each cluster 
+
+cr contains agents satisfying dist (Ξ i, Ξj ) < ϵ for i, j ∈ cr and sufficiently small ϵ > 0. Let the joint state be x = [ x1, x 2], and denote two state trajectories as ξ = [ ξ1, ξ 2] and ¯ξ = [ ¯ξ1, ¯ξ2].We define ¯ξ2 such that it follows the clustered structure: 
+
+¯ξ2 = [1 c1 ⊗ xc1 , . . . , 1cM ⊗ xcM ]
+
+and ¯ξ1 to make ¯ξ2 an equilibrium trajectory for x2.Using the vectorization operator X| = vec (X), we have x| =[x1|, x 2|] ∈ RNs·2K . Define the virtual state x = ξ + μ( ¯ξ − ξ)
+
+with x(μ = 0) = ξ and x(μ = 1) = ¯ξ. We now show that ¯ξ is a particular solution of the system described by Eq. (7). For agent i and its driving signal Ξi, its equilibrium trajectory is given by: 
+
+˙¯ξi1 = ( So Ξi ¯ξ2WB − ¯ξi2WB )˙¯ξi2 = − (τ + Ξ i) ◦ ¯ξi2 + So ¯ξi
+
+¯ξ2WA − ¯ξi2WA
+
+− So Ξi ¯ξi1WB + ¯ξi1WB + Ξ iB
+
+(16) 
+
+where So Ξi , So ¯ξi are the i-th rows of the matrices. Next, we select agent j from the same cluster as i and consider the difference in their dynamics, ˙¯ξi − ˙¯ξj , which is: 
+
+˙¯ξ1i − ˙¯ξ1j =So Ξi ¯ξ2WB − So Ξj ¯ξ2WB
+
+˙¯ξ2i − ˙¯ξ2j = − (Ξ i ◦ ¯ξ2i − Ξj ◦ ¯ξ2j ) + ( So ¯ξi
+
+¯ξ2WA − So ¯ξj
+
+¯ξ2WA)
+
+− (So Ξi ¯ξ1WB − So Ξj ¯ξ1WB ) + (Ξ i − Ξj )B.
+
+(17) 
+
+The difference in eq(17) is equal to the null vector as long as So Ξ, So ξ have constant row sum in the block matrices among the clusters, as demonstrated in [32]. Given our definition for these two matrices, this property is structurally satisfied. Moreover, the differences in eq(17) are zero when ¯ξ1 is such that (So Ξi − So Ξj ) ¯ξ1WB = (Ξ i − Ξj )B − (Ξ i ◦ ¯ξ2i − Ξj ◦ ¯ξ2j ).We now prove that the system is contracting for the two trajectories ξ and ¯ξ. The dynamic of the virtual displacement 
+
+δx | is defined by 
+
+δ ˙x| = F δx | + Gδz | (18) 
+
+with 
+
+F =
+
+ 0 W ⊤ 
+
+> B
+
+⊗ (IN − So Ξ)
+
+W ⊤ 
+
+> B
+
+⊗ (IN − So Ξ) − diag( τ + Ξ) + W ⊤ 
+
+> A
+
+⊗ (IN − So x)
+
+
+
+G =
+
+ W ⊤ 
+
+> B
+
+⊗ ( ∂So Ξ 
+
+> ∂Ξ
+> ∂g ∂z
+
+)x2|
+
+diag( ∂g ∂z )x2| + diag( ∂g ∂z )B| − W ⊤ 
+
+> B
+
+⊗ ( ∂So Ξ 
+
+> ∂Ξ
+> ∂g ∂z
+
+)x1|
+
+
+
+(19) 
+
+To establish convergence to the clustered equilibrium ¯ξ, we analyze the contraction properties of the unforced differential dynamics with respect to the state x, given by δ ˙x| = F δx |. We define the differential Lyapunov function P representing the Riemannian energy of the virtual displacement: 
+
+P =
+
+Z 10
+
+δx ⊤| δx |dμ (20) 
+
+Taking the time derivative of P along the trajectories of the system yields: 
+
+˙P =
+
+Z 10
+
+δx ⊤| (F + F ⊤)δx |dμ (21) 
+
+The stability of the system is governed by the symmetric part of the Jacobian matrix, Fs = 12 (F + F ⊤). Analyzing the block structure of F , the top-left block corresponding to the auxiliary state x1 is strictly zero. However, the bottom-right block governing the primary weight state x2 is defined by 
+
+F22 = −diag (τ + Ξ) + W ⊤ 
+
+> A
+
+⊗ (IN − So x). By design, the bias 
+
+τ > 0, the activation Ξ ≥ 0, and the attention mechanism 
+
+(IN − So x) acts as a network Laplacian. Consequently, F22 is strictly Hurwitz, and its symmetric part is negative definite. While the presence of the zero block in F implies that the full Jacobian is only negative semi-definite, the system exhibits weak (or partial) contraction. If we consider the pro-jected state transformation ˆy = [0 , I ]x⊤| = x2|, its differential dynamic is strongly contracting with a rate bounded by the maximum eigenvalue of the symmetric part of F22 , such that 
+
+λmax (F22 + F ⊤
+
+> 22
+
+) < 0. As shown in standard partial contraction theory [45], because the x2 subsystem is strictly contracting, all trajectories of x2 exponentially converge to a single unique trajectory, regardless of their initial conditions. This rigorous contraction of the x2 state forms the direct logical connection to our clustering definition. We have already established in Eq. (17) that the clustered trajectory ¯ξ, where agents in a coalition share the exact same state, is a valid equilibrium solution of the system. Because the system is contracting with respect to x2, the actual network state x2(t)
+
+must asymptotically converge to this clustered equilibrium 
+
+¯ξ2(t). Thus, the agents inherently form the clusters specified in Definition IV.1. 
+
+B. Proof to Lemma 3 
+
+In this section, we report the proof to Lemma 3 
+
+Proof. We establish the boundedness of the system using the quadratic Lyapunov function 
+
+P1 = 12 x⊤
+
+> 1|
+
+x1| + 12 x⊤
+
+> 2|
+
+x2|IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 17 
+
+where the notation (·)| = vec (·) denotes the standard column-wise vectorization operator. This specific choice of P1 is standard in nonlinear systems analysis for establishing L2
+
+stability and proving the existence of bounded invariant sets by evaluating the generalized energy of the states. Focusing on the x2 dynamics, the time derivative of P1
+
+along the system trajectories yields: 
+
+˙P1 ≤ − x⊤
+
+> 2|
+
+diag (τ2|)x2| − x⊤
+
+> 2|
+
+diag (Ξ |)x2|
+
+− x⊤
+
+> 2|
+
+(W ⊤ 
+
+> A
+
+⊗ (IN − So Ξ)) x2| + x⊤
+
+> 2|
+
+diag (Ξ |)B|
+
+Assuming the structural matrices associated with x2| and the network coupling W ⊤ 
+
+> A
+
+⊗ (IN − So Ξ) are positive semi-definite, their corresponding quadratic forms are non-positive. To prove that [−B, B ]N ×K is a positively invariant set, we analyze the remaining terms on the boundary by expanding them element-wise for each index i ∈ { 1, . . . , N K }:
+
+−x⊤
+
+> 2|
+
+diag (Ξ |)x2| + x⊤
+
+> 2|
+
+diag (Ξ |)B| =
+
+> N K
+
+X
+
+> i=1
+
+Ξ|,i 
+
+
+
+−x22|,i + B|,i x2|,i 
+
+
+
+Consider the case where the state x2 attempts to leave the region [−B, B ]N ×K . This implies that for at least one element index i, the state exceeds the boundary such that |x2|,i | >B|,i . Since B|,i > 0 by definition, the squared term strictly dominates the linear term: x22|,i > B |,i |x2|,i | ≥ B|,i x2|,i .Given that the activation functions yield Ξ|,i ≥ 0, we can explicitly bound the contribution of the i-th element outside the boundary: 
+
+Ξ|,i 
+
+
+
+−x22|,i + B|,i x2|,i 
+
+
+
+< Ξ|,i 
+
+
+
+−B|,i |x2|,i | + B|,i |x2|,i |
+
+
+
+= 0 
+
+Because the negative quadratic term strictly dominates the linear input term for any |x2|,i | > B |,i , it ensures that ˙P1 < 0
+
+strictly outside the defined set. This continuous dissipation of energy on the exterior of [−B, B ]N ×K forces the trajectories to remain bounded within it. Since x2| remains bounded and contractive, the coupling integral is finite: Lx1 = ∥WB ∥∞
+
+R t 
+
+> 0
+
+∥(I − So Ξ(s)) x2|(s)∥∞ds < 
+
+∥WB ∥∞ ∥B∥∞ 
+
+> λmax (F22 )
+
+< ∞ Therefore, x1|(t) remains bounded in 
+
+X1 when initialized within this set. 
+
+C. Proof to Theorem 2 
+
+In this section, we report the proof to Theorem 2 
+
+Proof. To formally prove the closed-loop contraction of the multi-agent system, we analyze the overall architecture as an interconnected system comprised of two subsystems: the observation dynamics (13) and the weight prediction dynam-ics (7). The stochastic small-gain theorem [46], [40] dictates that an interconnection of two contracting subsystems remains globally contracting if the product of their individual contrac-tion rates is strictly greater than the product of their cross-coupling Lipschitz constants. Let the individual contraction rate of the weight dynamics be bounded by λmax (F22 ), and let the contraction rate of the observation dynamics be a =min i αi. We denote the Lipschitz constant of the observation dynamics with respect to the weights w as Lw. The remaining requirement is to explicitly derive LG, which bounds the coupling strength of the weight dynamics with respect to the observation z.Consider the coupling function G(x) derived from the differential dynamics of the system. We must evaluate its Jacobian with respect to the observation vector z. Applying the chain rule through the nonlinear mapping Ξ = g(z), the partial derivatives of the effective similarity matrix So Ξ and the primary state dynamics yield the following block matrix structure for the Jacobian J = ∂G ∂x :
+
+J =
+
+ 0 W ⊤ 
+
+> B
+
+⊗
+
+ ∂So Ξ
+
+> ∂Ξ
+> ∂g ∂z
+
+
+
+0
+
+−W ⊤ 
+
+> B
+
+⊗
+
+ ∂So Ξ
+
+> ∂Ξ
+> ∂g ∂z
+
+
+
+diag   ∂g ∂z 
+
+ diag   ∂g ∂z 
+
+
+
+x1|
+
+x2|
+
+B|
+
+
+
+To establish the upper bound LG, we evaluate the infinity norm of this block matrix, ∥J∥∞. We leverage the known analytical bounds of the specific nonlinearities employed in the architecture. Specifically, the gradients of both the standard sigmoid function σ(·) and the softmax operation So (·) are strictly bounded such that their maximum singular values never exceed 14 . Additionally, we denote the maximum Lips-chitz constant of the observation mapping network g(z) as LZ ,meaning ∂g ∂z ∞ ≤ LZ .Applying the triangle inequality and these known bounds to the block components, we can bound the supremum of the coupling function’s norm across all states x bounded by B:
+
+sup 
+
+> x
+
+∥G(x)∥∞ ≤ max 
+
+
+
+B, ∥WB ∥∞
+
+∥B∥∞
+
+λmax (F22 )
+
+
+
+× LZ
+
+
+
+∥W ∥∞ + 1 + 116 ∥WB ∥∞
+
+
+
+The factor of 116 emerges directly from the sequential appli-cation of the chain rule through both the sigmoid and softmax functions ( 14 × 14 ). Simplifying the expression relative to the coupling weights yields the final bound: 
+
+LG = 2 LZ
+
+
+
+∥W ∥∞ + 1 + 116 ∥WB ∥∞
+
+
+
+With LG strictly bounding the sensitivity of the weight dy-namics to the observations, and Lw bounding the sensitivity of the observations to the weights, the closed-loop system is verified to be stable and contracting if the small-gain condition is satisfied: 
+
+λmax (F22 ) · a > L G · Lw
+
+This concludes the proof, demonstrating that as long as the internal consensus forces and local observation contractions dominate the cross-coupling perturbations, the entire multi-agent team will reliably converge to stable weight clusters. 
+
+D. Hardware Setup and Training Parameters 
+
+The agents are modeled as double integrators operating at 20 Hz, stabilized by a proportional-derivative (PD) policy with stiffness kp = 7 and damping kd = 5 . This yields the closed-loop matrix A =
+
+h 0 I 
+
+> −kpI−kdI
+
+i
+
+. To satisfy Theorem 2 directly in the physical observation space, we introduce a cross-coupling term ϵ = 0 .05 to define the non-diagonal contraction metric M =
+
+h (kp+ϵk d)I ϵI ϵI I
+
+i
+
+. This specific choice makes the symmetric generalized Jacobian strictly negative definite by perfectly canceling the off-diagonal cross-terms: IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 18        
+
+> ATM+M A =
+> h−2ϵk pI00−2( kd−ϵ)I
+> i
+
+. Consequently, the single-agent subsystem is proven to be strictly contracting with a rate of α = min( ϵk p, k d − ϵ). At the same sampling rate, the agents communicate with their neighbors and generate actions from the learned policy. All training and evaluations were conducted on a machine running Ubuntu 22.04 with an Intel Core i7-9750H @ 2.60GHz CPU, Nvidia RTX 2080Ti, and 32GB RAM. The observation vectors were normalized to the range  
+
+> [−1,1]
+
+, and a communication range of 1 was considered in the normalized space. A full breakdown of the hyperparameters utilized across algorithms is detailed in Table IV. We chose the training hyperparameters and the coefficients c1, c 2, c 3 leading to the best performances in out configuration by performing parameters sweeps. 
+
+E. Network Architectures and Reward Structures a) Multi-Resource Assignment: The reward function is designed to incentivize agents to approach consumer areas when they possess resources that match the consumers’ re-quirements. Specifically, for each consumer demand k, we assign the following reward:                    
+
+> rw ik =
+> 
+> β(∥pt−1
+> i−ds k∥ − ∥ pti−ds k∥)if ∥pti−ds k∥ ≥ Rk
+> and so i·de k>0RW ik otherwise
+
+where β > 0 is a scaling factor and RW ik > 0 represents a positive reward assigned to agent i upon successfully deliv-ering a resource to consumer area k. The collision avoidance reward is defined as rw i(K+1) =                           
+
+> 
+> −RW cl if ∃j̸=i, ∥pi−pj∥< R cl
+> γcl (min j∥pi−pj∥ − 3·Rcl )if min j∥pi−pj∥<3·Rcl
+> 0otherwise
+
+where RW cl > 0 is a fixed penalty for collisions and γcl > 0
+
+is a scaling factor. The connectivity reward is defined as    
+
+> rw i(K+2) =−RW co
+
+if the i-th row of the communication adjacency matrix S contains only zeros, and 0 otherwise, where RW co > 0 represents the connectivity penalty. We have experimented with RW co = 0.4, RW cl = 15 , Rcl = 0.05 , 
+
+> γcl = 0 .1
+
+, β = 0 .1, RW ik = 15 and Rk = 0 .2
+
+Let sd ik = so i·de k  
+
+> ∥so i∥·∥ de k∥+ϵ
+
+indicating whether the agent resource or demand resource are zero for a small ϵ > 0. The agent observation vector zi is structured as follows:               
+
+> zi=vi,{pi−ds k,sd ik ·(so i+ de k)}k∈K ,{pi−pj}pj∈O s
+> 
+
+We employ a DeepSets [47] architecture to achieve permutation-invariant aggregation across each observation set. For teammate relative positions, we compute:        
+
+> Φs=ϕ2
+>  X
+> pj∈O s
+> ϕ1(pi−pj)
+> (22)
+
+where ϕ1(·) and ϕ2(·) represent MLPs mapping inputs to an  
+
+> F
+
+-dimensional feature space. Similarly, we define aggregation functions Φk for each resource set k. The resulting features from different sets are concatenated and processed in an objective-specific manner. For the K resource-specific objectives, each objective k con-catenates the relative distance to the consumer location pi −ds k
+
+with the aggregated resource features Φk(sd ik ·(so i +de k)) . The collision avoidance and connectivity maintenance objectives utilize the teammate aggregation features Φs. All objectives incorporate velocity information to enable dynamic motion planning and coordination. The concatenated features are processed through a final MLP g(·) as defined in equation (6). This modular observa-tion processing architecture enables flexible objective scaling between training and deployment phases, which may involve different numbers of consumer locations, resource types, and team sizes. Alternatively, a unified MLP g(·) can directly extract fixed-dimensional objective features from the com-plete observation vector zi. The value function Vϕ utilizes an identical architecture to estimate objective-specific episode values. The policy network integrates the sampled weight vector w with the extracted objective features into a unified representation, which is then processed by a final MLP to generate action distributions. All MLPs have [32 , 32] features and tanh activation function for which is possible to compute the Lipschitz constant easily. All the methods in the following use the same networks with the same dimensions. 
+
+b) Multi-team Attackers-Defenders: The reward function is formalized through a team-level structure by defining RW s ∈ 
+
+> RK+1
+
+as the aggregated reward vector for team Vs at time 
+
+> t
+
+, treating the collective as a unified strategic entity. The problem structure naturally leads to a generalized zero-sum multi-player game formulation when viewed from the team perspective. For each attack objective k, we assign a positive reward RW sk > 0 to team Vs upon successful penetration of opponent region Rk by any team member. Correspondingly, the defending team Vk receives RW kk = −RW sk , establishing the adversarial reward structure. For the defense objective s,the roles are reversed: team Vs seeks to minimize intrusions while opposing teams attempt to maximize their territorial gains. The team’s strategic goal is to simultaneously optimize all K +1 objectives, contingent upon sufficient agent allocation and coordination capabilities. The transition from team-level to individual agent rewards requires careful consideration of the partial observability con-straints. To keep consistency with our observability constraints, we implement a localized reward structure where agent i re-ceives rw ik > 0 upon successfully infiltrating opponent region 
+
+> Rk
+
+, and rw is < 0 when detecting enemy penetration of the home territory Rs within its observation range. Additionally, agents incur a substantial penalty rw i ≪ 0 for teammate collisions across all objective rewards to promote collision-free coordination. We assigned rw i = −20 and −rw is = rw ik = 1 
+
+The agent observation vector zi is structured as follows:               
+
+> zi=
+> h
+> vi,{pi−ds k}k∈K∪{ s},{pi−pj}pj∈O s,{pi−pk}pk∈O k
+> i
+
+This representation encodes relative positional information across three distinct categories: distances to all safe areas, relative positions of observable teammates, and locations of detected opponents. These categorical groups undergo separate processing to extract objective-specific features. For attack ob-jectives, we combine relative positions to target safe areas with corresponding opponent locations to form offensive feature representations. The defensive objective aggregates the home safe area position with all observable opponent locations. IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 19 
+
+TABLE IV: Training parameters                                                                                                          
+
+> Parameters CIMORL—w/o Clust—w/o Sync MOMAPPO MO-MIX CIMORL-TS—CIMORL-MPPI MOMAPPO-TS
+> γ0.99 0.99 0.99 0.99 0.99 Episode length 250 250 250 250 250
+> λGAE 0.95 0.95 -0.95 0.95 Batch size 200 200 256 200 200 Epochs 66166rollout buffer 2000 2000 -1000 1000 replay buffer --150 ×10 3--Entropy coefficient 0.02 0.02 0.05 0.01 0.01 Clip ϵ0.3 0.3 -0.3 0.3 Max gradient norm 0.5 0.5 0.5 0.5 0.5 Adam learning rate 2×10 −32×10 −3·0.9×10 −32×10 −32×10 −3
+> Sampled w∗500 500 500 500 500 Training steps per weight -150 ×10 3150 ×10 3-150 ×10 3
+> Search horizon ---25 25 Search simulations ---2000 2000
+> c1, c 2, c 3---[1.5, 0.5, 0.75] [1.5, 0.5, 0.75]
+
+Teammate positions and agent velocity are incorporated across all objectives to enable coordination. This design ensures that each attack objective focuses exclusively on its designated opponent team, treating other teams as neutral entities that may serve as obstacles or potential allies. As in Section VII-A, we employ DeepSets to process the po-sition differences with permutation-invariant aggregation. The resulting aggregated features are concatenated and processed through the MLP g(·) to create objective-specific features. For this scenario, the value function Vϕ shares the same architecture, and the policy network integrates the sampled weight vector w with the extracted objective features before processing them with a final MLP to generate action distri-butions. All MLPs have [32 , 32] features and tanh activation function. The same neural networks are used in all the methods compared. As this environment involves adversarial agents, the max value in equation (9) and equation (10) could fail to capture the worst-case opponent behavior and the policy could loose robustness resulting too optimistic. Normally, this problem is addressed in tree search methods by making the agent playing in turns, with a turn corresponding to one node expansion. However, this strategy works only for discrete games with a full separation of agents turns, like chess or go. In our case, the agents are moving simultaneously and the tree search explores simultaneously the actions of all agents. Moreover, applying a strict minimax formulation often leads to overly pessimistic, degenerate policies in such continuous environments, effectively paralyzing the agents. Finally, MPPI in general is not designed to handle adversarial problems so there is no standard way to address this problem. Therefore, rather than assuming a strict worst-case oppo-nent, we introduce a risk-sensitive regularized optimization. We slightly modify the max value characterization in both the sampling-based search to penalize deviations of the opponent team values from a nominal value v0, which represents an expected-case, boundedly rational opponent. Given the state of the observed adversarial agents reconstructed by the observa-tion vector, the nominal value v0 is computed as the expected value of the opponent observed teams at the beginning of the search. Moreover, to assign the objective preference to the opponent teams, we consider the average weight vector 
+
+ˆw between agent i solving the tree search and neighboring teammates, computed by agent i from the communicated state of the weight predictor. Let’s denote all the opponents agents observed by agent i as N−s, we report the modified max value for the tree search: 
+
+ˆw = 1
+
+NsNsX
+
+> j=1
+
+wj
+
+Vmax (n) = max 
+
+> iNs
+
+X
+
+> j=1
+
+wij 
+
+|Vij (n) − v∗|
+
+v∗ + p
+
+> N−s
+
+X
+
+> j=1
+
+ˆw⊤
+
+> i
+
+
+
+Vij (n) − v0
+
+
+
+where p acts as a conservatism coefficient that dictates the algorithm’s risk aversion. A value of p = 0 .5 was chosen empirically to balance naive optimism against strict minimax pessimism. We note that a comprehensive game-theoretic analysis of this adversarial adaptation and an ablation over 
+
+p ∈ [0 , 1] are scoped as future work, as the primary focus of this paper remains the cooperative multi-objective framework. REFERENCES [1] R. Radulescu, “The world is a multi-objective multi-agent system: Now what?” in 27th European Conference on Artificial Intelligence . IOS Press, 2024, pp. 32–38. [2] S. Gronauer and K. Diepold, “Multi-agent deep reinforcement learning: a survey,” Artificial Intelligence Review , vol. 55, no. 2, pp. 895–943, 2022. [3] F. Felten, U. Ucak, H. Azmani, G. Peng, W. R¨ opke, H. Baier, P. Man-nion, D. M. Roijers, J. K. Terry, E.-G. Talbi et al. , “Momaland: A set of benchmarks for multi-objective multi-agent reinforcement learning,”  
+
+> arXiv preprint arXiv:2407.16312 , 2024. IEEE TRANSACTIONS ON ROBOTICS. PREPRINT VERSION. ACCEPTED XX, XXXX 20
+
+[4] C. B. Browne, E. Powley, D. Whitehouse, S. M. Lucas, P. I. Cowling, P. Rohlfshagen, S. Tavener, D. Perez, S. Samothrakis, and S. Colton, “A survey of monte carlo tree search methods,” IEEE Transactions on Computational Intelligence and AI in games , vol. 4, no. 1, pp. 1–43, 2012. [5] G. Williams, P. Drews, B. Goldfain, J. M. Rehg, and E. A. Theodorou, “Information-theoretic model predictive control: Theory and applications to autonomous driving,” IEEE Transactions on Robotics , vol. 34, no. 6, pp. 1603–1622, 2018. [6] D. M. Roijers, P. Vamplew, S. Whiteson, and R. Dazeley, “A survey of multi-objective sequential decision-making,” Journal of Artificial Intelligence Research , vol. 48, pp. 67–113, 2013. [7] P. Vamplew, R. Dazeley, A. Berry, R. Issabekov, and E. Dekker, “Empirical evaluation methods for multiobjective reinforcement learning algorithms,” Machine learning , vol. 84, no. 1, pp. 51–80, 2011. [8] C. F. Hayes, R. R˘ adulescu, E. Bargiacchi, J. K¨ allstr¨ om, M. Macfarlane, M. Reymond, T. Verstraeten, L. M. Zintgraf, R. Dazeley, F. Heintz 
+
+et al. , “A practical guide to multi-objective reinforcement learning and planning,” arXiv preprint arXiv:2103.09568 , 2021. [9] K. Van Moffaert and A. Now´ e, “Multi-objective reinforcement learning using sets of pareto dominating policies,” The Journal of Machine Learning Research , vol. 15, no. 1, pp. 3483–3512, 2014. [10] F. Felten, E.-G. Talbi, and G. Danoy, “Multi-objective reinforcement learning based on decomposition: A taxonomy and framework,” Journal of Artificial Intelligence Research , vol. 79, pp. 679–723, 2024. [11] J. Xu, Y. Tian, P. Ma, D. Rus, S. Sueda, and W. Matusik, “Prediction-guided multi-objective reinforcement learning for continuous robot con-trol,” in International conference on machine learning . PMLR, 2020, pp. 10 607–10 616. [12] L. N. Alegre, A. L. Bazzan, D. M. Roijers, A. Now´ e, and B. C. da Silva, “Sample-efficient multi-objective learning via generalized policy improvement prioritization,” arXiv preprint arXiv:2301.07784 ,2023. [13] H. Lu, D. Herman, and Y. Yu, “Multi-objective reinforcement learning: Convexity, stationarity and pareto optimality,” in The Eleventh Interna-tional Conference on Learning Representations , 2023. [14] H.-L. Tran, L. Doan, N. H. Luong, and H. T. T. Binh, “A two-stage multi-objective evolutionary reinforcement learning framework for con-tinuous robot control,” in Proceedings of the Genetic and Evolutionary Computation Conference , 2023, pp. 577–585. [15] L. Yliniemi and K. Tumer, “Multi-objective multiagent credit assignment in reinforcement learning and nsga-ii,” Soft Computing , vol. 20, no. 10, pp. 3869–3887, 2016. [16] P. Mannion, K. Mason, S. Devlin, J. Duggan, and E. Howley, “Multi-objective dynamic dispatch optimisation using multi-agent reinforcement learning,” in Proceedings of the 2016 International Conference on Autonomous Agents & Multiagent Systems , 2016, pp. 1345–1346. [17] T. Hu, B. Luo, C. Yang, and T. Huang, “Mo-mix: Multi-objective multi-agent cooperative decision-making with deep reinforcement learn-ing,” IEEE Transactions on Pattern Analysis and Machine Intelligence ,vol. 45, no. 10, pp. 12 098–12 112, 2023. [18] G. Dixit and K. Tumer, “Learning synergies for multi-objective op-timization in asymmetric multiagent systems,” in Proceedings of the Genetic and Evolutionary Computation Conference , 2023, pp. 447–455. [19] M. S. Abid, H. J. Apon, S. Hossain, A. Ahmed, R. Ahshan, and M. H. Lipu, “A novel multi-objective optimization based multi-agent deep reinforcement learning approach for microgrid resources planning,” 
+
+Applied Energy , vol. 353, p. 122029, 2024. [20] A. Callaghan, K. Mason, and P. Mannion, “Moma-ac: A preference-driven actor-critic framework for continuous multi-objective multi-agent reinforcement learning,” Neurocomputing , p. 132032, 2025. [21] D. M. Roijers, S. Whiteson, R. Brachman, and P. Stone, Multi-objective decision making . Springer, 2017. [22] M. J. Blondin and M. Hale, “An algorithm for multi-objective multi-agent optimization,” in 2020 American Control Conference (ACC) .IEEE, 2020, pp. 1489–1494. [23] Z. Aminzare, B. Dey, E. N. Davison, and N. E. Leonard, “Cluster synchronization of diffusively coupled nonlinear systems: A contraction-based approach,” Journal of Nonlinear Science , vol. 30, pp. 2235–2257, 2020. [24] A. Bizyaeva, A. Franci, and N. E. Leonard, “Nonlinear opinion dynamics with tunable sensitivity,” IEEE Transactions on Automatic Control ,vol. 68, no. 3, pp. 1415–1430, 2022. [25] Z. Zhang, S. Al-Abri, and F. Zhang, “A generalized kuramoto model for opinion dynamics on the unit sphere,” Automatica , vol. 171, p. 111957, 2025. [26] A. Marino, C. Pacchierotti, and P. Robuffo Giordano, “Liquid-Graph Time-Constant Network for Multi-Agent Systems Control,” in CDC 2024 - 63rd IEEE Conference on Decision and Control . Milan (Italie), Italy: IEEE, Dec. 2024. [27] W. Wang and M. Sebag, “Multi-objective monte-carlo tree search,” in 
+
+Asian conference on machine learning . PMLR, 2012, pp. 507–522. [28] C. F. Hayes, M. Reymond, D. M. Roijers, E. Howley, and P. Mannion, “Monte carlo tree search algorithms for risk-aware and multi-objective reinforcement learning,” Autonomous Agents and Multi-Agent Systems ,vol. 37, no. 2, p. 26, 2023. [29] R. Ariizumi, H. Sago, T. Asai, and S.-I. Azuma, “Multi-objective reinforcement learning with path integral policy improvement,” in 2023 62nd Annual Conference of the Society of Instrument and Control Engineers (SICE) . IEEE, 2023, pp. 1418–1423. [30] F. A. Oliehoek, C. Amato et al. , A concise introduction to decentralized POMDPs . Springer, 2016, vol. 1. [31] J. Branke, Multiobjective optimization: Interactive and evolutionary approaches . Springer Science & Business Media, 2008, vol. 5252. [32] W. Xia and M. Cao, “Clustering in diffusively coupled networks,” 
+
+Automatica , vol. 47, no. 11, pp. 2395–2405, 2011. [33] A. Botros, N. Wilde, A. Sadeghi, J. Alonso-Mora, and S. L. Smith, “Regret-based sampling of pareto fronts for multi-objective robot plan-ning problems,” IEEE Transactions on Robotics , 2024. [34] J. Schulman, P. Moritz, S. Levine, M. Jordan, and P. Abbeel, “High-dimensional continuous control using generalized advantage estimation,” 
+
+arXiv preprint arXiv:1506.02438 , 2015. [35] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-imal policy optimization algorithms,” arXiv preprint arXiv:1707.06347 ,2017. [36] D. Chen, B. Zhou, V. Koltun, and P. Kr¨ ahenb¨ uhl, “Learning by cheating,” in Conference on Robot Learning . PMLR, 2020, pp. 66–75. [37] B. Riviere, W. H¨ onig, M. Anderson, and S.-J. Chung, “Neural tree expansion for multi-robot planning in non-cooperative environments,” 
+
+IEEE Robotics and Automation Letters , vol. 6, no. 4, pp. 6868–6875, 2021. [38] D. Shah, Q. Xie, and Z. Xu, “Non-asymptotic analysis of monte carlo tree search,” in Abstracts of the 2020 SIGMETRICS/Performance Joint International Conference on Measurement and Modeling of Computer Systems , 2020, pp. 31–32. [39] W. Lohmiller and J.-J. E. Slotine, “On contraction analysis for non-linear systems,” Automatica , vol. 34, no. 6, pp. 683–696, 1998. [40] G. Russo, M. Di Bernardo, and E. D. Sontag, “A contraction approach to the hierarchical analysis and design of networked systems,” IEEE Transactions on Automatic Control , vol. 58, no. 5, pp. 1328–1331, 2012. [41] H. Tsukamoto, S.-J. Chung, and J.-J. E. Slotine, “Contraction theory for nonlinear stability analysis and learning-based control: A tutorial overview,” Annual Reviews in Control , vol. 52, pp. 135–169, 2021. [42] T. Miyato, T. Kataoka, M. Koyama, and Y. Yoshida, “Spectral normalization for generative adversarial networks,” arXiv preprint arXiv:1802.05957 , 2018. [43] A. P. Guerreiro, C. M. Fonseca, and L. Paquete, “The hypervolume indicator: Computational problems and algorithms,” ACM Computing Surveys (CSUR) , vol. 54, no. 6, pp. 1–42, 2021. [44] S. Petchrompo, D. W. Coit, A. Brintrup, A. Wannakrairot, and A. K. Parlikad, “A review of pareto pruning methods for multi-objective optimization,” Computers & Industrial Engineering , vol. 167, p. 108022, 2022. [45] A. P. Dani, S.-J. Chung, and S. Hutchinson, “Observer design for stochastic nonlinear systems via contraction-based incremental stability,” 
+
+IEEE Transactions on Automatic Control , vol. 60, no. 3, pp. 700–714, 2014. [46] A. Mironchenko and H. Ito, “Construction of lyapunov functions for interconnected parabolic systems: an iiss approach,” SIAM Journal on Control and Optimization , vol. 53, no. 6, pp. 3364–3382, 2015. [47] M. Zaheer, S. Kottur, S. Ravanbakhsh, B. Poczos, R. R. Salakhutdinov, and A. J. Smola, “Deep sets,” Advances in neural information processing systems , vol. 30, 2017.

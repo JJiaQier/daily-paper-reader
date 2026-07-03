@@ -1,0 +1,2150 @@
+Title: Deterministic Pareto-Optimal Policy Synthesis for Multi-Objective Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2606.26397v1
+
+Published Time: Fri, 26 Jun 2026 00:15:32 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# Deterministic Pareto-Optimal Policy Synthesis for Multi-Objective Reinforcement Learning 
+
+Aniruddha Joshi 1 Niklas Lauffer 1 Sanjit Seshia 1
+
+## Abstract 
+
+Real-world decision-making often requires bal-ancing multiple conflicting objectives, a challenge that standard Reinforcement Learning (RL) fre-quently addresses by aggregating rewards into a single scalar signal. While effective for sim-ple tasks, this approach often fails to capture the full spectrum of optimal trade-offs, known as the Pareto frontier. In this paper, we introduce a novel preference-conditioned Bellman operator, moti-vated from the Chebyshev scalarization, designed to compute deterministic Pareto-optimal policies for Multi-Objective Markov Decision Processes (MOMDPs). We prove that this operator satisfies an enveloping property, where the estimated value functions upper-bound the true Pareto frontier, and demonstrate that it monotonically converges to a coverage set of this frontier. Furthermore, we also show how to extract deterministic policies from these converged Q-estimates. This ensures the agent can recover a policy for any given prefer-ence, capturing the entire Pareto-optimal frontier while guaranteeing each synthesized policy re-mains approximately Pareto-optimal. Experimen-tal results validate that our algorithm successfully recovers complex trade-offs, providing a solution for deterministic Pareto-optimal policy synthesis. 
+
+## 1. Introduction 
+
+Many real-world decision-making problems are inherently multi-objective: practitioners must balance competing cri-teria rather than optimize a single scalar notion of perfor-mance, and the relevant trade-offs vary across users and operating regimes. This is evident across a wide range of domains, includ-ing circuit design (power, performance, area, reliability) (Soorapanth, 2009; Vi s¸ an et al., 2022; Gu et al., 2024; 
+
+> 1
+
+University of California Berkeley, USA. Correspondence to: Aniruddha Joshi <aniruddhajoshi@eecs.berkeley.edu >.
+
+Objective 1 
+
+> Objective 2
+
+z = ( z1, z 2)
+
+z1
+
+z2
+
+Ray    
+
+> Unit Quadrant
+> Ow(z)ww
+> Chebyshev Length: Ow(z)
+
+Figure 1. Geometric interpretation of the weighted Chebyshev operator. The preference vector w (black) defines a direction in the objective space. The operator calculates the maximum scaling of w that is weakly dominated by the value vector z = ( z1, z 2).Geometric interpretation of the weighted Chebyshev operator. The unit preference vector w (black) indicates the direction. The oper-ator determines the maximum factor by which this vector can be scaled until it reaches the boundary of the region dominated by the reference point z. The magnitude of this scaled vector represents the Chebyshev value. 
+
+Ta s¸ kıran et al., 2025); distributed computing (energy, la-tency, throughput) (da Silva Veith et al., 2019; Qin et al., 2020); drug and molecule design (efficacy, toxicity, syn-thesizability) (Zhou et al., 2019); recommender systems (accuracy, diversity, fairness) (Lacerda, 2017); robotics (speed, safety, energy) (Huang et al., 2019); satellite com-munications (throughput, delay, power) (Hu et al., 2020); control (tracking, robustness, effort) (Nair et al., 2025); and mechanical design (weight, strength, manufacturability) (De Santanna et al., 2025). Reinforcement learning (RL) is increasingly used as a general optimization, control, and exploration mechanism in such settings, but standard RL typically assumes a single reward signal (Sutton & Barto, 2018). When multiple objectives are present, practitioners commonly apply scalarisation techniques (e.g., hand-tuned weighted sums) to collapse them into a single objective; while convenient, this can eliminate important trade-offs and may yield policies that perform well on average but fail to satisfy critical preferences in specific scenarios. These limitations motivate a truly multi-objective approach: multi-1
+
+> arXiv:2606.26397v1 [cs.LG] 24 Jun 2026 Deterministic Pareto-Optimal Policy Synthesis for MORL
+
+objective reinforcement learning (MORL), which seeks to learn the full set of Pareto-optimal solutions. In this work, we introduce a novel Bellman operator parame-terized by preference weights. This formulation allows us to obtain a deterministic Pareto-optimal policy corresponding to any desired trade-off. We provide a proof of the oper-ator’s convergence, while guaranteeing that the extracted policies approximately cover the entire Pareto frontier and are individually approximately Pareto-optimal. Further we empirically demonstrate that, our procedure can retrieve the complete Pareto frontier. The main contributions of this work are as follows: 1. We introduce a model-based Bellman operator param-eterized by preferences, leveraging Chebyshev scalar-ization. We derive its error bounds and prove that it converges asymptotically to the Pareto-optimal values for deterministic, non-stationary policies in MOMDPs. 2. From these converged Q-estimates, we demonstrate how to extract deterministic policies requiring only a single-step transition memory. We prove that this approach yields a policy set that covers the Pareto frontier while guaranteeing that each recovered policy is approximately non-dominated within the space of all non-stationary deterministic policies. 3. We provide empirical evidence demonstrating that our algorithm successfully converges to the Pareto frontier, capturing all trade-offs and recovers a set of determin-istic Pareto-optimal policies for all of them. The remainder of this paper is organized as follows. Sec-tion 2 reviews related literature. Section 3 introduces the Multi-Objective Markov Decision Process framework and defines the problem of synthesizing a Pareto coverage set. Section 4 introduces Chebyshev scalarization as our core op-timization mechanism, provides geometric intuition for this operator, and proves that a norm-maximization tie-breaking rule yields a necessary and sufficient condition for exactly characterizing the Pareto frontier. Section 5 details our novel, preference-aware Bellman update, while Section 6 outlines the resulting deterministic policy synthesis algo-rithm. Section 7 validates the convergence and coverage capabilities of our approach through empirical experiments. Finally, Section 8 concludes the paper and outlines direc-tions for future work. 
+
+## 2. Related Work 
+
+We contextualize our contributions within three primary paradigms of Multi-Objective Reinforcement Learning: lin-ear scalarization , preference-based learning , and explicit set maintenance . While comprehensive surveys provide a broader view (Roijers et al., 2013; Hayes et al., 2022; Zhang et al., 2023), we focus on these specific categories to high-light a fundamental challenge: the difficulty of efficiently obtaining deterministic policies that cover the full Pareto frontier while maintaining rigorous convergence guarantees. 
+
+Linear Scalarization. A common approach to MORL in-volves reducing the vector-valued reward to a scalar via a weighted sum. This technique has been applied across diverse domains, including manufacturing (Aissani et al., 2008), hydroelectric control (Shabani, 2009), energy man-agement (Guo et al., 2009), and grid computing (Perez et al., 2009), alongside the development of specialized algorithms for this setting (Barrett & Narayanan, 2008; Yang et al., 2019; Castelletti et al., 2012). However, linear scalarization is fundamentally restricted to recovering solutions on the convex coverage set of the Pareto frontier, failing to iden-tify optimal trade-offs in non-convex regions common in complex real-world tasks (Roijers et al., 2013; Van Moffaert et al., 2014; Yamaguchi et al., 2019). 
+
+Preference-Based Approaches. These methods general-ize linear scalarization by parameterizing the value function with a vector of weights. The weighted Chebyshev scalariza-tion, originally characterized by Bowman (Bowman, 1976), has demonstrated empirical success in multi-objective evolu-tionary algorithms (Voss et al., 2008). In the MORL context, (Van Moffaert et al., 2013a) utilize this metric to learn mul-tiple policies, performing weight sweeps (fixing specific weights) to approximate the Pareto curve. Similarly, Rey-mond et al. (Reymond & Now ´e, 2019) extend these concepts using neural network approximations of Pareto-optimal Q-values. Our work builds upon this foundation by defining a prefer-ence space and estimating Q-values parameterized by these preferences. However, unlike methods that fix scalariza-tion weights to learn separate policies, we integrate the preference vector directly into the learning process. This Bellman operator allows the policy to dynamically optimize against varying preferences recursively, resulting in a single succinct representation parameterized by the weights. Fur-thermore, we provide a proof of asymptotic convergence to deterministic Pareto-optimal policies. Modern approaches (Van Moffaert et al., 2013b; Van Mof-faert & Now ´e, 2014; Ruiz-Montiel et al., 2017a; Mandow & P ´erez-de-la Cruz, 2018) focus on maintaining explicit sets of Pareto-optimal estimates. However, extracting a policy to achieve a specific Pareto-optimal value from these sets presents a fundamental challenge: alignment consistency .In these settings, the value of a state is represented by a set of vectors, each corresponding to a distinct optimal trade-off. To execute a policy, an agent must effectively select a target trade-off vector from the current state’s set. Crucially, this choice imposes a strict constraint on the subsequent step: to realize the chosen trade-off, the agent must identify 2Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+and select the specific corresponding vector from the set of estimates at the next state that contributed to the current value. In contrast to scalar RL, where a greedy maximiza-tion over a single value suffices, the MORL agent must maintain this specific alignment across the trajectory. If the agent fails to align the next-state selection with the previous state’s trade-off target, the global policy becomes subopti-mal. As highlighted in (Van Moffaert & Now ´e, 2014) and (Ruiz-Montiel et al., 2017b), arbitrarily selecting any trade-off without ensuring this alignment breaks the optimality chain. Consequently, these methods rely on heuristic action selection mechanisms that lack formal guarantees, and thus the executed policy is not guaranteed to realize the target Pareto-optimal value. Our approach addresses these limitations simultaneously. First, by parameterizing the value function with preferences, we eliminate the need for an explicit set representation, making our method amenable to standard function approxi-mation. Second, we establish asymptotic convergence guar-antees for the estimates similar to those of White (White, 1982); however, we obtain policies without the computa-tionally intractable requirement of storing action histories. Instead, we resolve the alignment consistency problem effi-ciently: our procedure dynamically determines the prefer-ence for the subsequent state based on the selected action and current preference. This mechanism allows us to re-cover non-stationary, deterministic Pareto-optimal policies by simply changing the local preference parameter over the rollout, and we further prove convergence of our policy to the frontier. 
+
+Explicit Set-Based Approaches. Works by White (White, 1982) established that generating the complete Pareto fron-tier using deterministic policies requires non-stationary be-havior, as stationary policies may be dominated in multi-objective settings. White proposed a Bellman update operat-ing on sets of estimates and established value convergence (a proof later revised by Mifrani (Mifrani, 2025)). However, retrieving the corresponding policy requires storing the en-tire history of actions across all updates ( n steps) and may scale exponentially. As noted by (Wiering & de Jong, 2007), this memory requirement is computationally infeasible. To circumvent this, algorithms like CON-MODP (Wiering & de Jong, 2007) restrict the search space to stationary poli-cies, thereby sacrificing the ability to recover the Pareto frontier. 
+
+## 3. Preliminaries and Problem Formulation 
+
+In this section, we formalize the problem of synthesizing a complete and parsimonious set of Pareto-optimal poli-cies. We first introduce the necessary preliminaries and definitions. 
+
+Definition 3.1 (Multi-Objective Markov Decision Process                    
+
+> s0start
+> s1
+> s2
+> s3
+> s4
+> a1
+> 1.0
+> [1 .0,0.5] T
+> a2
+> [2 .0,0.25] T0.5
+> 0.5
+> a1,a2
+> [0 .9,0.9] T/γ 1.0
+> a1
+> [0 .9,2.4] T/γ
+> 0.5
+> 0.5
+> a2
+> [0 .9,0.4] T/γ
+> 0.5
+> 0.5
+> [0 .1,0.1] T(1 −γ)/γ 2
+> a1,
+> a2
+> 1.0
+> [0 .1,0.1] T(1 −γ)/γ 2
+> a1,
+> a2
+> 1.0
+
+Figure 2. Solid arrows represent actions and are annotated with action labels and rewards, while dashed arrows represent stochastic transitions annotated with their probabilities. 
+
+(MOMDP)) . A Multi-Objective Markov Decision Process (MOMDP) is a tuple M := ( S, A, T, γ, s 0, R ), where S is a set of states, A is a set of actions, T : S × A × S → [0 , 1] 
+
+is a probabilistic transition function, γ ∈ [0 , 1) is a discount factor, s0 ∈ S is the initial state, and R : S × A → Rd 
+
+> ≥0
+
+is a d-dimensional vector-valued reward .
+
+Example 3.2. Consider the MOMDP with 2-dimensional rewards illustrated in Figure 2. As an example, execut-ing action a1 from the initial state s0 produces the reward   1.00.5
+
+ ∈ R2 
+
+> ≥0
+
+and transitions to state s1.We focus on deterministic policies π that map a state-action history ht and the current state s ∈ S to an action a ∈ A.We denote the action selected at state s given history ht by 
+
+π(s | ht), and the induced future policy by π(· | ht).Let ∆( S) denote the set of probability distributions over 
+
+S. For an initial state distribution I ∈ ∆( S), the Value Function (or value vector ) Vπ (I) ∈ Rd 
+
+> ≥0
+
+is the expected discounted return obtained by executing policy π:
+
+Vπ (I) = Es0∼I ,π 
+
+" ∞X
+
+> t=0
+
+γtR(st, a t)
+
+#
+
+Example 3.3. In the MOMDP (Figure 2), action choices affect transitions and rewards only at states s0 and s1; at states s2, s3, and s4, the outcomes are independent of the action chosen. This results in four distinct deterministic policies, corresponding to the action pairs π1 = ( a1, a 1),
+
+π2 = ( a1, a 2), π3 = ( a2, a 1), and π4 = ( a2, a 2), where the first and second components denote the actions taken at states s0 and s1 regardless of the history. These poli-cies yield the value vectors (2 , 3) , (2 , 1) , (3 , 2) , and (3 , 1) ,respectively (see Figure 3). 
+
+Notation. Let Π denote the set of deterministic policies. For vectors u, v ∈ Rd
+
+> ≥0
+
+, u weakly dominates v (v ⪯ u) if 
+
+ui ≥ vi for all i, and strictly dominates (v ≺ u) if v ⪯ u
+
+and u̸ = v. We use the shorthand V π (s) to denote the value of policy π starting from state s. Let 1 denote a 
+
+d-dimensional vector of all ones. Assuming a maximum component-wise reward Rmax ∈ R≥0, all value vectors are bounded by R := Rmax  
+
+> 1−γ
+
+1.3Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+Objective 1          
+
+> Objective 2
+> 1234
+> 1
+> 2
+> 3
+> 4PO value
+> Weak PO value
+> Dominated value
+> Pareto performance
+> frontier (PPF)
+> (1 ,0.5)
+> (2 .0,0.25)
+> (3 .0,0.75)
+> (3 .0,1.25)
+> (3 .0,2.75)
+
+a1
+
+> a1
+
+a2
+
+a2
+
+> a1
+
+a2
+
+> a1, a2
+
+π3(3 , 2) 
+
+π1(2 , 3) 
+
+π2(2 , 1) π4(3 , 1) 
+
+Figure 3. Multi-objective value vectors. Arrows show rewards accrued from deterministic (solid) and stochastic (dashed, p =0.5) transitions from s0, s1 and s2. Pareto-optimal and weakly Pareto-optimal vectors are marked in red (circles and triangle, respectively), while dominated values are in blue. The dashed black line indicates the Pareto performance frontier. 
+
+We note that two vectors u, v ∈ Rd 
+
+> ≥0
+
+are incomparable if neither u ⪯ v nor v ⪯ u. This occurs if and only if there exist indices i and j such that ui < v i and uj > v j .A policy π ∈ Π is Pareto-optimal (PO) if it is not strictly dominated by any other policy; formally, there exists no 
+
+π′ ∈ Π such that V π (s0) ≺ V π′
+
+(s0).1 The set of such policies, denoted ΠP O , represents the trade-offs where no objective can be improved without sacrificing another. 
+
+Example 3.4. Figure 3 illustrates the value vectors for the four policies: π1 and π3 are Pareto-optimal, whereas π2
+
+is dominated by π1 (V π2 (s0) ⪯ V π1 (s0)) and π4 is domi-nated by π3 (V π4 (s0) ⪯ V π3 (s0)). Furthermore, policies 
+
+π1 and π3 are incomparable, as neither of their value vectors dominates the other. Since multiple policies may yield identical value vectors, 
+
+ΠP O can contain redundant policies. We therefore seek a 
+
+Pareto Coverage Set CP O ⊆ ΠP O that serves as a repre-sentative subset capable of characterizing the entire fron-tier of optimal values without the redundancy of the full policy space; formally, ∀π ∈ ΠP O , ∃π′ ∈ C P O such that 
+
+V π′
+
+(s0) = V π (s0).Identifying such a set CP O is non-trivial and motivates our problem definition to synthesize a parsimonious policy set that satisfies coverage: 
+
+> 1
+
+While dominance is defined here with respect to the initial state s0, the concept naturally extends to any initial state distribu-tion I ∈ ∆( S) by substituting V π (s0) with V π (I).
+
+Problem Statement Complete And Parsimonious Synthesis (CAPS) 
+
+Given a Multi-Objective Markov Decision Process 
+
+M = ( S, A, T, γ, s 0, R ), synthesize a Pareto cov-erage set CP O ⊆ ΠP O that satisfies the following conditions: • Coverage : Every Pareto-optimal policy is rep-resented by a policy in the set CP O :
+
+∀π ∈ ΠP O , ∃π′ ∈ C P O such that 
+
+V π (s0) = V π′
+
+(s0)
+
+• Parsimony : Every policy in the coverage set is itself Pareto-optimal: 
+
+∀π′ ∈ C P O , ∃π ∈ ΠP O such that 
+
+V π′
+
+(s0) = V π (s0)
+
+Since value functions are defined as the limits of infinite sums, evaluating them exactly may not be practically pos-sible without truncating after a finite horizon. To account for the inherent error of this truncation, we relax the ex-act equality constraints and define the ϵ-CAPS problem as follows: 
+
+Problem Statement Approximate Complete And Parsimonious Synthesis ( ϵ-CAPS) 
+
+Given a Multi-Objective Markov Decision Process 
+
+M = ( S, A, T, γ, s 0, R ) and an ϵ ∈ R>0, synthe-size an approximate Pareto coverage set CϵP O that satisfies the following conditions: • Approximate Coverage : Every Pareto-optimal policy is approximately dominated by a policy in the approximate coverage set CϵP O :
+
+∀π ∈ ΠP O , ∃π′ ∈ C ϵP O such that 
+
+V π (s0) ⪯ V π′
+
+(s0) + ϵ1
+
+• Approximate Parsimony : Every policy in the approximate coverage set is itself approxi-mately Pareto-optimal: 
+
+∀π′ ∈ C ϵP O , ∃π ∈ ΠP O such that 
+
+V π′
+
+(s0) ⪯ V π (s0) + ϵ1
+
+Given a small margin ϵ > 0, the approximate coverage prop-erty ensures that the value of every Pareto-optimal policy is weakly dominated by the value of a policy in CϵP O , up to an additive factor of ϵ across all components. Similarly, the ap-proximate parsimony property guarantees that every policy in CϵP O is weakly dominated by an actual Pareto-optimal policy, up to the same ϵ margin. 4Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+To solve the ϵ-CAPS problem, we next introduce an ad-ditional parameter called a preference . Optimizing for a specific preference yields an approximately Pareto-optimal policy; consequently, systematically varying this preference allows us to construct the full approximate Pareto coverage set CϵP O .Our approach proceeds in two main steps. First, assuming a known probabilistic model of the system, we introduce a Bellman update procedure and prove that the resulting Q-value estimates converge arbitrarily close to the true Pareto-optimal values. Second, we demonstrate how to extract a history-independent policy π from these Q-estimates. This independence relies on a core property we establish regard-ing greedy Pareto-optimal policies : there exist deterministic, Pareto-optimal policies where, upon taking action a in state 
+
+s and transitioning to s′, the subsequent behavior perfectly matches another deterministic Pareto-optimal policy orig-inating from s′. Consequently, instead of storing the full execution history ht, we can greedily select actions by dy-namically updating the preference parameter based solely on the most recent state transition. 
+
+## 4. Preference-Based Chebyshev Scalarization 
+
+A common approach to solving the Pareto-optimal policy synthesis problem in MOMDPs is via scalarization. In this framework, a non-negative, unit-normalized preference vec-tor encodes the relative importance of the objectives, and a scalarization function maps vector-valued returns to scalar values. For each preference vector, this yields a distinct single-objective optimization problem, whose solution cor-responds to a policy tailored to that preference. Solving these problems over a collection of preference vectors pro-duces a set of policies that characterize the Pareto frontier. Our approach builds on this idea; we next formally define the preference space and the Chebyshev scalarization func-tion. 
+
+Definition 4.1 (Preference Space) . We define the preference space W as the set of all non-negative, unit-normalized weight vectors: 
+
+W := 
+
+n
+
+w ∈ Rd 
+
+> ≥0
+
+∥w∥2 = 1 , w i ≥ 0, ∀i = 1 , . . . , d 
+
+o
+
+.
+
+We refer to any vector w ∈ W as a preference . Conceptually, each component wi acts as a weight assigned to the i-th objective, representing its relative importance. 
+
+Definition 4.2 (Chebyshev Scalarization) . Let W be the preference space. The Weighted Chebyshev scalarization is a function O : W × Rd 
+
+> ≥0
+
+→ R≥0 that maps a preference vector w ∈ W and a value vector V ∈ Rd 
+
+> ≥0
+
+to a non-negative scalar score in R≥0. It is defined as: 
+
+O(w, V ) := min 
+
+> i:wi>0
+
+ Vi
+
+wi
+
+
+
+For a fixed preference vector w ∈ W , we write Ow(V ) := 
+
+O(w, V ) to denote the Chebyshev scalarization induced by the preference w.
+
+Geometric Intuition. Geometrically, the weighted Cheby-shev operator O(w, V ) identifies the largest scale factor 
+
+α ≥ 0 such that the vector αw remains weakly dominated by V . It measures how far a ray originating from the origin in the direction of w can extend before it is constrained by the components of V (illustrated in Figure 1). This relation-ship is formalized by the optimization: 
+
+max α subject to αw ⪯ V
+
+The constraint αw ⪯ V requires that αw i ≤ Vi for all i. Consequently, the optimization simplifies to α ≤
+
+min 
+
+> i:wi>0
+
+ Vi
+
+> wi
+
+
+
+. Thus, the resulting scalar value is determined strictly by the i-th bottleneck component that produces this minimum ratio. This component represents the first coordi-nate of V that restricts the scaling along the ray. We note that for a fixed preference w, multiple distinct value vectors (including those that are strictly dominated) may yield the exact same scalar score. Because the operator is sensitive only to the limiting bottleneck component, in-creasing any non-bottleneck objective Vj does not change the resulting value. This phenomenon, where an improve-ment in one objective is not reflected in the scalarization, is illustrated in Example 4.3 below. 
+
+Example 4.3. Consider four policies π1, . . . π 4 with value vectors V 1 = (2 , 3) , V 2 = (2 , 1) , V 3 = (3 , 2) , and 
+
+V 4 = (3 , 1) , as shown in Figure 3. Suppose we have a pref-erence vector w = (3 ,0.5)  
+
+> ∥(3 ,0.5) ∥2
+
+. For both V 3 and V 4, the first objective is the bottleneck since: V 31 
+
+> w1
+
+= V 41 
+
+> w1
+
+= ∥(3 , 0.5) ∥2.While V 3 strictly dominates V 2 (since 2 > 1 in the second objective), both yield the same scalarized value: 
+
+Ow(V 3) = Ow(V 4) = ∥(3 , 0.5) ∥2. Consequently, an opti-mizer using this preference w would be indifferent between the two. However, for a different preference w′ = (2 ,1)  
+
+> ∥(2 ,1) ∥
+
+,the bottleneck shifts, and only V 3 would remain as the maximum. While Example 4.3 highlights the operator’s indifference between specific value vectors, it also suggests that for any preference direction w, there exists a limit to how far the ray αw can extend within the space of achievable outcomes. We formalize this boundary in Definition 4.4. 
+
+Definition 4.4 (Pareto Performance Frontier (PPF)) . Let 
+
+V ⊂ Rd 
+
+> ≥0
+
+be the set of all achievable value vectors, such that V̸ = {0}. Let VP O ⊆ V denote the subset of Pareto-optimal points in V. The Pareto Performance Frontier 
+
+PPF ⊂ Rd 
+
+> ≥0
+
+is defined as the set of value vectors charac-terizing the upper boundary of the achievable region. A point v belongs to the PPF if it is weakly dominated by a 5Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+> Achievable Region
+> Unachievable Region
+> Pareto Performance Frontier
+
+Objective 1                       
+
+> Objective 2
+> 1234
+> 1
+> 2
+> 3
+> 4
+> (2 ,1)
+> (1 .3,1.3)
+> (2 .2,2)
+> (2 .5,1.5)
+> (1 .5,2.5)
+> (0 .5,2.7)
+> (0 .9,2.1)
+> (0 .5,0.8)
+> (1 .5,0.5) (2 .5,0.2)
+> (2 .6,0.8)
+> (2 .2,2.2)
+> (3 .3,1)
+> (3 .3,1.5)
+> (3 .8,0.5)
+> (2 ,3)
+> (1 .2,3)
+> (3 ,2)
+> Achievable value
+> Pareto-Performance Frontier (PPF)
+> Achievable Region
+> Unachievable
+> Region
+
+Figure 4. Visualization of the Pareto performance Frontier (PPF). The distinct points represent achievable values. The dashed bound-ary line demarcates the PPF, separating the achievable region (blue) from the unachievable region (red). 
+
+Pareto-optimal point, yet cannot be strictly improved in all objectives simultaneously by any achievable vector. For-mally: 
+
+PPF = 
+
+n
+
+v ∈ Rd 
+
+> ≥0
+
+∃v∗ ∈ V P O s.t. v ⪯ v∗
+
+and ∄v′ ∈ V s.t. ∀i = 1 , . . . , d, v i < v ′
+
+> i
+
+o
+
+The frontier separates the achievable performance region from the unachievable region. The achievable region is defined as the set of points weakly dominated by the Pareto set; conversely, the unachievable region comprises values that are strictly unattainable by any policy. Figure 4 visualizes the PPF as a dashed boundary separat-ing the achievable region (weakly dominated by VP O ) from the strictly unachievable region. By definition, no point on the PPF allows simultaneous improvement in all objectives. 
+
+Example 4.5. Figure 4 illustrates PPF with a dashed bound-ary. This frontier demarcates the achievable region, where all feasible points lie on or below the boundary, from the unachievable region located above it. It is easy to see that no point on the PPF can be improved in all objectives si-multaneously. Next, we provide an example illustrating a fundamental limitation of linear scalarization: its inability to capture Pareto-optimal points located in non-convex regions of the frontier. 
+
+Example 4.6. Consider the Pareto-optimal points A =[2 , 3] ⊤, B = [2 .2, 2.2] ⊤, and C = [3 , 2] ⊤, as shown in Figure 4. We assert that for any preference vector w ∈ W ,point B can never be the maximizer of linear scalarization. Specifically, either w⊤B ≤ w⊤A or w⊤B ≤ w⊤C.We prove this by contradiction. Suppose there exists a preference w = [ w1, w 2]⊤ ∈ W (where w1, w 2 ≥ 0) such that w⊤B > w ⊤A and w⊤B > w ⊤C. Expanding and simplifying these inequalities yields: 
+
+2.2( w1 + w2) > 2w1 + 3 w2 =⇒ w1 > 4w2
+
+2.2( w1 + w2) > 3w1 + 2 w2 =⇒ w2 > 4w1
+
+Combining these constraints results in w1 > 4w2 > 16 w1.Since w1 and w2 are non-negative, w1 > 16 w1 is a clear contradiction. Consequently, varying the preferences and maximizing a linear scalarization will fail to capture the entire Pareto frontier, particularly missing point B.While the PPF defines performance limits, it lacks a mech-anism for selecting specific optimal trade-offs. To address this, we use Chebyshev scalarization , which maps prefer-ences to frontier points. Unlike linear weighted sums, which fail on non-convex boundaries, Chebyshev scalarization en-sures that every Pareto-optimal point can be recovered. We formalize this in Theorem 4.7 next: 
+
+Theorem 4.7 (Sufficiency and Necessity of the weighted Chebyshev Scalarization) . Let V ⊂ Rd 
+
+> ≥0
+
+be a set of achiev-able value vectors such that V ⊆ [0 , R max ]d, and let the 
+
+PPF denote the set of Pareto performance frontier for vec-tors in V. For a given preference w ∈ W , let Ow(v) denote the weighted Chebyshev scalarization of v. The following properties hold: 4.7.1 Sufficiency: For any preference w, the maximizer of the Chebyshev scalarization is on the Pareto perfor-mance frontier. Formally, if V ∗ ∈ arg max  
+
+> v∈V
+
+Ow(v),then V ∗ ∈ PPF .4.7.2 Necessity: For any Pareto-optimal vector V ∗ ∈ V ,there exists a preference w ∈ W such that V ∗ is the unique maximizer of the scalarization. Formally if 
+
+V ′ ∈ arg max   
+
+> V∈V
+
+Ow(V ) then V ′ = V ∗.Proof Sketch. The intuition for both properties relies on the geometric constraints of the Chebyshev scalarization: • Sufficiency (Proof by Contradiction): If a maximizer of the Chebyshev objective were not on the Pareto per-formance frontier ( PPF ), there would exist another achievable vector in V that is strictly greater along all dimensions. Because the Chebyshev objective scales strictly with the minimum weighted component, this dominating vector would yield a strictly larger objec-tive value, contradicting the premise that the original vector was a maximizer. 6Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+• Necessity: For any given Pareto-optimal vector V ∗, we can perfectly align the preference vector w ∈ W by set-ting it proportional to V ∗, i.e., w := V ∗  
+
+> ∥V∗∥2
+
+. Therefore, any vector V ′ ∈ arg max   
+
+> V∈V
+
+Ow(V ) maximizing the ob-jective along this preference must weakly dominate V ∗,since min 
+
+> wi>0
+
+n V ′
+
+> i
+> wi
+
+o
+
+= min   
+
+> V∗
+> i>0
+
+n V ′   
+
+> i∥V∗∥2
+> V∗
+> i
+
+o
+
+≥ Ow(V ∗) = 
+
+∥V ∗∥2, yielding V ′ 
+
+> i
+
+≥ V ∗ 
+
+> i
+
+for all i. Since V ∗ is Pareto-optimal by definition, no achievable vector can strictly dominate it, forcing the unique maximizer to be exactly 
+
+V ∗.A detailed proof is provided in Appendix B.1. Theorem 4.7 establishes the connection between Cheby-shev scalarization and Pareto-optimality. As a consequence, the following Theorem 4.8.1 demonstrates that the set of scalarization maximizers covers all Pareto-optimal points while remaining entirely confined to the Pareto performance frontier. However, to isolate the Pareto-optimal subset, we must filter out points that lie on the PPF but are not Pareto-optimal. To achieve this, we introduce a two-stage optimization proce-dure in Theorem 4.8.2. This procedure refines the selection logic: while the first stage uses Chebyshev scalarization to identify candidate solutions, the second stage imposes a maximum ℓ2-norm tie-breaking rule. By selecting the vector with the largest ℓ2-norm, we effectively push the so-lution toward the most distal point on the PPF , filtering out suboptimal frontier points. This ensures the resulting points are strictly Pareto-optimal, thus exactly capturing the most efficient trade-offs. 
+
+Theorem 4.8 (Coverage and Exact Characterization of Pareto Optimality) . Let V ⊂ Rd 
+
+> ≥0
+
+be a set of achievable value vectors, with VP O denoting the Pareto-optimal set and PPF the Pareto performance frontier. The relationship between Chebyshev scalarization and the Pareto set is characterized by the following two properties: 4.8.1 Scalarization-Induced Coverage: Let S be the set constructed by selecting, for every preference w ∈ W ,an arbitrary vector that maximizes the scalarization 
+
+Ow. Formally: 
+
+S := [
+
+> w∈W
+
+vw , where vw ∈ arg max  
+
+> v∈V
+
+Ow(v).
+
+Then S contains all Pareto-optimal points and consists solely of points on the Pareto performance frontier: 
+
+VP O ⊆ S ⊆ PPF .
+
+4.8.2 Exact Characterization via Norm-Regularization: 
+
+Let M be the set constructed by selecting, for every preference w ∈ W , a vector v∗ 
+
+> w
+
+obtained via a two-stage optimization process: first maximizing the Cheby-shev scalarization Ow, and then maximizing the ℓ2-norm among the resulting candidates for tie-breaking. Formally: 
+
+M := [
+
+> w∈W
+
+v∗ 
+
+> w
+
+,
+
+where v∗ 
+
+> w
+
+is an arbitrary solution to the nested opti-mization: 
+
+v∗ 
+
+> w
+
+∈ arg max 
+
+> v
+
+
+
+∥v∥2 v ∈ arg max  
+
+> u∈V
+
+Ow(u)
+
+
+
+.
+
+Then M coincides with the Pareto-optimal set: 
+
+M = VP O .
+
+Proof Sketch. 1. Scalarization-Induced Coverage: This property is a direct consequence of the Sufficiency and Necessity of the Chebyshev scalarization established in Theorem 4.7. Sufficiency guarantees that any maximizer chosen for S naturally falls on the Pareto performance frontier ( S ⊆ PPF) . Necessity ensures that every true Pareto-optimal point is the unique maximizer for its per-fectly aligned preference vector, guaranteeing its inclu-sion in the coverage set ( VP O ⊆ S ). 2. Exact Characterization: To prove M = VP O , we must show that the ℓ2-norm tie-breaker correctly filters out dominated points on the performance frontier. If the two-stage process selected a point that is not Pareto-optimal, a dominating Pareto-optimal point would exist. This dominating point would achieve at least the same scalarization score (passing the first stage) but possess a strictly larger ℓ2-norm, thereby winning the tie-breaker and contradicting the selection of the inferior point. Con-versely, Pareto-optimal points are unique maximizers under their aligned preferences, meaning they trivially pass the tie-breaking phase. See Appendix B.2 for a detailed proof. 
+
+## 5. Bellman Update and Convergence 
+
+Main Idea: Theorem 4.8.2 allows us to characterize the set of Pareto-optimal values via preferences and the two-stage optimization problem involving Chebyshev scalarization in the first stage and norm-maximization in the second stage. By restricting the domain to value vectors achievable by policies, we characterize the set of Pareto-optimal Q-values obtained by starting from a state s, taking an action a, and subsequently behaving Pareto-optimally with respect to a preference w. We formalize this concept in Definition 5.1. To formulate the preference-conditioned Bellman operator, we leverage the coverage guarantee from Theorem 4.8.1. 7Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+Crucially, the Bellman update utilizes only the maximiza-tion procedure involving the Chebyshev scalarization, since that is sufficient to ensure coverage. Building on this for-mulation, we prove that the operator satisfies the envelop-ing property : the estimated value vectors upper-bound the Pareto-optimal values across the preference space. We demonstrate that this property is invariant under the Bell-man update: if the initialization envelopes the frontier, sub-sequent updates maintain this upper bound while monoton-ically approaching the Pareto performance frontier from above. This monotonic convergence guarantees that the final value estimates cover all Pareto-optimal values. Finally, to isolate the Pareto-optimal subset, we apply the two-stage optimization procedure to the converged Q-value vectors. To recover the corresponding Pareto-optimal poli-cies, we rely on Theorem 5.2, which establishes that Pareto-optimal values are recursive. This recursivity allows us to recover the optimal policies by acting greedily with respect to the converged Q-values. Now we define the optimal preference-action-value function as follows. 
+
+Definition 5.1 (Optimal Preference Action-Value Function) .
+
+For a preference vector w ∈ W , the Optimal Preference Action-Value Function Q∗ : S × A × W → Rd maps a state 
+
+s ∈ S , an action a ∈ A , and a preference vector w to the expected vector-valued return obtained by taking action a
+
+in state s and subsequently following an optimal policy. It is defined as 
+
+Q∗(s, a, w ) := R(s, a ) + γ V∗
+
+> w
+
+ p(· | s, a ),
+
+where the value function V∗ 
+
+> w
+
+is determined via a two-stage optimization procedure :1. Chebyshev optimization: Identify the policies that max-imize the weighted Chebyshev scalarization Ow(·).2. Tie-breaking: Among the resulting optimal value vec-tors, select one with maximum ℓ2-norm. Formally, this is expressed as 
+
+V∗
+
+> w
+
+(p(· | s, a )) ∈ arg max 
+
+> V
+
+n
+
+∥V∥2 V = Vπ (p(· | s, a )) ,π ∈ arg max  
+
+> π′∈Π
+
+Ow(Vπ′
+
+(p(· | s, a ))) 
+
+o
+
+.
+
+As proved in Theorem 4.8.2, this two-stage optimization allows us to characterize the set of Pareto-optimal points via preferences. The following theorem establishes that the preference-conditioned optimal action-value function Q∗
+
+admits a recursive decomposition. 
+
+Theorem 5.2 (Recursive Decomposition of Q∗). Let Q∗ :
+
+S × A × W → Rd 
+
+> ≥0
+
+be the optimal preference action-value function. For any state s ∈ S, action a ∈ A, and preference vector w ∈ W , Q∗ satisfies the recursive relationship: 
+
+Q∗(s, a, w ) = R(s, a ) + γ E
+
+> s′∼p(·| s,a )
+
+h
+
+Q∗(s′, ˆA(s′), ˆW(s′)) 
+
+i
+
+where the functions ˆA : S → A and ˆW : S → W map the next-states to actions and preferences, respectively. Proof Sketch. Let π be a policy achieving Q∗(s, a, w ). The tail policy induced by π at every next state s′ must be Pareto-optimal. If it were not, there would exist a strictly dominat-ing policy π′ at s′. We could then construct a stitched policy 
+
+π′′ that follows π′ at s′ and π otherwise. This policy π′′ 
+
+would strictly dominate π at (s, a ) (due to additive nature of expectation), which contradicts the Pareto-optimality of 
+
+π achieving Q∗(s, a, w ). Thus, the tail value of π at s′ must itself be the Pareto-optimal. Theorem 4.8 guarantees the ex-istence of a preference w′ recovering this value. By setting 
+
+ˆA(s′) = π(s′) and ˆW(s′) = w′, we recover the recursive form in terms of Q∗(s′, ˆA(s′), ˆW(s′)) . (See Appendix C.1 for details.) This recursive decomposition demonstrates that the Pareto-optimal action-value function Q∗ is greedy with respect to the current preference w. Specifically, after taking an action 
+
+a from the current state s, the agent can optimally navigate the environment by greedily selecting the subsequent ac-tion ˆA(s′) and preference W(s′) at each successive state 
+
+s′. This ensures that the expected vector-valued rewards are maximized along the original preference w thus capturing the Pareto-optimal trade-offs. Leveraging the recursive structure established in Theorem 5.2, we introduce the Preference Bellman Operator T (Def-inition 5.3) to formalize the iterative update process re-quired to recover the Pareto-optimal values. The relation-ship between the iterative application of this operator and the Pareto performance frontier is established in Theorem 5.4. Specifically, we prove that, when initialized with an upper-bounding Q-function, the sequence of functions generated by the repeated application of T monotonically converges to a coverage set of Pareto-optimal values on the PPF .
+
+Definition 5.3 (Preference Bellman Optimality Operator) .
+
+Let Q be the space of bounded vector-valued functions mapping S × A × W → Rd
+
+> ≥0
+
+. We define the Preference Bellman Optimality Operator T : Q → Q as follows. For any Q ∈ Q , state s ∈ S , action a ∈ A , and preference vector w ∈ W :      
+
+> (TQ)( s, a, w ) := R(s, a ) + γEs′∼p(·| s,a )
+> h
+> Q s′,ˆa(s′),ˆw(s′)i
+> ,
+
+where the next-state action ˆa(s′) and preference ˆw(s′) are chosen greedily to maximize the scalarized value at the next state: 
+
+(ˆ a, ˆw) ∈ arg max  
+
+> ϕA:S→AϕW:S→W
+
+Ow
+
+
+
+E
+
+> s′∼p(·| s,a )
+
+Q(s′, ϕ A(s′), ϕ W (s′)) 
+
+8Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+The Preference Bellman Operator T extends the standard notion of optimality to the multi-objective setting by treat-ing the preference vector as a dynamic component of the decision process. Rather than simply evaluating an ac-tion’s immediate reward, the operator performs a preference-conditioned backup .When evaluating the state-action pair (s, a ) under a current preference w, the operator looks ahead to the next state s′
+
+and identifies not only the optimal next action ˆa but also the optimal future preference ˆw. This ˆw acts as a steering mechanism: it selects the specific point on the next state’s frontier that contributes most effectively to maximizing the scalarized return for the current preference w.Next, we prove the convergence of the Bellman operator in Theorem 5.4. 
+
+Theorem 5.4. Let us define Q(s, a, w ) := R, then for every n ∈ N, and each state s, action a, the following three conditions hold: 5.4.1 Upper-bound : Every Pareto-optimal value is upper-bounded by an estimate. Specifically, for every prefer-ence w there exists a preference w′ such that: 
+
+Q∗(s, a, w ) ⪯ (T nQ)( s, a, w ′)
+
+5.4.2 Pareto Envelope : The estimates lie on or above the Pareto performance frontier. Formally, for all prefer-ences w the estimate is never dominated in all compo-nents by a Pareto-optimal value, i.e., 
+
+∀w, ∄w′ such that 
+
+(T nQ)( s, a, w )i < Q ∗(s, a, w ′)i, ∀i = 1 , . . . , d 
+
+5.4.3 Asymptotic Convergence : Every estimate converges to the value of a realizable policy. Formally, for all preferences w there is a policy π ∈ Π such that the gap between the estimate and the policy’s value vanishes: 
+
+0 ⪯ (T nQ)( s, a, w ) − V π (s) ⪯ γnR
+
+Proof Sketch. Upper-bound: We proceed by induction. The base case holds by the initialization Q ⪰ Q∗. For the inductive step, we invoke the Recursive Decomposition theorem (Theorem 5.2), which expresses Q∗ as an imme-diate reward plus a discounted next-state value. By the inductive hypothesis, the next-state Q∗ is upper-bounded by the previous iterate T n−1Q. Since the operator T per-forms a maximization over potential next-state updates, the update using the upper-bounding estimate yields a value at least as high as Q∗, preserving the inequality 
+
+Q∗(s, a, w ) ⪯ (T nQ)( s, a, w ′).
+
+Pareto Envelope: We argue by contradiction. Sup-pose there exist preferences w and w′ such that the es-timate is strictly less than an optimal value in all com-ponents: (T nQ)( s, a, w )i < Q∗(s, a, w ′)i for all i =1, . . . , d . From the Upper-bound property (Theorem 5.4.1), we know Q∗(s, a, w ′) is itself upper-bounded by some estimate T nQ(s, a, w ′′ ). By transitivity, this implies 
+
+(T nQ)( s, a, w )i < (T nQ)( s, a, w ′′ )i for all i. In other words, the estimate for w′′ is strictly greater than the esti-mate for w in every component. Subtracting R(s, a ) and dividing by γ implies that the expected continuation value used in the update for w′′ is strictly greater component-wise than that for w. Since every component is strictly larger, the resulting Chebyshev scalarization is strictly higher. This contradicts the operator’s maximization step, which would have selected the higher update. 
+
+Asymptotic Convergence: The value T nQ(s, a, w ) rep-resents the accumulation of rewards from n steps of opti-mal updates plus a residual initialization term bounded by 
+
+γnR. We construct a deterministic, non-stationary, history-dependent policy π that exactly mimics the sequence of action updates chosen by the operator T for the first n
+
+steps, and acts arbitrarily thereafter. The value of this policy 
+
+V π (s) matches the estimate T nQ(s, a, w ) exactly in the first n terms, with the difference arising solely from the tail rewards after step n. Since rewards are bounded, this difference is bounded by γnR, which vanishes as n → ∞ .(See Appendix D for the detailed proof.) 
+
+Discussion of Theorem 5.4 : The significance of this theo-rem lies in its guarantee that the preference-conditioned Bell-man operator monotonically converges toward the Pareto performance frontier. Unlike standard value iteration, which converges to a single fixed point, our operator converges to a set of values that fully characterizes the frontier. Condition 5.4.1 (Upper-bound) acts as a safety guarantee, ensuring that the iterative updates never discard the Pareto-optimal values; the estimates remain sufficiently expressive to cover all optimal trade-offs. Condition 5.4.2 (Pareto Envelope) establishes the geomet-ric relationship of the updates: the estimates approach the frontier strictly from the non-dominated side, creating an “envelope” that tightens with every iteration. Condition 5.4.3 (Asymptotic Convergence) bridges the gap between estimation and execution. It ensures that as 
+
+n → ∞ , the gap between the estimates and achievable val-ues vanishes, guaranteeing that the limiting values of the sequence represent executable policies. In the next section, we discuss how to obtain Pareto-optimal policies along a preference w.9Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+Algorithm 1 High-Level Pareto-Optimal Policy Execution 
+
+Require: Value estimate T nQ, Next state distribution p(· | 
+
+s, a ), Initial state s0, Initial Preference winit  
+
+> 1:
+
+Initialization: Compute an initial action a0 and next preference w1 that maximize the Chebyshev scalariza-tion along preference winit of Pareto-optimal estimates 
+
+T nQ(s0, a 0, w 1). 
+
+> 2:
+
+Take action a0 in the environment and observe the re-ward r0. 
+
+> 3:
+
+Set the history: sprev ← s0, aprev ← a0, reward 
+
+rprev ← r0, and next preference target wtarget ← w1. 
+
+> 4:
+
+while not termination do  
+
+> 5:
+
+Alignment: Align the target preference wtarget with the direction of the expected tail reward estimate.  
+
+> 6:
+
+Optimization: For the current state si, obtain the optimal action ai and next preference wi+1 that max-imize the Chebyshev scalarization of the expected re-ward estimates along the aligned preference wtarget . 
+
+> 7:
+
+Execution: Take the optimal action ai in the envi-ronment and observe the reward ri. 
+
+> 8:
+
+Update: Update the history with the new state 
+
+sprev ← si, action aprev ← ai, reward rprev ← ri,and next preference target wtarget ← wi+1 . 
+
+> 9:
+
+end while 
+
+## 6. Obtaining Pareto-optimal Policies 
+
+The convergence and recursive properties of the Preference Bellman Operator T enable us to recover policies that ap-proximate all Pareto-optimal values. Crucially, as estab-lished by the recursive decomposition in Theorem 5.2, these policies can be executed greedily. Rather than tracking the entire execution history, the agent requires only a constant-size memory consisting of the most recent transition data, namely the previous state si−1, action ai−1, and reward 
+
+ri−1, alongside the current guiding preference wi. At step 
+
+i, upon observing the current state si, the agent greedily selects an action-preference pair (ai, w i+1 ) based on the Q-estimates. This pair dictates the immediate action to execute and the updated preference parameter required to guide the policy from the subsequent state. The memory is then shifted forward accordingly. Algorithm 1 provides the high-level pseudocode for this execution, starting from an initial state s0 and initial preference winit (with the de-tailed procedure, Algorithm 2, deferred to Appendix D.1). Next, we establish the theoretical guarantees for the policies generated by this algorithm. 
+
+Theorem 6.1 (Approximate Pareto Coverage) . Let CnP O =
+
+{πw | w ∈ W} denote the set of policies generated by all preferences using the n-th Bellman update by Algorithm 1. This set satisfies the properties of approximate Pareto cover-age. 6.1.1 Approximate Coverage: Every Pareto-optimal policy is approximated by some policy in CnP O such that the 
+
+suboptimality gap is bounded. Formally: 
+
+∀π ∈ Π, ∃w ∈ W such that 
+
+V π (s0) ⪯ V πw (s0) + γnR
+
+6.1.2 Approximate Parsimony: Every policy in CnP O satis-fies γnR-Pareto optimality ; that is, no other policy can strictly dominate it by a margin larger than the approximation bound. Formally: 
+
+∀w ∈ W , ∀π ∈ Π we get 
+
+V π (s0) ⊁ V πw (s0) + γnR
+
+Proof Sketch. The argument depends on bounding the per-formance gap between the theoretical n-step Bellman esti-mate T nQ(s, a, w ) and the true expected value V πw (s) of the policy executing the greedy unrolling procedure starting from preference w.1. Recursive Trajectory Bound: At each step of execution, the agent greedily re-plans using the full n-step horizon aligned with its future expected return. By unrolling the recursive error over the infinite horizon, the maximum performance drop is bounded by the residual term: 
+
+T nQ(s, a, w ) ⪯ V πw (s) + γnR
+
+2. Approximate Coverage: We know from the fundamen-tal properties of the scalarized Bellman operator that the value of any true Pareto-optimal policy π∗ is weakly dominated by the theoretical n-th Bellman estimate for 
+
+some specifically aligned preference w′ added to a small residual term γnR. Chaining this bound with our ex-ecution bound guarantees that the induced policy πw′
+
+approximates the true optimal policy π∗ within the resid-ual gap: 
+
+V π∗
+
+(s) ⪯ T nQ(s, a, w ′) ⪯ V πw′ (s) + γnR
+
+3. Approximate Parsimony: Since the estimates generated by the Bellman operator cannot be strictly dominated by any policy, and the executed policy πw successfully recovers this estimate up to the γnR residual margin, no alternative policy exists that can strictly dominate 
+
+V πw (s) by a margin larger than γnR.A detailed proof is provided in Appendix D.10. In summary, our framework guarantees that by utilizing the Chebyshev-based Bellman operator to converge to accurate Q-value estimates, and subsequently filtering these estimates to break ties, we can extract an approximate set of Pareto-optimal policies. 10 Deterministic Pareto-Optimal Policy Synthesis for MORL           
+
+> 050 100 150 200
+> 0
+> 50
+> 100
+> 150
+> 200
+> Objective 1
+> Objective 2
+> Deep-Sea-Treasure Concave
+> ˆQ1ˆQ100 ˆQ1000 ˆQ2000
+> π1π100 π1000 π2000
+
+Figure 5. Coverage of Non-Convex Regions. In the concave variant, linear methods would fail to find the points in the locally concave “indented” region. Our method recovers the complete frontier, including non-convex trade-offs. 
+
+## 7. Experiments 
+
+In this section, we empirically validate the theoretical claims presented in Section 5. Our evaluation addresses three pri-mary questions: 
+
+Q1. Convergence: Does the recursive application of the preference-aware Bellman operator result in the con-vergence of value estimates to the Pareto frontier? 
+
+Q2. Coverage: Do the converged estimates successfully cover the entire set of Pareto-optimal trade-offs? 
+
+Q3. Policy Extraction: Do the synthesized deterministic policies achieve the estimated Pareto-optimal values (solving the alignment consistency problem)? To answer these, we evaluate our algorithm on the standard 
+
+Deep Sea Treasure (convex frontier) and a modified Deep Sea Treasure Concave variant (Vamplew et al., 2011). We note that Pareto-optimal values and policies are known for both the benchmarks (Vamplew et al., 2011). While the Deep-Sea-Treasure has a convex Pareto front, the Deep-Sea-Treasure-Concave has a concave Pareto front. 
+
+Q1 Convergence: Figures 5 and 6 illustrate the evo-lution of the value estimates ˆQ over training iterations 
+
+n = {1, 100 , 1000 , 2000 }. We observe that the estimates (represented by shapes) monotonically advance towards the frontier and stabilize after approximately at 1,000 steps. The negligible shift between the 1,000-step (Green) and 2,000-step (Orange) estimates affirms asymptotic convergence. 
+
+Q2 Coverage: The estimates ˆQ for both environments align with the ground truth Pareto optimal values. Notably, in the Concave environment, our method successfully identifies all the trade-offs , which are typically skipped by linear scalarization methods that only recover the convex hull.     
+
+> 050 100 150 200
+> 0
+> 50
+> 100
+> 150
+> 200
+> Deep-Sea-Treasure
+
+Figure 6. Convergence on Convex Frontier. Value estimates (shapes) converge to the true Pareto frontier. The policies (crosses) overlap perfectly with the estimates, demonstrating accurate policy extraction. 
+
+Q3 Policy Extraction: To verify consistency, we executed the extracted policies plotted the realized returns as crosses (×). The perfect overlap between the predicted estimates ( ˆQ2000 ) and the actual policy returns ( π2000 ) confirms that our policies achieve the estimated Pareto-optimal trade-offs. 
+
+Baselines: We benchmark our results against the MORL-Baselines project (Felten et al., 2023) 2. According to these benchmarks, Pareto Q-Learning (PQL) (Van Moffaert & Now ´e, 2014) successfully recovers the complete Pareto-optimal frontier in both the convex and concave Deep Sea Treasure environments. In contrast, Multi-Policy Multi-Objective Q-Learning (MP-MOQ) (Van Moffaert et al., 2013a) recovers nearly the entire frontier in the convex setting, it fails significantly in the concave environment, identifying only the two points of the concave frontier. 
+
+## 8. Conclusion 
+
+We presented a framework for the Approximate Complete And Parsimonious Synthesis (ϵ-CAPS) of deterministic Pareto-optimal policies. By introducing a novel Bellman operator based on Chebyshev scalarization, we established theoretical guarantees for asymptotic convergence to the Pareto performance frontier. Crucially, we demonstrated how to obtain deterministic policies from the converged Q-estimates, ensuring that every recovered policy is approx-imately non-dominated, and every non-dominated value is approximately recovered. Empirically, our method suc-cessfully captures complex, non-convex trade-offs where standard linear scalarizations strictly fail. Future work will focus on scaling this formulation to high-dimensional state spaces via deep reinforcement learning architectures. 
+
+> 2
+
+https://wandb.ai/openrlbenchmark/ MORL-Baselines 
+
+11 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+## References 
+
+Aissani, N., Beldjilali, B., and Trentesaux, D. Efficient and effective reactive scheduling for manufacturing systems using sarsa multi-objective agents. 01 2008. Barrett, L. and Narayanan, S. Learning all optimal poli-cies with multiple criteria. In Proceedings of the 25th International Conference on Machine Learning , ICML ’08, pp. 41–47, New York, NY, USA, 2008. Associa-tion for Computing Machinery. ISBN 9781605582054. doi: 10.1145/1390156.1390162. URL https://doi. org/10.1145/1390156.1390162 .Bowman, V. J. On the relationship of the tchebycheff norm and the efficient frontier of multiple-criteria objectives. In Thiriez, H. and Zionts, S. (eds.), Multiple Criteria Decision Making , pp. 76–86, Berlin, Heidelberg, 1976. Springer Berlin Heidelberg. ISBN 978-3-642-87563-2. Castelletti, A., Pianosi, F., and Restelli, M. Tree-based fitted q-iteration for multi-objective markov decision problems. pp. 1–8, 06 2012. ISBN 978-1-4673-1488-6. doi: 10. 1109/IJCNN.2012.6252759. da Silva Veith, A., de Souza, F. R., de Assun c¸ ˜ ao, M. D., Lef `evre, L., and dos Anjos, J. C. S. Multi-objective reinforcement learning for reconfiguring data stream an-alytics on edge computing. In Proceedings of the 48th International Conference on Parallel Processing , pp. 1– 10, 2019. De Santanna, L., Guidotti, G., Mastinu, G., and Gobbi, M. Multi-objective optimal design based on reinforcement learning. Journal of Mechanical Design , 147(10):101703, 08 2025. ISSN 1050-0472. doi: 10.1115/1.4069046. URL 
+
+https://doi.org/10.1115/1.4069046 .Felten, F., Alegre, L. N., Now ´e, A., Bazzan, A. L. C., Talbi, E. G., Danoy, G., and Silva, B. C. d. A toolkit for reliable benchmarking and research in multi-objective reinforce-ment learning. In Proceedings of the 37th Conference on Neural Information Processing Systems (NeurIPS 2023) ,2023. Gu, T., Lyu, R., Bi, Z., Yan, C., Yang, F., Zhou, D., Cui, T., Liu, X., Zhang, Z., and Zeng, X. Himoss: A novel high-dimensional multi-objective optimization method via adaptive gradient-based subspace sampling for analog circuit sizing. In Proceedings of the 61st ACM/IEEE Design Automation Conference , DAC ’24, New York, NY, USA, 2024. Association for Comput-ing Machinery. ISBN 9798400706011. doi: 10.1145/ 3649329.3657318. URL https://doi.org/10. 1145/3649329.3657318 .Guo, Y., Zeman, A., and Li, R. A reinforcement learning approach to setting multi-objective goals for energy de-mand management. Int. J. Agent Technol. Syst. , 1(2): 55–70, April 2009. ISSN 1943-0744. doi: 10.4018/jats. 2009040104. URL https://doi.org/10.4018/ jats.2009040104 .Hayes, C. F., R ˘adulescu, R., Bargiacchi, E., K ¨allstr ¨om, J., Macfarlane, M., Reymond, M., Verstraeten, T., Zint-graf, L. M., Dazeley, R., Heintz, F., Howley, E., Irissap-pane, A. A., Mannion, P., Now ´e, A., Ramos, G., Restelli, M., Vamplew, P., and Roijers, D. M. A practical guide to multi-objective reinforcement learning and planning. 
+
+Autonomous Agents and Multi-Agent Systems , 36(1):26, 2022. doi: 10.1007/s10458-022-09552-y. URL https: //doi.org/10.1007/s10458-022-09552-y .Hu, X., Zhang, Y., Liao, X., Liu, Z., Wang, W., and Ghan-nouchi, F. M. Dynamic beam hopping method based on multi-objective deep reinforcement learning for next gen-eration satellite broadband systems. IEEE Transactions on Broadcasting , 2020. Huang, S. H., Zambelli, M., Kay, J., Martins, M. F., Tassa, Y., Pilarski, P. M., and Hadsell, R. Learning gentle object manipulation with curiosity-driven deep reinforcement learning. arXiv preprint arXiv:1903.08542 , 2019. Lacerda, A. Multi-objective ranked bandits for recom-mender systems. Neurocomputing , 246:12–24, 2017. Mandow, L. and P ´erez-de-la Cruz, J.-L. Pruning dominated policies in multiobjective pareto q-learning. In Confer-ence of the Spanish Association for Artificial Intelligence ,pp. 240–250. Springer, 2018. Mifrani, A. A counterexample and a corrective to the vector extension of the bellman equations of a markov decision process. Ann. Oper. Res. , 345(1):351–369, 2025. Nair, S. H., Vallon, C., and Borrelli, F. Multi-objective learn-ing model predictive control. In Berberich, J., Iannelli, A., and Allg ¨ower, F. (eds.), Systems Theory in Data and Optimization , pp. 261–276, Cham, 2025. Springer Nature Switzerland. ISBN 978-3-031-83191-1. Perez, J., Germain-Renaud, C., K ´egl, B., and Loomis, C. Responsive elastic computing. In Proceedings of the 6th International Conference Industry Session on Grids Meets Autonomic Computing , GMAC ’09, pp. 55–64, New York, NY, USA, 2009. Association for Com-puting Machinery. ISBN 9781605585789. doi: 10. 1145/1555301.1555311. URL https://doi.org/ 10.1145/1555301.1555311 .Qin, Y., Wang, H., Yi, S., Li, X., and Zhai, L. An energy-aware scheduling algorithm for budget-constrained scien-tific workflows based on multi-objective reinforcement 12 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+learning. The Journal of Supercomputing , 76(1):455–480, 2020. Reymond, M. and Now ´e, A. Pareto-dqn: Ap-proximating the pareto front in complex multi-objective decision problems. 2019. URL https: //api.semanticscholar.org/CorpusID: 251245284 .Roijers, D. M., Vamplew, P., Whiteson, S., and Dazeley, R. A survey of multi-objective sequential decision-making. 
+
+J. Artif. Int. Res. , 48(1):67–113, October 2013. ISSN 1076-9757. Ruiz-Montiel, M., Mandow, L., and P ´erez-de-la Cruz, J.-L. A temporal difference method for multi-objective reinforcement learning. Neurocomputing , 263:15–25, 2017a. Ruiz-Montiel, M., Mandow, L., and P ´erez-de-la Cruz, J.-L. A temporal difference method for multi-objective reinforcement learning. Neurocomputing , 263, 06 2017b. doi: 10.1016/j.neucom.2016.10.100. Shabani, N. Incorporating flood control rule curves of the Columbia River hydroelectric system in a multireservoir reinforcement learning optimization model . PhD thesis, University of British Columbia, 2009. URL https: //open.library.ubc.ca/collections/ ubctheses/24/items/1.0063141 .Soorapanth, T. Multi-objective circuit design with weight-factor optimization via geometric programming. In TEN-CON 2009 - 2009 IEEE Region 10 Conference , pp. 1–5, 2009. doi: 10.1109/TENCON.2009.5396122. Sutton, R. S. and Barto, A. G. Reinforcement learning: An introduction . MIT press, 2018. Ta s¸ kıran, H., Sa ˘glıcan, E., and Afacan, E. Multi-objective optimization of analog circuits using reinforcement learn-ing. In 2025 21st International Conference on Synthesis, Modeling, Analysis and Simulation Methods, and Appli-cations to Circuits Design (SMACD) , pp. 1–4, 2025. doi: 10.1109/SMACD65553.2025.11092100. Vamplew, P., Dazeley, R., Berry, A., Issabekov, R., and Dekker, E. Empirical evaluation methods for mul-tiobjective reinforcement learning algorithms. Ma-chine Learning , 84(1):51–80, 2011. doi: 10.1007/ s10994-010-5232-5. URL https://doi.org/10. 1007/s10994-010-5232-5 .Van Moffaert, K. and Now ´e, A. Multi-objective reinforce-ment learning using sets of pareto dominating policies. 
+
+The Journal of Machine Learning Research , 15(1):3483– 3512, 2014. Van Moffaert, K., Drugan, M., and Nowe, A. Scalar-ized multi-objective reinforcement learning: Novel de-sign techniques. 04 2013a. doi: 10.1109/ADPRL.2013. 6615007. Van Moffaert, K., Drugan, M. M., and Now ´e, A. Hypervolume-based multi-objective reinforcement learn-ing. In Purshouse, R. C., Fleming, P. J., Fonseca, C. M., Greco, S., and Shaw, J. (eds.), Evolutionary Multi-Criterion Optimization , pp. 352–366, Berlin, Heidelberg, 2013b. Springer Berlin Heidelberg. ISBN 978-3-642-37140-0. Van Moffaert, K., Brys, T., Chandra, A., Esterle, L., Lewis, P. R., and Now ´e, A. A novel adaptive weight selec-tion algorithm for multi-objective multi-agent reinforce-ment learning. In 2014 International Joint Conference on Neural Networks (IJCNN) , pp. 2306–2314, 2014. doi: 10.1109/IJCNN.2014.6889637. Vi s¸ an, C., Pascu, O., St ˘anescu, M., S¸ andru, E.-D., Diaconu, C., Buzo, A., Pelz, G., and Cucu, H. Automated circuit sizing with multi-objective optimization based on differential evolution and bayesian inference. Knowledge-Based Systems , 258:109987, 2022. ISSN 0950-7051. doi: https://doi.org/10.1016/j.knosys.2022.109987. URL https://www.sciencedirect.com/ science/article/pii/S0950705122010802 .Voss, T., Beume, N., Rudolph, G., and Igel, C. Scalariza-tion versus indicator-based selection in multi-objective cma evolution strategies. In 2008 IEEE Congress on Evolutionary Computation (IEEE World Congress on Computational Intelligence) , pp. 3036–3043, 2008. doi: 10.1109/CEC.2008.4631208. White, D. Multi-objective infinite-horizon discounted markov decision processes. Journal of Mathematical Analysis and Applications , 89(2):639–647, 1982. Wiering, M. A. and de Jong, E. D. Computing optimal stationary policies for multi-objective markov decision processes. In 2007 IEEE International Symposium on Approximate Dynamic Programming and Reinforcement Learning , pp. 158–165, 2007. doi: 10.1109/ADPRL. 2007.368183. Yamaguchi, T., Nagahama, S., Ichikawa, Y., and Takadama, K. Model-based multi-objective reinforcement learn-ing with unknown weights. In Human Interface and the Management of Information. Information in Intel-ligent Systems: Thematic Area, HIMI 2019, Held as Part of the 21st HCI International Conference, HCII 2019, Orlando, FL, USA, July 26-31, 2019, Proceed-ings, Part II , pp. 311–321, Berlin, Heidelberg, 2019. Springer-Verlag. ISBN 978-3-030-22648-0. doi: 10. 13 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+1007/978-3-030-22649-7 25. URL https://doi. org/10.1007/978-3-030-22649-7_25 .Yang, R., Sun, X., and Narasimhan, K. A generalized al-gorithm for multi-objective reinforcement learning and policy adaptation . Curran Associates Inc., Red Hook, NY, USA, 2019. Zhang, L., Qi, Z., and Shi, Y. Multi-objective reinforcement learning – concept, approaches and applications. Proce-dia Computer Science , 221:526–532, 2023. ISSN 1877-0509. doi: https://doi.org/10.1016/j.procs.2023.08.018. URL https://www.sciencedirect.com/ science/article/pii/S1877050923007767 .Tenth International Conference on Information Technol-ogy and Quantitative Management (ITQM 2023). Zhou, Z., Kearnes, S., Li, L., Zare, R. N., and Riley, P. Op-timization of molecules via deep reinforcement learning. 
+
+Scientific reports , 9(1):1–10, 2019. 14 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+## A. Principle of Aligned Dominance 
+
+Lemma A.1 (The Principle of Aligned Dominance) . Let V ⊂ Rd 
+
+> ≥0
+
+be a compact, non-empty set, such that V̸ = {0}, and let v ∈ V be a non-zero vector. Consider any maximizer v∗ of the Chebyshev scalarization with the preference aligned with 
+
+v. Then v∗ weakly dominates v.Formally: if w = v
+
+∥v∥2
+
+and v∗ ∈ argmax 
+
+> z∈V
+
+Ow(z), then v ⪯ v∗. (1) 
+
+Proof. If v∗ ∈ arg max 
+
+> z∈V
+
+Ow(z) then Ow(v∗) ≥ Ow(v). Therefore min 
+
+> i:vi>0
+
+ v∗
+
+> ivi
+> ∥v∥2
+
+
+
+≥ min 
+
+> i:vi>0
+
+ vi
+
+vi
+
+> ∥v∥2
+
+
+
+= ∥v∥2. Therefore for every i = 1 , 2 . . . d , v∗ 
+
+> i
+
+≥ vi
+
+∥v∥2 ∥v∥2 ≥ 0. Guaranteeing that v∗ dominates v, i.e. v∗ ⪰ v.Lemma A.1 establishes a mechanism for monotonic improvement in the vector space. Specifically, it guarantees that for any point v ∈ V , the scalarization objective Ow parameterized by the direction w = v 
+
+> ∥v∥2
+
+aligned with v is maximized by a point v∗ that weakly dominates v. We note that there could be multiple maximizers, possibly incomparable to each other. However, every maximizer would dominate v. Example A.2 illustrates this. 
+
+Example A.2. Consider v1 := (1 , 1) , v2 = (1 .5, 2) , v3 = (2 , 1.5) , and V := {v1, v 2, v 3} be three vectors. Then, both v2
+
+and v3 are maximizers of the Chebyshev scalarization aligned along v1, however both v2 and v3 are incomparable.     
+
+> 011.52
+> 0
+> 1
+> 1.5
+> 2
+> Alignment Ray  v1
+> v2
+> v3
+> Pareto performance frontier
+> Objective 1 Objective 2 Chebyshev Scalarization Aligned with v1
+
+Figure 7. Visualizing Example A.2. The preference direction w is aligned with the point v1 = (1 , 1) . The Chebyshev scalarization is maximized simultaneously by points v2 and v3, even though they are incomparable with each other. 
+
+## B. Chebyshev Scalarization and Pareto-Optimality 
+
+Theorem B.1 (Sufficiency and Necessity of Chebyshev Scalarization) . Let V ⊂ Rd 
+
+> ≥0
+
+be a set of achievable value vectors such that V ⊆ [0 , R max ]d, and let the PPF denote the set of Pareto performance frontier for vectors in V. For a given preference w ∈ W , let Ow(v) denote the weighted Chebyshev scalarization objective. The following properties hold: B.1.1 Sufficiency: For any preference w, the maximizer of the Chebyshev scalarization is on the Pareto performance frontier. Formally, if v∗ ∈ arg max  
+
+> v∈V
+
+Ow(v), then v∗ ∈ PPF .B.1.2 Necessity: For any Pareto-optimal point v∗ ∈ V , there exists a preference w ∈ W such that v∗ is the unique maximizer of the scalarization. Formally if v′ ∈ arg max  
+
+> v∈V
+
+Ow(v) then v′ = v∗.Proof. 1. Sufficiency 
+
+15 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+If v∗ ∈ arg max  
+
+> v∈V
+
+Ow(v) then v∗ ∈ PPF : Suppose for the sake of contradiction v∗ is a maximizer of Ow(v) but v∗ /∈ PPF .Since v∗ is not on the PPF there is a Pareto-optimal vector v′ ∈ V such that v′ 
+
+> i
+
+> v ∗ 
+
+> i
+
+for all i = 1 , 2 . . . , d . Then for every 
+
+i ∈ { 1, 2, . . . d } such that wi > 0, we can divide v′ 
+
+> i
+
+and v∗ 
+
+> i
+
+by the positive weight wi to obtain: 
+
+v′
+
+> i
+
+wi
+
+> v∗
+
+> i
+
+wi
+
+Taking the minimum over i:
+
+min 
+
+> i:wi>0
+
+ v′
+
+> i
+
+wi
+
+
+
+> min 
+
+> i:wi>0
+
+ v∗
+
+> i
+
+wi
+
+
+
+=⇒ Ow(v′) > O w(v∗)
+
+This contradicts the optimality of v∗. Thus, v∗ must be in PPF .
+
+2. Necessity 
+
+Let v∗ ∈ V be a Pareto-optimal point, and let w = v∗ 
+
+> ∥v∗∥2
+
+be the preference aligned with v∗. We invoke Lemma A.1 to obtain that for every v′ ∈ arg max  
+
+> v∈V
+
+Ow(v), we have v′ ⪰ v∗. However, since v∗ is Pareto-optimal, this condition implies 
+
+v∗ = v′. Thus, there is a unique maximizer along the preference aligned with v∗.
+
+Theorem B.2 (Coverage and Exact Characterization of Pareto Optimality) . Let V ⊂ Rd 
+
+> ≥0
+
+be a compact set of achievable value vectors, with VP O denoting the Pareto-optimal set and PPF the Pareto performance frontier. The relationship between Chebyshev scalarization and the Pareto set is characterized by the following two properties: (i) Scalarization-Induced Coverage: Let S be the set constructed by selecting, for every preference w ∈ W , an arbitrary vector that maximizes the scalarization Ow. Formally: 
+
+S := [
+
+> w∈W
+
+vw , where vw ∈ arg max  
+
+> v∈V
+
+Ow(v).
+
+Then S contains all Pareto-optimal points and consists solely of points on the Pareto performance frontier: 
+
+VP O ⊆ S ⊆ PPF .
+
+(ii) Exact Characterization via Norm-Regularization: Let M be the set constructed by selecting, for every preference 
+
+w ∈ W , a vector v∗ 
+
+> w
+
+obtained via a two-stage optimization process: first maximizing the Chebyshev scalarization Ow,and then maximizing the ℓ2-norm among the resulting candidates for tie-breaking. Formally: 
+
+M := [
+
+> w∈W
+
+v∗ 
+
+> w
+
+,
+
+where v∗ 
+
+> w
+
+is an arbitrary solution to the nested optimization: 
+
+v∗ 
+
+> w
+
+∈ arg max 
+
+> v
+
+
+
+∥v∥2 v ∈ arg max  
+
+> u∈V
+
+Ow(u)
+
+
+
+.
+
+Then M coincides with the Pareto-optimal set: 
+
+M = VP O .
+
+Proof. i. Scalarization-Induced Coverage: The proof proceeds in two steps: 1. (S ⊆ PPF ): Consider any selected element vw ∈ S . By definition, vw is a maximizer of the weighted Chebyshev scalarization Ow. From the Sufficiency property (Theorem 4.7.1), any such maximizer must lie on the Pareto performance frontier. Therefore, every element in S belongs to PPF , implying S ⊆ PPF .2. (VP O ⊆ S ): Let v∗ ∈ V P O be an arbitrary Pareto-optimal vector. From the Necessity property (Theorem 4.7.2), there exists a specific preference w ∈ W such that v∗ is the unique maximizer of the scalarization Ow over V. Since the maximizer is unique, the arbitrary selection vw for this specific weight must be v∗ itself (i.e., vw = v∗). Consequently, 
+
+v∗ is included in S, implying VP O ⊆ S .16 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+ii. Exact Characterization via Norm-Regularization: We prove the equality by showing mutual inclusion: M ⊆ V P O 
+
+and VP O ⊆ M .
+
+1. ( M ⊆ V P O ): Let vw ∈ M be a vector selected for some preference w. Suppose for the sake of contradiction that 
+
+vw /∈ V P O . This implies there exists a dominating vector v∗ ∈ V P O such that vw ≺ v∗. This means vw,k ≤ v∗ 
+
+> k
+
+for all components k, with strict inequality for at least one component. This dominance implies two properties: (a) Scalarization: Since every component of v∗ is at least as large as vw, the weighted minimum ratio cannot decrease, so Ow(vw) ≤ Ow(v∗).(b) Norm: Since v∗ strictly dominates vw and values are non-negative, the ℓ2-norm must be strictly larger: ∥vw∥2 <
+
+∥v∗∥2.Now we check if vw could have been the output of the two-stage process: • If Ow(v∗) > O w(vw), then vw failed the first stage (maximizing scalarization), which is a contradiction. • If Ow(v∗) = Ow(vw), then vw is a valid candidate for the second stage. However, since ∥v∗∥2 > ∥vw∥2, the second stage would have selected v∗ rather than vw. This is also a contradiction. Thus, no such dominating vector v∗ can exist, so vw must be Pareto-optimal. 
+
+2. ( VP O ⊆ M ): Let v∗ ∈ V P O be an arbitrary Pareto-optimal point. Consider the specific preference aligned with this vector: w∗ := v∗ 
+
+> ∥v∗∥2
+
+.We invoke Lemma A.1, which states that for aligned preferences, any maximizer v′ ∈ arg max  
+
+> v∈V
+
+Ow∗ (v) of the Chebyshev scalarization Ow∗ must weakly dominate the alignment target: v′ ⪰ v∗. However, since v∗ is Pareto-optimal, it cannot be strictly dominated. Therefore, the weak dominance implies equality: v′ = v∗.This means the set of first-stage maximizers arg max  
+
+> u∈V
+
+Ow∗ (u) is the singleton set {v∗}. Since the set contains only one element, the second-stage norm maximization trivially selects v∗. Consequently, v∗ ∈ M .
+
+## C. Bellman Update 
+
+Theorem C.1 (Recursive Decomposition of Q∗). Let Q∗ : S × A × W → Rd 
+
+> ≥0
+
+be the optimal preference action-value function. For any state s ∈ S, action a ∈ A, and preference vector w ∈ W , Q∗ satisfies the recursive relationship: 
+
+Q∗(s, a, w ) = R(s, a ) + γ E
+
+> s′∼p(·| s,a )
+
+h
+
+Q∗(s′, ˆA(s′), ˆW(s′)) 
+
+i
+
+(2) 
+
+where the functions ˆA : S → A and ˆW : S → W map the next-states to actions and preferences, respectively. Proof. The proof proceeds by expanding the definition of the optimal preference action-value function and examining the optimality of the induced “tail” policies. 
+
+1. Expansion of Q∗: By Definition 5.1, Q∗(s, a, w ) is the value achieved by a policy π that maximizes the Chebyshev scalarization for the preference w. Let us denote this optimal policy by πw. We can expand the value of this policy recursively: 
+
+Q∗(s, a, w ) = R(s, a ) + γ E
+
+> s′∼p(·| s,a )
+
+h
+
+R(s′, a ′) + γV πw (·| s′,a ′)(p(· | s′, a ′)) 
+
+i
+
+(3) where a′ = πw(s′) is the action chosen by the policy at the next state, and V πw (·| s′,a ′)(p(· | s′, a ′)) denotes the expected value of following policy πw from that point onward (i.e., given the history (s′, a ′)). 
+
+2. The Claim: To establish the recursive relationship in Equation (2) , we must prove that the tail value term corresponds to an optimal value Q∗ for some configuration of action and preference. Specifically, we claim that for every next state 
+
+s′, the continuation value vector V πw (·| s′,a ′)(p(· | s′, a ′)) is Pareto-optimal. If it is Pareto-optimal, then by Theorem (Theorem 4.7.2), it must be the maximizer for some specific preference w′.17 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+3. Proof by Contradiction (The “Stitching” Argument): Suppose, for the sake of contradiction, that for the next-state distribution induced by a specific state s′ and action a′ = πw(s′), the continuation policy induced by πw(· | s′, a ′) is not 
+
+Pareto-optimal. This implies there exists an alternative policy πbetter that strictly dominates the original “tail” policy from the distribution p(· | s′, a ′). Formally: 
+
+V πbetter (p(· | s′, a ′)) ≻ V πw (·| s′,a ′)(p(· | s′, a ′)) 
+
+We now construct a “stitched” composite policy πnew that switches behavior based on the history. The policy follows πbetter 
+
+if the trajectory passes through the specific history (s′, a ′), and defaults to πw otherwise: 
+
+πnew (h) := 
+
+(
+
+πbetter (h) if h is rooted at (s′, a ′)
+
+πw(h) otherwise (4) Since πbetter provides strictly higher value on the specific sub-branch starting at (s′, a ′) and πnew behaves identically to πw
+
+everywhere else, the multi-objective value at the root (s, a ) must strictly dominate, i.e. V πw (p(· | s, a )) ≺ V πbetter (p(· | s, a )) .Substituting this back into Equation (3), the value of the new policy satisfies:              
+
+> R(s, a ) + γE
+> h
+> R(s′, π w(s′)) + γV πbetter (·| s′,π w(s′))  p(· | s′, π w(s′)) i
+> ≻R(s, a ) + γE
+> h
+> R(s′, π w(s′)) + γV πw(·| s′,π w(s′))  p(· | s′, π w(s′)) i
+> =Q∗(s, a, w )
+
+(5) This implies that πnew achieves a strictly dominating value vector than πw. Consequently, from Lemma 4.8.2 the two-stage optimization process involving the Chebyshev scalarization and tie-breaking would never choose πw since πbetter 
+
+strictly dominates the value πw obtains from the intial distribution induced by p(· | s, a ). That is Vπw (p(· | s, a )) /∈
+
+arg max 
+
+> V
+
+n
+
+∥V∥2 V = Vπ (p(· | s, a )) , π ∈ arg max  
+
+> π′∈Π
+
+Ow(Vπ′
+
+(p(· | s, a ))) 
+
+o
+
+.This contradicts the original assumption that πw was the maximizer for the preference w.
+
+4. Conclusion: Because the contradiction assumes the tail was not optimal, we conclude that the induced tail policy must be Pareto-optimal. Since the continuation value is Pareto-optimal, there exists a preference w′ (specifically, the one aligned with the continuation value) from Theorem 4.7.2 such that: 
+
+R(s′, a ′) + γV πw (p(· | s′, a ′)) = Q∗(s′, a ′, w ′)
+
+Substituting this back into Equation (3) yields the desired recursive relationship: 
+
+Q∗(s, a, w ) = R(s, a ) + γ E
+
+> s′∼p(·| s,a )
+
+h
+
+Q∗(s′, ˆA(s′), ˆW(s′)) 
+
+i
+
+## D. Convergence Proof 
+
+Notation: For brevity, we denote the estimate at the n-th Bellman update T nQ by the shorthand ˆQn.
+
+Theorem D.1. Let the value function be initialized to an optimistic upper bound ˆQ0(s, a, w ) := R = Rmax 
+
+> 1−γ
+> 11
+
+...
+
+> 1
+
+!
+
+∈ Rd
+
+> ≥0
+
+.Then for every n ∈ N, state s, and action a, the following three conditions hold: 1. Upper-bound Coverage: The estimated set of values covers the true Pareto front. Formally, for every preference w,there exists a preference w′ such that: 
+
+Q∗(s, a, w ) ⪯ ˆQn(s, a, w ′)
+
+2. Envelope Property: The estimate is never goes below the Pareto performance frontier. Formally, there is no preference 
+
+w′ for which a Pareto-optimal value is strictly greater than the estimate in all components: 
+
+∀w, ∄w′ such that ˆQn(s, a, w )i < Q ∗(s, a, w ′)i ∀i = 1 , . . . , d 
+
+18 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+3. Asymptotic Convergence: Every estimate ˆQn corresponds to a feasible policy execution up to a residual term. There exists a policy π ∈ Π such that: ˆQn(s, a, w ) − V π (s) ⪯ γnR
+
+Proof. 1. Upper-bound Coverage: We prove this by induction on n.
+
+Base Case ( n = 0 ): By initialization, ˆQ0(s, a, w ) = R 
+
+> 1−γ
+
+, which is the maximum possible return. Thus, Q∗(s, a, w ) ⪯
+
+ˆQ0(s, a, w ) trivially holds. 
+
+Induction Step: Assume the hypothesis holds for n = k. That is, for any s′, a ′, w next , there exists some ˜w such that Q∗(s′, a ′, w next ) ⪯ ˆQk(s′, a ′, ˜w). We wish to show that for any w, there exists a w′ such that Q∗(s, a, w ) ⪯
+
+ˆQk+1 (s, a, w ′).From the recursive decomposition (Theorem 5.2), we know: 
+
+Q∗(s, a, w ) = R(s, a ) + γ E 
+
+> s′∼p(·| s,a )
+
+[Q∗(s′, a ′′ , w ′′ )] 
+
+We construct the specific target preference w′ aligned with this optimal continuation expectation: 
+
+w′ := Es′∼p(·| s,a ) [Q∗(s′, a ′′ , w ′′ )] 
+
+Es′∼p(·| s,a ) [Q∗(s′, a ′′ , w ′′ )] 2
+
+By the induction hypothesis, for every optimal continuation value inside the expectation, there exists a preference in our estimate set ˆQk that dominates it. Specifically, for any s′, the value Q∗(s′, a ′′ , w ′′ ) is dominated by some 
+
+ˆQk(s′, a ′′′ , w ′′′ ).Because the Bellman operator computes the maximizer over all possible actions and preferences, and since the specific preference w′ is perfectly aligned with the optimal continuation vector Es′∼p(·| s,a ) [Q∗(s′, a ′′ , w ′′ )] , Lemma A.1 (Principle of Aligned Dominance) guarantees: 
+
+max   
+
+> a, ˜w
+
+Ow′
+
+
+
+E  ˆQk(s′, a, ˜w)
+
+≥ Ow′
+
+
+
+E Q∗(s′, a ′′ , w ′′ )
+
+This implies component-wise dominance for the updated value: 
+
+E
+
+> s′
+
+ ˆQk(s′, ˆa, ˆw) ⪰ E
+
+> s′
+
+Q∗(s′, a ′′ , w ′′ )
+
+Multiplying by γ and adding the reward R(s, a ) to both sides proves that Q∗(s, a, w ) ⪯ ˆQk+1 (s, a, w ′).2. Envelope Property: 
+
+We prove this by contradiction for n ≥ 1, if n = 0 , then ˆQ0(s, a, w ) = R and the Envelope property holds. Assume there exist preferences w, w ′ such that the estimate is strictly dominated in every component: 
+
+ˆQn(s, a, w )i < Q ∗(s, a, w ′)i for every i = 1 , . . . , d (6) Let the update for ˆQn(s, a, w ) be derived from the specific choice of action ˆa and preference ˆw. Similarly, let the optimal value Q∗(s, a, w ′) be derived from the optimal action a∗ and preference w∗.Expanding both sides of Eq. 6, subtracting R(s, a ), and dividing by γ yields: 
+
+E
+
+> s′
+
+ ˆQn−1(s′, ˆa, ˆw) 
+
+> i
+
+< E
+
+> s′
+
+Q∗(s′, a ∗, w ∗) 
+
+> i
+
+∀i (7) We now apply the Upper-bound Coverage property. For the optimal pair (a∗, w ∗), there must exist a preference ˜w
+
+such that: 
+
+Q∗(s′, a ∗, w ∗) ⪯ ˆQn−1(s′, a ∗, ˜w) (8) Substituting (8) into (7) gives the chain of inequalities: 
+
+E
+
+> s′
+
+ ˆQn−1(s′, ˆa, ˆw) 
+
+> i
+
+< E
+
+> s′
+
+Q∗(s′, a ∗, w ∗) 
+
+> i
+
+≤ E
+
+> s′
+
+ ˆQn−1(s′, a ∗, ˜w) 
+
+> i
+
+∀i (9) 19 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+This implies that the vector expected from the chosen pair (ˆ a, ˆw) is component-wise strictly greater than the vector from the pair (a∗, ˜w).Since any valid scalarization function is strictly increasing with respect to strong dominance, the scalarized score for 
+
+(a∗, ˜w) must be strictly higher than the score for (ˆ a, ˆw). That is, for any preference w, the Chebyshev scalarization 
+
+Ow′′ (z) = min  
+
+> i:w′′
+> i>0
+
+ zi
+
+> w′′ i
+
+
+
+satisfies strict monotonicity with respect to strong dominance. Specifically, since the vector for (ˆ a, ˆw) is strictly smaller than the vector for (a∗, ˜w) in every component i, it follows that: 
+
+Ow′′ 
+
+
+
+E
+
+> s′
+
+ ˆQn−1(s′, ˆa, ˆw)
+
+= min  
+
+> i:w′′
+> i>0
+
+ E[. . . ]i
+
+w′′ 
+
+> i
+
+
+
+< min  
+
+> i:w′′
+> i>0
+
+ E[. . . ]i
+
+w′′ 
+
+> i
+
+
+
+= Ow′′ 
+
+
+
+E
+
+> s′
+
+ ˆQn−1(s′, a ∗, ˜w)
+
+This strict inequality violates the optimality of the update rule, as the Bellman operator should have selected the superior configuration (a∗, ˜w) (or an even better one) instead of (ˆ a, ˆw).Thus the assumption is not true, and the Envelope property holds. 3. Asymptotic Convergence: Consider an estimate ˆQn(s, a, w ). We construct a non-stationary deterministic policy π
+
+defined by the “backtracking” trace of the Bellman updates. Let π execute action a at t = 0 . For steps t = 1 . . . n − 1, let π select the actions that were chosen as the maximizers during the recursive computation of ˆQn. The accumulated rewards of this policy match the estimate exactly for the first 
+
+n steps. The difference between the estimate and the true value of π arises only from the tail (after step n). Since rewards are bounded, the maximum possible value of the tail is bounded by γnR. Thus: 
+
+0 ⪯ ˆQn(s, a, w ) − V π (s) ⪯ γnR
+
+D.1. Approximate Pareto Coverage 
+
+In this subsection, we provide a detailed algorithmic characterization of the policy execution (or “unrolling”) procedure derived from our Bellman operator, and we prove its convergence properties. We begin by establishing the necessary notation and definitions. The core intuition is that the computation of the n-th Bellman update T nQ(s1, a 1, w 1) naturally relies on the optimal substructure of T n−1Q(s2, a 2, w 2), which in turn relies on T n−2Q, and so on. This recursive dependency allows us to “unroll” the sequence of actions and preferences 
+
+(a1, w 1), (a2, w 2), . . . originally selected during the computation of T nQ. We formally define the policy that performs this unrolling in Definition D.3. Since the value function is initialized with the maximum obtainable rewards, R = Rmax  
+
+> 1−γ
+
+1 ∈ Rd
+
+> ≥0
+
+, the Bellman estimate 
+
+T nQ(s, a, w ) can be decomposed into the sum of rewards obtained by this unrolled policy over n steps plus a residual term γnR.Crucially, because T nQ is simply this finite-horizon sum shifted by the constant residual γnR, optimizing the Chebyshev scalarization Ow(T nQ) allows us to identify Pareto-optimal policies for the n-step horizon. In Theorem D.7, we establish a rigorous one-to-one correspondence between the set of Pareto-optimal policies and the Pareto-optimal T nQ values for each state and action. This correspondence serves as the theoretical foundation for our deployment procedure. Given an n-step Bellman estimate 
+
+T nQ, our policy selects an action that maximizes this estimate. By greedily optimizing for the n-step horizon at each step, we ensure that the resulting policy weakly dominates the (n − 1) -step policy that was implicitly used to compute the optimal continuation T n−1Q. This monotonic improvement property allows us to prove the Simulation Lemma (Theorem D.9), which confirms that the actual accumulated rewards of our greedy policy satisfy the bounds predicted by the Bellman estimate, thereby concluding the proofs for approximate coverage and parsimony. 
+
+Definition D.2 (Horizon-Dependent Greedy Selector Functions) . For any Bellman update iterate k ≥ 0, current state s ∈ S,action a ∈ A, and preference w ∈ W , let the selector functions 
+
+ˆAk(s, a, w, ·) : S → A and ˆWk(s, a, w, ·) : S → W 
+
+20 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+be the mappings that maximize the scalarized expected value of the (k)-th estimate. They are defined as some solution to: 
+
+  ˆAk(s, a, w, ·), ˆWk(s, a, w, ·) ∈ arg max  
+
+> ϕA:S→A, ϕW:S→W
+
+Ow
+
+
+
+Es′∼p(·| s,a )
+
+T kQ(s′, ϕ A(s′), ϕ W (s′)) 
+
+Using the greedy selector functions, we are able to select an action ˆAi(s, a, w, s ′) and a preference ˆWi(s, a, w, s ′) at each step, allowing us to unroll the rewards R(s′, ˆAi(s, a, w, s ′)) involved in computing T nQ(s, a, w ) up to n steps. 
+
+Definition D.3 (Induced Policy Definition) . Let n ∈ N be the iterate index of the Bellman update T nQ. For a starting configuration of state s ∈ S, action a ∈ A, and preference w ∈ W , we define the policy πs,a,w n as a mapping from a history 
+
+h and a next state s′ to an action. Let Hs,a denote the set of all histories starting with the pair (s, a ). That is, any h ∈ Hs,a of length t is a sequence 
+
+h = ( s1, a 1, s 2, a 2, . . . , s t, a t) where s1 = s and a1 = a.To define the policy behavior, we first define the notion of history consistency and induced preference sequence :(i) History Consistency: A history h is said to be consistent if, for all steps 1 < i ≤ t, the action taken matches the greedy selector for the induced preference: 
+
+ai = ˆAn−(i−1) (si−1, a i−1, w i−1, s i)
+
+(ii) Induced Preference Sequence: For a history h, we construct the sequence of target preferences (w1, . . . , w t)
+
+recursively: 
+
+wi =
+
+(
+
+w if i = 1 ˆWn−(i−1) (si−1, a i−1, w i−1, s i) if 1 < i ≤ t
+
+Based on these definitions, the policy πs,a,w n (s′ | h) is defined as follows: 1. Case t ≥ n (Horizon Exceeded): If the history length exhausts the horizon ( t ≥ n), the policy behaves arbitrarily. 2. Case t < n (Within Horizon): 
+
+• If the history h is consistent , the policy selects the greedy action for the next state s′ according to the current preference wt:
+
+πs,a,w n (s′ | h) := ˆAn−t(st, a t, w t, s ′)
+
+• If the history h is inconsistent , the policy behaves arbitrarily. Having formally defined the induced policy πs,a,w m which explicitly unrolls the recursive action selection inherent in the Bellman estimate T nQ, we now introduce the concept of the n-step expected return. This definition provides the quantity needed to subsequently prove Lemma D.5, demonstrating that the value computed by the operator is realized by the execution of the induced policy upto a residual term γnR.
+
+Definition D.4 (n-Step Value) . Given a policy π : ( S × A)∗ × S → A, the n-step expected return starting from state s is defined as: 
+
+V πn (s) := E
+
+" nX
+
+> t=1
+
+γt−1R(st, a t) s1 = s, a t = π(st | ht−1)
+
+#
+
+where ht−1 = ( s1, a 1, . . . , s t−1, a t−1) denotes the history of state-action pairs prior to the current step (with h0 = ∅). 
+
+Lemma D.5 (Bellman Consistency) . For any horizon n ∈ N, state s ∈ S, action a ∈ A, and preference w ∈ W , the induced policy π = πs,a,w n satisfies: 
+
+T nQ(s, a, w ) − γnR = V πn (s).
+
+21 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+Proof Sketch. The proof follows directly from the construction of the policy. The Bellman operator T n is defined by a sequence of nested maximizations, where at each depth t, the operator selects the optimal strategy (action and preference) to maximize the continuation value. By Definition D.3, the policy πs,a,w n is explicitly constructed to replicate this optimization path. For every time step t ≤ n,the policy computes the sequence of greedy selector functions implied by the history and executes the exact action ˆat that was chosen to maximize the corresponding stage of the Bellman update. Since the policy chooses the action at at every step to match the maximizer of the Bellman operator’s t-th expansion, the distribution of trajectories induced by the policy is identical to those assumed in the calculation of T nQ. Consequently, the expected sum of discounted rewards generated by the policy (the value V πn ) is identical to the value computed by the Bellman update (minus the discounted residual at step n). We next establish a one-to-one correspondence between the n-step values obtained by n-step Pareto-optimal policies and the 
+
+n-step Bellman estimate in Theorem D.7. However, prior to this, we prove in Lemma D.6 that n-step Pareto-optimal policies exhibit optimal substructure, ensuring that the induced subpolicy following the first step is itself (n − 1) -step Pareto-optimal. 
+
+Lemma D.6 (Pareto Optimal Subpolicy) . Let π be a policy that is Pareto-optimal for the n-step value V πn (s). Let s′ be any state reachable from s at the second step with non-zero probability. Then, the continuation policy π(· | s, a ), which represents the behavior of π for all steps following the history (s, a ), must be Pareto-optimal for the remaining (n − 1) -step value V π(·| s,a ) 
+
+> n−1
+
+(s′) starting from s′.Proof. Suppose for the sake of contradiction that the continuation policy π(· | s, a ) is not Pareto-optimal for the state s′.This implies there exists an alternative continuation policy ˜π such that its value strictly dominates the original continuation value at s′:
+
+V ˜πn−1(s′) ≻ V π(·| s,a ) 
+
+> n−1
+
+(s′).
+
+We can construct a new global policy π∗ by “stitching” the original policy behavior at the first step and replacing the behavior for the history (s, a ) and state s′ onwards with ˜π.By the linearity of expectation, the total value of this new policy is: 
+
+V π∗ 
+
+> n
+
+(s) = R(s, a ) + γ E 
+
+> ˆs
+
+V π∗
+
+> n−1
+
+(ˆ s).
+
+Since π∗ behaves identically to π for all states ˆs̸ = s′ (and behaves like ˜π at s′), the difference in value is: 
+
+V π∗ 
+
+> n
+
+(s) − V πn (s) = γ · p(s′|s, a ) ·
+
+
+
+V ˜πn−1(s′) − V π(·| s,a ) 
+
+> n−1
+
+(s′)
+
+
+
+.
+
+Since the term in the parentheses is strictly positive (by our assumption of dominance), it follows that V π∗ 
+
+> n
+
+(s) ≻ V πn (s).This implies that π∗ dominates π, which contradicts the initial assumption that π was Pareto-optimal. Therefore, the continuation policy must be Pareto-optimal. 
+
+Theorem D.7 (Duality of n-th Pareto-Optimal Estimate and n-step Pareto-Optimal Policy) . Let T nQ(s, a, w ) denote the 
+
+n-th Bellman estimate. The following relationships hold between the Pareto optimality of the Bellman estimates and the Pareto optimality of the resulting policies: 1. n-Step Preference Optimality =⇒ n-Step Policy Optimality 
+
+Let w ∈ W be a preference such that the corresponding Bellman estimate is Pareto-optimal. That is, assume: 
+
+∀w′ ∈ W , T nQ(s, a, w ) ⊀ T nQ(s, a, w ′).
+
+Then, the policy π = πs,a,w n is Pareto-optimal with respect to the n-step return among all policies starting with the same state s and the same action a. Specifically, for every history-dependent deterministic policy π′ ∈ Π such that 
+
+π′(s) = π(s) = a:
+
+V πn (s) ⊀ V π′ 
+
+> n
+
+(s).
+
+22 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+2. n-Step Policy Optimality =⇒ n-Step Preference Optimality 
+
+Let π be any history-dependent deterministic policy such that π(s) = a and its n-step value is Pareto-optimal among all such policies (i.e., ∀π′ ∈ Π with π′(s) = a, V πn (s) ⊀ V π′ 
+
+> n
+
+(s)). Define the specific preference vector w∗ based on the direction of the future expected return: 
+
+w∗ = V πn (s) + γnR − R(s, a )
+
+∥V πn (s) + γnR − R(s, a )∥2
+
+.
+
+Then, the Bellman estimate targeting this preference recovers the policy’s value and is itself Pareto-optimal: 
+
+T nQ(s, a, w ∗) = V πn (s) + γnR,
+
+and 
+
+∀w′ ∈ W , T nQ(s, a, w ∗) ⊀ T nQ(s, a, w ′).
+
+Proof. We prove both statements by induction on the horizon n.
+
+Base Case ( n = 1 ): For any s, a, w , T 1Q(s, a, w ) = R(s, a ) + γR and V π 
+
+> 1
+
+(s) = R(s, a ). Since R(s, a ) is constant given a, all estimates and policy values are identical. No value strictly dominates another, so all are Pareto-optimal. Both statements hold vacuously. 
+
+Inductive Step: Assume both statements hold for horizon n − 1. We prove them for horizon n.
+
+Part 1: Preference Optimality =⇒ Policy Optimality Assume T nQ(s, a, w ) is Pareto-optimal. Let π = πs,a,w n . Suppose for contradiction that π is not Pareto-optimal. Then there exists a policy π′ (where π′(s) = a) such that V π′ 
+
+> n
+
+(s) ≻ V πn (s).Expanding the values: 
+
+R(s, a ) + γEs′
+
+h
+
+V π′(·| s,a ) 
+
+> n−1
+
+(s′)
+
+i
+
+≻ R(s, a ) + γEs′
+
+h
+
+V π(·| s,a ) 
+
+> n−1
+
+(s′)
+
+i
+
+.
+
+By Lemma D.6, the continuation of π′ must be Pareto-optimal for the (n − 1) horizon (otherwise we could improve it to get an even better policy). By the Induction Hypothesis (Part 2) , for every state s′, there exists a preference w′ 
+
+> s′
+
+such that the Bellman update recovers the value of this continuation policy: 
+
+T n−1Q(s′, π ′(s′ | s, a ), w ′ 
+
+> s′
+
+) = V π′(·| s,a ) 
+
+> n−1
+
+(s′) + γn−1R.
+
+Now, consider the global Bellman update T n calculated with a preference wdom that is aligned with the expected value vector E 
+
+> s′
+
+V π′(·| s,a ) 
+
+> n−1
+
+(s′) of π′ after the first step. By the Principle of Aligned Dominance A.1, since the Bellman operator maximizes scalarized expectation over all possible next actions and preferences, the resulting value must be at least as high as that of π′ in the direction of wdom . Consequently, there exists a preference wdom such that: 
+
+T nQ(s, a, w dom ) ⪰ V π′ 
+
+> n
+
+(s) + γnR ≻ V πn (s) + γnR.
+
+Using the consistency property (Lemma D.5), V πn (s) + γnR = T nQ(s, a, w ). Thus: 
+
+T nQ(s, a, w dom ) ≻ T nQ(s, a, w ).
+
+This contradicts the assumption that T nQ(s, a, w ) was Pareto-optimal. Thus we arrive at a contradiction because of our assumption that π is not n-step Pareto-optimal starting from the state s. So, π has to be n-step Pareto-optimal. 
+
+Part 2: n-Step Policy Optimality =⇒ n-Step Preference Optimality 
+
+Assume π is a Pareto-optimal policy for the first n-steps with π(s) = a. That is, for any π′ ∈ Π such that π′(s) = π(s), we have V πn (s) ⊀ V π′ 
+
+> n
+
+(s).We define the expected future return vector adjusted for the tail: 
+
+U ∗ := V πn (s) − R(s, a ) + γnR.
+
+We define the target preference w∗ to be aligned with this return: 
+
+w∗ := U ∗
+
+∥U ∗∥2
+
+.
+
+23 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+We now analyze the Bellman update T nQ(s, a, w ∗). By Definition D.2, this operator computes the expectation over the optimal next-step greedy selectors: 
+
+T nQ(s, a, w ∗) = R(s, a ) + γEs′
+
+h
+
+T n−1Q
+
+
+
+s′, ˆAn−1(s, a, w ∗, s ′), ˆWn−1(s, a, w ∗, s ′)
+
+i 
+
+.
+
+Step 2.1: Feasibility (Lower Bound) 
+
+By Lemma D.6, the continuation policy π(·| s, a ) is Pareto-optimal for the (n − 1) horizon. By the Inductive Hypothesis (Part 2) , for every next state s′, there exists a preference ws′ such that the (n − 1) -th estimate recovers this continuation value: 
+
+T n−1Q(s′, π (s′|s, a ), w s′ ) = V π(·| s,a ) 
+
+> n−1
+
+(s′) + γn−1R.
+
+The Bellman operator maximizes the scalarized objective over all possible next-step actions and preferences. Since the specific action chosen by the policy, a′ 
+
+> s′
+
+= π(s′ | s, a ), and the preference ws′ constitute a valid candidate pair (a′ 
+
+> s′
+
+, w s′ ) in this search space, the scalar value achieved by the optimal selectors ˆAn−1, ˆWn−1 must be at least that of the configuration used by π:
+
+Ow∗ (T nQ(s, a, w ∗) − R(s, a )) ≥ Ow∗ (U ∗).
+
+Step 2.2: Contradiction (Equality) 
+
+Suppose for the sake of contradiction that the inequality is strict. That is, the Bellman operator finds a configuration of greedy selectors ˆAn−1 and ˆWn−1 that yields a strictly higher scalarized value: 
+
+Ow∗
+
+
+
+γEs′
+
+h
+
+T n−1Q(s′, ˆAn−1(. . . ), ˆWn−1(. . . )) 
+
+i 
+
+> O w∗ (U ∗).
+
+Let Vnew denote this superior expected value found by the operator. By the Inductive Hypothesis (Part 1) , for each next state s′, the term T n−1Q(s′, ˆAn−1(. . . ), ˆWn−1(. . . )) corresponds to the value of some valid Pareto-optimal policy π′
+
+> s′
+
+starting at s′.We can “stitch” these policies together to form a new global policy πstitch . We define πstitch such that it executes action 
+
+a at the root state s, and for any subsequent state s′ reached, it adopts the behavior of the corresponding sub-policy π′ 
+
+> s′
+
+.Formally, for a history h:
+
+πstitch (h) = 
+
+(
+
+a if h = ( s)
+
+π′ 
+
+> s′
+
+(h′) if h = ( s, a ) ◦ h′
+
+where h′ denotes the local history suffix starting from s′.The value of this new policy is precisely the value found by the operator: 
+
+V πstitch  
+
+> n
+
+(s) − R(s, a ) + γnR = γEs′
+
+h
+
+T n−1Q(s′, ˆAn−1(. . . ), ˆWn−1(. . . )) 
+
+i
+
+Substituting this back into our inequality: 
+
+Ow∗ (V πstitch  
+
+> n
+
+(s) − R(s, a ) + γnR) > O w∗ (V πn (s) − R(s, a ) + γnR).
+
+By Lemma A.1 (Principle of Aligned Dominance), since w∗ is the unit vector strictly aligned with the direction of the RHS vector, a strictly higher scalarization score implies strict vector dominance: 
+
+V πstitch  
+
+> n
+
+(s) ≻ V πn (s).
+
+This contradicts the assumption that π is Pareto-optimal for the n-step discounted rewards. Therefore, strict inequality is impossible, and we must have equality: 
+
+T nQ(s, a, w ∗) = V πn (s) + γnR.
+
+Step 2.3: Pareto Optimality of the Estimate 
+
+Finally, we prove that the estimate T nQ(s, a, w ∗) is itself Pareto-optimal. Suppose not; then there would exist a preference vector w′ such that: 
+
+T nQ(s, a, w ′) ≻ T nQ(s, a, w ∗).
+
+24 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+Without loss of generality, we assume that the estimate T nQ(s, a, w ′) is itself Pareto-optimal (otherwise, we could simply select a further dominating estimate). We expand the term on the left-hand side using the definition of the Bellman operator: 
+
+T nQ(s, a, w ′) = R(s, a ) + γEs′∼p(·| s,a )
+
+h
+
+T n−1Q s′, ˆAn−1(s, a, w ′, s ′), ˆWn−1(s, a, w ′, s ′)i
+
+.
+
+Let ˆas′ = ˆAn−1(s, a, w ′, s ′) and ˆws′ = ˆWn−1(s, a, w ′, s ′). Since T nQ(s, a, w ′) is Pareto-optimal, each inner term 
+
+T n−1Q(s′, ˆas′ , ˆws′ ) must be a Pareto-optimal estimate for the (n − 1) horizon (otherwise, we could replace it with a dominating term to obtain a quantity strictly more than T nQ(s, a, w ′) leading to a contradiction of T nQ(s, a, w ′) being Pareto-optimal). By the Inductive Hypothesis (Part 1) , for each s′, there exists a Pareto-optimal policy π′ 
+
+> s′
+
+starting at s′ such that its value matches this estimate: 
+
+V π′
+
+> s′
+> n−1
+
+(s′) + γn−1R = T n−1Q(s′, ˆas′ , ˆws′ ).
+
+We can now construct a new global policy πnew that takes action a at state s, and for any subsequent history h = (( s, a ), h ′),follows the policy π′ 
+
+> s′
+
+(h′). The value of this stitched policy is: 
+
+V πnew  
+
+> n
+
+(s) + γnR = R(s, a ) + γEs′
+
+h
+
+V π′
+
+> s′
+> n−1
+
+(s′) + γn−1R
+
+i
+
+= T nQ(s, a, w ′).
+
+Combining this with our initial dominance assumption: 
+
+V πnew  
+
+> n
+
+(s) + γnR ≻ T nQ(s, a, w ∗) = V πn (s) + γnR.
+
+Simplifying, we get V πnew  
+
+> n
+
+(s) ≻ V πn (s). This contradicts the assumption that π is Pareto-optimal. Thus, no such dominating preference w′ can exist. In the next theorem, we establish the transformation in the preference required to obtain a one-to-one correspondence between Pareto-optimal policies and Bellman estimates. 
+
+Theorem D.8 (Bellman-Policy Pareto Equivalence and Scalarization Alignment) . Combining the Bellman Consistency (Lemma D.5) and the Pareto Duality (Theorem D.7), we establish the following equivalence: 1. Estimates generate optimal policies aligned with future returns: 
+
+If the Bellman estimate T nQ(s, a, w ) is Pareto-optimal (i.e., ∀w′ ∈ W , T nQ(s, a, w ) ⊀ T nQ(s, a, w ′)), then the resulting policy π = πs,a,w n is Pareto-optimal for the n-step return among all policies starting with action a (i.e., 
+
+∀π′ ∈ Π s.t. π′(s) = a, V πn (s) ⊀ V π′ 
+
+> n
+
+(s)). Furthermore, this policy maximizes the scalarized expected return for the specific preference direction weff aligned with the estimated value adjusted for the tail: 
+
+weff = T nQ(s, a, w ) − γnR∥T nQ(s, a, w ) − γnR∥ 2
+
+.
+
+That is, ∀π′ ∈ Π s.t. π′(s) = a, Oweff (V πn (s)) ≥ Oweff (V π′ 
+
+> n
+
+(s)) .2. Optimal policies correspond to specific Bellman estimates: 
+
+Conversely, let π be a history-dependent policy that takes action a at state s and is Pareto-optimal for the n-step horizon among all such policies (i.e., ∀π′ ∈ Π s.t. π′(s) = π(s) = a, V πn (s) ⊀ V π′ 
+
+> n
+
+(s)). Then, its value is exactly recovered by the Bellman operator targeting the preference w∗ aligned with the policy’s actual future return: 
+
+w∗ = V πn (s) − R(s, a ) + γnR∥V πn (s) − R(s, a ) + γnR∥ 2
+
+.
+
+Specifically, the Bellman estimate recovers the policy value: 
+
+T nQ(s, a, w ∗) = V πn (s) + γnR,
+
+and this estimate is itself Pareto-optimal (i.e., ∀w′ ∈ W , T nQ(s, a, w ∗) ⊀ T nQ(s, a, w ′)). 
+
+25 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+Algorithm 2 Pareto-Optimal Policy Execution 
+
+Require: • Value Function T nQ
+
+• Transition kernel p(· | s, a ) and Reward function R(s, a )
+
+• Initial state s0 and Initial Preference winit 
+
+1: Initialization: 
+
+2: Identify the set of optimal candidates at s0:
+
+3: Sopt = argmax a′,w ′ Owinit 
+
+ T nQ(s0, a ′, w ′)
+
+4: Select candidate with maximum norm: 
+
+5: (ˆ a0, ˆw1) = argmax (a′,w ′)∈Sopt T nQ(s0, a ′, w ′) 2
+
+6: Initialize current action a0 ← ˆa0 and target preference wtarget ← ˆw1.
+
+7: Set time step t ← 0.
+
+8: while not termination do 
+
+9: Execute at, observe next state st+1 and reward rt = R(st, a t).
+
+10: // Step 1: Preference Alignment 
+
+11: Calculate preference vector aligned with expected tail rewards: 
+
+12: vtail = T nQ(st, a t, w target ) − R(st, a t) − γnR
+
+13: ˆwt+1 = vtail 
+
+> ∥vtail ∥2
+
+14: // Step 2: Chebyshev Optimization (Lookahead) 
+
+15: Compute policy maps maximizing scalarization w.r.t. ˆwt+1 :
+
+16: ( ˆA, ˆW ) = argmax ϕA:S→AϕW :S→W 
+
+O ˆwt+1 
+
+ Es′∼p(·| st,a t)
+
+T nQ(s′, ϕ A(s′), ϕ W (s′))  − γnR
+
+17: // Step 3: Selection and Update 
+
+18: Determine action and preference for the observed state st+1 :
+
+19: at+1 = ˆA(st+1 )
+
+20: wnext = ˆW (st+1 )
+
+21: Update history trackers: 
+
+22: wtarget ← wnext 
+
+23: t ← t + 1 
+
+24: end while 
+
+Proof sketch. Due to Theorem D.7 and Principle of Aligned Dominance Lemma A.1. Next we give the exact algorithm for greedy policy based on the nth -Bellman estimate. 
+
+Description: The execution procedure is detailed in Algorithm 2. The process begins (Lines 2–5) by identifying the optimal action and next-preference pair (ˆ a0, ˆw1) for the initial state s0.The core of the execution loop relies on dynamic preference alignment. By Lemma D.5 the current estimate 
+
+T nQ(st, a t, w target ) corresponds to the value of an n-step policy ( πs,a,w n ), specifically T nQ − R − γnR. In Line 12 and 13, we explicitly calculate the preference direction ˆwt+1 that aligns with this future value component. In Line 15, the algorithm performs a search to find the action and preference maps ( ˆA, ˆW ) that greedily maximize the scalarized expected return with respect to the aligned preference ˆwt+1 . By the Principle of Aligned Dominance (Lemma A.1), maximizing this specific scalarization guarantees that the resulting policy choice dominates the future component of the previous estimate. Finally, in Lines 19–20, the agent instantiates this policy for the actually observed state st+1 to determine the next action at+1 and target preference wnext .It is important to note that while the recursive calculation of the Bellman operator typically utilizes the (n − 1) -th estimate, our execution policy consistently utilizes the full n-th estimate T nQ for the lookahead optimization at every step, ensuring 26 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+the highest available lookahead in action selection. 
+
+Theorem D.9 (Recursive Trajectory Error Bound) . Let {(st, a t, w t+1 )}t≥0 be the trajectory generated by the execution policy, where ˆwt+1 is the preference target aligned for the next step. Let V π (s) denote the true value of the executed policy starting from state s.The following recursive inequality holds: 
+
+T nQ(st, a t, w t+1 ) − V π (st) ⪯ γEst+1 ∼p(·| st,a t) [T nQ(st+1 , a t+1 , w t+2 ) − V π (st+1 )] + γn(1 − γ)R
+
+Proof. Let ∆t = T nQ(st, a t, w t+1 ) − V π (st) denote the vector error at time step t. We expand both terms using their respective Bellman definitions. First, we expand the true policy value V π (st) using the standard Bellman equation: 
+
+V π (st) = R(st, a t) + γEst+1 ∼p(·| st,a t)
+
+h
+
+V π(·| st,a t)(st+1 )
+
+i
+
+. (10) Next, we expand the n-step estimate T nQ(st, a t, w t+1 ). From Lemma D.5 we obtain that this estimate is composed of the immediate reward plus the discounted value of the tail policy plus a residual value: 
+
+T nQ(st, a t, w t+1 ) = R(st, a t) + γEst+1 ∼p(·| st,a t)
+
+V tail 
+
+> n−1
+
+(st+1 ) + γn−1R . (11) Subtracting (10) from (11), the immediate reward R(st, a t) cancels out: 
+
+∆t = γEst+1 
+
+h V tail 
+
+> n−1
+
+(st+1 ) + γn−1R − V π(·| st,a t)(st+1 )
+
+i
+
+.
+
+At step t + 1 , the agent re-computes the estimate T nQ(st+1 , a t+1 , w t+2 ) using a full n-step horizon and an updated preference ˆwt+1 explicitly aligned with Est+1 V tail  
+
+> n
+
+(st+1 ). This fresh estimate is guaranteed to weakly dominate the residual value of the previous plan (the stale tail) by the Principle of Aligned Dominance (Lemma A.1): 
+
+V tail 
+
+> n−1
+
+(st+1 ) ⪯ T nQ(st+1 , a t+1 , w t+2 ) − γnR
+
+Substituting this inequality back into the expression for ∆t, we obtain: 
+
+∆t ⪯ γEst+1 
+
+h
+
+T nQ(st+1 , a t+1 , w t+1 ) − V π(·| st,a t)(st+1 )
+
+i
+
++ γn(1 − γ)R⪯ γEst+1 [∆ t+1 ] + γn(1 − γ)R
+
+Thus, the error at time t is bounded by the discounted expected error at time t + 1 .
+
+Theorem D.10 (Approximate Pareto Coverage) . Let CnP O = {πw | w ∈ W} denote the set of policies generated by all preferences using the n-th Bellman update by Algorithm 1. This set satisfies the properties of approximate Pareto coverage. D.10.1 Approximate Coverage: Every Pareto-optimal policy is approximated by some policy in CnP O such that the suboptimality gap is bounded. Formally: 
+
+∀π ∈ Π, ∃w ∈ W such that 
+
+V π (s0) ⪯ V πw (s0) + γnR
+
+D.10.2 Approximate Parsimony: Every policy in CnP O satisfies γnR-Pareto optimality ; that is, no other policy can strictly dominate it by a margin larger than the approximation bound. Formally: 
+
+∀w ∈ W , ∀π ∈ Π we get 
+
+V π (s0) ⊁ V πw (s0) + γnR
+
+Proof. Using Theorem D.9, we obtain ∆t ⪯ γ Est+1 [∆ t+1 ] + γn(1 − γ)R, therefore taking a max for each component allows us to prove ∆max ⪯ γnR. Therefore starting with any nth estimate T nQ(s, a, w ) the procedure obtains a value 
+
+V π (s), such that T nQ(s, a, w ) ⪯ V π (s) + γnR.27 Deterministic Pareto-Optimal Policy Synthesis for MORL 
+
+1. Approximate Coverage: Since we prove in Theorem 5.4.1 that every Pareto-optimal policy π∗ is dominated by an estimate V π∗
+
+(s) ⪯ T nQ(s, a, w ′) ⪯ V πw′ (s) + γnR.2. Approximate Parsimony: Since there is no policy that dominates an estimate T nQ(s, a, w ) we obtain that there is no policy that dominates V πw (s0) + γnR.28

@@ -1,0 +1,843 @@
+Title: Learning from Mistakes: Rollout-Retrieval Lifelong Policy Learning for Autonomous Driving
+
+URL Source: https://arxiv.org/pdf/2606.30537v1
+
+Published Time: Tue, 30 Jun 2026 02:46:28 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+> PREPRINT 1
+
+# Learning from Mistakes: Rollout-Retrieval Lifelong Policy Learning for Autonomous Driving 
+
+Cheng Gong, Haoyang Wang, Chao Lu, Zirui Li, Jianwei Gong 
+
+Abstract —Autonomous driving policies should be able to im-prove continually as deployment exposes them to increasingly diverse and long-tail traffic situations. However, most learning-based policies are trained or fine-tuned on expert demonstrations and then rely largely on generalization to handle challenging closed-loop scenarios, lacking an explicit mechanism to correct and retain the mistakes exposed in these scenarios. This paper studies autonomous driving policy improvement from a lifelong learning perspective: Can a pretrained policy improve continually by accumulating corrective knowledge derived from its own mis-takes, while retaining previously acquired driving competence? To answer this question, we propose Rollout-Retrieval Lifelong Policy Learning (R 2LPL), a new policy learning framework that retrieves corrective targets from recoverable policy-induced mis-takes and retains the resulting knowledge through lifelong policy learning. R 2LPL addresses a key bottleneck in continual policy improvement: closed-loop mistakes reveal where the policy is weak, but do not directly specify what the policy should learn. By filtering recoverable mistake-related states and retrieving feasible corrective targets, R2LPL turns sparse failure evidence into compact supervised knowledge for stable and sample-efficient policy improvement. We evaluate R 2LPL on large-scale closed-loop nuPlan benchmarks. With only a few rollout and continual-learning cycles, R 2LPL elevates a learning-based planner with moderate initial performance to state-of-the-art performance across the evaluated benchmarks, especially on the challenging and long-tail Test14-hard split. These results demonstrate the effectiveness of R 2LPL in converting recoverable closed-loop mistakes into corrective knowledge for sustained policy improve-ment. Code available at: https://github.com/Engibacter/R2LPL. 
+
+Index Terms —Autonomous driving, motion planning, lifelong learning, continual learning, policy learning, long-tail scenarios, closed-loop decision making. 
+
+I. I NTRODUCTION 
+
+# AUTONOMOUS vehicles are expected to operate in open and continually evolving environments, where rare com-binations of road geometry, traffic interactions, and agent behaviors inevitably give rise to long-tail situations [1], [2]. Recent advances in planning-oriented and end-to-end au-tonomous driving have substantially improved closed-loop performance [3]–[5] through increasingly powerful policy 
+
+This work was supported in part by the National Natural Science Foundation of China under Grant 52372405, and in part by the National Key R&D Program of China under Grant 2022ZD0115503. Corresponding authors: Chao Lu and Jianwei Gong. Cheng Gong, Haoyang Wang, Chao Lu, and Jianwei Gong are with the School of Mechanical Engineering, Beijing Institute of Technology, Bei-jing 100081, China (e-mails: engibacter@gmail.com; haoyaw7@gmail.com; chaolu@bit.edu.cn; gongjianwei@bit.edu.cn). Zirui Li is with the School of Mechanical and Aerospace Engi-neering, Nanyang Technological University, Singapore 639798 (e-mail: zirui.li@ntu.edu.sg). 
+
+architectures [6]–[8], generative models [9]–[11], and large-scale foundation models [12]–[14]. Despite these advances, mistakes remain inevitable. Even highly capable driving poli-cies may encounter situations in which their learned behaviors are insufficient, leading to suboptimal decisions or closed-loop failures [15], [16]. These failures may stem from rare interactions, imperfect generalization, or the accumulation of policy-induced deviations over closed-loop execution. This raises a fundamental question: if mistakes are inevitable, can a deployed driving policy learn from them and continually improve itself over time? Most existing learning-based planning policies address this challenge by exploiting richer information from pre-collected expert data. Imitation-based planners improve scene represen-tations, model architectures, interaction reasoning, and training strategies to obtain stronger generalization from expert demon-strations [6], [8], [17]–[19]. Generative planners further model multimodal trajectory distributions using diffusion- or flow-based formulations [10], [20], [21]. Vision-language-action and language-augmented driving models introduce high-level reasoning and broader semantic priors to improve adaptabil-ity in complex scenarios [12]–[14], [22]. These approaches have significantly advanced learning-based planning through increasingly powerful policy models and stronger generaliza-tion from pre-collected expert data. However, they primarily focus on better utilizing existing knowledge, offering limited mechanisms to incorporate new knowledge revealed by policy failures and difficult scenarios. A promising direction is to continuously acquire new knowledge from policy interactions and exploit the result-ing feedback to further improve policy behavior. Reinforce-ment learning and preference-based optimization can improve closed-loop behavior beyond expert demonstration, but reward design, sparse safety feedback, and exploration risk remain major challenges for safety-critical driving [23]–[27]. Dataset aggregation methods such as DAgger [15] improve policies by rolling out the current learner and querying an expert on visited states. However, obtaining expert supervision for arbitrary policy-induced states is often prohibitively expensive in large-scale driving scenarios. Recent closed-loop supervised fine-tuning methods, such as CAT-K [28] and RoaD [16], alle-viate this burden by using logged ground-truth trajectories to guide closed-loop data generation and then fine-tuning driving policies on the recovered rollout experiences. Nevertheless, the knowledge recovered from closed-loop rollout is often heterogeneous in quality and informativeness. As policies deviate from expert states in rollout, some recovered knowl-edge provide valuable corrective information, whereas others  
+
+> arXiv:2606.30537v1 [cs.RO] 29 Jun 2026 PREPRINT 2
+
+may introduce biased or misleading updates. Consequently, effectively extracting useful corrective knowledge from closed-loop rollout remains an open challenge. We study this problem from a lifelong policy learning perspective. As shown in Fig. 1, in contrast to imitation learn-ing, which relies on stronger generalization from fixed expert demonstrations, and reinforcement learning, which improves policies through reward-driven trial and error, our goal is to enable a pretrained planner to improve through repeated correction of its own rollout-induced mistakes. Unlike dataset aggregation, this process does not assume that a queryable expert can provide valid labels for arbitrary learner-induced states. Instead, it treats closed-loop rollouts as a stream of policy-dependent experience, from which the learner must selectively retrieve recoverable mistakes and convert them into reliable corrective knowledge. This perspective raises two cen-tral challenges. The first is mistake-to-knowledge conversion :how to accurately and efficiently extract reliable corrective knowledge from heterogeneous rollout experience. Potential policy mistakes may lead to failures, risks, and behavioral conflicts events in close-loop rollout. Yet such outcomes do not directly reveal the responsible mistakes or the supervision targets that should be retrieved. Since only part of the in-duced experience contains actionable corrective information, the learner must identify informative mistake-related states and retrieve valid targets while avoiding ambiguous or noisy super-vision. The second is non-forgetting policy improvement : how to improve over repeated correction cycles without forgetting previous corrections. Once a policy is updated, it induces a new rollout distribution and may expose new mistakes. The challenge is to learn from these newly revealed mistakes while retaining the knowledge that prevents old mistakes from reappearing. To tackle these challenges, this paper proposes R 2LPL, short for Rollout-Retrieval Lifelong Policy Learning , as a paradigm for lifelong policy improvement. R 2LPL first uses closed-loop rollouts to collect policy-induced experience associated with failures, risks, and conflicts. To address mistake-to-knowledge conversion, R 2LPL performs rollout-retrieval (R 2): candidate actions are evaluated at selected policy-induced states, feasible targets are retrieved from states that still admit meaning-ful correction, and misleading targets are avoided when no feasible correction exists. To address non-forgetting policy improvement, R 2LPL further performs lifelong policy learning (LPL), which updates the planner with newly retrieved R 2
+
+knowledge while replaying previously learned corrections. Through repeated rollout-continual-learning (ROCL) cycles, R2LPL enables a pretrained planner to continuously improve from its own mistakes without relying on reward-driven ex-ploration or online expert querying. The main contributions of this paper are:  
+
+> •
+
+We introduce R 2LPL, a rollout-retrieval lifelong policy learning framework for autonomous driving. It formulates policy learning and improvement as a process of learn-ing from the policy’s own mistakes, and organizes this process into mistake-related state mining, recoverability-aware corrective-knowledge construction, and lifelong policy update. Policy Learning Paradigms for Autonomous Driving    
+
+> Imitation Learning
+> Supervised
+> Learning
+> Reinforcement Learning
+> Close -loop
+> Explore
+> Candidate
+> Rollouts
+> Advantage Signals
+> RL
+> Update
+> Closed -loop Supervised Learning
+> fine -tune from learner -induced states using expert labels
+> Policy
+> pretrained
+> rollout Policy Induced States
+> off -expert
+> query expert
+> Aggregate dTarget
+> Off -expert states + expert action
+> Supervised
+> learning
+> Supervised
+> Targets
+> R2LPL
+> Expert
+> Demonstration
+> Expand
+> Expert -log
+> Coverage
+> Improve
+> Policy
+> Architecture
+> Driving
+> Policy
+> Reward/
+> Preference
+> Guidance
+> Policy -Induced
+> States
+> Expert / GT
+> Guidance
+> Supervised
+> Learning
+> Close -loop
+> Rollout
+> Mistake -
+> Related States
+> Close -loop
+> Rollout
+> Corrective
+> Target
+> Evaluate &
+> Retrieve
+> Replay
+> Memory
+> Lifelong
+> Update
+> R2LPL
+> Driving
+> Policy
+> Driving
+> Policy
+> Driving
+> Policy
+
+Fig. 1. Comparison of policy learning paradigms for autonomous driving. Existing paradigms improve policies from fixed expert demonstrations, re-ward/advantage signals, or expert/ground-truth guided supervision on policy-induced rollouts. In contrast, the proposed R2LPL converts recoverable policy-induced mistakes into corrective targets and accumulates the resulting knowledge through replay memory, providing a lifelong policy improvement route driven by the policy’s own mistakes.  
+
+> •
+
+We propose R 2, a rollout-retrieval mechanism that con-verts closed-loop mistakes into corrective supervision. Instead of directly using all rollout experiences, R2
+
+selectively mines mistake-related but recoverable states and retrieves feasible corrective targets from candidate actions.  
+
+> •
+
+We formulate lifelong policy learning for planning as in-cremental accumulation of corrective knowledge. Instead of performing one-shot supervised fine-tuning on newly retrieved corrections, R 2LPL updates the policy with both new R 2 knowledge and replayed historical corrections, enabling multi-round improvement while reducing for-getting of previously corrective knowledge.  
+
+> •
+
+We validate R 2LPL on large-scale closed-loop nuPlan benchmarks, showing that a learning-based planner with moderate initial performance can be improved to state-of-the-art performance within only a few ROCL rounds, especially on the hard long-tail Test14-hard split. II. R ELATED WORK 
+
+A. Planning Policy Learning for Autonomous Driving 
+
+In planning policy learning, autonomous-driving planners are commonly formulated as parameterized policies that map scene observations to future ego trajectories or distributions over candidate trajectories. Early workers utilize transformer-based, vectorized, and interaction-aware modeling to encode driving scene, and regress or classify to the logged ego future trajectory [29], [30]. GameFormer [17] formulates interactive prediction and planning with a game-theoretic transformer, while PLUTO [6] advances imitation-based planning through strong scene representations and data augmentation. Another line of work formulates planning as selection or scoring PREPRINT 3
+
+over multiple candidate actions. VADv2 [19] formulates end-to-end planning as a probabilistic distribution over a fixed set of trajectory anchors. Hydra-MDP [8] uses multi-target rule-distillation to learn multi-modal planning targets. Recent mixture-of-experts planning improves generalization by com-posing specialized motion-planning behaviors [31]. Compared with black-box trajectory regression, probabilistic or score-based planners expose alternative action hypotheses and their relative preferences, which provides a structured interface for analyzing and improving policy decisions at closed-loop induced states. Recent studies further improve learned planners through generative modeling and language-augmented policy archi-tectures. Generative planners, including DiffusionDrive [9], Diffusion Planner [10], Flow Planner [20], Diffusion Forcing Planner [21], and MISTY [32], model multimodal and uncer-tain driving behaviors with diffusion, flow matching, or other distributional trajectory-generation mechanisms. Meanwhile, vision-language-action and language-augmented models such as OpenDriveVLA [12], AutoVLA [13], and Reasoning-VLA [14] introduce semantic reasoning and cross-scenario priors into end-to-end driving policies. These methods demon-strate the importance of scaling policy representations, tra-jectory generation, and reasoning capability for autonomous driving. However, stronger policy architectures do not by themselves provide a mechanism for stable and continual pol-icy improvement from closed-loop evaluation experience. In particular, the increasing complexity of generative objectives, guidance terms, large reasoning models, and end-to-end action generation makes targeted policy refinement sensitive to data distribution, optimization stability, inference efficiency, and safety verification. 
+
+B. Closed-loop Policy Improvement 
+
+Closed-loop policy improvement aims to refine a learned policy after initial training, especially when rollout execution exposes states that are not well handled by the pretrained pol-icy. Classical dataset aggregation methods address this issue by learning from learner-induced states: DAgger [15] rolls out the learner, queries an expert at visited states, and aggregates newly labeled data, while DART [33], SafeDAgger [34], HG-DAgger [35], and EnsembleDAgger [36] improve robustness, query efficiency, or safety through noise injection, safety clas-sifiers, human intervention, or uncertainty estimation. These methods show the value of policy-induced states, but rely on expert or intervention signals that can provide valid super-vision during rollout, which is difficult to obtain for large-scale autonomous-driving scenarios. Recent driving-oriented methods adapt closed-loop improvement to modern learned planners: CAT-K [28] performs closed-loop supervised fine-tuning for tokenized traffic models, and RoaD [16] uses expert-guided rollouts as demonstrations for supervised fine-tuning. While these works show that rollout experience can reveal weaknesses beyond fixed expert logs, such experience is not uniformly informative: policy-induced states may deviate from logged behaviors, differ in recoverability, or provide noisy correction signals. Moreover, each policy update changes the future rollout distribution, so policy improvement requires more than one-shot adaptation. It requires repeatedly acquir-ing reliable corrective knowledge while retaining previously learned corrections. Reinforcement learning and preference-based optimization provide another route for policy improvement. Human-guided RL incorporates human knowledge to improve navigation be-havior [23]; CarPlanner [24] applies large-scale reinforcement learning to autoregressive trajectory planning; DriveDPO [25] uses safety-oriented direct preference optimization for end-to-end driving; and Plan-R1 [26] further represents trajectories as motion tokens and applies rule-based GRPO to align plan-ning behavior with driving objectives. Recent diffusion-based planners, including DIVER [37] and Hyper Diffusion Plan-ner [38], further integrate reinforcement learning or reward optimization with generative trajectory modeling.These meth-ods move beyond expert-log imitation and optimize policies toward closed-loop driving objectives. However, autonomous-driving rewards are sparse, multi-objective, and safety-critical, making exploration-intensive updates costly or unstable. To-gether with closed-loop supervised fine-tuning methods, these studies show that rollout experience is valuable for improving learned driving policies, but also highlight a central challenge: how to convert policy-induced experience into reliable and sustained policy improvement without depending on dense expert annotation or unstable exploration. 
+
+C. Lifelong Policy Learning 
+
+Lifelong learning, often referred to as continual learning, studies how a model can acquire knowledge from sequential or incremental data while mitigating catastrophic forgetting [39], [40]. Representative strategies include regularization-based methods [41], distillation-based methods [42], replay-based methods [43]–[45], and architecture- or parameter-isolation methods [46], [47]. With large pretrained models, recent stud-ies further explore prompt- and parameter-efficient continual learning [48]–[51]. These methods mainly address how to preserve past knowledge while adapting to a new sequence of given tasks or data distributions. Policy learning poses an addi-tional difficulty: the data distribution is induced by the policy itself, and each policy update can change the states that will be encountered in future rollouts. Moreover, policy-induced states usually do not come with explicit ground-truth actions, so useful supervision must first be constructed from closed-loop experience. Therefore, lifelong policy learning requires not only non-forgetting optimization, but also a mechanism for acquiring reliable corrective knowledge from the evolving behavior of the policy. Continual learning has also been explored in autonomous driving, including perception, prediction, and decision-making modules [52]. Prediction-oriented studies investigate case-level forgetting, dynamic expansion, and task-free identification for driving scene [53], [54]. These works extend continual learning to driving-specific data streams, but still largely follow the conventional setting where supervision from in-cremental data or task changes are given. Lifelong policy learning differs from conventional continual learning because PREPRINT 4
+
+the policy is updated through data that is partly induced by its own closed-loop behavior: its decisions affect future state visitation, and the resulting states may not come with explicit supervision. Existing studies have explored continual policy learning from different angles, including dynamic confidence-aware reinforcement learning for autonomous driving [55], lifelong skill preservation and recombination in robot manipu-lation [56], life-long policy learning for path tracking control [57], and human-guided continual learning for personalized driving decisions [58]. These works show that policies can be improved over time through interaction, accumulated knowl-edge, or external feedback. However, they mainly focus on policy update or adaptation, while mistake-driven acquisition of corrective knowledge remains less explored. In closed-loop planning, failures do not directly reveal responsible decisions, recoverability, or corrective targets. Therefore, lifelong policy learning for planning requires not only preserving previous knowledge, but also converting mistake-related experience into reliable supervision for avoiding repeated failures. III. P ROBLEM FORMULATION 
+
+A. Planning Policy Learning for Autonomous Driving 
+
+We consider autonomous-driving planning as trajectory-level policy learning. At time t, the planner observes a driving state 
+
+st = {hego  
+
+> t
+
+, h agent  
+
+> t
+
+, m t, c t, r t}, (1) where hego  
+
+> t
+
+and hagent  
+
+> t
+
+denote ego and agent histories, mt
+
+denotes map and route geometry, ct denotes traffic-control context, and rt denotes the navigation goal. A learned planner maps st to a future ego trajectory τt or, more generally, to a distribution over candidate trajectories. Because target retrieval requires candidate actions that can be explicitly searched, scored, and replayed as supervision, this paper focuses on score-based policies with a finite set of trajectory anchors as action space, similar to [19], [25]. Let 
+
+A = {a1, a 2, . . . , a K } (2) be a finite anchor library, where each ai = {(xiℓ, y iℓ, ψ iℓ)}Hℓ=1 
+
+is a future ego trajectory over horizon H. Given scene features 
+
+ϕ(st), the planner computes a trajectory score 
+
+ziθ (t) = fθ (ϕ(st), a i), (3) where θ denotes the policy parameters and ziθ (t) is the logit associated with action ai at state st. The scores induce a categorical trajectory policy through softmax normalization: 
+
+πθ (ai|st) = exp( ziθ (t)) 
+
+PKj=1 exp( zjθ (t)) . (4) The executed action can be obtained by maximum-score se-lection, sampling, or downstream rule-based selection among top candidates. Rather than treating the expert future only as a continuous regression target, the score-based planner is trained with sparse anchor-score supervision. For a driving state s, let 
+
+Y(s) = {(i, y i) | i ∈ A s, y i > 0} (5) denote the supervised anchor-score set, where As ⊆ 1, . . . , K 
+
+is the subset of supervised anchor indices and yi is the non-negative target score assigned to anchor ai. Depending on the training source, As and yi can be obtained from scoring, rollout retrieval, or candidate sampling. The best supervised anchor is 
+
+i∗ = arg max ( i, y i) ∈ Y (s)yi. (6) The normalized target preference over the supervised subset is defined as 
+
+qYi (s) = yi
+
+P 
+
+> j∈A s
+
+yj
+
+, i ∈ A s. (7) Correspondingly, we restrict the policy distribution to the same supervised subset: 
+
+qiθ (s) = exp( ziθ (s)/ϵ )
+
+P 
+
+> j∈A s
+
+exp( zθ j (s)/ϵ ) , i ∈ A s, (8) where ϵ is a temperature parameter. This restricted distribution is used only for training efficiency with sparse supervision loss. During inference, the planner scores the full anchor library. We define the anchor-score planning loss as 
+
+LAS (s, Y; θ) = − log qθ i∗
+
+(s) + λKL 
+
+X
+
+> i∈A s
+
+qYi (s) log qYi (s)
+
+qθ i(s) ,
+
+(9) where λKL balances the best-anchor classification term and the preference-matching term. The first term pulls the policy toward the best supervised anchor, while the second term pre-serves the relative preference among multiple positive anchors. Standard pretraining can then be written as score-supervised planning over expert states, 
+
+DE = {(sEt , YEt )}NE
+
+> t=1
+
+, (10) where sEt is an expert-log state and YEt is the corresponding sparse anchor-score supervision. The initial policy is obtained by: 
+
+θ = arg min θE(sEt ,YtE )∼D E
+
+LAS 
+
+ sEt , YEt ; θ (11) During inference, the planner can score the full anchor library, whereas training may supervise only selected anchors for efficiency. This score-based formulation is important for rollout retrieval: the finite candidate action space exposes alternative decisions and allows a retrieved corrective target to be represented as replayable supervised knowledge at an arbitrary policy-induced state. 
+
+B. Lifelong Policy Learning with Knowledge Replay 
+
+Lifelong learning considers a sequence of learning tasks 
+
+{D 1, . . . , DK }, where Dk contains the supervised knowledge newly available at task t. Let x denote a training sample, 
+
+ℓ(x; θ) its task loss under model parameters θ, and θk−1
+
+and θk the model parameters before and after learning task 
+
+k, respectively. The objective is to learn the new knowledge in Dk without overwriting useful knowledge acquired from 
+
+D1, . . . , Dk−1.PREPRINT 5
+
+In policy learning, the sequential tasks are not necessarily manually predefined. Instead, each task may correspond to a batch of incremental knowledge acquired from the current policy’s closed-loop behavior. After the policy is updated, its future rollout distribution changes, and new weaknesses may be exposed. Thus, the knowledge available at each round is policy-dependent and can only be acquired progressively. A trivial alternative would be to store all knowledge collected from previous rounds and repeatedly train on their union. However, this corresponds to an unbounded joint-training setting that assumes unlimited memory and increasing op-timization cost. Training only on the latest knowledge, on the other hand, may cause the policy to forget previously knowledge. We therefore formulate lifelong policy learning as bounded incremental policy improvement with knowledge replay. Let 
+
+Mk−1 ⊆
+
+> k−1
+
+[
+
+> j=1
+
+Dj , |M k−1| ≤ C, (12) denote the replay memory before round k, where C is its maximum capacity. With replay mechanism, learning loss at task k can be defined as: 
+
+Lk
+
+> replay
+
+(θ) = Ex∼D k ℓ(x; θ)+ λrep Ex∼M k−1 ℓ(x; θ), (13) where the first term learns the current task, the second re-hearses retained knowledge from historical tasks, and λrep ≥ 0
+
+controls their relative influence. Replaying only the supervised target preserves the expert-preferred feasible action, but ignores the expert or scoring knowledge about infeasible or less preferred alternatives. To retain both positive and negative preferences in the action space, we store the historical policy response and use it as an auxiliary distillation target during replay. Following the idea of dark-experience replay [45], we store this response together with each replay sample. Let ux be the stored output vector for sample x, and let oθ (x) be the current model output over the same dimensions. We define the response-retention loss as 
+
+LDER (x; θ) = KL (softmax( ux/ϵ d) ∥ softmax( oθ (x)/ϵ d)) ,
+
+(14) where ϵd > 0 is a temperature parameter. Combining super-vised replay with response retention gives 
+
+Lk
+
+> KR
+
+(θ) = Lk
+
+> replay
+
+(θ) + λDER Ex∼M k−1 LDER (x; θ),θk = arg min  
+
+> θ
+
+Lk
+
+> KR
+
+(θ), (15) where λDER ≥ 0 controls retention of the historical model response. The replay term preserves stored supervision, while the DER term constrains changes in the richer output structure associated with that supervision. After each task, the memory is updated by 
+
+Mk = UC (Mk−1 ∪ D k) , (16) where UC retains at most C records from the previous memory and current data. IV. R 2 LPL: R OLLOUT -R ETRIEVAL LIFELONG POLICY 
+
+LEARNING 
+
+A. Framework Overview 
+
+Fig. 2 illustrates the overall pipeline of R 2LPL. Each ROCL round follows a Rollout–Retrieval–Lifelong Policy Learning cycle. The current policy is first executed in a closed-loop simulator or world model to induce states under its own decisions and expose failure, risk, or conflict evidence. The retrieval stage then searches the rollout experience for recov-erable mistake-related states and converts them into corrective targets. Finally, lifelong policy learning updates the planner with the newly retrieved knowledge while replaying previous corrections. After the update, the improved policy induces a new closed-loop state distribution, which starts the next ROCL round. The first two stages together instantiate rollout-retrieval (R 2) target construction. Rollout is used diagnostically rather than as a demonstration generator: it reveals where the cur-rent policy becomes unsafe, risky, or conflict-related under closed-loop execution. Retrieval further determines whether the mined mistake-related states are recoverable by the avail-able trajectory-action space and selectively retrieves feasible candidate actions as corrective targets, while discarding un-recoverable states to avoid propagating misguiding rollout histories into supervision. The resulting R 2 knowledge is then used for lifelong policy learning, where the planner is updated with new R 2 supervision, replayed historical correc-tions, and anchor-score retention. Through repeated ROCL rounds, R 2LPL continually accumulates corrective knowledge from the policy’s own closed-loop experience while reducing forgetting of previously learned corrective knowledge. 
+
+B. R 2 Corrective Target Construction 1) Policy-Induced State Mining: Static expert data describe states visited by the expert, but do not reveal which states the current policy will induce or which of its earlier decisions will lead to undesirable closed-loop behavior. We therefore roll out the current policy to obtain policy-dependent experience from which corrective knowledge can be constructed. At round r,executing πr−1 in closed-loop rollout produces: 
+
+Ξr = Rollout( πr−1) = {(sπr,t , a πr,t )}Tt=1 . (17) where Ξr denotes the visited states collected from rollout in time T .Not every visited state is informative for correction. We use three complementary event detectors dg (Ξ r , t ) ∈ { 0, 1},
+
+g ∈ { F, R, C}, for Failure, Risk, and Conflict, respectively. Failure identifies states associated with an observed closed-loop failure; Risk captures safety-critical states that do not directly lead to failures; and Conflict captures inappropriate acceleration or yielding decisions that are inconsistent with logged expert behaviorally. Together, they cover terminal er-rors, non-terminal safety precursors, and decision-level incon-sistencies. Observed events are not necessarily caused by the action selected at the exact event frame: erroneous decisions can begin several steps earlier and gradually drive the policy into PREPRINT 6R2 Supervision 
+
+Closed-loop Rollout Failure Risk Conflict Closed-loop Simulation Planning Policy Policy-induced States Mistake Retrieval    
+
+> Sampled Trajectory Scene Feature
+> Retrieved Mistake-related Interval Supervision Targets Restoration
+> Severity
+> Diversity
+> Training loss Loss R2 Failure Risk Conflict
+
+Lifelong Policy Learning Incremental Knowledge Memory Consolidation     
+
+> failure unrecoverable states recoverable states failure unrecoverable states recoverable states failure unrecoverable states recoverable states Search & Retrieve Recovered Decision
+> Mistake Decision
+> Policy Optimization
+> Memory Replay
+> Logits Distillation Loss Replay Loss Retain
+> policy π k
+
+ROCL (k+1) ROCL (k ） [ Rollout ] ── [ Retrieval ] ── [ Lifelong Policy Learning ] ROCL (k-1) updated policy π k+1 π kπ k+1 
+
+> Update
+> Weighted Sum
+
+Fig. 2. Overview of R 2LPL. Each ROCL round follows a Rollout–Retrieval–Lifelong Policy Learning cycle: closed-loop rollout exposes failure, risk, and conflict evidence; retrieval identifies recoverable mistake-related states and constructs corrective targets; and lifelong policy learning updates the policy with new R 2 knowledge and replayed memory. 
+
+danger. We therefore assign each event a preceding credit-assignment window tF:
+
+tF = min {t | dF(Ξ r , t ) = 1 }, (18) For event type g, a state is retained in Ir,g , if a correspond-ing event occurs within the next Wg steps: 
+
+Ir,g =
+
+
+
+sπr,t     
+
+> t≤tF,
+> ∃k∈[t, min( t+Wg,t F)]
+> s.t. dg(Ξ r,k )=1
+
+
+
+. (19) The potentially informative policy-induced states are there-fore: 
+
+Ir = [
+
+> g∈{ F,R,C}
+
+Ir,g . (20) The horizon Wg therefore links an observed event to the sequence of potentially responsible decisions rather than only supervising with its final frame. The constraint t ≤ tF excludes post-failure states whose histories have already been corrupted by mistake related actions. Applying this definition across rollouts yields the complete state set Ir for target retrieval. 
+
+2) Action Scoring and Target Recovering: State mining identifies where correction may be useful, but does not directly provide a valid target. In particular, the logged expert future is anchored at the logged state sEt and may become infeasible after the learned policy reaches a different state sπt . R2
+
+therefore first estimates the reliability of log-based guidance and then searches the structured action space for a feasible correction. For each sπr,t ∈ I r , we omit the round superscript for clarity and characterize its deviation from the logged state by 
+
+∆t =  dxy (sπt , s Et ), d ψ (sπt , s Et ), d v (sπt , s Et ), d p(sπt , s Et )
+
+(21) We first form a geometrically admissible subset Apre  
+
+> t
+
+⊆ A 
+
+by removing actions that are clearly incompatible with the route, heading, or drivable area while retaining stop actions. This preselection only reduces the number of actions eval-uated. Each remaining action receives a rule-based planning score 
+
+qi = Q msaf  
+
+> i
+
+, m drv  
+
+> i
+
+, m route  
+
+> i
+
+, m prog  
+
+> i
+
+, m comf 
+
+> i
+
+ , (22) where the five terms measure safety, drivable-area compliance, route consistency, progress, and comfort, respectively, and Q
+
+denotes their rule-based aggregation. The feasible candidate set Avalid  
+
+> t
+
+and the state recoverability R(sπt ) of state sπt are: 
+
+Avalid  
+
+> t
+
+= {ai ∈ A pre  
+
+> t
+
+| qi > 0},R(sπt ) = 1[Avalid 
+
+> t
+
+̸ = ∅]. (23) States with R(sπt ) = 0 are excluded because the available action space cannot provide valid supervision from them. For a recoverable state, its deviation determines the guid-ance class κt:
+
+κt = Γ(∆ t) ∈ { near , rec , far }. (24) where near , rec , and far denote three types of guidance class. Near-log states retain reliable expert guidance; recoverable off-log states use the expert only as a weak behavioral prior; and far-off-policy states no longer use the logged expert future for target retrieval. Thus, recoverability determines whether the state can be supervised, whereas κt determines which evidence should define that supervision. For recoverable states, action quality is described by three signals: normalized rule score ¯qi, reference consistency cref  
+
+> i
+
+,and expert consistency cEi . Reference consistency measures geometric alignment with the route/reference path. Expert consistency measures behavioral alignment with the logged future: 
+
+cEi = exp   − αH dH (ai, τ Et ) − αP dP (ai, τ Et )
+
+− αψ dψ (ai, τ Et ) − αv dv (ai, τ Et ), (25) PREPRINT 7
+
+where dH is a Hausdorff-style shape distance, dP measures progress mismatch along the reference path, and dψ and dv
+
+measure heading and velocity disagreement, respectively. The progress term is symmetric: it penalizes both lagging and overshooting, so waiting and yielding behavior can be learned rather than overwritten by a progress-only scorer. The final target score yi is computed as: 
+
+yi = wκt 
+
+> q
+
+¯qi + wκt 
+
+> ref
+
+cref  
+
+> i
+
++ wκt 
+
+> E
+
+cEi . (26) where wκt 
+
+> q
+
+, wκt 
+
+> ref
+
+and wκt 
+
+> E
+
+denote the respective weights for different guidance class κt. The class-dependent parameters express the different reliability of supervision. Near-log states assign greater weight to expert consistency; recoverable off-log states emphasize rule and reference scores while retaining weak expert guidance; and far-off-policy states set wfar  
+
+> E
+
+= 0 .Hence the scoring rule transits from log-guided correction to rule-guided recovery as the deviation between policy-induced states and logged expert states increases. Thus the retrieved target is: 
+
+a∗ = arg max 
+
+> ai∈A valid
+> t
+
+yi. (27) For training a score-based planner, the recovered sample stores the sparse target distribution: 
+
+Yt = {(i, y i) | ai ∈ A valid  
+
+> t
+
+, y i > 0}, (28) which supervises both the best anchor and the relative prefer-ence among recovered candidates. 
+
+C. Lifelong Policy Learning with R 2 Knowledge 
+
+Let Dr = {(sπt , Yt)} denote the recovered knowledge produced by R 2 in round r. Each sample pairs a policy-induced driving state with a retrieved anchor-score target, so it can be used by the same score-based policy in Eq. (4). The key role of LPL is to incorporate this new R 2 knowledge for policy learning while retaining knowledge learned in previous rounds. Thus both expert-log pretraining and rollout-induced lifelong learning are expressed through the same anchor-score planning loss in Eq. (9). Let Mr denote the bounded memory available before learning round r. The round-r update minimizes: 
+
+Lr =Ex∼D r LAS (x; θ) + λrep Ex∼M r LAS (x; θ)+ λDER Ex∼M r LDER (x; θ) + λE Ex∼D rE LAS (x; θ).
+
+(29) where x is shorthand for a state–target pair (s, Y). The first term learns from the current recovered failures. The second term constraints policy from forgetting replayed knowl-edge from previous rounds. The DER term preserves the stored teacher preference over replayed anchors through score-distribution matching. The final term mixes original expert-log samples from DrE to retain broad log-distribution behavior. After optimizing Eq. (29), LPL updates its bounded memory from both historical and newly recovered knowledge. The memory candidate pool is the duplicated union 
+
+Pr = Unique ( Mr ∪ D r ) . (30) As memory capacity is limited, it is important to update and store only the most valuable knowledge. Each x ∈ P r
+
+is evaluated from two complementary aspects. The first is learning difficulty hr (x). For a new sample, it is measured by the mean anchor-score loss observed over Nx times it is sampled during round-r training. For a historical sample that is not revisited as current data, its stored priority ρr−1(x) from the previous memory update is carried forward: 
+
+hr (x) = 
+
+
+
+1
+
+NxNxX
+
+> n=1
+
+L(n)AS (x; θ), x ∈ D r ,ρr−1(x), x ∈ M r \ D r .
+
+(31) The second aspect is rollout utility u(x), which favors samples associated with more consequential or more difficult-to-recover closed-loop states: 
+
+u(x) = X
+
+> g∈{ F,R,C}
+
+wg 1[g ∈ G (x)] + ws(cx)+ wttc 
+
+
+
+1 − TTC( x)
+
+τttc 
+
+
+
+> +
+
++ wq
+
+
+
+1 − y∗(x)
+
+τq
+
+
+
+> +
+
+,
+
+(32) where G(x) records whether the sample is mined from Failure (F), Risk (R), or Conflict (C) evidence; cx is its near-log, recoverable, or far-recoverable state class; TTC( x) is the minimum time to collision; and y∗(x) = max i yi is the best recovered action score from Eq. (26). Because the scales of hr and u vary across rounds, both are min–max normalized over the same candidate pool Pr .Denoting this pool-wise normalization by NPr (·), the memory priority ρr (x) is described as: 
+
+ρr (x) = α NPr (hr (x)) + β NPr (u(x)) . (33) A global top-C selection rule may cause frequent scenarios or dominant failure types to occupy most of the memory. We therefore adopt a bucket-balanced memory update. Specifi-cally, the candidate pool Pr = Unique( Mr ∪ D r ) is parti-tioned according to the scene category, the state class cx, and the primary Failure/Risk/Conflict reason. Within each bucket, samples are ranked by the memory priority ρr (x), which combines learning difficulty and rollout utility. The limited memory budget is then allocated approximately uniformly across active buckets, and the highest-priority samples in each bucket are retained. If the candidate pool does not exceed the memory capacity, all candidates are kept. This stratified update preserves diverse corrective knowledge across scenarios and corrective knowledge types while still favoring high-priority old and newly retrieved R 2 samples. The resulting memory 
+
+Mr+1 serves as the replay set for the next ROCL round. V. E XPERIMENTS 
+
+A. Benchmarks and Metrics 
+
+We evaluate R 2LPL on the nuPlan closed-loop simulation benchmarks [1]. NuPlan provides real-world driving logs with rich scenario annotations, long-horizon closed-loop simula-tion, and standardized planning metrics. These properties allow us to expose policy-induced mistakes through rollout, and PREPRINT 8
+
+Algorithm 1 R2LPL: Rollout-Retrieval Lifelong Policy Learn-ing  
+
+> 1:
+
+Input: pretrained planner π0, scenarios S, anchor library 
+
+A, memory capacity C 
+
+> 2:
+
+Initialize replay memory M0 ← ∅  
+
+> 3:
+
+for round r = 0 , 1, . . . , R − 1 do  
+
+> 4:
+
+Roll out πr on scenarios S 
+
+> 5:
+
+Mine Ir from Failure, Risk, and Conflict evidence; stop mining after failure boundaries  
+
+> 6:
+
+Initialize recovered dataset Dr ← ∅  
+
+> 7:
+
+for frame t ∈ I r do  
+
+> 8:
+
+Restore scene at rollout ego state sπt 
+
+> 9:
+
+Construct admissible candidate anchors and score them by Eq. (26)  
+
+> 10:
+
+if no valid candidate exists then  
+
+> 11:
+
+discard frame as unrecoverable  
+
+> 12:
+
+else  
+
+> 13:
+
+retrieve sparse target Yt by Eq. (28)  
+
+> 14:
+
+add (sπt , Yt) to Dr 
+
+> 15:
+
+end if  
+
+> 16:
+
+end for  
+
+> 17:
+
+Update πr with LPL objective in Eq. (29)  
+
+> 18:
+
+Obtain next planner πr+1  
+
+> 19:
+
+Form Pr = Unique( Mr ∪ D r ) and compute ρr by Eqs. (31)–(33)  
+
+> 20:
+
+Select Mr+1 by the bucket-balanced rule  
+
+> 21:
+
+end for  
+
+> 22:
+
+Return: lifelong-improved planner πR
+
+evaluate the capability of proposed R 2LPL for continual policy improvement in large-scale real traffic scenarios. We use three commonly adopted nuPlan benchmarks: 
+
+Val14 , Test14-hard , and Test14-random . Val14 
+
+contains 1118 validation scenarios from 14 scenario types with an imbalanced category distribution. Test14-hard 
+
+contains 272 challenging and long-tailed scenarios, while 
+
+Test14-random contains 261 randomly sampled scenarios with a more balanced distribution over the same 14 scenario types. We consider two closed-loop protocols: non-reactive (NR) and reactive (R) simulation. In NR simulation, the ego vehicle is controlled by the planner while other agents follow logged trajectories. In R simulation, surrounding agents are controlled by an IDM-based reactive model. For each benchmark, ROCL data generation and policy updating are performed on the scenarios from that benchmark under the NR protocol. The R results are obtained by directly evaluating the NR-updated checkpoint under the R protocol, without any additional R-specific ROCL update. Planner performance is measured by the official nuPlan aggregate score, which combines safety, comfort, and progress-related metrics. 
+
+B. Implementation Details 
+
+We instantiate R 2LPL-base with an anchor-based planner with transformer encoder-decoder architecture. The planner encodes vectorized ego history, neighboring agents, road ge-ometry, and route context, and predicts scores over a fixed library of K = 4096 trajectory anchors. Each anchor covers a 4.0 s planning horizon at 0.2 s intervals. The model uses a hidden dimension of 256 , an encoder depth of 4, and a planning decoder depth of 8. We pretrain the base model on 1M samples from the nuPlan training set for 30 epochs, using a batch size of 72 , a learning rate of 10 −4, 1000 warm-up steps, λKL = 0 .1, and bf16-mixed precision on 4 NVIDIA RTX 4090 GPUs. Rollouts are performed with model-only planning without any post-processing. Rollout and retrieval are run on two AMD EPYC 7763 64-Core processors. Candidate mining uses a rollout time step of 0.1 s. Failure-related frames are collected from the 40 steps preceding the failure frame. A failure frame is identified when collision or out-of-road is detected. Risk frames are identified by a minimum TTC below 1.0 s, together with a 10 -step pre-risk window. Conflict frames are selected according to misalignment between policy-induced states and logged expert states, using thresholds of 0.5 m/s for waiting speed, 3.0 m for lag-progress gap, and 1.0 m/s for moving speed. For R 2 retrieval, we first prefilter at most 1024 geometry-compatible anchors before scoring. Compatibility is deter-mined by a maximum reference-path distance of 6.0 m and a maximum heading error of 60 ◦. A frame is discarded as unrecoverable if no valid anchor is found. Otherwise, the top 
+
+256 recovered anchors are stored as sparse replay targets. State classes are defined by δxy  
+
+> near
+
+= 1 .0 m, δψ 
+
+> near
+
+= 15 ◦,
+
+δv 
+
+> near
+
+= 2 .0 m/s, δxy  
+
+> rec
+
+= 5 .0 m, and δψ 
+
+> rec
+
+= 45 ◦. Near-log retrieval further requires the expert-consistency score to be within 0.05 of the best score and at least 0.75 . The final anchor score in Eq. (26) uses (wsim , w ref , w exp ) = (0 .10 , 0.10 , 0.80) 
+
+for near-log states, (0 .65 , 0.30 , 0.05) for recoverable states, and (0 .80 , 0.20 , 0.00) for far-off-policy states. For LPL, we use DER with scenario-aware rollout-priority replay as the default continual learning method. Each ROCL round is trained for 20 epochs with a batch size 24 and a mem-ory capacity C = 4096 . In Eq. (29), the replay loss weight is 
+
+λrep = 1 .0, the DER distillation weight is λDER = 0 .25 , and the distillation temperature is 1.0. In Eq. (33), the normalized training-loss component and the rollout-utility component are both assigned a weight of 1.0. Expert-cache mixing uses a ratio of 0.25 , a loss weight of λE = 0 .25 , and at most 20 ,000 
+
+expert samples per task. 
+
+C. Comparison with Baselines 
+
+We compare R2LPL with representative learning-based planners on the nuPlan benchmarks to evaluate the relative performance improvement and to assess its competitiveness among existing policy learning paradigms. The comparison focuses on planners whose reported performance mainly comes from learned policy modeling, including recent genera-tive methods and reinforcement-learning fine-tuning methods. Since this experiment aims to compare learned policy capa-bility rather than rule-assisted execution quality, we do not include methods whose final scores rely heavily on rule-based post-processing, trajectory repair, or hybrid rule-based refine-ment. Such methods are important for engineering robustness, PREPRINT 9                                                                                                          
+
+> TABLE I MAIN CLOSED -LOOP RESULTS ON NU PLAN BENCHMARKS . NR AND RDENOTE NON -REACTIVE AND REACTIVE SIMULATION PROTOCOLS ,
+> RESPECTIVELY . S CORES ARE AGGREGATED METRICS ,WHERE HIGHER VALUES INDICATE BETTER PERFORMANCE .BOLD DENOTE THE BEST AND UNDERLINED THE SECOND -BEST RESULTS AMONG COMPARED METHODS .
+> Method Training Paradigm Val14 Test14-hard Test14-random NR RNR RNR R
+> Expert Human log replay 93.53 80.32 85.96 68.80 94.03 75.86 UrbanDriver [59] Imitation learning 68.57 64.11 50.40 49.95 51.83 67.15 PDM-Open [60] Imitation learning 53.53 54.24 33.51 35.83 52.81 57.23 PlanTF [18] Imitation learning 84.27 76.95 69.70 61.61 85.62 79.58 PLUTO [6] Imitation learning 88.89 78.11 70.03 59.74 89.90 78.62 Diffusion Planner [10] Generative IL 89.87 82.80 75.99 69.22 89.19 82.93 Flow Planner [20] Generative IL 90.43 83.31 76.47 70.42 89.88 82.93 DFP [21] Generative IL 90.33 79.97 76.91 63.56 90.69 81.96 DFP-FM [21] Generative IL 92.68 81.30 79.43 67.94 90.62 83.59 Plan-R1 [26] IL + RL alignment 88.98 87.69 77.45 77.20 91.23 90.04
+> R2LPL-base (ours) Imitation learning 75.39 73.87 60.67 65.25 70.74 72.96 R2LPL-ROCL-5 (ours) IL + R²LPL 91.26 85.38 83.51 78.38 92.25 87.99 R2LPL-ROCL-10-best IL + R²LPL (envelope) 92.22 85.83 86.54 78.88 93.94 88.20
+
+but their performance may reflect both learned policy quality and external correction modules, making it difficult to isolate the capability of the learned planner. The compared methods include: 
+
+• UrbanDriver [59] is an early learning-based planner that optimizes a driving policy from real-world demonstrations using a policy-gradient objective. 
+
+• PDM-Open [60] predicts future way points using an IDM-based centerline and ego history. 
+
+• PlanTF [18] is an imitation-based transformer planner trained to predict expert future motion. 
+
+• PLUTO [6] improves imitation-based planning with stronger scene representation, data augmentation, and training design. 
+
+• Diffusion Planner [10] formulates planning as conditional diffusion trajectory generation with guidance. 
+
+• Flow Planner [20] applies flow matching and interaction-aware modeling for tokenized trajectory generation. 
+
+• DFP [21] uses diffusion forcing with history-annealed planning, and DFP-FM augments it with flow matching. 
+
+• Plan-R1 [26] casts trajectory planning as motion-token lan-guage modeling and applies rule-based GRPO post-training. We report our pretrained anchor-based planner as R 2LPL-base, a fixed-budget five-round version as R 2LPL-ROCL-5, and the best observed result within the ten-round search budget as R 2LPL-ROCL-10-best. Table I reports the main closed-loop results on all three nuPlan benchmarks. The pretrained anchor-based planner is relatively weak compared with recent learning-based planners, achieving only 75.39/73.87, 60.67/65.25, and 70.74/72.96 on 
+
+Val14 , Test14-hard , and Test14-random under NR/R protocols. After five ROCL rounds, the same planner is im-proved to 91.26/85.38, 83.51/78.38, and 92.25/87.99, yielding absolute gains of +15 .87 , +22 .84 , and +21 .51 points under NR and +11 .51 , +13 .13 , and +15 .03 points under R. These improvements elevate a moderate base planner to the first or second place among all compared learning-based methods on every benchmark and protocol. Since ROCL updates the policy without changing the base architecture or adding deployment-time rule refinement, the results indicate that the proposed framework improves the learned policy itself rather than relying on a stronger planner design or external execution-time correction. Among the three splits, Test14-hard provides the clear-est stress test for closed-loop policy improvement because it focuses on challenging and long-tailed scenarios. On this split, R2LPL-ROCL-5 achieves 83.51 NR and 78.38 R, outperform-ing the strongest listed learning-based baselines by 4.08 and 
+
+1.18 points, respectively. The larger margin under NR is ex-pected, since both ROCL data generation and policy updating are conducted with NR rollouts. Nevertheless, the R score also increases from 65.25 to 78.38 without any R-specific ROCL update, reaching the best result among all compared methods. This cross-protocol improvement suggests that the retrieved corrective knowledge is not merely tied to the fixed-agent trajectories used during NR rollout. Since ROCL supervises recoverable mistake-related states rather than directly imitating a specific closed-loop trajectory, the learned corrections can encode more general decision preferences for avoiding unsafe or conflicting behaviors, which remain beneficial even when the interaction dynamics changes. The results on Val14 and Test14-random show a more moderate but consistent pattern. These splits cover broader evaluation scenarios rather than explicitly concentrating on hard long-tail cases, so the advantage of mistake-driven correc-tion is less pronounced than on Test14-hard . Nevertheless, R2LPL-ROCL-5 still ranks second on Val14 under both protocols and first/second on Test14-random under NR/R. This indicates that correcting policy-induced mistakes does not sacrifice broader closed-loop competence. In other words, R2LPL is not only effective on failure-prone scenarios, but also retains strong general performance after lifelong updates. The learning-envelope result R 2LPL-ROCL-10-best further shows that additional improvement is possible within the same ten-round search budget, reaching 92.22/85.83, 86.54/78.88, and 93.94/88.20 on the three splits. We use R 2LPL-ROCL-5 as the primary fixed-budget result and report R 2LPL-ROCL-PREPRINT 10                                                                                                 
+
+> TABLE II DETAILED TE S T 14-H A R D CLOSED -LOOP METRICS ACROSS FIVE ROCL UPDATES . S CORES ARE AGGREGATED METRICS ,WHERE HIGHER VALUES INDICATE BETTER PERFORMANCE . P ARENTHESIZED VALUES REPORT ABSOLUTE CHANGES FROM THE PREVIOUS ROUND .
+> ROCL Round Score Collisions TTC Drivable Comfort Progress
+> 0 (Base) 60.67 75.55 64.76 90.81 88.24 94.81 171.64 (+10.97) 91.36 (+15.81) 84.92 (+20.16) 95.95 (+5.14) 90.81 (+2.57) 74.68 (-20.13)
+> 278.63 (+6.99) 91.54 (+0.18) 82.72 (-2.20) 95.59 (-0.36) 89.34 (-1.47) 87.78 (+13.1)
+> 380.70 (+2.07) 94.85 (+3.31) 84.56 (+1.84) 95.22 (-0.37) 90.44 (+1.10) 88.87 (+1.09)
+> 483.00 (+2.30) 94.49 (-0.36) 85.66 (+1.10) 97.43 (+2.21) 92.28 (+1.84) 90.16 (+1.29)
+> 583.52 (+0.52) 93.20 (-1.29) 85.29 (-0.37) 97.43 (+0.00) 91.54 (-0.74) 91.80 (+1.64) 012345678910
+> ROCL round
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> NR score
+> Val14
+> Test14-hard
+> Test14-random
+> Log replay
+> Fig. 3. Closed-loop performance over ROCL rounds on Val14 ,
+> Test14-hard , and Test14-random . Solid curves report R 2LPL scores across ROCL rounds, and dashed horizontal lines report the corresponding expert-log replay scores.
+
+10-best only to indicate the potential performance envelope of the iterative improvement process. 
+
+D. Analysis on Iterative Improvement 
+
+This subsection examines the iterative behavior of R 2LPL. The analysis focuses on two empirical aspects: whether the planner continues to improve across repeated rollout-learning rounds, and what data and replay mechanisms account for this improvement. We use the round-wise score curves to address the former, and the mined-data and memory statistics to analyze the latter. Fig. 3 shows that the improvement is not limited to the first update. On Test14-hard , the NR score increases sharply in the early rounds and continues to improve more gradu-ally afterwards, eventually exceeding the expert-log replay reference. Although the curve is not strictly monotonic, such fluctuations are expected because each policy update changes the induced closed-loop state distribution and may shift the balance among safety, comfort, and progress terms in the nuPlan aggregate score. Nevertheless, the overall upward trend indicates that R 2LPL continues to accumulate useful corrective knowledge across ROCL rounds. The smoother curves on 
+
+Val14 and Test14-random further indicate that iterative rollout learning does not only benefit the hardest subset, although the largest gain appears on Test14-hard , where the initial policy exposes more severe residual errors. To understand how the improvement is obtained, Table II re-ports the detailed metric evolution on Test14-hard . Paren-thesized values denote absolute changes from the previous round, because the nuPlan aggregate and component metrics are bounded scores. The metric breakdown suggests a two-stage improvement pattern. The first round gives the largest aggregate gain, from 60.67 to 71.64, mainly through safety-related metrics: collision score improves by 15.81 points and TTC score improves by 20.16 points. This is consistent with the role of rollout mining, since the base policy exposes safety-critical states that can be converted into corrective targets when they are recoverable. Subsequent rounds provide smaller but still meaningful gains, with improvements distributed over drivable-area compliance, comfort, and progress. The temporary progress drop after the first round also illustrates the multi-objective nature of closed-loop planning: an update that strongly suppresses risky behavior can initially make the policy more conservative, and later rounds restore the progress score while preserving the safety gains. By ROCL round 5, the aggregate score reaches 83.52, with relatively high collision, TTC, drivable-area, comfort, and progress scores retained simultaneously. The remaining question is why repeated updates continue to provide useful supervision. Fig. 4 reports three statistics related to the data stream and memory: the retrieved training data mined in each round, the composition of the replay memory, and the source rounds preserved by the memory. These statistics indicate whether later policies still expose informative errors and whether the learner maintains access to previously recovered corrections. Fig. 4(a) shows that the recovered data are policy-dependent rather than fixed. Failure denotes frames in the temporal window before an actual rollout failure, Risk denotes high-risk context frames such as low TTC or dangerous near-miss states, and Conflict denotes model-expert disagreement frames where the policy behavior differs substantially from the logged expert. Early rounds contain many failure-window corrections, while later rounds still provide risk and conflict samples around the remaining difficult states. Thus, after the most obvious failures are corrected, rollout continues to reveal residual mistakes that can be used for further learning. Fig. 4(b) and Fig. 4(c) show how LPL stabilizes this evolving data stream. The memory keeps a mixed composition of Failure, Risk, and Conflict samples rather than being dominated by one category, and it preserves samples from multiple source rounds. Later updates are therefore not simple PREPRINT 11 1 2 3 4 5 6 7 8 9 10                                                                    
+
+> ROCL round
+> 0
+> 6000
+> 12000
+> 18000
+> Recovered frames
+> (a) Retrieved data
+> Failure
+> Risk
+> Conflict
+> 12345678910
+> ROCL round
+> 0
+> 1500
+> 3000
+> 4500
+> Memory samples
+> (b) Memory reasons
+> Failure
+> Risk
+> Conflict
+> 12345678910
+> ROCL round
+> 0
+> 1500
+> 3000
+> 4500
+> Memory samples
+> (c) Memory source
+> R1
+> R2
+> R3
+> R4
+> R5
+> R6
+> R7
+> R8
+> R9
+> R10
+> Fig. 4. Evolution of policy-induced failure data and replay memory across ROCL rounds. The three panels summarize: (a) retrieved data classified by recovery reason, (b) memory composition by recovery reason, and (c) memory source over each ROCL round. TABLE III ABLATION ON TE S T 14-H A R D UNDER A FIVE -ROUND ROCL BUDGET .SFT DENOTES SUPERVISED FINE -TUNING ,AND W /O DENOTES WITHOUT .ROUND 0IS THE SAME PRETRAINED BASE POLICY FOR ALL VARIANTS .THE TARGET EXPERT -LOG SFT BASELINE IS A ONE -SHOT ADAPTATION BASELINE ,SO LATER ROCL ROUNDS ARE NOT APPLICABLE .
+> Method ROCL Score 012345
+> Base + expert-log SFT 60.67 60.79 ––––Base + RoaD-style SFT 60.67 66.36 67.34 66.62 65.57 63.58 Base + R 2-style SFT 60.67 71.29 75.37 76.12 79.51 76.17 R2LPL w/o expert mix 60.67 72.44 78.34 80.89 83.18 82.64 R2LPL full 60.67 71.64 78.63 80.70 83.00 83.52
+
+fine-tuning on the newest rollout cache. They combine newly exposed residual mistakes with replayed corrections from previous policies. This interaction between policy-dependent mining and replay explains the sustained improvement ob-served in Fig. 3: R 2 supplies newly exploited recoverable mistakes as the policy updates, while LPL prevents earlier experience from being overwritten. 
+
+E. Ablation Studies 
+
+We organize the ablation around two questions. The first is whether the improvement is attributed to overfitting target-scenario expert knowledge rather than learning from policy-induced mistakes. The second is whether recoverability-aware supervised fine-tuning is sufficient, or whether lifelong policy learning is needed for stable multi-round continuous improve-ment. Table III separates the effects of target-scenario expert knowledge, closed-loop rollout data, recoverability-aware re-trieval, and lifelong policy learning. Directly fine-tuning the base model on target-scenario expert logs provides almost no improvement, increasing the score from 60.67 to 60.79. This suggests that the main gain in R 2LPL is not simply due to additional exposure to the target scenarios or memorization of their logged expert behavior. We further compare with a RoaD-style SFT baseline. This baseline uses closed-loop rollout states and the corresponding expert demonstration guided targets as supervised training samples, but does not perform R 2 recoverability-aware target retrieval or LPL. It improves over expert-log SFT and reaches 67.34 after two rounds, showing that policy-induced states and targets recovered from expert logs do contain useful information. However, its gain is limited. A likely reason is the uneven quality of the induced supervision. When the policy has deviated substantially from the logged expert state, forcing the rollout state toward an expert-aligned demonstration can introduce misleading targets, because the logged expert motion may no longer be a feasible or appropriate correction from the learner-induced state. The later score decrease to 63.58 then reflects a stability and forgetting issue under repeated updates on such noisy rollout-derived targets. Replacing RoaD-style targets with R 2 retrieval provides a stronger SFT baseline. Base model trained with R 2-style SFT reaches 71.29 after the first round, close to the 71.64 obtained by full R 2LPL, which indicates that recoverability-aware target construction provides the main initial corrective signal. However, this SFT baseline improves more slowly in later rounds and drops from 79.51 at round 4 to 76.17 at round 5. This behavior is consistent with learning under insufficient retention: while new R 2 knowledge is being fitted, earlier correction knowledge are not explicitly preserved, and later updates cause the polity to forget more than it learns. In contrast, R 2LPL maintains scores above 80 after round 3 and reaches 83.52 at round 5, showing the role of LPL in retaining previously acquired correction knowledge while incorporating new R 2 knowledge. The variant without expert mix is close to the full model and is slightly higher in some intermediate rounds, indicating that expert-log mixing is not the primary source of the closed-loop performance gain. Overall, the ablation supports that R 2LPL benefits from both high-quality recoverable supervision from R 2 and non-forgetting policy update through LPL, while expert mixing mainly acts as a conservative regularizer. 
+
+F. Qualitative Analysis 
+
+We visualize representative base-policy failures and the corresponding round-5 behaviors after R 2LPL updates. The PREPRINT 12 History Traj 
+
+> Original Plan
+> Rollout Traj
+> Terminal Ego Pose
+> Off-road Failure
+> History Traj
+> Original Plan
+> Candidate Plans
+> Recovered Plan
+
+(a) High lateral acceleration History Traj 
+
+> Original Plan
+> Rollout Traj
+> Terminal Ego Pose
+> Collision Failure
+> History Traj
+> Original Plan
+> Candidate Plans
+> Recovered Plan
+
+(b) Changing lane History Traj 
+
+> Original Plan
+> Rollout Traj
+> Terminal Ego Pose
+> Collision Failure
+> History Traj
+> Original Plan
+> Candidate Plans
+> Recovered Plan
+
+(c) Near pedestrian on crosswalk Fig. 5. Qualitative examples of R 2 corrective-supervision construction, Blue boxes denote the rollout ego vehicle, and yellow boxes denote surrounding agents. Case (a) shows a high-lateral-acceleration maneuver that eventually leads to an off-road failure, case (b) shows a lane-changing collision failure, and case (c) shows a collision failure with pedestrians. Each row shows a recoverable state mined from a base-policy failure and the corresponding retrieved target in the same state. 
+
+qualitative analysis is shown in three aspects: how R 2 correc-tive knowledge is retrieved, which rollout states are used by R2 for recovery knowledge construction, and to illustrate how the improved policy avoids repeating the same failure. Fig. 5 provides a qualitative visualization of how R 2 con-structs corrective supervision from closed-loop failures. For each failure case, R 2 first mines recoverable policy-induced states before the terminal failure. The left panels show the base-policy behavior around one of these states: although the original plan predicted at the selected frame may appear lo-cally plausible, the subsequent closed-loop rollout follows this decision and eventually leads to an off-road or collision failure. Therefore, R 2 focuses on the pre-failure window to identify recoverable states and correct the decisions that drive the policy toward failure, rather than simply labeling the terminal failure pose. Given the recoverable state, R 2 then searches the structured action space for alternative corrective plans. As shown in the right panels, candidate plans are evaluated by the normalized target score yi in Eq. (8), with darker candidates indicating higher-scoring plans under the evaluator. The selected recovered plan provides a safer and more feasible alternative to the original plan, and is therefore used as the retrieved target. This target is stored as R 2 knowledge and used as corrective supervision in the subsequent lifelong policy update. Fig. 6 provides concrete examples of the rollout-retrieval process. In the base-policy rollout, R 2 does not treat all states before failure equally. Green segments indicate states for which the action set and evaluator can still identify feasible recovery targets, and these states are used to construct R 2
+
+knowledge. Red segments indicate states that have become unrecoverable under the available action space or scene con-straints, and are therefore excluded from training. This visual-ization corresponds directly to the recoverable/unrecoverable separation in the method. It also illustrates why R 2LPL mines a temporal window before failure rather than only the final failure frame. In closed-loop planning, a collision or off-road event is often the consequence of erroneous decisions made several seconds earlier. When close to the final failure frame, the failure may already be irreversible. Corrective learning therefore needs to identify and repair the preceding recoverable decisions that lead the vehicle toward the dangerous state. The three cases in Fig. 6 cover different failure modes. In Fig. 6(a), the base policy drives the ego vehicle outside the drivable region while exhibiting high lateral acceleration. In Fig. 6(b) and Fig. 6(c), the base policy leads to collision-prone interactions, including collision with other agent in left turn and collision with a static obstacle. The round-5 panels show the learned policy at −2s, 0s, and +2 s relative to the base policy’s failing moment. Compared with the base policy, the improved policy adjusts its behavior before reaching the failure state and no longer produces the same off-road or collision outcome. These examples illustrate how R 2 supplies policy-specified recovery knowledge from selected failure-window states, and how LPL turns this knowledge into corrected closed-loop behavior in later rollouts. VI. C ONCLUSION 
+
+We presented R 2LPL, a rollout-retrieval lifelong policy learning paradigm for autonomous driving. Instead of treat-ing closed-loop failures only as evaluation outcomes, R 2LPL uses policy-induced rollouts to identify mistake-related states, retrieve recoverable corrective targets from a structured action space, and incorporate the retrieved knowledge through life-long policy learning. The central insight is that the most useful knowledge for continual policy improvement is not the failure itself, but the corrective knowledge that helps the policy avoid repeating the same mistakes. Experiments on nuPlan show that R 2LPL can substantially improve an anchor-based planner with moderate performance and elevate it to state-of-the-art performance among learning-based planners across multiple closed-loop benchmarks. The gains are most pronounced on hard and long-tailed scenarios, while the updated policy PREPRINT 13 R 2LPL-base (2.6 s) R 2LPL-ROCL-5 (0.6 s) R 2LPL-ROCL-5 (2.6 s) R 2LPL-ROCL-5 (4.6 s)
+
+(a) High lateral acceleration R 2LPL-base (10.5 s) R 2LPL-ROCL-5 (8.5 s) R 2LPL-ROCL-5 (10.5 s) R 2LPL-ROCL-5 (12.5 s)
+
+(b) Low magnitude speed R 2LPL-base (11.2 s) R 2LPL-ROCL-5 (9.2 s) R 2LPL-ROCL-5 (11.2 s) R 2LPL-ROCL-5 (13.2 s)
+
+(c) Traversing pickup-dropoff Fig. 6. Qualitative recovery examples. Each row shows a base-policy failure and the corresponding ROCL round-5 R 2LPL rollout results around the same critical frame. Case (a) corresponds to an off-road failure associated with high lateral acceleration, while cases (b) and (c) correspond to collision failures. Blue boxes denote the rollout ego vehicle, light-blue dashed boxes denote the log expert, yellow boxes denote surrounding agents, and purple boxes denote static obstacles. Black solid and gray dashed curves show rollout and expert histories, respectively. Green and red thick trajectory segments in the base rollout indicate recoverable and unrecoverable failure-window states. The round-5 panels at −2 s, 0 s, and +2 s show how the improved policy behaves before, at, and after the critical frame. 
+
+also maintains strong performance on broader validation and random test splits. Moreover, although the corrective knowl-edge is acquired from non-reactive rollouts, the improved policy generalizes to reactive simulation, suggesting that the retrieved targets encode reusable decision preferences rather than overfitting to non-reactive agent patterns. These results demonstrate that large-scale closed-loop policy improvement can be achieved with compact ROCL rounds through R 2LPL, without relying solely on larger expert-log imitation, reward-driven exploration, or deployment-time rule refinement. The current instantiation of R2LPL focuses on deci-sion policies with explicit or sampleable action candidates, where recoverability-aware target retrieval can be implemented through candidate evaluation. Its effectiveness therefore de-pends on the coverage of the action space and the alignment of the evaluator used to select corrective targets. Extending this idea to continuous generative planners may require retrieval or projection in latent trajectory space, together with stronger mechanisms for filtering noisy targets. Another important direction is to replace or complement simulation-based rollouts with learned physical world models with human-like agents, enabling policies to acquire corrective knowledge from a much larger and more diverse stream of closed-loop interactions. ACKNOWLEDGMENTS 
+
+Large language models, including models from DeepSeek and GitHub Copilot, were used for code debugging, lan-PREPRINT 14 
+
+guage polishing, and readability improvement. The authors verified and take full responsibility for all presented con-tents, experimental results, and conclusions. All figures and corresponding experimental results can be reproduced using the code and instructions available in our public repository: https://github.com/Engibacter/R2LPL. REFERENCES [1] N. Karnchanachari, D. Geromichalos, K. S. Tan, N. Li, C. Eriksen, S. Yaghoubi, N. Mehdipour, G. Bernasconi, W. K. Fong, Y. Guo, and H. Caesar, “Towards learning-based planning: The nuplan benchmark for real-world autonomous driving,” in Proceedings of the IEEE Inter-national Conference on Robotics and Automation , 2024, pp. 629–636. [2] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li, I. Gilitschenski, B. Ivanovic, M. Pavone, A. Geiger, and K. Chitta, “Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking,” in Advances in Neural Information Processing Systems ,vol. 37, 2024, pp. 28 706–28 719. [3] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin, W. Wang, L. Lu, X. Jia, Q. Liu, J. Dai, Y. Qiao, and H. Li, “Planning-oriented autonomous driving,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , 2023, pp. 17 853– 17 862. [4] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger, “Transfuser: Imitation with transformer-based sensor fusion for au-tonomous driving,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 45, no. 11, pp. 12 878–12 895, 2023. [5] L. Chen, P. Wu, K. Chitta, B. Jaeger, A. Geiger, and H. Li, “End-to-end autonomous driving: Challenges and frontiers,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 12, pp. 10 164– 10 183, 2024. [6] J. Cheng, Y. Chen, and Q. Chen, “PLUTO: Pushing the limit of imi-tation learning-based planning for autonomous driving,” arXiv preprint arXiv:2404.14327 , 2024. [7] W. Sun, X. Lin, Y. Shi, C. Zhang, H. Wu, and S. Zheng, “Sparsedrive: End-to-end autonomous driving via sparse scene representation,” in 
+
+Proceedings of the IEEE International Conference on Robotics and Automation , 2025, pp. 8795–8801. [8] Z. Li, K. Li, S. Wang, S. Lan, Z. Yu, Y. Ji, Z. Li, Z. Zhu, J. Kautz, Z. Wu 
+
+et al. , “Hydra-mdp: End-to-end multimodal planning with multi-target hydra-distillation,” arXiv preprint arXiv:2406.06978 , 2024. [9] B. Liao, S. Chen, H. Yin, B. Jiang, C. Wang, S. Yan, X. Zhang, X. Li, Y. Zhang, Q. Zhang, and X. Wang, “Diffusiondrive: Truncated diffusion model for end-to-end autonomous driving,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2025, pp. 12 037–12 047. [10] Y. Zheng, R. Liang, K. ZHENG, J. Zheng, L. Mao, J. Li, W. Gu, R. Ai, S. E. Li, X. Zhan, and J. Liu, “Diffusion-based planning for autonomous driving with flexible guidance,” in Proceedings of the International Conference on Learning Representations , 2025. [11] J. Wang, Y. Zheng, X. Liu, Z. Xing, P. Li, K. Ma, H. Ye, G. Chen, G. Li, L. Chen, Z. Xia, and Q. Zhang, “Meanfuser: Fast one-step multi-modal trajectory generation and adaptive reconstruction via meanflow for end-to-end autonomous driving,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2026, pp. 17 884–17 893. [12] X. Zhou, X. Han, F. Yang, Y. Ma, V. Tresp, and A. Knoll, “Opendrivevla: Towards end-to-end autonomous driving with large vision language action model,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 40, no. 16, 2026, pp. 13 782–13 790. [13] Z. Zhou, T. Cai, S. Zhao, Y. Zhang, Z. Huang, B. Zhou, and J. Ma, “Autovla: A vision-language-action model for end-to-end autonomous driving with adaptive reasoning and reinforcement fine-tuning,” in 
+
+Advances in Neural Information Processing Systems , vol. 38, 2025, pp. 27 920–27 956. [14] D. Zhang, Z. Yuan, Z. Chen, C.-T. Liao, Y. Chen, F. Shen, Q. Zhou, and T.-S. Chua, “Reasoning-vla: A fast and general vision-language-action reasoning model for autonomous driving,” arXiv preprint arXiv:2511.19912 , 2025. [15] S. Ross, G. Gordon, and D. Bagnell, “A reduction of imitation learning and structured prediction to no-regret online learning,” in Proceedings of the International Conference on Artificial Intelligence and Statistics ,vol. 15, 2011, pp. 627–635. [16] G. Garcia-Cobo, M. Igl, P. Karkus, Z. Zhang, M. Watson, Y. Chen, B. Ivanovic, and M. Pavone, “Road: Rollouts as demonstrations for closed-loop supervised fine-tuning of autonomous driving policies,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Findings , 2026, pp. 1000–1009. [17] Z. Huang, H. Liu, and C. Lv, “Gameformer: Game-theoretic modeling and learning of transformer-based interactive prediction and planning for autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 3903–3913. [18] J. Cheng, Y. Chen, X. Mei, B. Yang, B. Li, and M. Liu, “Rethinking imitation-based planner for autonomous driving,” in Proceedings of the IEEE International Conference on Robotics and Automation , 2024, pp. 14 123–14 130. [19] S. Chen, B. Jiang, H. Gao, B. Liao, Q. Xu, Q. Zhang, C. Huang, W. Liu, and X. Wang, “Vadv2: End-to-end vectorized autonomous driving via probabilistic planning,” in Proceedings of the International Conference on Learning Representations , 2024. [20] T. Tan, Y. Zheng, R. Liang, Z. Wang, K. Zheng, J. Zheng, J. Li, X. Zhan, and J. Liu, “Flow matching-based autonomous driving planning with advanced interactive behavior modeling,” in Advances in Neural Information Processing Systems , vol. 38, 2025, pp. 38 310–38 335. [21] Z. Zhang, Y. Li, N. Zhang, and J. Cai, “Diffusion forcing plan-ner: History-annealed planning with time-dependent guidance for au-tonomous driving,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2026, pp. 39 796–39 805. [22] Y. Zheng, Z. Xing, Q. Zhang, B. Jin, P. Li, Y. Zheng, Z. Xia, Y. Chen, and D. Zhao, “Planagent: A multi-modal large language agent for closed-loop vehicle motion planning,” IEEE Transactions on Cognitive and Developmental Systems , pp. 1–14, 2026. [23] J. Wu, Y. Zhou, H. Yang, Z. Huang, and C. Lv, “Human-guided reinforcement learning with sim-to-real transfer for autonomous naviga-tion,” IEEE Transactions on Pattern Analysis and Machine Intelligence ,vol. 45, no. 12, pp. 14 745–14 759, 2023. [24] D. Zhang, J. Liang, K. Guo, S. Lu, Q. Wang, R. Xiong, Z. Miao, and Y. Wang, “Carplanner: Consistent auto-regressive trajectory planning for large-scale reinforcement learning in autonomous driving,” in Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025, pp. 17 239–17 248. [25] S. Shang, Y. Chen, Y. Wang, Y. Li, and Z.-X. ZHANG, “Drivedpo: Policy learning via safety dpo for end-to-end autonomous driving,” in 
+
+Advances in Neural Information Processing Systems , vol. 38, 2025, pp. 81 565–81 585. [26] X. Tang, M. Kan, S. Shan, and X. Chen, “Plan-r1: Safe and feasible trajectory planning as language modeling,” arXiv preprint arXiv:2505.17659 , 2026. [27] S. Feng, H. Zhu, H. Sun, X. Yan, L. He, J. Yang, G. Su, B. Li, S. Li, L. Wang, S. Shen, and H. X. Liu, “Breaking through safety performance stagnation in autonomous vehicles with dense learning,” 
+
+Nature Communications , vol. 17, no. 3163, 2026. [28] Z. Zhang, P. Karkus, M. Igl, W. Ding, Y. Chen, B. Ivanovic, and M. Pavone, “Closed-loop supervised fine-tuning of tokenized traffic models,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2025, pp. 5422–5432. [29] S. Casas, A. Sadat, and R. Urtasun, “Mp3: A unified model to map, perceive, predict and plan,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, pp. 14 398–14 407. [30] B. Jiang, S. Chen, Q. Xu, B. Liao, J. Chen, H. Zhou, Q. Zhang, W. Liu, C. Huang, and X. Wang, “Vad: Vectorized scene representation for efficient autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 8340–8350. [31] Q. Sun, H. Wang, J. Zhan, F. Nie, X. Wen, L. Xu, K. Zhan, P. Jia, X. Lang, and H. Zhao, “Generalizing motion planners with mixture of experts for autonomous driving,” in Proceedings of the IEEE Interna-tional Conference on Robotics and Automation , 2025, pp. 6033–6039. [32] Y. Xing, Z. Ke, Y. Tu, Z. Liu, W. Yu, and J. Wang, “Misty: High-throughput motion planning via mixer-based single-step drifting,” arXiv preprint arXiv:2604.21489 , 2026. [33] M. Laskey, J. Lee, R. Fox, A. Dragan, and K. Goldberg, “Dart: Noise injection for robust imitation learning,” in Proceedings of the Conference on Robot Learning , vol. 78, 2017, pp. 143–156. [34] J. Zhang and K. Cho, “Query-efficient imitation learning for end-to-end autonomous driving,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 30, 2017, pp. 2891–2897. [35] M. Kelly, C. Sidrane, K. Driggs-Campbell, and M. J. Kochenderfer, “Hg-dagger: Interactive imitation learning with human experts,” in Pro-ceedings of the International Conference on Robotics and Automation ,2019, pp. 8077–8083. PREPRINT 15 
+
+[36] K. Menda, K. Driggs-Campbell, and M. J. Kochenderfer, “Ensembledag-ger: A bayesian approach to safe imitation learning,” in Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems , 2019, pp. 5041–5048. [37] Z. Song, L. Liu, H. Pan, B. Liao, M. Guo, L. Yang, Y. Zhang, S. Xu, C. Jia, and Y. Luo, “Diver: Reinforced diffusion breaks imi-tation bottlenecks in end-to-end autonomous driving,” arXiv preprint arXiv:2507.04049 , 2026. [38] Y. Zheng, T. Tan, B. Huang, E. Liu, R. Liang, J. Zhang, J. Cui, G. Chen, K. Ma, H. Ye, L. Chen, Y.-Q. Zhang, X. Zhan, and J. Liu, “Unleashing the potential of diffusion models for end-to-end autonomous driving,” 
+
+arXiv preprint arXiv:2602.22801 , 2026. [39] G. M. van de Ven, T. Tuytelaars, and A. S. Tolias, “Three types of incremental learning,” Nature Machine Intelligence , vol. 4, no. 12, pp. 1185–1197, 2022. [40] L. Wang, X. Zhang, H. Su, and J. Zhu, “A comprehensive survey of continual learning: Theory, method and application,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 8, pp. 5362– 5383, 2024. [41] J. Kirkpatrick, R. Pascanu, N. Rabinowitz, J. Veness, G. Desjardins, A. A. Rusu, K. Milan, J. Quan, T. Ramalho, A. Grabska-Barwinska, D. Hassabis, C. Clopath, D. Kumaran, and R. Hadsell, “Overcoming catastrophic forgetting in neural networks,” Proceedings of the National Academy of Sciences , vol. 114, no. 13, pp. 3521–3526, 2017. [42] Z. Li and D. Hoiem, “Learning without forgetting,” in Proceedings of the European Conference on Computer Vision , 2016, pp. 614–629. [43] S.-A. Rebuffi, A. Kolesnikov, G. Sperl, and C. H. Lampert, “icarl: Incremental classifier and representation learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2017, pp. 2001–2010. [44] D. Lopez-Paz and M. Ranzato, “Gradient episodic memory for continual learning,” in Advances in Neural Information Processing Systems , 2017, p. 6470–6479. [45] P. Buzzega, M. Boschini, A. Porrello, D. Abati, and S. CALDERARA, “Dark experience for general continual learning: a strong, simple base-line,” in Advances in Neural Information Processing Systems , vol. 33, 2020, pp. 15 920–15 930. [46] J. Yoon, E. Yang, J. Lee, and S. J. Hwang, “Lifelong learning with dynamically expandable networks,” in Proceedings of the International Conference on Learning Representations , 2018. [47] A. Mallya and S. Lazebnik, “Packnet: Adding multiple tasks to a single network by iterative pruning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2018, pp. 7765–7773. [48] Z. Wang, Z. Zhang, S. Ebrahimi, R. Sun, H. Zhang, C.-Y. Lee, X. Ren, G. Su, V. Perot, J. Dy, and T. Pfister, “Learning to prompt for continual learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022, pp. 139–149. [49] Z. Wang, Z. Zhang, C.-Y. Lee, H. Zhang, R. Sun, X. Ren, G. Su, V. Perot, J. Dy, and T. Pfister, “Dualprompt: Complementary prompting for rehearsal-free continual learning,” in Proceedings of the European Conference on Computer Vision , 2022, pp. 631–648. [50] Y.-S. Liang and W.-J. Li, “Inflora: Interference-free low-rank adaptation for continual learning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 23 638–23 647. [51] D.-W. Zhou, H.-L. Sun, J. Ning, H.-J. Ye, and D.-C. Zhan, “Continual learning with pre-trained models: A survey,” in Proceedings of the International Joint Conference on Artificial Intelligence , 2024, pp. 8363– 8371. [52] Z. Li, C. Gong, Y. Lin, G. Li, X. Wang, C. Lu, M. Wang, S. Chen, and J. Gong, “Continual driver behaviour learning for connected vehicles and intelligent transportation systems: Framework, survey and challenges,” 
+
+Green Energy and Intelligent Transportation , vol. 2, no. 4, p. 100103, 2023. [53] H. Li, X. Wu, J. Huang, and Z. Zhong, “Toward zero-forget continual learning for interactive trajectory prediction: A dynamically expandable approach,” Communications in Transportation Research , vol. 6, no. 1, p. 9640015, 2026. [54] Y. Lin, Z. Li, G. Du, X. Zhao, C. Gong, X. Wang, C. Lu, and J. Gong, “H2c: Hippocampal circuit-inspired continual learning for lifelong trajectory prediction in autonomous driving,” IEEE Transactions on Intelligent Transportation Systems , pp. 1–18, 2026. [55] Z. Cao, K. Jiang, W. Zhou, S. Xu, H. Peng, and D. Yang, “Continu-ous improvement of self-driving cars using dynamic confidence-aware reinforcement learning,” Nature Machine Intelligence , vol. 5, no. 2, pp. 145–158, 2023. [56] Y. Meng, Z. Bing, X. Yao, K. Chen, K. Huang, Y. Gao, F. Sun, and A. Knoll, “Preserving and combining knowledge in robotic lifelong reinforcement learning,” Nature Machine Intelligence , vol. 7, no. 2, pp. 256–269, 2025. [57] C. Gong, C. Lu, Z. Li, Z. Liu, J. Gong, and X. Chen, “Beyond imi-tation: A life-long policy learning framework for path tracking control of autonomous driving,” IEEE Transactions on Vehicular Technology ,vol. 73, no. 7, pp. 9786–9799, 2024. [58] H. Yang, Y. Zhou, J. Wu, H. Liu, L. Yang, and C. Lv, “Human-guided continual learning for personalized decision-making of autonomous driv-ing,” IEEE Transactions on Intelligent Transportation Systems , vol. 26, no. 4, pp. 5435–5447, 2025. [59] O. Scheel, L. Bergamini, M. Wolczyk, B. Osi´ nski, and P. Ondruska, “Urban driver: Learning to drive from real-world demonstrations using policy gradients,” in Proceedings of the Conference on Robot Learning ,vol. 164, 2022, pp. 718–728. [60] D. Dauner, M. Hallgarten, A. Geiger, and K. Chitta, “Parting with misconceptions about learning-based vehicle motion planning,” in Pro-ceedings of The Conference on Robot Learning , vol. 229, 2023, pp. 1268–1281.
