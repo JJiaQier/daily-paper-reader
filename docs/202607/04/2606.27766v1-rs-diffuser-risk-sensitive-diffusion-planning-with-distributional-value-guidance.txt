@@ -1,0 +1,293 @@
+Title: RS-Diffuser: Risk-Sensitive Diffusion Planning with Distributional Value Guidance
+
+URL Source: https://arxiv.org/pdf/2606.27766v1
+
+Published Time: Mon, 29 Jun 2026 00:32:13 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# RS-Diffuser: Risk-Sensitive Diffusion Planning with Distributional Value Guidance 
+
+Shiqiang Gong 1[0009 −0006 −9412 −9949] 
+
+Northwestern Polytechnical University 
+
+gongshiqiang@mail.nwpu.edu.cn 
+
+Abstract. Offline reinforcement learning enables policy learning from fixed datasets without additional environment interaction, making it ap-pealing for safety-critical applications where online exploration is costly or unsafe. Diffusion-based decision-making methods have recently achieved strong performance in offline RL by modeling rich, multimodal tra-jectory distributions. However, existing diffusion planners are typically risk-neutral and therefore may overlook rare but catastrophic outcomes that are crucial in real-world deployment. In this work, we propose RS-Diffuser , a risk-sensitive offline diffusion planning framework that com-bines diffusion-based trajectory generation with distributional value crit-ics. RS-Diffuser learns a diffusion planner over future state trajectories, a separate inverse dynamics model for action decoding, and a Monte Carlo distributional critic that estimates the full return distribution of candidate plans through quantile regression. At sampling time, we incor-porate a risk-sensitive guidance signal into the denoising process, using gradients computed from tail-aware objectives such as Conditional Value at Risk to steer generation toward desired risk profiles. As a result, a sin-gle trained model can flexibly produce risk-averse, risk-neutral, or risk-seeking behaviors by changing only the inference-time risk parameter. Extensive experiments on risk-sensitive D4RL and risky robot naviga-tion benchmarks demonstrate that RS-Diffuser achieves state-of-the-art performance, improving both overall return and worst-case robustness while reducing safety violations. 
+
+Keywords: Diffusion Planning · Risk Sensitivity · Distributional Rein-forcement Learning 
+
+## 1 Introduction 
+
+Offline reinforcement learning (RL) seeks to learn effective decision-making poli-cies from a fixed dataset without further interaction with the environment [20]. This setting is particularly attractive in safety-critical domains such as health-care, autonomous driving, and robotics, where online exploration is costly, un-safe, or impractical [27]. However, offline RL remains fundamentally challenging due to distributional shift: the learned policy must act beyond the support of the behavior data, often leading to unreliable value estimates and poor general-ization. In addition, many existing offline RL methods rely on deterministic or  
+
+> arXiv:2606.27766v1 [cs.LG] 26 Jun 2026 2S. Gong
+
+simple Gaussian policy classes, which can be insufficient for modeling the com-plex and multimodal behaviors commonly present in real-world datasets [41]. Recently, diffusion models have emerged as a powerful paradigm for offline decision making by casting control as conditional generative modeling over ac-tions or trajectories [9, 41]. Existing approaches can be broadly divided into two families. Planning-based methods, such as Diffuser [10], generate trajectories through iterative denoising and perform decision making by trajectory opti-mization. Policy-based methods, such as Diffusion-QL [28], instead use diffusion models as expressive policy classes for direct action generation. By modeling rich multimodal distributions and long-horizon dependencies, diffusion methods have achieved strong performance across a range of offline RL benchmarks. Despite these advances, most existing diffusion-based decision-making meth-ods remain fundamentally risk-neutral: they optimize expected return and do not explicitly model the tail behavior of returns. This limitation is particu-larly problematic in safety-critical settings, where two candidate behaviors may have similar expected returns but drastically different downside risk [22]. Risk-sensitive RL addresses this issue by optimizing risk-aware objectives rather than expectation alone [30, 19]. Among these approaches, distributional RL provides a principled foundation by explicitly modeling the full return distribution, thereby enabling tail-aware criteria such as Value-at-Risk and Conditional Value-at-Risk (CVaR) [2, 3, 6]. However, existing risk-sensitive offline RL methods are predom-inantly built on actor-critic or policy-optimization pipelines, and relatively few works have explored how to endow diffusion-based planners with explicit and controllable risk sensitivity [4, 18, 32]. In this paper, we propose RS-Diffuser , a risk-sensitive offline diffusion plan-ning framework that combines diffusion-based trajectory generation with distri-butional value learning. RS-Diffuser learns a diffusion planner over future state trajectories and a separate inverse dynamics model for action recovery. Its key component is a distributional value critic , trained with quantile regression to predict the full return distribution of candidate plans rather than only their ex-pected value. At inference time, instead of retraining the planner for a fixed risk preference, we inject a risk-sensitive guidance signal into the diffusion denoising process, where gradients derived from tail-aware objectives such as CVaR steer generation toward desired risk profiles. As a result, a single trained model can realize risk-averse, risk-neutral, or risk-seeking behaviors by changing only the inference-time risk parameter. Our work makes three main contributions: 
+
+• We introduce a diffusion planning framework for offline RL that explicitly incorporates distributional value modeling for tail-aware decision making. 
+
+• We show how a distributional critic can be integrated into guided diffusion sampling, yielding flexible inference-time control over risk preferences. 
+
+• We demonstrate on two risk-sensitive benchmarks that RS-Diffuser outper-forms existing state-of-the-art models. RS-Diffuser 3
+
+## 2 Related Works 
+
+Diffusion Models for Decision Making. The application of diffusion models for decision making has gained significant traction due to their ability to rep-resent complex, multi-modal policy distributions [41]. Diffusion planning rep-resents a major branch of this research, where the model generates entire se-quences of future states or actions [10]. For example, Diffuser [10] utilizes a U-Net architecture to iteratively denoise trajectories guided by a reward function. Building on this, Decision Diffuser [1] frames decision-making as a pure condi-tional generative task, removing the need for explicit reward gradients during sampling. Recent studies have further optimized these architectures, exploring the benefits of Transformer-based denoising networks and specialized sampling techniques [14, 5, 17]. The applications of diffusion models in decision-making span diverse domains, including autonomous driving [40, 37, 36, 11] and sports decision-making [31]. While these methods excel at capturing the behavior dis-tribution, they are inherently risk-neutral. They prioritize the most frequent or highest-reward paths in the training set without a mechanism to mitigate the risk of the generated plans. 
+
+Risk-sensitive Reinforcement Learning. Risk-sensitive RL aims to learn policies that account for the uncertainty and variability of returns [19, 15]. A cornerstone of this field is Distributional RL, which models the entire distribu-tion of the random return variable instead of just its expectation [6, 2]. Bellemare et al. [2] introduced the categorical distribution approach, while Dabney et al. [6] enhanced this with Quantile Regression DQN (QR-DQN), allowing for more flex-ible and accurate distribution modeling. To achieve risk-aversion, researchers often optimize metrics such as the Conditional Value-at-Risk (CVaR), which fo-cuses on the lower tail of the return distribution [33, 16]. In the offline setting, risk-aversion is particularly crucial as it provides a natural defense against the epistemic uncertainty arising from limited data [4]. However, traditional risk-sensitive offline RL methods are often built upon standard actor-critic architec-tures, which can suffer from limited policy expressivity and training instabilities in complex environments. It is worth noting that another line of research fo-cuses on constrained learning from demonstrations, namely Inverse Constrained Reinforcement Learning (ICRL) [30, 29, 13, 39, 35, 34], which aims to infer la-tent safety constraints from expert demonstrations and incorporate them into policy optimization. Our work departs from these by embedding distributional risk-awareness directly into the generative diffusion process, leveraging the ex-pressive power of diffusion models. 
+
+## 3 Problem Formulation 
+
+Markov Decision Process (MDP). The agent optimizes the control pol-icy under a Markov Decision Process (MDP), defined by a tuple (S, A, P, r, γ ),where S and A denote the state and action spaces, P (s′ | s, a ) is the transition dynamics, r(s, a ) is the reward function, and γ ∈ (0 , 1) is the discount factor. 4 S. Gong 
+
+At each time step, the agent selects an action according to a policy π(a | s),receives a reward, and transitions to the next state. The objective is to learn a policy that maximizes the expected discounted return. In this work, we consider the offline RL setting, where the policy is learned solely from a fixed dataset without further interaction with the environment. 
+
+Diffusion Planner. Let x0 = ( s0, a 0, s 1, a 1, . . . , s H−1, a H−1, s H ) denote a tra-jectory segment of horizon H sampled from an offline dataset, where st ∈ S 
+
+and at ∈ A . A diffusion planner [10] models a conditional distribution over trajectories as p(x0 | c), where c denotes the planning condition, such as the current state, a goal, or a target return. Following Denoising Diffusion Proba-bilistic Models (DDPM) [9], the clean trajectory x0 is gradually corrupted into a noisy version xk over diffusion steps k = 1 , . . . , K , and a denoising network is trained to reverse this process 1. Specifically, the learned reverse dynamics are parameterized as pθ (xk−1 | xk, c) = N μθ (xk, k, c), Σ k
+
+, where μθ is a denois-ing neural network and Σk is a predefined covariance. Training minimizes the standard denoising objective [9]: 
+
+LDDPM (θ) = Ex0,ϵ,k 
+
+h
+
+ϵ − ϵθ (xk, k, c) 22
+
+i
+
+, (1) where xk = √¯αkx0 + √1 − ¯αkϵ denotes the corrupted data and ϵ ∼ N (0 , I)
+
+denotes the sampled noise. At inference time, the planner starts from Gaussian noise and iteratively applies the learned reverse process via μθ to recover a clean trajectory respecting c.
+
+Guided Sampling. To bias generation toward a task objective y, we introduce a differentiable guidance model defined on the noisy trajectory, written as pϕ(y |
+
+xk, c, k ). Using the standard guidance approximation [23, 40, 31], the reverse generation step can be steered toward the desired objective as follows: 
+
+pθ,ϕ (xk−1 | xk, c, y ) ≈ N  μθ (xk, k, c) + w Σ k gk, Σ k
+
+ , (2) where w > 0 controls the guidance strength and gk = ∇xk log pϕ(y | xk, c, k ) rep-resents the gradient of the classifier regarding the noisy sample xk. By training the diffusion model μθ and the guidance model pϕ separately, the diffusion model learns a trajectory prior from offline data, while the guidance term steers the denoising process toward trajectories that better satisfy the desired objective. 
+
+Distributional Value Modeling. In distributional RL [2, 3], the value is mod-eled as a random return rather than only its expectation. For a trajectory x, let 
+
+Z(x) denote the random discounted return associated with x. Rather than pre-dicting only the expectation as previous offline RL methods [12, 28, 38], we model the full return distribution, which is essential for risk-sensitive decision making.        
+
+> 1In this work, we use superscripts ( k∈ { 0,1, ..., K }) to denote diffusion timesteps and subscripts ( t∈ { 0,1, ..., T }) to denote trajectory timesteps RS-Diffuser 5
+
+Following quantile-based distributional RL [6, 30], we approximate the re-turn distribution Z(x) by N quantile values {zi(x)}Ni=1 , associated with quantile fractions {τi}Ni=1 ⊂ (0 , 1) . Each τi specifies a probability level, and the corre-sponding quantile value zi(x) approximates the return threshold below which a fraction τi of outcomes lie. The resulting distribution is represented as a uniform mixture of Dirac masses located at these quantile values Z(x) ≈ 1
+
+> N
+
+PNi=1 δzi(x),where δzi(x) denotes a Dirac delta distribution centered at zi(x). In practice, the quantile fractions {τi} are typically chosen uniformly in (0 , 1) . This distri-butional critic enables us to compute tail aware risk measures, such as VaR [8] and CVaR [21], which can be used to guide diffusion sampling. 
+
+## 4 Method 
+
+4.1 Overview 
+
+Given an offline trajectory dataset D that many consists of state-action-reward pairs, our goal is to learn a diffusion planner that can generate high-quality fu-ture plans while allowing explicit control over risk preferences at inference time. To this end, RS-Diffuser consists of three components: 1) a diffusion planner that generates future state trajectories conditioned on the current state (Section 4.2), 2) an inverse dynamics model that converts planned state transitions into exe-cutable actions (Section 4.3), and 3) a distributional value critic that predicts the return distribution of candidate generated trajectories (Section 4.4). At test time, the distributional critic provides a differentiable risk-sensitive objective whose gradients guide the diffusion denoising process, allowing a sin-gle diffusion model to produce risk-averse, risk-neutral, or risk-seeking plans by adjusting the risk parameter (Section 4.5). 
+
+4.2 State Trajectory Diffusion Planner 
+
+While the generic formulation in Sec. 3 allows state-action trajectories, our method instantiates the diffusion variable as a future state plan by following [1]. Specifically, at decision time t, we define x0 = ( st+1 , s t+2 , . . . , s t+H ), which de-notes a future state sequence of planning horizon H, conditioned on the current state st. The planner therefore models pθ (x0 | st).This state-only formulation decouples long-horizon planning from low-level action generation, allowing the diffusion model to focus on predicting feasible future state evolutions while delegating action recovery to a separate inverse dynamics model. By adapting Equation 1 to the state-only setting, the planner 
+
+μθ is trained with the following denoising objective: 
+
+Lplan (θ) = Ex0,ϵ,k 
+
+h
+
+ϵ − ϵθ (xk, k, s t) 22
+
+i
+
+, (3) At inference time, the planner starts from Gaussian noise and iteratively denoises to produce a future state plan ˆx0 = (ˆ st+1 , . . . , ˆst+H ).6 S. Gong 
+
+4.3 Inverse Dynamics Action Decoder 
+
+Because the planner operates in state space, we use a separate inverse dynamics model to recover executable actions from planned state transitions. Specifically, we learn a deterministic decoder fψ (st, s t+1 ) for continuous control. In practice, given the current state st and the predicted next state ˆst+1 from the diffusion planner, the executed action is obtained as ˆat = fψ (st, ˆst+1 ). The inverse dy-namics model is trained on offline transitions using supervised regression [1]: 
+
+Linv (ψ) = E(st,a t,s t+1 )∼D 
+
+∥at − fψ (st, s t+1 )∥22
+
+ . (4) This design separates what future states should be reached from how to realize them, which is particularly suitable for diffusion planning over long horizons. 
+
+4.4 Monte Carlo Distributional Value Critic 
+
+The core of RS-Diffuser is a distributional value critic that estimates the return-to-go distribution of candidate plans. Unlike standard risk-neutral value guid-ance, which predicts only the expected return, our critic models the full return distribution and therefore supports tail-aware risk measures. For each trajectory segment starting at time step t, we compute the Monte Carlo discounted return-to-go as: 
+
+Rt =
+
+> Te−t−1
+
+X
+
+> ℓ=0
+
+γℓrt+ℓ, (5) where γ ∈ (0 , 1] is the discount factor and Te denotes the terminal index. To make the critic compatible with denoising-time guidance, we condition it on the noisy plan xk, the current state st, and the diffusion step k. The dis-tributional critic then predicts N quantiles zϕ(xk, s t, k ) = 
+
+n
+
+zϕi (xk, s t, k )
+
+oNi=1 
+
+,corresponding to quantile fractions {τi}Ni=1 ⊂ (0 , 1) . Importantly, we adopt Monte Carlo supervision rather than Bellman bootstrapping, following the value-learning paradigm in [14]. Specifically, we train the critic by quantile regression using the Monte Carlo return sample Rt:
+
+Ldist (ϕ) = E(x0,s t,R t)∼D , ϵ, k 
+
+"
+
+1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ρκτi
+
+
+
+Rt − zϕi (xk, s t, k )
+
+#
+
+, (6) where D denotes the offline dataset and ρκτ (·) is the quantile Huber loss [6]: 
+
+ρκτ (u) = |τ − I(u < 0) | Lκ(u), Lκ(u) = 
+
+ 
+
+> 12
+
+u2/κ, |u| ≤ κ, 
+
+|u| − 12 κ, otherwise. (7) By learning the full return distribution instead of only its mean, the critic provides a natural basis for risk-sensitive guidance during inference. RS-Diffuser 7
+
+4.5 Practical Implementation of RS-Diffuser Risk Sensitive Objective from Quantiles. Once the return distribution is available, different risk preferences can be expressed through different functionals of the predicted quantiles. For a risk-averse objective, we use the lower-tail CVaR, approximated by averaging quantiles up to level α:
+
+ρlow  
+
+> α
+
+(xk, s t, k ) = CVaR α(xk, s t, k ) ≈ 1
+
+|I α|
+
+X
+
+> i∈I α
+
+zϕi (xk, s t, k ), (8) where Iα = {i : τi ≤ α}. Maximizing this objective encourages plans with favorable worst-case outcomes. For risk-seeking behavior we use an upper-tail objective: 
+
+ρup  
+
+> α
+
+(xk, s t, k ) = 1
+
+|J α|
+
+X
+
+> i∈J α
+
+zϕi (xk, s t, k ), Jα = {i : τi ≥ 1 − α}. (9) 
+
+Risk Guided Diffusion Sampling We now instantiate the generic guidance mechanism in Sec. 3 with the distributional value critic. Instead of using a con-ventional classifier, we treat the risk functional ρα(xk, s t, k ) as a differentiable guidance objective defined on the noisy plan. Its gradient with respect to the current denoising state is: 
+
+gk = ∇xk ρα(xk, s t, k ), (10) where ρα denotes the used risk measure on the distributional critic. The guided reverse process can then be calculated by Eq. 2. Intuitively, the critic-derived gradient biases denoising toward trajectories that match the desired risk profile. 
+
+Remarks. It is worth noting that this design is a key advantage of RS-Diffuser: the planner is trained only once, while risk preference is entirely controlled at inference time through the choice of ρα applied to the distributional value critic. As a result, a single model can seamlessly switch between conservative, neutral, and aggressive behaviors according to different requirements without retraining. Algorithm 1 summarizes the overall pipeline of RS-Diffuser, including offline training of the planner, inverse dynamics model, and distributional critic, as well as risk-guided planning at inference time. 
+
+## 5 Experiments 
+
+In this section, we empirically evaluate the proposed RS-Diffuser against state-of-the-art methods on risk-sensitive benchmarks, including risk-sensitive D4RL (Section 5.2) and risky robot navigation (Section 5.3). To further assess robust-ness, we conduct ablation studies on key hyperparameters (Section 5.4). 8 S. Gong 
+
+Algorithm 1 RS-Diffuser 
+
+Require: Offline dataset D, planning horizon H, diffusion steps K, quantile numbers 
+
+N , risk objective ρα
+
+1: Calculate accumulated discounted returns for every step t via Equation 5. 2: Offline training 
+
+3: for each training iteration do 
+
+4: Sample (st, x0, R t) from D, where x0 = ( st+1 , . . . , s t+H )
+
+5: Update diffusion planner ϵθ with denoising loss Lplan via Equation 1 6: Update inverse dynamics model fψ with loss Linv via Equation 4 7: Update distributional critic zϕ with quantile loss Ldist via Equation 6 8: end for 
+
+9: Risk-guided planning at inference 
+
+10: for each decision step do 
+
+11: Observe current state st and initialize xK ∼ N (0 , I)
+
+12: for k = K, K − 1, . . . , 1 do 
+
+13: Compute risk guidance gk = ∇xk ρα(xk , s t, k ) using zϕ via Equation 10 14: Perform guided reverse diffusion to obtain xk−1
+
+15: end for 
+
+16: Obtain planned states ˆx0 = (ˆ st+1 , . . . , ˆst+H )
+
+17: Decode action ˆat = fψ (st, ˆst+1 ) and execute it 18: end for 
+
+5.1 Experimental Setup Model Configurations We implement our method using CleanDiffuser [7]. The planner uses a 2-block Transformer (hidden size 256), and the inverse dy-namics model is an MLP (hidden size 256). We adopt DDIM [24] with 20 steps for planning and DDPM [9] with 10 steps for inverse dynamics. Models are trained for 1M steps with batch size 256. The planning horizon is 32 with discount factor 0.99. We use Adam optimizer with a learning rate 3e-4. 
+
+Baseline Methods We compare with risk neutral baselines, Conservative Q Learning (CQL [12]) and Diffusion QL [28], as well as risk sensitive methods: 1) OWCPG [25], optimizing worst case (e.g., CVaR) returns; 2) ORAAC [26], a distributional critic with an imitation based policy; 3) CODAC [16], conservative offline RL with a distributional critic; 4) UDAC [4], an uncertainty aware actor critic with a diffusion policy. 
+
+Evaluation Metric Each method is evaluated over 100 test episodes. We report episodic return (cumulative reward per episode) as the main metric, including both the mean and CVaR 0.1 (average of the worst 10 episodes). For risky navi-gation tasks, we also report episodic violations, defined as the total number of time steps spent in risky regions. Results are averaged over five random seeds and reported as mean ± standard deviation. RS-Diffuser 9
+
+5.2 Risk-sensitive D4RL Task Description The risk-sensitive D4RL benchmark [26] introduces stochas-tic penalties in MuJoCo to model safety-critical failures. Rewards are reduced by large penalties when agents enter undesirable states, such as exceeding ve-locity thresholds in Half-Cheetah or violating stability constraints (e.g., large pitch angles) in Walker2D and Hopper. This creates rare but severe negative outcomes, requiring policies to balance performance and safety. The maximum episode length is 500 steps. 
+
+Table 1. Episodic return on risk-sensitive D4RL tasks. Higher is better for both CVaR 0.1 and Mean metrics. Algorithm Medium Expert Mixed CVaR 0.1 ↑ Mean ↑ CVaR 0.1 ↑ Mean ↑ CVaR 0.1 ↑ Mean ↑                                                                                                                              
+
+> Half-Cheetah  CQL -15 ±17 33 ±36 -207 ±47 -75 ±23 12 ±24 214 ±52 Diffusion-QL 84 ±32 329 ±20 542 ±102 728 ±104 143 ±77 199 ±43 OWCPG 76 ±14 316 ±23 248 ±232 905 ±107 164 ±76 217 ±33 ORAAC 214 ±36 331 ±30 595 ±191 1180 ±78 119 ±27 307 ±6CODAC -41 ±17 338 ±25 687 ±152 1255 ±101 238 ±59 396 ±56 UDAC 276 ±29 417 ±18 732 ±104 1352 ±100 275 ±50 462 ±48 RS-Diffuser 292 ±21 431 ±29 793 ±125 1409 ±113 301 ±62 539 ±56 Walker-2D  CQL 1244 ±128 1524 ±99 1301 ±78 2018 ±65 74 ±77 -64 ±78 Diffusion-QL 31 ±10 273 ±20 621 ±49 1202 ±63 302 ±154 102 ±88 OWCPG -15 ±41 283 ±37 362 ±33 1372 ±160 201 ±33 -77 ±54 ORAAC 663 ±124 1134 ±20 1172 ±71 2006 ±56 222 ±37 -70 ±76 CODAC 1159 ±57 1537 ±78 1298 ±98 2102 ±102 450 ±193 261 ±231 UDAC 1368 ±89 1602 ±85 1398 ±67 2198 ±78 498 ±91 299 ±194 RS-Diffuser 1493 ±107 1588 ±74 1406 ±83 2204 ±110 531 ±84 377 ±146 Hopper
+> CQL 1344 ±40 1524 ±20 1289 ±30 1402 ±30 189 ±63 -21 ±62 Diffusion-QL 981 ±28 1001 ±11 406 ±31 583 ±18 1021 ±102 1010 ±59 OWCPG -87 ±25 69 ±8720 ±34 898 ±12 372 ±100 442 ±201 ORAAC 1416 ±28 1482 ±4980 ±28 1385 ±33 876 ±87 525 ±323 CODAC 976 ±30 1014 ±16 990 ±19 1398 ±29 1551 ±33 1450 ±101 UDAC 1502 ±19 1602 ±18 1302 ±28 1502 ±27 1620 ±42 1523 ±90 RS-Diffuser 1590 ±31 1732 ±23 1475 ±39 1623 ±39 1702 ±69 1609 ±134
+
+Results Analysis Table 1 shows the results. We find that RS-Diffuser achieves the best overall performance on the risk-sensitive D4RL benchmark, outper-forming both risk-neutral and risk-sensitive baselines across most settings. This indicates not only stronger average performance but also improved robustness under worst-case scenarios. In contrast, risk-neutral methods such as CQL per-form poorly, as optimizing only the expected return fails to capture tail risks in safety-critical environments. Diffusion-QL achieves moderately better perfor-mance, benefiting from the expressive generative capacity of diffusion models, but still lacks explicit risk awareness. Risk-sensitive baselines such as UDAC demonstrate relatively strong performance. However, they are typically trained 10 S. Gong 
+
+to optimize a fixed risk objective, limiting their adaptability across different sce-narios. In contrast, RS-Diffuser enables flexible control over risk preferences at inference time, allowing a single model to adapt to different risk measures and consistently achieve strong performance. Overall, these results demonstrate that guiding diffusion planning with a distributional critic is an effective approach for improving tail-aware decision making in offline RL. 
+
+5.3 Risky Robot Navigation Task Description Risky robot navigation benchmark was introduced in [16]. It was evaluated on two challenging navigation tasks: Risky PointMass and Risky Ant. In both environments, the agent starts from a randomly initialized state and aims to reach a target location efficiently. 
+
+Fig. 1. Risky Ant. 
+
+However, the direct path to the goal passes through a haz-ardous region that imposes significant penalties. While risk-neutral policies tend to take the shorter but hazardous route, risk-sensitive policies are expected to avoid the hazardous area and instead favor safer trajectories. Figure 1 shows an illustra-tive example of Risky Ant. 
+
+Table 2. Episodic return and violations on risky robot navigation tasks. For return metrics (Mean, Median, and CVaR 0.1), higher is better. For violations, lower is better. Algorithm Risky PointMass Risky Ant Mean ↑ Median ↑ CVaR 0.1 ↑ Violations ↓ Mean ↑ Median ↑ CVaR 0.1 ↑ Violations ↓                                                        
+
+> CQL -7.5 ±2.0 -4.4 ±1.6 -43.4 ±2.8 93.4 ±10.5 -967.8 ±78.2 -858.5 ±87.2 -1887.3 ±122.4 1854.3 ±130.2 Diffusion-QL -13.5 ±2.2 -5.7 ±1.3 -69.2 ±4.6 140.1 ±10.5 -892.5 ±80.3 -766.5 ±66.7 -1884.4 ±133.2 1902.4 ±127.9 OWCPG -12.4 ±2.5 -5.1 ±1.7 -67.4 ±4.0 123.5 ±10.6 -819.2 ±77.4 -791.5 ±80.2 -1424.5 ±98.2 1455.3 ±104.5 ORAAC -10.7 ±1.6 -4.6 ±1.3 -64.1 ±2.6 138.7 ±20.2 -788.1 ±98.2 -795.3 ±86.2 -1247.2 ±105.7 1196.1 ±99.6 CODAC -6.1 ±1.8 -4.9 ±1.2 -14.7 ±2.4 0±0-456.3 ±53.2 -433.4 ±47.2 -686.6 ±87.2 347.8 ±42.1 UDAC -5.8 ±1.4 -4.2 ±1.3 -12.4 ±2.0 0±0-392.5 ±33.2 -399.5 ±40.5 -598.5 ±50.2 291.5 ±20.8 RS-Diffuser -4.7 ±1.1 -3.6 ±1.0 -9.9 ±2.5 0±0-365.1 ±33.2 -371.5 ±43.7 -574.3 ±53.1 269.0 ±17.5
+
+Results Analysis Table 2 shows the results. In the Risky PointMass environ-ment, CODAC, UDAC, and the proposed RS-Diffuser all achieve zero violations while maintaining high returns, reflecting the relative simplicity of controlling a point mass system. Despite the absence of violations across these methods, RS-Diffuser consistently achieves the highest performance in terms of Mean, Median, and CVaR 0.1, indicating superior overall return and stronger tail per-formance. In the more challenging Risky Ant environment, RS-Diffuser attains the lowest number of violations while simultaneously achieving the highest re-turns. This demonstrates its ability to effectively balance safety and performance. The results highlight the advantage of combining a distributional value critic for risk-aware evaluation with the expressive power of diffusion models for modeling complex transitions. 
+
+5.4 Ablation Study on Hyperparameters Task Description To further evaluate the robustness of the proposed method, we conduct an ablation study on the Half-Cheetah environment by varying the RS-Diffuser 11 
+
+guidance measure ρα. Specifically, we consider both VaR and CVaR as risk mea-sures and systematically vary the parameter α to model different risk preferences. Smaller values of α correspond to more risk-averse behavior, while larger values encourage more risk-seeking behavior. 
+
+Table 3. Ablation on risk-sensitive Half-Cheetah with varying risk measures ρα at inference time. CVaR 0.1 is used as the default in the main experiments.                                                
+
+> ρα
+> Medium Expert Mixed CVaR 0.1↑Mean ↑CVaR 0.1↑Mean ↑CVaR 0.1↑Mean ↑
+> CVaR 0.05 305 ±19 408 ±24 826 ±118 1361 ±105 319 ±48 512 ±53 CVaR 0.1(default) 292 ±21 431 ±29 793 ±125 1409 ±113 301 ±62 539 ±56 CVaR 0.2271 ±24 452 ±31 742 ±132 1463 ±120 278 ±67 563 ±60 VaR 0.05 286 ±23 418 ±27 775 ±129 1388 ±111 292 ±54 526 ±55 VaR 0.1279 ±25 439 ±30 759 ±131 1432 ±118 284 ±58 548 ±57 VaR 0.2252 ±29 463 ±35 711 ±140 1491 ±126 259 ±61 577 ±63
+
+Results Analysis Table 3 studies the effect of different inference-time risk measures on Half-Cheetah. As expected, smaller α leads to more risk-averse be-havior, yielding higher CVaR 0.1 but lower mean return, while larger α encourages more risk-seeking behavior, improving the mean at the cost of weaker tail per-formance. Comparing VaR and CVaR, we observe that CVaR-based guidance generally provides stronger worst-case performance, whereas VaR-based guid-ance is slightly more aggressive and can achieve higher mean returns for larger 
+
+α. Among all settings, CVaR 0.1 offers the best overall trade-off between average return and robustness, which justifies its use as the default choice. 
+
+## 6 Conclusion 
+
+We presented RS-Diffuser , a risk-sensitive offline diffusion planning framework that integrates diffusion-based trajectory generation with distributional value critics. By guiding the denoising process with gradients derived from tail-aware risk measures such as CVaR, our method enables a single trained model to flexi-bly realize risk-averse, risk-neutral, and risk-seeking behaviors at inference time. Experiments on risk-sensitive D4RL and risky robot navigation benchmarks demonstrate that RS-Diffuser achieves strong performance, improved robustness, and fewer safety violations compared to prior methods. These results highlight the effectiveness of combining diffusion planning with distributional value guid-ance for risk-sensitive decision making. A promising direction for future work is to extend RS-Diffuser to more challenging settings, including higher-dimensional real-world robotics tasks, richer uncertainty-aware critics, and multi-objective safety constraints. We hope this work provides a useful step toward flexible and reliable risk-sensitive decision-making with diffusion models. 12 S. Gong 
+
+## References 
+
+1. Ajay, A., Du, Y., Gupta, A., Tenenbaum, J., Jaakkola, T., Agrawal, P.: Is con-ditional generative modeling all you need for decision-making? arXiv preprint arXiv:2211.15657 (2022) 2. Bellemare, M.G., Dabney, W., Munos, R.: A distributional perspective on rein-forcement learning. In: International conference on machine learning. pp. 449–458. Pmlr (2017) 3. Bellemare, M.G., Dabney, W., Rowland, M.: Distributional reinforcement learning. MIT Press (2023) 4. Chen, X., Wang, S., Yu, T., Yao, L.: Diffusion policies for risk-averse behavior modeling in offline reinforcement learning. In: 2025 IEEE/RSJ International Con-ference on Intelligent Robots and Systems (IROS). pp. 567–574. IEEE (2025) 5. Chen, Z., Long, X., Zhang, L., Cai, W.: Toward diffusion-based deep reinforcement learning for discrete decision-making: Methods and evaluations. IEEE Transactions on Network Science and Engineering (2025) 6. Dabney, W., Rowland, M., Bellemare, M., Munos, R.: Distributional reinforce-ment learning with quantile regression. In: Proceedings of the AAAI conference on artificial intelligence. vol. 32 (2018) 7. Dong, Z., Yuan, Y., Hao, J., Ni, F., Ma, Y., Li, P., Zheng, Y.: Cleandiffuser: An easy-to-use modularized library for diffusion models in decision making. Advances in Neural Information Processing Systems 37 , 86899–86926 (2024) 8. Duffie, D., Pan, J., et al.: An overview of value at risk. Journal of derivatives 4(3), 7–49 (1997) 9. Ho, J., Jain, A., Abbeel, P.: Denoising diffusion probabilistic models. Advances in neural information processing systems 33 , 6840–6851 (2020) 10. Janner, M., Du, Y., Tenenbaum, J.B., Levine, S.: Planning with diffusion for flex-ible behavior synthesis. arXiv preprint arXiv:2205.09991 (2022) 11. Jiao, R., Zhang, J., Li, C., Hu, L.: Large-kernel spatially parallel feature fusion for monocular 3d perception in autonomous driving. Knowledge-Based Systems 343 ,115998 (2026) 12. Kumar, A., Zhou, A., Tucker, G., Levine, S.: Conservative q-learning for offline reinforcement learning. Advances in neural information processing systems 33 ,1179–1191 (2020) 13. Liu, G., Xu, S., Liu, S., Gaurav, A., Subramanian, S.G., Poupart, P.: A compre-hensive survey on inverse constrained reinforcement learning: Definitions, progress and challenges. arXiv preprint arXiv:2409.07569 (2024) 14. Lu, H., Han, D., Shen, Y., Li, D.: What makes a good diffusion planner for decision making? In: International conference on learning representations (2025) 15. Ma, X., Chen, J., Xia, L., Yang, J., Zhao, Q., Zhou, Z.: Dsac: Distributional soft actor-critic for risk-sensitive reinforcement learning. Journal of Artificial Intelli-gence Research 83 (2025) 16. Ma, Y., Jayaraman, D., Bastani, O.: Conservative offline distributional reinforce-ment learning. Advances in neural information processing systems 34 , 19235–19247 (2021) 17. Mejia, M.A., Macedo, L.H., Pinto, T., Franco, J.F.: Integrating a spatio-temporal diffusion model with a multi-criteria decision-making approach for optimal plan-ning of electric vehicle charging infrastructure. Applied Energy 395 , 126160 (2025) 18. Miao, R., Xu, S., Zhao, R., Chan, W.K.V., Liu, G.: Uncertainty-aware preference alignment for diffusion policies. In: The Thirty-ninth Annual Conference on Neural Information Processing Systems (2025) RS-Diffuser 13 19. Noorani, E., Mavridis, C.N., Baras, J.S.: Risk-sensitive reinforcement learning with exponential criteria. IEEE Transactions on Cybernetics (2025) 20. Prudencio, R.F., Maximo, M.R., Colombini, E.L.: A survey on offline reinforcement learning: Taxonomy, review, and open problems. IEEE transactions on neural net-works and learning systems 35 (8), 10237–10257 (2023) 21. Rockafellar, R.T., Uryasev, S., et al.: Optimization of conditional value-at-risk. Journal of risk 2, 21–42 (2000) 22. Shen, Y., Tobia, M.J., Sommer, T., Obermayer, K.: Risk-sensitive reinforcement learning. Neural computation 26 (7), 1298–1328 (2014) 23. Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., Ganguli, S.: Deep unsuper-vised learning using nonequilibrium thermodynamics. In: International conference on machine learning. pp. 2256–2265. pmlr (2015) 24. Song, J., Meng, C., Ermon, S.: Denoising diffusion implicit models. arXiv preprint arXiv:2010.02502 (2020) 25. Tang, Y.C., Zhang, J., Salakhutdinov, R.: Worst cases policy gradients. arXiv preprint arXiv:1911.03618 (2019) 26. Urpí, N.A., Curi, S., Krause, A.: Risk-averse offline reinforcement learning. arXiv preprint arXiv:2102.05371 (2021) 27. Wang, X., Wang, S., Liang, X., Zhao, D., Huang, J., Xu, X., Dai, B., Miao, Q.: Deep reinforcement learning: A survey. IEEE Transactions on Neural Networks and Learning Systems 35 (4), 5064–5078 (2022) 28. Wang, Z., Hunt, J.J., Zhou, M.: Diffusion policies as an expressive policy class for offline reinforcement learning. arXiv preprint arXiv:2208.06193 (2022) 29. Xu, S., Liu, G.: Robust inverse constrained reinforcement learning under model misspecification. In: ICML (2024) 30. Xu, S., Liu, G.: Uncertainty-aware constraint inference in inverse constrained re-inforcement learning. In: International Conference on Learning Representations. vol. 2024, pp. 17792–17816 (2024) 31. Xu, S., Liu, G., Kharrat, T., Luo, Y., Aloulou, M., Peña, J.L., Sofeikov, K., Reid, A., Roberts, P., Spencer, S., et al.: Tacticgen: Grounding adaptable and scalable generation of football tactics. arXiv preprint arXiv:2604.18210 (2026) 32. Xu, S., Yue, B., Zha, H., Liu, G.: A distributional approach to uncertainty-aware preference alignment using offline demonstrations. In: International Conference on Learning Representations. vol. 2025, pp. 3024–3049 (2025) 33. Ying, C., Zhou, X., Su, H., Yan, D., Chen, N., Zhu, J.: Towards safe reinforcement learning via constraining conditional value-at-risk. arXiv preprint arXiv:2206.04436 (2022) 34. Yue, B., Li, J., Liu, G.: Provably efficient exploration in inverse constrained rein-forcement learning. arXiv preprint arXiv:2409.15963 (2024) 35. Yue, B., Wang, S., Gaurav, A., Li, J., Poupart, P., Liu, G.: Understanding con-straint inference in safety-critical inverse reinforcement learning. In: The Thir-teenth International Conference on Learning Representations (2025) 36. Zhang, J., Song, X., Li, Y., Liang, D., Zhang, Z., Cai, J.: Adaptive dual cross-attention network for multispectral object detection in autonomous driving. Expert Systems with Applications p. 132012 (2026) 37. Zhang, J., Xiang, M., Hu, Y., Hao, W., Lei, L., Yi, K.: Multivariate feature learning and associative spatial information enhancement for snow object detection in au-tonomous driving. Engineering Applications of Artificial Intelligence 175 , 114672 (2026) 38. Zhang, S., Zhang, W., Gu, Q.: Energy-weighted flow matching for offline reinforce-ment learning. In: International conference on learning representations (2025) 14 S. Gong 39. Zhao, R., Xu, S., Yue, B., Liu, G.: Toward exploratory inverse constraint inference with generative diffusion verifiers. In: The Thirteenth International Conference on Learning Representations (2025) 40. Zheng, Y., Liang, R., Zheng, K., Zheng, J., Mao, L., Li, J., Gu, W., Ai, R., Li, S., Zhan, X., et al.: Diffusion-based planning for autonomous driving with flexible guidance. In: International Conference on Learning Representations. vol. 2025, pp. 37207–37227 (2025) 41. Zhu, Z., Zhao, H., He, H., Zhong, Y., Zhang, S., Guo, H., Chen, T., Zhang, W.: Diffusion models for reinforcement learning: A survey. arXiv preprint arXiv:2311.01223 (2023)

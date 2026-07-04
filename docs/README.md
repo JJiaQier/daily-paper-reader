@@ -6,42 +6,49 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-03
-- 运行时间：2026-07-03 21:09:34 UTC
+- 最新运行日期：2026-07-04
+- 运行时间：2026-07-04 21:26:03 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：0
-- 速读区：7
+- 本次总论文数：9
+- 精读区：1
+- 速读区：8
 
 ### 今日简报（AI）
-今日速读7篇论文，聚焦多目标强化学习与无奖励控制两大方向。最值得看的是确定性帕累托最优策略合成与采样协调的多机器人多目标强化学习，前者为多目标优化提供理论保证，后者提升多智能体协作效率。建议先了解多目标强化学习基础概念，再深入代码实现。
-- 详情：[/202607/03/README](/202607/03/README)
+今日精读风险敏感扩散规划RS-Diffuser，速读轻量安全强化学习无人机导航、图像目标导航单步动作流及多智能体链式策略优化。  
+值得关注风险敏感扩散规划中的分布价值引导方法，以及轻量安全强化学习在无人机端到端导航的应用。  
+建议优先精读RS-Diffuser论文，并思考如何将安全强化学习与扩散规划结合。
+- 详情：[/202607/04/README](/202607/04/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [RS-Diffuser: Risk-Sensitive Diffusion Planning with Distributional Value Guidance](/202607/04/2606.27766v1-rs-diffuser-risk-sensitive-diffusion-planning-with-distributional-value-guidance)  
+   标签：评分：8.0/10、query:rl-last-mile
+   evidence：风险敏感离线扩散规划用于物流中的安全路径优化
 
 ### 速读区论文标签
-1. [Deterministic Pareto-Optimal Policy Synthesis for Multi-Objective Reinforcement Learning](/202607/03/2606.26397v1-deterministic-pareto-optimal-policy-synthesis-for-multi-objective-reinforcement-learning)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：提供可应用于车辆路径问题的多目标强化学习方法
-2. [Sampling-Based Coordination-Informed Multi-Objective Multi-Robot Reinforcement Learning](/202607/03/2606.30893v1-sampling-based-coordination-informed-multi-objective-multi-robot-reinforcement-learning)  
+1. [Lightweight Safe Reinforcement Learning for End-to-End UAV Navigation](/202607/04/2607.01794v1-lightweight-safe-reinforcement-learning-for-end-to-end-uav-navigation)  
    标签：评分：7.0/10、query:rl-path-opt
-   evidence：多机器人协调强化学习与帕累托最优解，适用于路径优化与区域划分
-3. [Rank-Then-Act: Reward-Free Control from Frame-Order Progress](/202607/03/2607.01897v1-rank-then-act-reward-free-control-from-frame-order-progress)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：使用强化学习（GRPO）和视觉语言模型从视频学习控制，可应用于机器人路径优化
-4. [Hybridizing a Grouping Metaheuristic with Reinforcement Learning for the One-Dimensional Bin Packing Problem](/202607/03/2607.02315v1-hybridizing-a-grouping-metaheuristic-with-reinforcement-learning-for-the-one-dimensional-bin-packing-problem)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：强化学习用于装箱分组，类似配送区域划分
-5. [RoamFlow: Reinforcement-Aligned One-Step Action MeanFlow Policy for Image-Goal Navigation](/202607/03/2606.29934v1-roamflow-reinforcement-aligned-one-step-action-meanflow-policy-for-image-goal-navigation)  
+   evidence：轻量级安全强化学习用于端到端无人机导航路径规划
+2. [RoamFlow: Reinforcement-Aligned One-Step Action MeanFlow Policy for Image-Goal Navigation](/202607/04/2606.29934v1-roamflow-reinforcement-aligned-one-step-action-meanflow-policy-for-image-goal-navigation)  
    标签：评分：6.0/10、query:rl-path-opt
-   evidence：使用强化学习和MeanFlow进行图像目标导航
-6. [Learning from Mistakes: Rollout-Retrieval Lifelong Policy Learning for Autonomous Driving](/202607/03/2606.30537v1-learning-from-mistakes-rollout-retrieval-lifelong-policy-learning-for-autonomous-driving)  
+   evidence：使用强化学习进行机器人图像目标导航路径规划
+3. [ACPO: Agent-Chained Policy Optimization for Multi-Agent Reinforcement Learning](/202607/04/2606.30072v1-acpo-agent-chained-policy-optimization-for-multi-agent-reinforcement-learning)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：自动驾驶中基于终身学习的策略改进，方法与物流路线规划中强化学习应用有重叠
-7. [Dynamic Scheduling for Flexible Manufacturing Systems Based on Multi-Agent Deep Reinforcement Learning and Petri Nets](/202607/03/2606.31737v2-dynamic-scheduling-for-flexible-manufacturing-systems-based-on-multi-agent-deep-reinforcement-learning-and-petri-nets)  
+   evidence：智能体链式策略优化用于合作多智能体强化学习，可应用于车队路径规划
+4. [Sampling-Based Coordination-Informed Multi-Objective Multi-Robot Reinforcement Learning](/202607/04/2606.30893v1-sampling-based-coordination-informed-multi-objective-multi-robot-reinforcement-learning)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：多智能体深度强化学习动态调度方法可迁移至车辆路径问题与末端物流
+   evidence：多机器人强化学习协调方法可应用于多车辆末端配送路径优化
+5. [Warp RL: Reshaping Base Policy Distributions for Dynamics Adaptation](/202607/04/2606.31043v1-warp-rl-reshaping-base-policy-distributions-for-dynamics-adaptation)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：强化学习策略自适应方法，可应用于机器人路径优化（与v2相同）
+6. [Warp RL: Reshaping Base Policy Distributions for Dynamics Adaptation](/202607/04/2606.31043v2-warp-rl-reshaping-base-policy-distributions-for-dynamics-adaptation)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：强化学习策略自适应方法，可应用于机器人路径优化
+7. [CoRe: Combined Rewards with Vision-Language Model Feedback for Preference-Aligned Reinforcement Learning](/202607/04/2607.01721v1-core-combined-rewards-with-vision-language-model-feedback-for-preference-aligned-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：使用视觉语言模型反馈的通用强化学习奖励设计方法，可应用于车辆路径问题的奖励工程
+8. [Rank-Then-Act: Reward-Free Control from Frame-Order Progress](/202607/04/2607.01897v1-rank-then-act-reward-free-control-from-frame-order-progress)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：从专家视频学习强化学习控制策略，可用于机器人路径规划
 
 
 <div class="dpr-home-promo-card">
