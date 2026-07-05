@@ -1,0 +1,3287 @@
+Title: Accelerating Q-learning through Efficient Value-Sharing across Actions
+
+URL Source: https://arxiv.org/pdf/2606.29806v1
+
+Published Time: Tue, 30 Jun 2026 01:44:35 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+Prabhat Nagarajan 1 2 Brett Daley 3 Martha White 1 2 4 Marlos C. Machado 1 2 4 
+
+Abstract 
+
+Action-values are foundational to many control al-gorithms such as Q-learning. Therefore learning action-values efficiently is central to reinforce-ment learning (RL). However, learning them can be slow, requiring many updates to move values from their initialization, typically near zero, to their true values, which may be far from zero. Moreover, action-value learning algorithms typi-cally update each state–action pair independently, without learning shared value structure across ac-tions within a state. In this paper, we address these inefficiencies by introducing the mean-expansion layer , which accelerates action-value learning by sharing values across actions within a state and by changing the problem from directly learning potentially large action-values to learning a lower-norm representation of them. In deep RL, this layer can be applied as a parameter-free addition to Q-network architectures without altering the un-derlying algorithm. Applied to deep Q-networks and implicit quantile networks, it improves ag-gregate performance across 57 Atari games while increasing action gaps and dramatically reducing value overestimation. 
+
+1. Introduction 
+
+Many reinforcement learning (RL) algorithms learn action-value functions, or Q-functions. Q-functions represent the expected discounted return for state-action pairs. Agents can make decisions by referencing their learned Q-function and selecting high-value actions. Consequently, learning action-value functions efficiently is a central focus in RL (Mnih et al., 2015). We draw attention to two observations. 
+
+> 1
+
+Department of Computing Science, University of Alberta, Edmonton, AB, Canada. 2Alberta Machine Intelligence Institute. 
+
+> 3
+
+Meta (independent work, not on Meta’s behalf). 4Canada CI-FAR AI Chair. Correspondence to: Prabhat Nagarajan <nagara-jan@ualberta.ca >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+The first observation is that the true action-values being learned are often of high (Euclidean) norm, due to each action-value representing an entire return. Large norms can be problematic when we consider that almost universally, action-value estimates are initialized to be close to zero. To add to this, the update rules of action-value learning algo-rithms like Q-learning (Watkins, 1989; Watkins & Dayan, 1992) make small, incremental changes to the predicted values. Consequently, when the true action-value functions have high norm, many updates are needed to change the small initial values to the large values over the course of training (Daley et al., 2025). We can reason, then, that lower-norm outputs can be found faster. The second motivating observation is that in many practical settings, action-values in a state are not mean-zero, as values are often correlated within a state. If one action in a state has a positive or negative action-value, other actions are also likely to as well, and may even share similar values. The majority of action-value learning methods, however, update each action-value in a state individually and independently of other actions. Action-value learning could be accelerated, for example, by learning a common state-dependent base-line value that is shared across all actions in a state. Doing so would transform the challenging problem of indepen-dently learning potentially large individual action-values to an easier one of learning smaller residuals. These two ideals—value sharing through a state-dependent baseline and learning lower-norm solutions—are very re-lated. Learning a single scalar baseline for each state that is shared across actions requires the baseline be stored only once, rather than stored repeatedly in each action-value. These ideals motivate the goal of our approach, which is to represent a vector of action-values with a lower-norm vector by efficiently sharing value across actions .In deep RL, there are existing methods that share val-ues to accelerate learning, namely dueling network ap-proaches (Wang et al., 2016; Tang et al., 2023; Daley et al., 2025). At each state, dueling network approaches produce a state-dependent baseline value along with action-specific residuals to construct Q-values. In practice, however, learn-ing this baseline requires adding extra parameters to a Q-network through a separate multi-layer output stream. In this paper, we derive and analyze a value-sharing method 1
+
+> arXiv:2606.29806v1 [cs.LG] 29 Jun 2026 Accelerating Q-learning through Efficient Value-Sharing across Actions
+
+which we call the mean-expansion layer that does not re-quire an explicit baseline nor extra model parameters. This layer allows us to to share values across actions in a state by constructing an implicit baseline which is shared by all ac-tions to construct action-values. This layer is implementable as a parameter-free modification to a Q-network. It intro-duces no changes to the underlying algorithm and can be easily applied to both tabular and deep Q-learning. Simple PyTorch (Paszke et al., 2019) code to implement this layer is shown in Appendix D. Our empirical findings demonstrate several benefits of the mean-expansion layer. We first show that it can accelerate learning in a controlled gridworld setting. In deep RL, we find that it accelerates learning and improves aggregate per-formance when applied to deep Q-networks (DQN; Mnih et al., 2015) and implicit quantile networks (Dabney et al., 2018) in 57 Atari 2600 games (Bellemare et al., 2013). Lastly, we find that it substantially reduces overestimation and increases the action gap in DQN — both desirable prop-erties in deep RL. 
+
+2. Preliminaries 
+
+We formulate the RL problem as a finite Markov decision process (MDP). A finite MDP is a tuple (S, A, P, μ, R, γ, ),where S is a finite set of environment states and A is the finite set of actions available to the agent. In this paper we use n to denote |A| , the cardinality of the action space. The state transition probability P (s′|s, a ) is the probability that the agent transitions to state s′ after taking action a in state 
+
+s. The distribution μ ∈ ∆( S) is a start-state distribution, where μ(s) denotes the probability of an episode beginning in state s. The reward function R maps state transitions 
+
+(s, a, s ′) to a bounded scalar reward r = R(s, a, s ′), which the agent receives at the next timestep as it transitions to s′.The agent’s objective is to maximize its expected discounted return EP,π,μ [P∞ 
+
+> t=0
+
+γtRt+1 ]. The quantity γ ∈ [0 , 1) is a discount rate that exponentially discounts future rewards. A policy π(·| s) ∈ ∆( A) is a decision rule defined for all actions that specifies the probability π(a|s) of taking action 
+
+a in state s. The expected discounted return for following policy π after taking action a in state s is known as the action-value function for policy π, formalized as 
+
+qπ (s, a ) := EP,π 
+
+" ∞X
+
+> t=0
+
+γtRt+1 St = s, A t = a
+
+#
+
+.
+
+To learn to maximize the expected discounted return, al-gorithms like Q-learning (Watkins & Dayan, 1992) learn an estimated action-value function Q that approximates the action-value function of the optimal policy q∗ =max π qπ (s, a ), ∀s ∈ S , a ∈ A .Deep Q-networks (DQN) (Mnih et al., 2015) adapt Q-learning (Watkins & Dayan, 1992) to leverage neural networks. The algorithm learns a Q-network, which is a Q-function parameterized with a set of neural net-work parameters θ. Given a state s, the Q-network out-puts a vector of action-values: q(s; θ) = Q(s, ·; θ) = [Q(s, a 1; θ), ..., Q (s, a n; θ)] ⊤. The agent’s most recent 
+
+M experience transitions (s, a, r, s ′) are stored in a replay buffer D (Lin, 1992). This buffer serves as a training dataset for supervised regression of target values, where the tar-gets y(a, r, s ′) are constructed from the Q-learning update, 
+
+y(a, r, s ′) = r + γ max a′ Q(s′, a ′; θ−). The parameters 
+
+θ− are the parameters of the target network , a time-delayed copy of the Q-network, used to produce stable targets for a fixed interval. The target network parameters are periodi-cally copied from the Q-network parameters: θ− ← θ. As the agent interacts with the environment, the algorithm sam-ples transitions from D uniformly at random and minimizes the loss E(s,a,r,s ′)∼U (D)[( y(a, r, s ′) − Q(s, a ; θ)) 2].
+
+3. The Mean-Expansion Layer 
+
+In this section, we aim to represent a vector q of action-values with a lower-norm vector in a manner that shares val-ues efficiently across actions. To do so, we derive the mean-expansion layer (ME layer), a simple, invertible, linear transformation. We are motivated by the baseline-residual decomposition , which represents a vector with a scalar base-line and a vector of residuals. We begin this section by analyzing the norm-reducing properties of baseline-residual decompositions. To strive for simplicity in neural network implementations and to further reduce norm, we seek a rep-resentation of q in which we do not have to explicitly carry an extra baseline parameter. Let q ∈ Rn. We can represent each entry of q as qi =(qi − b) + b, where b ∈ R is a scalar baseline and each 
+
+zi = qi − b is a residual . The vector z = [ z1, ..., z n]⊤ is a 
+
+residual vector .
+
+Definition 3.1 (Baseline-residual vector ). The vector 
+
+u(q, b ) = [ z1, ..., z n, b ]⊤ is the baseline-residual vector 
+
+of q with baseline b.This decomposition of q explicitly separates the shared component b from z. That is, changing b changes all entries 
+
+qi, i ∈ { 1, ..., n }. By contrast, changing zi affects only qi.The vector u(q, b ) can be used to construct q:
+
+q = ( q − b1) + b1 = z + b1, (1) where 1 denotes the all-ones vector. 
+
+3.1. Norm-reducing baselines 
+
+Representing q through a baseline-residual vector u(q, b )
+
+has the advantage of being efficient, in that its Euclidean norm is often less than that of q: ∥u(q, b )∥22 < ∥q∥22. In 2Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+fact, if the entries of q have non-zero mean, then it can be represented with a lower-norm baseline-residual decompo-sition. Moreover, we can compute the baseline that results in the minimum norm baseline-residual vector. 
+
+Proposition 1. (Norm-minimizing baseline) . Given a vector q ∈ Rn, the norm-minimizing baseline is b∗ =Pni=1 qi/(n+1) . That is, 
+
+b∗ = argmin 
+
+> b
+
+∥u(q, b )∥22 =
+
+Pni=1 qi
+
+n + 1 . (2) 
+
+Proof. See Appendix A. More generally, we consider any baseline-residual decom-position efficient if its vector has lower norm than q.
+
+Definition 3.2 (Norm-reducing baseline ). Any b ∈ R such that ∥u(q, b )∥2 < ∥q∥2 is called a strictly norm-reducing baseline .In Proposition 4 in Appendix A, we show that in general, if the mean value of the entries of q,
+
+μq = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+qi, (3) is non-zero, then any baseline non-inclusively between 0 and 2b∗ is a strictly norm-reducing baseline. In this paper, we only consider baselines between 0 and μq ,which are all strictly norm-reducing baselines, other than 
+
+b = 0 . We go one step further in this section, eliminating the baseline from our representation, resulting in even further norm reduction than a baseline-residual vector. 
+
+3.2. Deriving the Mean-Expansion Layer 
+
+To avoid learning a baseline explicitly, our approach is to store only a residual vector and reconstruct a desired base-line implicitly. To decide our objective, consider how the mean of the residual vector relates to the baseline. Let 
+
+z = q − b1 be the residual vector of q with baseline b.The absolute value of the mean of this residual vector 
+
+gz (b) = | 1
+
+> n
+
+P
+
+> i
+
+(qi − b)| = |μq − b| = |μz | is a decreasing function from b = 0 to b = μq , regardless of the sign of μq
+
+(Proposition 5, Appendix A). That is, the mean μz becomes smaller from b = 0 to b = μq . Moreover, the Euclidean norm of the residual vector z is also decreasing from b = 0 
+
+to b = μq (Proposition 6, Appendix A). Consequently, to encourage a lower norm residual vector, we minimize 
+
+min 
+
+> z
+
+ 1
+
+n ∥z − q∥22 + k 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+zi
+
+!2 , (4) where k ≥ 0 is a penalty coefficient on the mean value of the vector’s entries. The first term encourages z to fit q
+
+exactly, or equivalently, z = q−b1, with b = 0 . The second term penalizes the mean of the entries of z for having large magnitude, encouraging z = q − b1, for some b ∈ [0 , μ q ),as we will soon show. Solutions that minimize this objective trade off directly representing q − 0 and representing some residual vector 
+
+q−b1. The choice of k dictates the degree of this tradeoff, or how much the mean should be penalized for being large. The fraction 1/n on the first term reflects the fact that ∥z − q∥22
+
+is a sum over n squared deviations, so its loss grows with n.To account for this sum, we normalize the sum of squared deviations by n. By contrast, regardless of the value of n,the second term squares a single scalar value (i.e., the mean), and does not require normalization as n grows. We can characterize the solution to this objective as a solu-tion to a linear system of equations. Let J be the all-ones matrix, i.e., the n × n matrix of ones. 
+
+Proposition 2. Given vector q ∈ Rn, the unique minimizer of Equation 4 is the solution to the system of equations: 
+
+q =
+
+
+
+I + kn J
+
+
+
+z. (5) That is, to solve the objective in Equation 4, we can solve the system in Equation 5. For k ≥ 0, we call the invertible matrix Mk = I + kn J the mean-expansion layer , where k
+
+is a mean-scaling coefficient. Returning to the language of baselines and residuals, the vector z is still a residual vector, but the baseline vector 
+
+b1 = kn Jz is inferred from z. In other words, given some target vector of values q, for some desired baseline b ∈
+
+[0 , μ q ), q can be entirely represented by the residuals z that represent the solution to the system described in Equation 5. 
+
+3.3. Geometric Properties 
+
+As per its name, the mean-expansion layer scales the mean component of a vector. To understand this, first note that the matrix 1 
+
+> n
+
+J is the projection matrix onto the all-ones direction 1. Applied to a vector, it produces a constant vector of means 1 
+
+> n
+
+Jq = μq 1 = [ μq , ..., μ q ]⊤. We call μq 1
+
+the mean component of q, i.e., the projection of q onto 1.Geometrically, the mean-expansion layer scales the mean component by a factor of k + 1 .Equation 5 can be rewritten as (see Appendix A.3): 
+
+q =
+
+
+
+(k + 1) 1
+
+n Jz 
+
+| {z }
+
+> mean scaling
+
++
+
+
+
+z − 1
+
+n Jz 
+
+| {z }
+
+> mean orthogonal
+
+. (6) The mean component of z is scaled by k+1 and added to the component of z orthogonal to 1 to produce q. Equivalently, 3Accelerating Q-learning through Efficient Value-Sharing across Actions Input/residuals                                 
+
+> Input
+> Baseline
+> Mean
+> Expanded mean
+> Output
+> Mean-expansion
+> Figure 1. The mean-expansion layer. The input vector z=(3 ,1) , is projected onto the all-ones vector to produce the mean component (2 ,2) . This mean component is scaled by k, where
+> k= 2 , to produce the implicit baseline vector knJz = (4 ,4) . The input vector, which also serves as the residual vector, z, is added to this implicit baseline to produce the output q= ( I+knJ)z=(7 ,5) . The mean vector of qis (6 ,6) , scaling the mean component of zby k+ 1 . The ME layer allows us to store low-norm vector z
+> instead of qwithout explicitly storing a baseline.
+
+the residual vector z is q with its mean component scaled down. Small changes to z along the all-ones dimension result in large changes to q along the all-ones dimension. Figure 1 provides a visual depiction of the transformation. 
+
+3.4. Selecting k
+
+We have established how the mean-expansion layer avoids the explicit maintenance of a baseline parameter b. All that remains, then, is to understand how to select k, based on the algorithm designer’s desired implicit baseline b. The relationship between b and k can be formalized as follows. 
+
+Proposition 3. Let μz = 1
+
+> n
+
+Pni=1 zi. Let b = kμ z , where 
+
+b1 = kn Jz . Then if k > 0,
+
+b = kμ z =
+
+Pni=1 qi
+
+n + nk
+
+. (7) 
+
+Proof. See Appendix A. Applying Equation 7, we see that as k → 0+, i.e., as k
+
+approaches 0 from the right, the baseline b → 0. As k → ∞ ,
+
+b → μq . In this paper, we use k = n unless stated otherwise, which corresponds to the norm-minimizing baseline b∗.It is easy to see that for k > 0, when q has non-zero mean, z
+
+has a lower norm than both q and its corresponding baseline-residual vector. That is, ∥z∥22 < ∥u(q, kμ z )∥22 < ∥q∥22.This follows from the fact that when k > 0, the implied baseline is in the range (0 , μ q ), which are all strictly norm-reducing baselines. By not explicitly storing the baseline, z
+
+has even lower norm than its baseline-residual counterpart. 
+
+3.5. Optimization and Numerical Stability 
+
+When using the mean-expansion layer, k cannot be too large. While no mathematical issues arise with an arbitrarily large 
+
+k, computational or numerical issues do. Computing z
+
+requires solving the system in Equation 5. For k ≥ 0, the condition number of Mk is k + 1 , arising from scaling the all-ones direction by k + 1 . Hence, solving this system becomes numerically unstable for large values of k. For extremely large n, k = 1 is a safe choice, keeping the condition number at 2. The value k = 1 corresponds to the baseline μq/2, which is a strictly norm-reducing baseline when the mean is non-zero. 
+
+4. The Mean-Expansion Layer for Q-networks 
+
+Implementing the mean-expansion layer in a neural network is straightforward. Just as a softmax layer transforms a vector of logits into a probability vector, the ME layer takes as input an n-dimensional vector of residuals and produces an output that adds those residuals to a baseline which is constructed by scaling the mean of those very residuals. The layer increases the magnitude of the mean value of the input vector entries while preserving their relative differences. PyTorch (Paszke et al., 2019) code for the ME layer is provided in Appendix D. The mean-expansion layer is added immediately before the vector-valued output of a neural network. In the previous section, we described how solving the system in Equation 5 allows us to produce the lower magnitude residual-only representation of some vector q. When producing a vector-valued output q for a state, as is done in Q-learning, we can-not solve Equation 5 without prior knowledge of q. Since q
+
+is being learned, we instead implicitly change the problem to one of learning z. The network’s penultimate layer first outputs z and then we apply the final layer, an ME layer, to construct q = Mkz. Losses on q are then backpropagated through Mk to z. We transition from gradient descent on 
+
+q in a standard Euclidean space to gradient descent on q
+
+in a modified Euclidean space where distances along the all-ones direction are shortened. Taking as input the vector z, the layer is implemented in a 4Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+manner similar to Equation 6 to produce output q:
+
+μz ← 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+zi,
+
+q ← z − μz 1 + ( k + 1) μz 1.
+
+4.1. Implicit-Baseline Deep Q-networks 
+
+Concretely, in DQN, the standard output layer becomes the penultimate layer and we add an ME layer as an out-put layer. Given a state s, a standard Q-network outputs a vector q(s; θ) containing the n values corresponding to each action-value Q(s, a ; θ). Adding a mean-expansion layer causes the network to first output a residual vec-tor z, whose entries are aggregated according to the mean-expansion layer to produce the action-value outputs. We call this method Implicit-Baseline DQN, or IB-DQN (k), where 
+
+k ≥ 0 is the hyperparameter to set the desired baseline. IB-DQN has several benefits. First, it generalizes DQN as special case when k = 0 . Moreover, the invertibility of the transformation ensures that with a sufficiently deep network, the representation capacity does not change relative to a standard Q-network. As a mere layer addition, IB-DQN does not modify the DQN algorithm itself and introduces no additional learnable parameters to the model. A major benefit of IB-DQN is that k is not an opaque hyperparam-eter. We can select k to produce some specific implicit baseline as a function of q, which may make the problem of hyperparameter selection easier. 
+
+4.2. Mean-Expansion for Tabular Q-learning 
+
+The mean-expansion layer can also be applied to tabular Q-learning. In lieu of a lookup table of Q-values, we maintain a lookup table of residuals Z(s, a ) and construct the Q-values using the mean-expansion layer Mk: Q(s, ·) = MkZ(s, ·).This is equivalent to Q(s, a ) = Z(s, a ) + kn
+
+P 
+
+> a′
+
+Z(s, a ′).A gradient descent step with step size αt produces the semi-gradient (i.e., the target is treated as a constant) update rule for all a ∈ A (see Appendix B for gradient computation): 
+
+Z(st, a t) ← Z(st, a t) + αtδt
+
+
+
+1 + kn
+
+
+
+. (8) 
+
+Z(st, a ) ← Z(st, a ) + αtδt
+
+ kn
+
+
+
+, a̸ = at. (9) We call this Implicit-Baseline Q-learning (IBQ), as we com-bine the mean-expansion layer, which generates an implicit baseline, with Q-learning. Each action’s residual Z(st, a )
+
+is incremented by kn αtδt. The chosen action’s residual is incremented by an additional αtδt. The action-value of the chosen action is incremented in greater proportion to the Q-learning error than the other actions, but the entire update emphasizes updating the baseline substantially more when 
+
+k is large. Observe that we recover Q-learning (Watkins & Dayan, 1992) as a special case when k = 0 . More generally, this derivation applies to any TD-learning based action-value learning algorithm like Sarsa (Rummery & Niranjan, 1994) and Expected Sarsa (John, 1994). The update in Equations 8 and 9 highlight how the ME layer induces the value-sharing in Q-learning. The construction of Q(s, a ) shows that all the Z(s, a ) in a state each carry some component of the shared baseline used to construct 
+
+any action’s value in that state. Consequently, the credit for the TD error is distributed across all actions in a state, as indicated by the update equations. This manner of credit distribution should accelerate learning of the shared baseline in a state relative to the residuals, potentially accelerating overall learning. 
+
+5. Related Work 
+
+The most related class of approaches are dueling network approaches (Wang et al., 2016; Tang et al., 2023; Daley et al., 2025), the closest being Dueling DQN. Dueling DQN, like our method, is also an architectural modification to a Q-network that is otherwise trained through standard DQN, without modification to the loss function. Dueling DQN, despite the use of the terms “value” and “advantage”, in fact implements a baseline-residual decomposition of the action-value function. Dueling DQN outputs a state-specific baseline B(s; θ), which serves as the mean action-value. It also outputs action-specific residuals Z(s, a ; θ) to con-struct action-values as Q(s, a ; θ) = B(s; θ) + Z(s, a ; θ).To learn this baseline, however, Dueling DQN adds an addi-tional two-layer output stream to a Q-network, introducing a substantial number of extra parameters. In Appendix C, we show how Dueling DQN is a baseline-residual decom-position, specifically a mean-residual decomposition. Another related method is called Regularized Dueling Q-learning (RDQ) (Daley et al., 2025). RDQ leverages the same architecture as Dueling DQN. However, B(s) does not serve as a predefined baseline in RDQ, unlike in Dueling DQN where its value is the mean action-value prediction. Instead, RDQ augments the DQN loss with an additional L2-penalty, β( 12 B(s; θ)2 + 12
+
+P 
+
+> a
+
+Z(s, a ; θ)2), where β is a regularization coefficient. Both RDQ and Dueling DQN learn an extra functional pa-rameter to represent a baseline and both require an addi-tional stream of learnable parameters. Dueling DQN, like our method, is a mere architectural modification to DQN with a predefined baseline. RDQ, by contrast, neither uses a predefined baseline, nor is it a mere architectural change, as it augments the DQN loss function. 5Accelerating Q-learning through Efficient Value-Sharing across Actions      
+
+> Figure 2. Gridworld results. We compare IBQ with different values of k, including k= 0 , which is Q-learning. We report the percentage increase in episode completions across four sam-ple complexity regimes. Shaded regions corresponds to a 95% confidence interval. For most k, IBQ(k) can complete over 20% more episodes than Q-learning within 1k timesteps. Both algo-rithms quickly master the task and their gap decreases with more timesteps.
+
+Advantage updating (Baird, 1993) serves as a conceptual predecessor for the methods mentioned here. It is a classical algorithm that decomposes a value function into state-values and action-advantages, where the state-value is shared by ac-tions in a state. Its successor, Advantage Learning (Baird III, 1999) avoids learning an explicit state-value function. These methods emphasize stable learning through gradient descent with function approximation rather than accelerating learn-ing through value-sharing. Baseline-residual decompositions are broadly related to centering and normalization, which have been explored in RL (Naik et al., 2024). Pop-Art (van Hasselt et al., 2016b) is a method which adaptively normalizes targets to be ro-bust to different value scales. Sun et al. (2022) explore how shifting rewards can improve curiosity-driven exploration. More generally, baselines are commonly used in RL for vari-ance reduction and stability, particularly in policy gradient methods (Williams, 1992; Chung et al., 2021). 
+
+6. Experiments 
+
+In this section, we evaluate our implicit-baseline Q-learning methods in a gridworld setting as well as in 57 Atari games. In particular, we examine its sample efficiency, performance, sensitivity to k, overestimation, and action gaps. 
+
+6.1. Gridworld Experiment 
+
+We first examine IBQ, the tabular algorithm which com-bines the mean-expansion layer with tabular Q-learning (Equations 8 and 9). To highlight its sample efficiency, we examine it in a pedagogical 5x5 stochastic gridworld task. Episodes begin in the bottom left corner and terminate upon reaching the goal state in the top right corner. The discount rate is 0.95. The agent receives a reward of 5 for reaching the goal and 0 otherwise. The agent’s actions are the four cardinal directions. The agent transitions according to its chosen action with probability 3/4 and according to a different randomly selected action with probability 1/4.We evaluate IBQ at different k. For each k, we report the best results across a sweep over 61 step sizes chosen from a logarithmic search over (0 , 1] , running each combination for 128 seeds. All agents employ an ϵ-greedy policy with 
+
+ϵ = 0 .1 for 5k timesteps. Figure 2 shows, for different val-ues of k, the percentage increase in the number of completed episodes over Q-learning, across four different sample com-plexity regimes. The shaded regions correspond to a 95% confidence interval. IBQ consistently learns faster than Q-learning. By distribut-ing credit to all four actions rather than one, value propa-gates more quickly. The gap between Q-learning and IBQ decreases, however, with more experience, as both algo-rithms equally master the task. We also observed that when 
+
+k is large, smaller step sizes are more suitable, given the larger scaling induced by k. Conversely, when k is small, larger step sizes are more suitable. 
+
+6.2. Deep RL Empirical Methodology Setting. We evaluate all of our agents in the Arcade Learn-ing Environment (ALE) (Bellemare et al., 2013) on the 57 standard Atari environments used in the literature (van Has-selt et al., 2016a). We follow the evaluation practices pro-posed by Machado et al. (2018). Specifically, we train and evaluate agents with sticky actions with probability 0.25, game-over termination signals, and the full action set. 
+
+Code and baselines. Our algorithms and baselines 1 are implemented based on the PFRL library (Fujita et al., 2021) and its reproduction of DQN. Our DQN implementation follows modern best practices, including the use of the Adam optimizer (Kingma & Ba, 2015) and the squared-error loss, using the optimizer settings of Hessel et al. (2018), as has become standard practice (Ceron & Cas-tro, 2021). IB-DQN( k) refers to DQN which adds a final mean-expansion layer with mean-scaling coefficient k. For IB-DQN, we do not modify the underlying DQN algorithm or its hyperparameters. We compare against the most re-lated value-sharing method, Dueling DQN. We also scale up and evaluate RDQ, which was originally evaluated on MinAtar (Young & Tian, 2019), to the full ALE. For RDQ, we set β = 0 .001 , matching the original paper after testing several values on a subset of games. For implicit quantile networks (IQN) (Dabney et al., 2018), we largely match the training settings of the original paper. IB-IQN refers to IQN where an ME layer is added at the end of the network. 
+
+> 1github.com/prabhatnagarajan/me layer.
+
+6Accelerating Q-learning through Efficient Value-Sharing across Actions 0M 10M 20M 30M 40M 50M   
+
+> Steps
+> 0%
+> 25%
+> 50%
+> 75%
+> 100%
+> 125%
+> 150%
+> 175%
+> 200%
+> Human Normalized Score
+> IB-DQN( n)
+> time to DQN
+> Max Score
+> IB-IQN( n)
+> time to IQN
+> Max Score
+> IQM DQN
+> Dueling DQN
+> IB-DQN ( 1)
+> IB-DQN (n)
+> RDQ ( = 0.001 )
+> IQN
+> IB-IQN ( n)DoubleDunk
+> Venture
+> Jamesbond
+> Gopher
+> Phoenix
+> Tennis
+> Pong
+> Gravitar
+> Hero
+> Qbert
+> Berzerk
+> Freeway
+> Asteroids
+> PrivateEye
+> MontezumaRevenge
+> Bowling
+> BeamRider
+> Pitfall
+> Solaris
+> NameThisGame
+> Centipede
+> KungFuMaster
+> Alien
+> Seaquest
+> Riverraid
+> Enduro
+> Zaxxon
+> Krull
+> MsPacman
+> RoadRunner
+> WizardOfWor
+> Amidar
+> YarsRevenge
+> BattleZone
+> Surround
+> SpaceInvaders
+> ChopperCommand
+> FishingDerby
+> IceHockey
+> Asterix
+> Boxing
+> Tutankham
+> Frostbite
+> BankHeist
+> Defender
+> Robotank
+> Assault
+> Skiing
+> UpNDown
+> Kangaroo
+> CrazyClimber
+> Breakout
+> TimePilot
+> DemonAttack
+> Atlantis
+> StarGunner
+> VideoPinball
+> 100
+> 10
+> 1
+> 0
+> 1
+> 10
+> 100
+> 1000
+> Improvement in HNS
+
+IB-DQN(n) versus DQN 
+
+Figure 3. (left ) Different algorithms and the interquartile mean of their human-normalized score across 57 games. All algorithms were run for five seeds per game. The shaded region depicts the 95% stratified bootstrap confidence interval (Agarwal et al., 2021). Dashed lines indicate the use of the mean-expansion layer. ( right ) The increase in human-normalized score, measured as the average area-under-the-curve, when switching from DQN to IB-DQN( k = n). Note that the y-axis is log-scale. 
+
+Appendix E contains more training and evaluation details for reproducibility. 
+
+6.3. Atari-57 Performance 
+
+Figure 3 ( left ) depicts the performance in terms of the in-terquartile mean (IQM) (Agarwal et al., 2021) of the human-normalized score (Mnih et al., 2015) of DQN, Dueling DQN, IB-DQN, RDQ, IQN, and IB-IQN. All algorithms were run for five seeds per game. Figure 3 ( right ) shows the change in human-normalized score when switching from DQN to IB-DQN. Figure 7 in Appendix G shows the per-game learn-ing curves. Additionally, Table 2 in Appendix G reports the mean score over the last three evaluations for each agent in each environment, across all seeds. IB-DQN( n) clearly performs better than both DQN and Du-eling DQN, with much better sample efficiency. The first vertical dotted line shows the first timestep at which the IQM of IB-DQN( n) exceeds DQN’s highest score across its curve. IB-DQN (n) is able to achieve DQN’s best perfor-mance at just under 20M timesteps, i.e., within 40% of the total training time, exhibiting improved sample efficiency. IB-IQN( n), i.e., IQN with the ME layer, also exhibits faster learning and performance over IQN. It achieves IQN’s high-est score across its curve at 33.75M timesteps, at just over 
+
+> 2
+
+/3 of its total training time. To test the impact of the ME layer under a different optimizer, we evaluate the ME layer on DQN with RMSprop (Tieleman, 2012) and the Huber loss in Figure 6 of Appendix F. The ME layer accelerates learning and improves performance in this setting too, rein-forcing our core findings. When k = 1 , which represents the conservative ME layer with a low condition number, we see faster initial learning and a modest improvement through training. By scaling the all-ones component of a vector, the gradients along the all-ones component are also scaled. This gradient scaling accelerates learning of a common baseline value for all entries of the vector. When k = 1 , the mean action-value in a state is updated less aggressively than larger values of 
+
+k, yet this appears sufficient to accelerate initial learning. Overall, these results demonstrate that the ME layer can be an effective addition to a standard deep Q-network. Scaling RDQ demonstrates it to be an effective algorithm. Unlike Dueling DQN, RDQ is able to effectively lever-age its additional parameters through explicit regularization. RDQ outperforms IB-DQN( n), though the latter is compet-itive. This is to be expected; RDQ has an extra stream of parameters and an augmented loss. The primary appeal of IB-DQN( n) is its simplicity as a simple parameter-free layer that can be added to Q-networks that boosts performance through an implicit baseline. Dueling DQN does not outperform DQN, contrary to the original results of Wang et al. (2016). It has been shown that modern implementations of DQN that use Adam and the squared-error loss perform on par with distributional variants (Agarwal et al., 2020), which have been known to outperform Dueling Double DQN with prioritized re-play (Bellemare et al., 2017). Though it is difficult to draw definitive conclusions without extensive tuning, it may be the case the Dueling DQN’s benefits are better realized in older implementations of DQN with did not use Adam and the squared-error loss. 
+
+6.4. Value Function Stability: Overestimation and Action Gaps 
+
+Aside from performance and sample efficiency, there are other metrics related to value-function dynamics that are 7Accelerating Q-learning through Efficient Value-Sharing across Actions VideoPinball 
+
+> PrivateEye
+> Pong
+> YarsRevenge
+> Skiing
+> Bowling
+> Assault
+> KungFuMaster
+> CrazyClimber
+> ChopperCommand
+> Enduro
+> Gopher
+> Freeway
+> Tennis
+> Asterix
+> BeamRider
+> DemonAttack
+> SpaceInvaders
+> Zaxxon
+> Robotank
+> Riverraid
+> NameThisGame
+> Kangaroo
+> Qbert
+> Boxing
+> BattleZone
+> TimePilot
+> Gravitar
+> FishingDerby
+> UpNDown
+> Hero
+> Centipede
+> Breakout
+> IceHockey
+> Phoenix
+> Surround
+> Alien
+> Jamesbond
+> BankHeist
+> WizardOfWor
+> StarGunner
+> Asteroids
+> Krull
+> MsPacman
+> Seaquest
+> Frostbite
+> RoadRunner
+> DoubleDunk
+> Berzerk
+> Amidar
+> Atlantis
+> Tutankham
+> Pitfall
+> Venture
+> Solaris
+> Defender
+> MontezumaRevenge 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> % Decrease in Overestimation
+> Overestimation Amidar
+> Seaquest
+> Hero
+> MsPacman
+> Skiing
+> Bowling
+> CrazyClimber
+> NameThisGame
+> Kangaroo
+> Solaris
+> UpNDown
+> Atlantis
+> Defender
+> Asterix
+> Frostbite
+> Alien
+> DemonAttack
+> Zaxxon
+> Berzerk
+> BankHeist
+> SpaceInvaders
+> Breakout
+> StarGunner
+> BeamRider
+> Riverraid
+> Qbert
+> Gopher
+> Tutankham
+> Assault
+> Krull
+> KungFuMaster
+> VideoPinball
+> Boxing
+> Freeway
+> BattleZone
+> Enduro
+> Phoenix
+> Centipede
+> ChopperCommand
+> Jamesbond
+> TimePilot
+> Asteroids
+> PrivateEye
+> RoadRunner
+> YarsRevenge
+> Venture
+> Robotank
+> Pitfall
+> Gravitar
+> Pong
+> FishingDerby
+> DoubleDunk
+> IceHockey
+> MontezumaRevenge
+> Surround
+> Tennis
+> WizardOfWor
+> 0.000
+> 0.002
+> 0.004
+> 0.006
+> 0.008
+> 0.010
+> Relative Action Gap Increase
+> Relative Action Gap
+
+Figure 4. (left ) The percentage reduction in overestimation when using IB-DQN over DQN, as a percentage of DQN’s average overestimation area under the curve. In all games, IB-DQN reduces overestimation over DQN. ( right ) The increase in relative action gap from using IB-DQN instead of DQN. In the vast majority of games, IB-DQN increases the relative action gap compared to DQN. Values are clipped at 0.01 for visibility. 
+
+known to be correlated with stability and performance in deep RL. In particular, we examined two such metrics, overestimation and action gaps. Overestimation refers to the action-value prediction exceeding the true expected re-turn (Nagarajan et al., 2026). Reducing overestimation has historically been correlated with improved stability and per-formance in deep RL (van Hasselt et al., 2016a; Fujimoto et al., 2018). Figure 4 ( left ) shows the percentage reduction in value over-estimation when using IB-DQN( n) over DQN, measured as percentage of DQN’s overestimation. Overestimation is measured by comparing predicted returns to achieved re-turns during evaluation phases (see Appendix E). As DQN overestimates in all games (see Figure 8 in Appendix G), a reduction exceeding 100% indicates underestimation, while a reduction between 0% and 100% represents a reduction in, but not elimination of, overestimation. IB-DQN exhibits reduced overestimation in all games. In standard DQN, a positive TD error increases the action-value of one action and indirectly modifies the other action-values via changes to the penultimate layer’s outputted fea-tures. In IB-DQN, the updates are explicit such that positive TD error increases the values of all actions and a negative TD error decreases the value of all actions. A TD error on one action is distributed across actions, perhaps tem-pering the outlier increases in the maximum action-value used for bootstrapping. This sensitivity to global changes in value and the implicit penalty on increasing the mean of the residuals (Equation 4) may be why we observe reduced overestimation. The full curves depicting overestimation throughout training are provided in Figure 8 in Appendix G. These curves also depict the overestimation of IB-DQN( 1), where we find that it exhibits less overestimation than DQN, but more than IB-DQN( n). Note that IB-DQN should be complementary to other meth-ods for overestimation reduction, like Double DQN (van Hasselt et al., 2016a). Double DQN uses both the Q-network and target network to produce bootstrap targets. The use of separate networks in the bootstrap target mitigates the maximization bias. The use of two networks in the bootstrap target is still present when the ME layer is added to Double DQN. Thus, the two methods should be complementary. The second metric we measured was the action gap. The 
+
+action gap (Farahmand, 2011) refers to the difference be-tween the maximum action-value and the second-highest action-value. In deep RL, gaps between action-values in a state are often quite small. For example, Wang et al. (2016) report that the average action-value across states of a Double DQN agent trained on the game Seaquest was 15. However, the average action gap was a mere 0.04. A consequence of small action gaps is that minor changes to action-values can rapidly change the greedy actions. For these reasons, increasing the action gap is known to be generally beneficial in deep RL (Bellemare et al., 2016). Figure 4 ( right ) shows the increase in the relative action gap when transitioning from DQN to IB-DQN( n). The relative action gap refers to the action gap divided by the absolute value of the average Q-value. We measure the relative action gap because IB-DQN produces much smaller action-values than DQN, as suggested by our overestimation results. In a large majority of environments, IB-DQN exhibits an in-creased relative action gap. This increase in relative action gap may be because our learned representations are them-selves residuals. Consequently, the majority of the model’s capacity need not be devoted to fitting a large baseline value common to all actions, and can instead be used to model the relative differences between action-values. 
+
+6.5. Sensitivity Analysis of Mean-Scaling Coefficient 
+
+To examine the sensitivity of IB-DQN to its mean-scaling coefficient k, we ran it for several values of k on three Atari 2600 games (Figure 5 ( left )) for five seeds each and on Gym-nasium’s (Towers et al., 2024) LunarLander-v3 environment (Figure 5 ( center )) for 120 seeds each. All environments 8Accelerating Q-learning through Efficient Value-Sharing across Actions 1     
+
+> 32
+> 64
+> 128
+> 256
+> 512
+> 1024
+> Mean-scaling coefficient k
+> 0%
+> 100%
+> 200%
+> 300%
+> 400%
+> 500%
+> Average AUC of HNS
+> Demon Attack (k=0)
+> Name This Game (k=0)
+> Star Gunner (k=0)
+> Atari 2600 Games 1
+> 2
+> 4
+> 8
+> 16
+> 32
+> 64
+> 128
+> 256
+> 512
+> 1024
+> 2048
+> 4096
+> 8192
+> 16384
+> 32768
+> Mean-scaling coefficient k
+> 400
+> 300
+> 200
+> 100
+> 0
+> AUC of Score
+> DQN(k=0)
+> LunarLander-v3 0K 20K 40K 60K 80K 100K
+> Steps
+> 500
+> 400
+> 300
+> 200
+> 100
+> 0
+> 100
+> Score k=0
+> k=16
+> k=32
+> k=256
+> k=2048
+> k=8192
+> k=16384
+> k=32768
+
+Figure 5. Sensitivity Analysis of k. (left ) The average area under the curve (AUC) of the human-normalized score for several values of k
+
+(log scale) on Atari 2600 games, where the shaded region depicts the standard deviation across five seeds. ( center ) Similar to the left 
+
+figure, but for LunarLander-v3, where the shaded region depicts a 95% confidence interval for the mean across 120 seeds. ( right ) The corresponding LunarLander learning curves for a subset of values of k, again with the shaded region depicting a 95% confidence interval. 
+
+share similar qualitative results. For some values of k, per-formance exceeds that of DQN, which is equivalent to k = 0 .Then, as k grows too large, performance drops dramatically, likely due to gradients being scaled too much along the all-ones direction. Figure 5 (right) depicts the correspond-ing LunarLander-v3 learning curves for several values of k,where we can visibly see the degradation as k grows large. In this sensitivity analysis, we use the same step-size for all k, and our results should be interpreted accordingly. In principle, we should tune the step size as we modify k, as we did in the tabular experiments. Smaller step sizes should be more suitable for larger values of k. Nonetheless, the general result is that for any fixed step-size, there is some large value of k beyond which performance degrades. 
+
+7. Conclusion and Discussion 
+
+In this paper, we presented the mean-expansion layer (ME layer), a simple way to represent and share values across actions. The ME layer allows us to avoid learning an explicit baseline parameter and merely learn a vector of residuals. This layer introduces no extra learnable parameters and does not change the underlying algorithm. Applying this layer at the end of a Q-network produces reliable improvements to DQN and IQN in terms of sample efficiency and perfor-mance in aggregate across 57 Atari games. It also provides large reductions in overestimation and increases the action gap, which are generally desirable in deep RL. The ME layer applied to RL has its limitations. The first is that performance degrades as k grows large. Therefore, se-lecting k = n in large action spaces may lead to instabilities. This limitation is not specific to the ME layer; large action spaces generally create more difficult learning problems, including for Q-learning methods. Fortunately, selecting 
+
+k = 1 is well-conditioned and implies a baseline of μq/2,regardless of the number of actions. As such, setting k = 1 
+
+can be better than the implicit baseline of 0 in standard Q-learning, as supported by our empirical results. A second limitation is that there is a discrepancy between the conceptual framing of the ME layer and its practical usage. While the ME layer is used to produce vector-valued outputs of action-values, feedback is in the form of sample-based updates to individual state-action pairs. This discrepancy is also present in Dueling DQN, where updates to individual state-action pairs update the baseline B(s), which repre-sents the mean action-value in the state. The updates are according to the behavior policy, which typically sample some actions in different proportions to others. Nonethe-less the mean is updated without accounting for variation in action-selection. Examining the impact of this discrepancy is left for future work. Our work casts a novel perspective on accelerating learn-ing across actions in deep RL, especially as compared to Dueling DQN. The original dueling network architecture introduces extra parameters, a modified architecture, and a learned state-specific baseline. Any of one these could play an important role in improving performance. Our work suggests that the key ingredient may be the state-specific baseline, as we improve performance without extra param-eters or large architectural modifications. We show that value-sharing does not necessarily require explicit separa-tion of shared and independent components. Instead, we can have each action’s output carry both individual and shared information effectively. Despite understanding fundamental aspects of the ME layer, there are several open questions. We lack a comprehensive understanding of how the ME layer impacts the value func-tion’s learning path, how and when it improves performance, and its impact on convergence guarantees. Moreover, the generalization of the ME layer to continuous actions re-mains an open question, and we still lack a mechanistic explanation for the ME layer’s impact on overestimation and action gaps. 9Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+Acknowledgements 
+
+We thank the anonymous reviewers, as well as Alex Lewandowski, Diego Gomez Noriega, Esraa Elelimy, and Roshan Shariff for their helpful feedback which improved the paper and its presentation. This research was supported in part by the Natural Sciences and Engineering Research Council of Canada (NSERC), the Canada CIFAR AI Chair Program, and the Alberta Ma-chine Intelligence Institute (Amii). Prabhat Nagarajan is supported by the Alberta Innovates Graduate Student Schol-arship. Computational resources were provided in part by the Digital Research Alliance of Canada. 
+
+Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+References 
+
+Agarwal, R., Schuurmans, D., and Norouzi, M. An opti-mistic perspective on offline reinforcement learning. In 
+
+International Conference on Machine Learning (ICML) ,2020. Agarwal, R., Schwarzer, M., Castro, P. S., Courville, A. C., and Bellemare, M. Deep reinforcement learning at the edge of the statistical precipice. Neural Information Pro-cessing Systems (NeurIPS) , 2021. Aitchison, M., Sweetser, P., and Hutter, M. Atari-5: Dis-tilling the arcade learning environment down to five games. In International Conference on Machine Learning (ICML) , 2023. Baird, L. Advantage updating (technical report wl-tr-93-1146). Wright Laboratory , 1993. Baird III, L. C. Reinforcement learning through gradient descent . PhD thesis, Carnegie Mellon University, 1999. Bellemare, M. G., Naddaf, Y., Veness, J., and Bowling, M. The arcade learning environment: An evaluation plat-form for general agents. Journal of Artificial Intelligence Research (JAIR) , 2013. Bellemare, M. G., Ostrovski, G., Guez, A., Thomas, P., and Munos, R. Increasing the action gap: New operators for reinforcement learning. In AAAI Conference on Artificial Intelligence (AAAI) , 2016. Bellemare, M. G., Dabney, W., and Munos, R. A distri-butional perspective on reinforcement learning. In In-ternational Conference on Machine Learning (ICML) ,2017. Ceron, J. S. O. and Castro, P. S. Revisiting rainbow: Pro-moting more insightful and inclusive deep reinforcement learning research. In International Conference on Ma-chine Learning (ICML) , 2021. Chung, W., Thomas, V., Machado, M. C., and Le Roux, N. Beyond variance reduction: Understanding the true im-pact of baselines on policy optimization. In International Conference on Machine Learning (ICML) , 2021. Dabney, W., Ostrovski, G., Silver, D., and Munos, R. Im-plicit quantile networks for distributional reinforcement learning. In International Conference on Machine Learn-ing (ICML) , 2018. Daley, B., Nagarajan, P., White, M., and Machado, M. C. An analysis of action-value temporal-difference methods that learn state values. Reinforcement Learning Journal (RLJ) , 2025. Farahmand, A.-M. Action-gap phenomenon in reinforce-ment learning. Neural Information Processing Systems (NeurIPS) , 2011. Fujimoto, S., Hoof, H., and Meger, D. Addressing function approximation error in actor-critic methods. In Interna-tional Conference on Machine Learning (ICML) , 2018. Fujita, Y., Nagarajan, P., Kataoka, T., and Ishikawa, T. ChainerRL: A deep reinforcement learning library. Jour-nal of Machine Learning Research (JMLR) , 2021. Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostro-vski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., and Silver, D. Rainbow: Combining improvements in deep reinforcement learning. In AAAI Conference on Artificial intelligence (AAAI) , 2018. Householder, A. S. A theory of steady-state activity in nerve-fiber networks: I. definitions and preliminary lemmas. 
+
+The Bulletin of Mathematical Biophysics , 1941. John, G. H. When the best move isn’t optimal: Q-learning with exploration. In AAAI Conference on Artificial Intel-ligence (AAAI) , 1994. Kingma, D. P. and Ba, J. Adam: A method for stochastic optimization. In International Conference on Learning Representations (ICLR) , 2015. Lin, L. Reinforcement learning for robots using neural networks . PhD thesis, Carnegie Mellon University, 1992. Machado, M. C., Bellemare, M. G., Talvitie, E., Veness, J., Hausknecht, M., and Bowling, M. Revisiting the arcade learning environment: Evaluation protocols and 10 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+open problems for general agents. Journal of Artificial Intelligence Research (JAIR) , 2018. Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., Graves, A., Riedmiller, M., Fidje-land, A. K., Ostrovski, G., et al. Human-level control through deep reinforcement learning. Nature , 2015. Nagarajan, P., White, M., and Machado, M. C. Deep Double Q-learning. arXiv preprint arXiv:2507.00275 , 2026. Naik, A., Wan, Y., Tomar, M., and Sutton, R. S. Reward centering. Reinforcement Learning Journal (RLJ) , 2024. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al. Pytorch: An imperative style, high-performance deep learning library. Neural Information Processing Systems (NeurIPS) , 2019. Quan, J. and Ostrovski, G. DQN Zoo: Reference imple-mentations of DQN-based agents, 2020. URL http: //github.com/deepmind/dqn_zoo .Rummery, G. A. and Niranjan, M. On-line Q-learning using connectionist systems , volume 37. University of Cambridge, Department of Engineering Cambridge, UK, 1994. Sun, H., Han, L., Yang, R., Ma, X., Guo, J., and Zhou, B. Ex-ploit reward shifting in value-based deep-RL: Optimistic curiosity-based exploration and conservative exploitation via linear reward shaping. Neural Information Processing Systems (NeurIPS) , 2022. Tang, Y., Munos, R., Rowland, M., and Valko, M. VA-learning as a more efficient alternative to Q-learning. In 
+
+International Conference on Machine Learning (ICML) .PMLR, 2023. Tieleman, T. Lecture 6e-rmsprop: Divide the gradient by a running average of its recent magnitude. Coursera: Neural Networks for Machine Learning , pp. 26–30, 2012. Towers, M., Kwiatkowski, A., Terry, J., Balis, J. U., De Cola, G., Deleu, T., Goul ˜ao, M., Kallinteris, A., Krimmel, M., KG, A., et al. Gymnasium: A standard interface for reinforcement learning environments. arXiv preprint arXiv:2407.17032 , 2024. van Hasselt, H., Guez, A., and Silver, D. Deep reinforce-ment learning with double Q-learning. In AAAI Confer-ence on Artificial Intelligence (AAAI) , 2016a. van Hasselt, H. P., Guez, A., Hessel, M., Mnih, V., and Silver, D. Learning values across many orders of magni-tude. Neural Information Processing Systems (NeurIPS) ,2016b. Wang, Z., Schaul, T., Hessel, M., Hasselt, H., Lanctot, M., and Freitas, N. Dueling network architectures for deep reinforcement learning. In International Conference on Machine Learning (ICML) , 2016. Watkins, C. J. C. H. Learning from delayed rewards . PhD thesis, King’s College, University of Cambridge, 1989. Watkins, C. J. C. H. and Dayan, P. Q-learning. Machine Learning , 1992. Williams, R. J. Simple statistical gradient-following algo-rithms for connectionist reinforcement learning. Machine Learning , 1992. Young, K. and Tian, T. Minatar: An Atari-inspired testbed for thorough and reproducible reinforcement learning experiments. arXiv preprint arXiv:1903.03176 , 2019. 11 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+A. Theoretical Results 
+
+A.1. Baseline Analysis Proposition 1. (Norm-minimizing baseline) . Given a vector q ∈ Rn, the norm-minimizing baseline is b∗ =Pni=1 qi/(n+1) . That is, 
+
+b∗ = argmin 
+
+> b
+
+∥u(q, b )∥22 =
+
+Pni=1 qi
+
+n + 1 . (2) 
+
+Proof. Let f (b) be the squared Euclidean norm of u(q, b ).
+
+f (b) = ∥u(q, b )∥22 =
+
+> n
+
+X
+
+> i=1
+
+(qi − b)2 + b2. (10) This function is convex, so we can apply the first derivative test to find its minimum. 
+
+df db = 2 b − 2
+
+> n
+
+X
+
+> i=1
+
+(qi − b). (11) Setting the derivative to zero, we obtain 
+
+0 = 2 b − 2
+
+> n
+
+X
+
+> i=1
+
+(qi − b) (12) 
+
+0 = b −
+
+> n
+
+X
+
+> i=1
+
+qi + nb (13) 
+
+> n
+
+X
+
+> i=1
+
+qi = ( n + 1) b (14) 
+
+b =
+
+Pni=1 qi
+
+n + 1 . (15) 
+
+Proposition 4. (Norm-reducing baselines) . Let μq =Pni=1 qi/n. If μq < 0, then the strictly norm-reducing base-lines b are the ones that satisfy 2b∗ < b < 0. If μq > 0, the strictly norm-reducing baselines satisfy 0 < b < 2b∗.Proof. Let f (b) be the squared Euclidean norm of u(q, b ).
+
+f (b) = ∥u(q, b )∥22 =
+
+> n
+
+X
+
+> i=1
+
+(qi − b)2 + b2. (16) Expanding, 
+
+f (b) = 
+
+> n
+
+X
+
+> i=1
+
+ q2 
+
+> i
+
++ b2 − 2qib + b2
+
+=
+
+> n
+
+X
+
+> i=1
+
+q2 
+
+> i
+
+− 2b
+
+> n
+
+X
+
+> k=1
+
+qk + ( n + 1) b2.
+
+Using Pni=1 qi = nμ q , we obtain 
+
+f (b) = ∥q∥22 − 2bnμ q + ( n + 1) b2.
+
+Thus the norm of u(q, b ) is less than the norm of q when 
+
+−2bnμ q + ( n + 1) b2 < 0(n + 1) b2 < 2bnμ q
+
+b2 < 2bb ∗
+
+b(b − 2b∗) < 0.
+
+This inequality holds if either b < 0 or (b − 2b∗) < 0, but not both. If μq < 0, then b∗ < 0. Conversely, if μq > 0, then b∗ > 0.Thus, if b⋆ < 0, then the norm is reduced for 2b⋆ < b < 0.If b⋆ > 0, then the norm is reduced for 0 < b < 2b⋆.This implies that if μq̸ = 0 , then ∥u(q, b )∥22 is less than 
+
+∥q∥22.
+
+Proposition 5. Let q ∈ Rn and b ∈ R. Assume μq̸ =0. The absolute value of the mean of the residual vector, 
+
+gq (b) = | 1
+
+> n
+
+Pni=1 (qi − b)| = |μq − b| = μz , decreases from b = 0 to b = μq , regardless of the sign of μq .Proof. 
+
+gq (b) = 
+
+(
+
+μq − b b ≤ μq ,b − μq b > μ q .
+
+So, if b < μ q , dgq 
+
+> db
+
+= −1, and if b > μ q , dgq 
+
+> db
+
+= 1 . Thus, if 
+
+μq > 0, then on the interval b ∈ (0 , μ q ) gq (b) is decreasing. If μq < 0 then on the interval b ∈ (μq , 0) gq (b) is increas-ing. Thus, gq (b) is decreasing from b = 0 to b = μq .
+
+Proposition 6. Let q ∈ Rn and b ∈ R. Assume μq̸ = 0 .The squared Euclidean norm of the residual vector ∥q −
+
+b1∥22 has decreasing magnitude from b = 0 to b = μq ,regardless of the sign of μq .Proof. Define fq (b) = ∥q − b1∥22 = Pni=1 (qi − b)2.To understand whether fq (b) is increasing or decreasing as a function of b, we examine its derivative: 
+
+df q
+
+db = −2
+
+> n
+
+X
+
+> i=1
+
+(qi − b) = 2 
+
+> n
+
+X
+
+> i=1
+
+(b − qi) = 2 n(b − μq ).
+
+Thus, fq (b) is decreasing when 
+
+2n(b − μq ) < 0 ⇐⇒ b < μ q ,
+
+and increasing when b > μ q . The norm of the residual vector is minimized at b = μq , a known fact. We can examine the two cases. In the first case, if μq < 0, then 12 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+for b ∈ (μq , 0) we have b > μ q , so fq (b) is increasing on this interval and hence decreases from b = 0 to μq . In the second case, if μq > 0, then for b ∈ [0 , μ q ) we have b < μ q ,so fq (b) is decreasing on this interval. Thus, from b = 0 to b = μq , the norm of the residual vector decreases regardless of the sign of μq .
+
+A.2. Analysis of the Mean-Expansion Layer Proposition 3. Let μz = 1
+
+> n
+
+Pni=1 zi. Let b = kμ z , where 
+
+b1 = kn Jz . Then if k > 0,
+
+b = kμ z =
+
+Pni=1 qi
+
+n + nk
+
+. (7) 
+
+Proof. Let Sq = Pni=1 qi and let Sz = Pni=1 zi.As Q-values are constructed with Q(s, a ) = Z(s, a ) + 
+
+> kn
+
+P 
+
+> a′
+
+Z(s, a ′), then for k ≥ 0, we can sum all Q-values: 
+
+Sq = Sz + kn Sz
+
+kn Sq = kn Sz + k2
+
+n Sz
+
+kn Sq = kn Sz (k + 1)  
+
+> kn
+
+Sq
+
+k + 1 = kn Sz
+
+Sq 
+
+> nk
+
+(k + 1) = kn Sz
+
+kμ z = Sq
+
+n + nk
+
+.
+
+A.3. Properties of the Mean-Expansion Layer 
+
+In Equation 6, we described the geometric properties of the mean-expansion layer as stretching the mean component of the vector. This framing can be seen below. 
+
+q =
+
+
+
+I + kn J
+
+
+
+x
+
+=
+
+
+
+I + kn J + 1
+
+n J − 1
+
+n J
+
+
+
+x
+
+=
+
+ kn Jx 
+
+
+
++
+
+ 1
+
+n Jx 
+
+
+
++
+
+
+
+I − 1
+
+n J
+
+
+
+x
+
+= ( k + 1) 
+
+ 1
+
+n Jx 
+
+
+
++
+
+
+
+I − 1
+
+n J
+
+
+
+x
+
+= ( k + 1) 
+
+ 1
+
+n Jx 
+
+
+
++
+
+
+
+x − 1
+
+n Jx 
+
+
+
+.
+
+The first term stretches the mean and the second term sub-tracts the mean component from the original vector. 
+
+Proposition 2. Given vector q ∈ Rn, the unique minimizer of Equation 4 is the solution to the system of equations: 
+
+q =
+
+
+
+I + kn J
+
+
+
+z. (5) 
+
+Proof. Let 
+
+f (z) = 1
+
+n ∥z − q∥22 + k 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+zi
+
+!2
+
+= 1
+
+n (z − q)⊤(z − q) + k 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+zi
+
+!2
+
+= 1
+
+n (z − q)⊤(z − q) + k
+
+ 1
+
+n 1⊤z
+
+2
+
+= 1
+
+n (z − q)⊤(z − q) + kn2 z⊤11 ⊤z
+
+= 1
+
+n (z − q)⊤(z − q) + kn2 z⊤Jz 
+
+We can then take the gradient with respect to z,
+
+∇z f (z) = 2
+
+n (z − q) + 2kn2 Jz .
+
+Setting the gradient to 0 and dividing by 2, we get: 
+
+0 = 1
+
+n (z − q) + kn2 Jz 
+
+0 = ( z − q) + kn Jz q = z + kn Jz q =
+
+
+
+I + kn J
+
+
+
+z.
+
+B. Tabular Update Rules 
+
+To derive the update rules for our residuals, we do Q-learning on the implied Q-values. Let the Q-learning error at time t be δt = rt+1 + γ max a′ Q(st+1 , a ′) − Q(st, a t).We then apply gradient descent to the Q-learning error and minimize L = 12 δ2 
+
+> t
+
+. For transition (st, a t, r t+1 , s t+1 ), the derivative with respect to Z(st, a ), for action a in state st is 
+
+∂L
+
+∂Z (st, a ) = ∂L
+
+∂Q (st, a )
+
+∂Q (st, a )
+
+∂Z (st, a ) (17) 
+
+= ( −δt) ∂Q ∂Z (st, a ) (18) 
+
+= ( −δt)
+
+
+
+1{at=a} + kn
+
+
+
+. (19) 13 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+The interpretation, as shown in Equations 8 and 9, is that the chosen action is updated in greater proportion to the TD error than the other actions. That is, the update adds 
+
+αt(1 + k/n)δt to the chosen action’s residual, whereas the update adds αt(k/n)δt to the residuals of the chosen action. 
+
+C. Semantics of the Dueling Network Architecture 
+
+In this Appendix, we discuss dueling methods more closely. 
+
+C.1. Dueling Deep Q-networks 
+
+Dueling DQN (Wang et al., 2016) in fact learns a mean-residual decomposition of action-values, under the terms “value” and “advantage” for the mean and residuals, respec-tively. Its modification to the DQN architecture is to learn 
+
+B(s; θ) in a baseline stream and Z(s, ·; θ) in a residual stream. The baseline and residual streams are aggregated to construct the Q-values 
+
+Q(s, a ; θ) = B(s; θ) + Z(s, a ; θ), (20) or Q(s, ·; θ) = B(s; θ)1+Z(s, ·; θ). Prior to outputting the residual vector Z(s, ·; θ), the residual stream first produces raw outputs X(s, a ; θ), which are then zero-centered to produce the action residuals Z(s, ·; θ):
+
+Z(s, a ; θ) = X(s, a ; θ) − 1
+
+n
+
+X
+
+> a′∈A
+
+X(s, a ′; θ). (21) Wang et al. (2016) find this architecture to be effective, providing a substantial improvement over DQN. We can analyze the semantics of the dueling network archi-tecture through its construction of action-values. First, note that due to the zero-centering in Equation 21, the sum of residuals is zero: 
+
+X
+
+> a
+
+Z(s, a ; θ) = X
+
+> a
+
+
+
+X(s, a ; θ) − 1
+
+n
+
+X
+
+> a′
+
+X(s, a ′; θ)
+
+
+
+= X
+
+> a
+
+
+
+X(s, a ; θ)
+
+
+
+− nn
+
+X
+
+> a′
+
+X(s, a ′; θ)= 0 .
+
+Thus, summing the Q-values, we get 
+
+X
+
+> a
+
+Q(s, a ; θ) = X
+
+> a
+
+
+
+B(s; θ) + Z(s, a ; θ)
+
+X
+
+> a
+
+Q(s, a ; θ) = nB (s; θ) + X
+
+> a
+
+Z(s, a ; θ)
+
+X
+
+> a
+
+Q(s, a ; θ) = nB (s; θ).
+
+Dividing by n:
+
+1
+
+n
+
+X
+
+> a
+
+Q(s, a ; θ) = B(s; θ).
+
+Thus, Dueling DQN enforces 
+
+B(s; θ) = 1
+
+n
+
+X
+
+> a
+
+Q(s, a ; θ) ,
+
+i.e., the output of the baseline stream B(s; θ) is the mean action-value for the state. As Q(s, a ; θ) = B(s; θ) + 
+
+Z(s, a ; θ), each Z(s, a ); θ is a residual with respect to the mean action-value. Thus, Dueling DQN implements a mean-residual decomposition .
+
+C.2. Regularized Dueling Q-learning 
+
+The recently proposed Regularized Dueling Q-learning (RDQ) (Daley et al., 2025) uses the same Dueling DQN architecture and aggregates values according to Equation 20, but without the centering of the raw network outputs in Equa-tion 21. In Dueling DQN, Equation 21 plays an important role in providing identifiability to the system in Equation 20 to ensure that the n + 1 variables, i.e., a single baseline and 
+
+n residuals, are not unconstrained. RDQ adopts a different approach to constrain values through explicit regularization of the network outputs. In particular, if the network outputs B(s; θ) and Z(s, a ; θ) for all a ∈ A ,RDQ adds the following penalty term to the DQN loss: 
+
+β B(s; θ)2 + X
+
+> a
+
+Z(s, a ; θ)2
+
+!
+
+,
+
+where β is a regularization coefficient. In effect, this method encourages the baseline-residual vector of the optimal base-line in Equation 2. Unlike IB-DQN or Dueling DQN, RDQ does not use the residuals and baseline to represent any spe-cific predefined baseline. Dueling DQN and IB-DQN both structurally enforce their baseline terms to be specific scalar multiples of the average action-value. RDQ simply uses 
+
+B(s; θ) generally as a baseline, and penalizes it to ensure a low-norm representation. 14 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+D. Mean-expansion Layer PyTorch Code 
+
+The PyTorch (Paszke et al., 2019) code for the ME layer can be implemented in a dozen lines.                                 
+
+> 1import torch
+> 23class MeanExpansionLayer(torch.nn.Module):
+> 4def __init__(self, mean_scaling_coefficient):
+> 5super().__init__()
+> 6self.register_buffer(’scale’, torch.tensor(1 +mean_scaling_coefficient))
+> 78def forward(self, vec):
+> 9mean =vec.mean(dim=-1, keepdim=True)
+> 10 residual =vec -mean
+> 11 output =self.scale * mean +residual
+> 12 return output
+
+E. Experimental Setup 
+
+In this Appendix, we discuss the training and evaluation details for our agents. 
+
+E.1. Environment and training settings 
+
+We train agents in the Arcade Learning Environment (Bellemare et al., 2013), using the environment protocol proposed by Machado et al. (2018). We use sticky actions, where the agent’s most recently executed simulator action is repeated in the subsequent frame with probability 0.25. We expose the agents to the full action set of 18 actions in all games. The only termination signal the agent receives is when the game is over, corresponding to the end of an episode. The agents are trained for 50M timesteps. These 50M timesteps are divided into 200 training phases, each lasting 250k timesteps. After each training phase is an evaluation phase lasting 125k timesteps. During evaluation, the agents deploy an 
+
+ϵ-greedy policy with ϵ = 0 .001 . During both training and evaluation, episodes that reach the 30-minute time limit, which corresponds to 27,000 timesteps, are truncated. 
+
+E.2. Algorithm training details and hyperparameters 
+
+The training details of DQN largely follow Mnih et al. (2015). We use their architecture, pre-processing schema, and other details unless otherwise mentioned. One distinction worth noting is that we have our agents deploy an ϵ-greedy policy during training that is annealed from ϵ = 1 to ϵ = 0 .01 over the first 1M timesteps. Another distinction is that we use the Adam optimizer and the squared error loss as opposed to RMSprop with Huber loss. Table 1 contains more implementation details and hyperparameters. For IQN, our training details largely follow Dabney et al. (2018). We use their same architecture. Our exploration ϵ-decay schedule matches DQN. We use Adam with step size 5 × 10 −5 and ϵ = 3 .125 × 10 −4, and other hyperparameters follow the original paper. 
+
+E.3. Metrics 
+
+Human-normalized scores (HNS) provide a mechanism for evaluating an agent’s score in a manner that is comparable across games. The human-normalized score (Mnih et al., 2015) of an agent can be computed as score hns = score agent − score random 
+
+score human − score random 
+
+. (22) The human and random scores are taken from Quan & Ostrovski (2020). 
+
+Measuring Overestimation In this paper, we follow Nagarajan et al. (2026)’s protocol for measuring overestimation. During evaluations, we deploy a near-greedy evaluation policy. We only consider completed evaluation episodes, which are episodes that terminate or truncate due to reaching the maximum allowed episode length of 27,000 timesteps. Any episodes that are truncated prematurely due to the evaluation phase ending are discarded. Each state-action pair in a completed episode has a received empirical return. On truncations due to time limit, we bootstrap the value of the final state to compute the empirical return. Overestimation for a state-action pair is computed as the difference between the action-value prediction 15 Accelerating Q-learning through Efficient Value-Sharing across Actions  
+
+> Table 1. DQN training hyperparameters. We use * to indicate hyperparameters that differ from the original DQN paper.
+
+Hyperparameter Value Description 
+
+minibatch size 32 Sample batch size of gradient updates. replay memory capacity 1,000,000 Number of recent transitions stored in the replay buffer. agent history length 4 Number of previous frames stacked in state representation. target network update frequency 2,500 Frequency (in terms of gradient updates) of target network updates. discount rate 0.99 Value of γ.action repeat 4 In one timestep, actions are repeated for multiple simulator frames. update frequency 4 Frequency (in timesteps) of parameter updates. replay start size 50K Minimum number of transitions in the replay buffer required before parameter updates begin. initial exploration 1.0 Initial value of ϵ used for ϵ-greedy exploration. *final exploration 0.01 Final value of ϵ used for ϵ-greedy exploration. final exploration timestep 1,000,000 The timesteps over which ϵ is linearly annealed to its final ϵ.maximum episode length 27,000 Timesteps after which an episode is truncated and the environment is reset. step size 6.25 × 10 −5 The step size used by Adam. *Adam ϵ 1.5 × 10 −4 The ϵ used by Adam. *Adam β1 0.9 β1 hyperparameter value in Adam. *Adam β2 0.999 β2 hyperparameter value in Adam. 
+
+and the received empirical return. We average these over all state-action pairs in all evaluation episodes across all evaluation phases in a training run across all seeds to produce a single scalar measurement of overestimation. We then report the difference in overestimation between the two algorithms. DQN agents (on Atari) employ reward clipping, where rewards are clipped to the range [−1, 1] . Since agents are trained to predict return estimates under this reward, we ensure that this clipping is also applied to compute returns. Combined with discounting, clipping often causes returns to be much smaller than the raw game scores, which are undiscounted and unclipped. 
+
+Measuring the Action Gap To measure the action gap, we sample a minibatch from the buffer after each target network update and measure the action gap, i.e., the difference between the highest and second-highest action-value averaged across all (pre-transition) states in the minibatch. These quantities are averaged across all measurements in a training phase. We also maintain a running average of the last 1000 average minibatch action-values for each training phase. The relative action gap for a training phase is computed as the average action gap divided by the absolute value of the average action-value with a stability term of 1e-8 added to the denominator. These relative action gaps are averaged across all training phases and seeds. Figure 4 ( right ) reports the difference in the relative action gap between the two algorithms, clipped at 0.01 for presentation. 
+
+E.4. Baselines 
+
+For our Dueling DQN implementation, we used the exact same settings as DQN, but replace the network with the dueling network architecture. The final convolution layer outputs 64 filters of size 7 × 7 feature maps which are flattened into 3,136 outputs. Following these flattened outputs are two independent streams of two-layer fully connected networks. Each stream has a hidden of layer of 512 units and ReLU activations (Householder, 1941). The first stream outputs a single scalar B(s; θ), and the second stream outputs an n-dimensional vector x(s; θ), which is centered to output the residuals 
+
+z(s; θ) = x(s; θ) − 1 
+
+> n
+
+Jx(s; θ).RDQ shares the same dueling network architecture, but outputs the residuals z(s; θ) directly, as opposed to first centering the raw outputs. It also includes a regularization coefficient β on the penalty B(s; θ)2 + P 
+
+> a
+
+Z(s, a ; θ)2. We tested 5 different values of β on Atari-5-Val (Aitchison et al., 2023), a subset of environments used for validation. As long as β was not too large, we found RDQ to be relatively robust. We did not observe an improvement for changing β from 0.001 , as was 16 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+set by Daley et al. (2025), and thus kept this value. 
+
+F. Mean-Expansion Layer with RMSprop 0M 10M 20M 30M 40M 50M 
+
+> Steps
+> 0%
+> 20%
+> 40%
+> 60%
+> 80%
+> Human Normalized Score
+> IQM
+> DQN (RMSprop)
+> IB-DQN (n)(RMSprop)
+
+Figure 6. The ME layer with RMSprop and the Huber loss. The plot shows the interquar-tile mean of DQN with and without the ME layer across 55 games. All algorithms were run for three seeds per game. The shaded region depicts the 95% stratified bootstrap confidence interval (Agarwal et al., 2021). 
+
+To examine how the ME layer impacts performance in deep RL outside of the Adam optimizer, we also tested with the RMSprop (Tieleman, 2012) optimizer and the Huber loss, with the optimizer hyperparameters matched that of the original DQN (Mnih et al., 2015). In particular, we compare, across 55 environments and three seeds per environment, the interquartile mean in performance between DQN and IB-DQN( n). Consistent with our prior results, we find that IB-DQN( n) substantially outperforms DQN in this setting, providing further evidence for the general efficacy of the ME layer. 
+
+G. Per-Game Results 
+
+In this Appendix, we include the per-game results corresponding to the Atari 2600 experiments in Section 6. We include the full learning curves for each game in Figure 7. We also include curves that show the overestimation of DQN and IB-DQN throughout training in Figure 8. Lastly, Table 2 reports the mean score across the final three evaluation phases for each algorithm and game. 17 Accelerating Q-learning through Efficient Value-Sharing across Actions 0M 10M 20M 30M 40M 50M 
+
+0
+
+1K 
+
+2K 
+
+3K 
+
+4K 
+
+5K 
+
+> Score
+
+Alien 0M 10M 20M 30M 40M 50M 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+1200 
+
+Amidar 0M 10M 20M 30M 40M 50M 
+
+1K 
+
+2K 
+
+3K 
+
+4K 
+
+5K 
+
+Assault 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+10K 
+
+20K 
+
+30K 
+
+40K 
+
+Asterix 0M 10M 20M 30M 40M 50M 
+
+500 
+
+1000 
+
+1500 
+
+2000 
+
+2500 
+
+3000 
+
+3500 
+
+> Score
+
+Asteroids 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+200K 
+
+400K 
+
+600K 
+
+800K 
+
+Atlantis 0M 10M 20M 30M 40M 50M 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+1200 
+
+1400 
+
+Bank Heist 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+5K 
+
+10K 
+
+15K 
+
+20K 
+
+25K 
+
+30K 
+
+35K 
+
+Battle Zone 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+> Score
+
+Beam Rider 0M 10M 20M 30M 40M 50M 
+
+200 
+
+300 
+
+400 
+
+500 
+
+600 
+
+700 
+
+Berzerk 0M 10M 20M 30M 40M 50M 
+
+10 
+
+20 
+
+30 
+
+40 
+
+Bowling 0M 10M 20M 30M 40M 50M 
+
+20 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+Boxing 0M 10M 20M 30M 40M 50M 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+> Score
+
+Breakout 0M 10M 20M 30M 40M 50M 
+
+2K 
+
+3K 
+
+4K 
+
+5K 
+
+6K 
+
+Centipede 0M 10M 20M 30M 40M 50M 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+Chopper Command 0M 10M 20M 30M 40M 50M 
+
+20K 
+
+40K 
+
+60K 
+
+80K 
+
+100K 
+
+120K 
+
+Crazy Climber 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+5K 
+
+10K 
+
+15K 
+
+20K 
+
+25K 
+
+> Score
+
+Defender 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+10K 
+
+20K 
+
+30K 
+
+40K 
+
+50K 
+
+60K 
+
+70K 
+
+Demon Attack 0M 10M 20M 30M 40M 50M 
+
+20 
+
+15 
+
+10 
+
+5
+
+0
+
+5
+
+10 
+
+Double Dunk 0M 10M 20M 30M 40M 50M 
+
+0
+
+500 
+
+1K 
+
+1.5K 
+
+2K 
+
+Enduro 0M 10M 20M 30M 40M 50M 
+
+80 
+
+60 
+
+40 
+
+20 
+
+0
+
+20 
+
+40 
+
+> Score
+
+Fishing Derby 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+35 Freeway 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+Frostbite 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+5K 
+
+8K 
+
+10K 
+
+12K 
+
+15K 
+
+18K 
+
+20K 
+
+Gopher 0M 10M 20M 30M 40M 50M 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+1200 
+
+1400 
+
+> Score
+
+Gravitar 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+5K 
+
+10K 
+
+15K 
+
+20K 
+
+25K 
+
+Hero 0M 10M 20M 30M 40M 50M 
+
+15 
+
+10 
+
+5
+
+0
+
+5
+
+10 
+
+Ice Hockey 0M 10M 20M 30M 40M 50M 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+Jamesbond 
+
+18 Accelerating Q-learning through Efficient Value-Sharing across Actions 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+> Score
+
+Kangaroo 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+Krull 0M 10M 20M 30M 40M 50M 
+
+5K 
+
+10K 
+
+15K 
+
+20K 
+
+25K 
+
+30K 
+
+Kung Fu Master 0M 10M 20M 30M 40M 50M 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+Montezuma Revenge 0M 10M 20M 30M 40M 50M 
+
+1K 
+
+2K 
+
+3K 
+
+4K 
+
+5K 
+
+> Score
+
+Ms Pacman 0M 10M 20M 30M 40M 50M 
+
+2K 
+
+5K 
+
+8K 
+
+10K 
+
+12K 
+
+15K 
+
+18K 
+
+Name This Game 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K Phoenix 0M 10M 20M 30M 40M 50M 
+
+200 
+
+150 
+
+100 
+
+50 
+
+0
+
+Pitfall 0M 10M 20M 30M 40M 50M 
+
+20 
+
+15 
+
+10 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+> Score
+
+Pong 0M 10M 20M 30M 40M 50M 
+
+300 
+
+200 
+
+100 
+
+0
+
+100 
+
+200 
+
+Private Eye 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+14K 
+
+16K 
+
+Qbert 0M 10M 20M 30M 40M 50M 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+14K 
+
+Riverraid 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+10K 
+
+20K 
+
+30K 
+
+40K 
+
+50K 
+
+60K 
+
+> Score
+
+Road Runner 0M 10M 20M 30M 40M 50M 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+Robotank 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+5K 
+
+10K 
+
+15K 
+
+20K 
+
+Seaquest 0M 10M 20M 30M 40M 50M 
+
+-30K 
+
+-28K 
+
+-25K 
+
+-22K 
+
+-20K 
+
+-18K 
+
+-15K 
+
+-12K 
+
+-10K 
+
+Skiing 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+0K 
+
+0K 
+
+1K 
+
+1K 
+
+1K 
+
+2K 
+
+2K 
+
+> Score
+
+Solaris 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+14K 
+
+Space Invaders 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+20K 
+
+40K 
+
+60K 
+
+80K 
+
+Star Gunner 0M 10M 20M 30M 40M 50M 
+
+10.0 
+
+7.5 
+
+5.0 
+
+2.5 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+Surround 0M 10M 20M 30M 40M 50M 
+
+20 
+
+10 
+
+0
+
+10 
+
+20 
+
+> Score
+
+Tennis 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+14K 
+
+16K 
+
+Time Pilot 0M 10M 20M 30M 40M 50M 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+Tutankham 0M 10M 20M 30M 40M 50M 
+
+0K 
+
+10K 
+
+20K 
+
+30K 
+
+40K 
+
+50K 
+
+Up N Down 0M 10M 20M 30M 40M 50M 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+1200 
+
+> Score
+
+Venture 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0K 
+
+100K 
+
+200K 
+
+300K 
+
+400K 
+
+500K 
+
+Video Pinball 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+Wizard Of Wor 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0K 
+
+10K 
+
+20K 
+
+30K 
+
+40K 
+
+50K 
+
+60K 
+
+70K 
+
+80K 
+
+Yars Revenge 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0K 
+
+2K 
+
+4K 
+
+6K 
+
+8K 
+
+10K 
+
+12K 
+
+14K 
+
+> Score
+
+Zaxxon DQN 
+
+Dueling DQN 
+
+IB-DQN( 1)
+
+IB-DQN( n)
+
+RDQ 
+
+IQN 
+
+IB-IQN( n)
+
+Figure 7. Mean score across 50M timesteps over five seeds per game. For readability, plots are smoothed with a moving average of seven. 
+
+19 Accelerating Q-learning through Efficient Value-Sharing across Actions 0M 10M 20M 30M 40M 50M 
+
+5.0 
+
+2.5 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+> Overestimation
+
+Alien 0M 10M 20M 30M 40M 50M 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+Amidar 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+Assault 0M 10M 20M 30M 40M 50M 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+Asterix 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> Overestimation
+
+Asteroids 0M 10M 20M 30M 40M 50M 
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+Atlantis 0M 10M 20M 30M 40M 50M 
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+Bank Heist 0M 10M 20M 30M 40M 50M 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+Battle Zone 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+> Overestimation
+
+Beam Rider 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Berzerk 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+Bowling 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+Boxing 0M 10M 20M 30M 40M 50M 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+> Overestimation
+
+Breakout 0M 10M 20M 30M 40M 50M 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Centipede 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Chopper Command 0M 10M 20M 30M 40M 50M 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Crazy Climber 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> Overestimation
+
+Defender 0M 10M 20M 30M 40M 50M 
+
+0
+
+2
+
+4
+
+6
+
+Demon Attack 0M 10M 20M 30M 40M 50M 
+
+0
+
+1
+
+2
+
+3
+
+Double Dunk 0M 10M 20M 30M 40M 50M 
+
+2.5 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+17.5 
+
+Enduro 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+> Overestimation
+
+Fishing Derby 0M 10M 20M 30M 40M 50M 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+Freeway 0M 10M 20M 30M 40M 50M 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Frostbite 0M 10M 20M 30M 40M 50M 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+Gopher 0M 10M 20M 30M 40M 50M 
+
+1.0 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+> Overestimation
+
+Gravitar 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Hero 0M 10M 20M 30M 40M 50M 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Ice Hockey 0M 10M 20M 30M 40M 50M 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+Jamesbond 
+
+20 Accelerating Q-learning through Efficient Value-Sharing across Actions 0M 10M 20M 30M 40M 50M 
+
+1.0 
+
+0.5 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+> Overestimation
+
+Kangaroo 0M 10M 20M 30M 40M 50M 
+
+15 
+
+10 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Krull 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6 Kung Fu Master 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Montezuma Revenge 0M 10M 20M 30M 40M 50M 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> Overestimation
+
+Ms Pacman 0M 10M 20M 30M 40M 50M 
+
+2.5 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+Name This Game 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+Phoenix 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Pitfall 0M 10M 20M 30M 40M 50M 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+> Overestimation
+
+Pong 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Private Eye 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+Qbert 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+Riverraid 0M 10M 20M 30M 40M 50M 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> Overestimation
+
+Road Runner 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+Robotank 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+Seaquest 0M 10M 20M 30M 40M 50M 
+
+5
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Skiing 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+> Overestimation
+
+Solaris 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+Space Invaders 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Star Gunner 0M 10M 20M 30M 40M 50M 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+Surround 0M 10M 20M 30M 40M 50M 
+
+0
+
+1
+
+2
+
+3
+
+> Overestimation
+
+Tennis 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Time Pilot 0M 10M 20M 30M 40M 50M 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Tutankham 0M 10M 20M 30M 40M 50M 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+Up N Down 0M 10M 20M 30M 40M 50M 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+> Overestimation
+
+Venture 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+Video Pinball 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+Wizard Of Wor 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+Yars Revenge 0M 10M 20M 30M 40M 50M 
+
+Steps 
+
+1
+
+0
+
+1
+
+2
+
+3
+
+> Overestimation
+
+Zaxxon DQN 
+
+IB-DQN( 1)
+
+IB-DQN( n)
+
+Figure 8. Mean overestimation across 50M timesteps across five seeds. Overestimation capped at 25 for visibility. Translucent curves are the individual seeds. 
+
+21 Accelerating Q-learning through Efficient Value-Sharing across Actions 
+
+Environment DQN Dueling DQN IB-DQN( 1) IB-DQN( n) RDQ( β = 0 .001 ) IQN IB-IQN( n)ALIEN 3446.7 3686.3 3602.8 3751.2 5075.3 3886.3 4298.1 
+
+AMIDAR 704.1 721.5 1076.5 1104.7 1262.4 952.9 980.4 
+
+ASSAULT 1864.5 1481.4 1815.6 2039.6 1698.4 3479.8 5159.2 
+
+ASTERIX 11725.6 13975.8 13689.3 17452.8 24383.4 30104.1 39998.3 
+
+ASTEROIDS 1071.2 1167.6 1012.9 1073.4 2856.2 1144.7 1178.5 
+
+ATLANTIS 821470.0 841251.7 886831.7 856981.7 922795.0 941850.0 865951.7 BANK HEIST 966.4 1168.1 1028.1 1270.8 1245.3 1203.8 1463.0 
+
+BATTLE ZONE 28035.5 28205.0 27649.0 33482.2 32937.7 27673.7 37347.3 
+
+BEAM RIDER 5028.0 3838.2 4315.6 4982.4 5669.1 7803.1 10219.5 
+
+BERZERK 628.5 493.9 691.2 576.8 597.2 718.2 593.9 BOWLING 28.6 25.4 30.5 33.5 30.4 39.4 35.8 BOXING 94.5 96.2 95.1 95.2 94.5 98.0 98.6 
+
+BREAKOUT 91.3 172.7 61.0 133.8 133.3 309.3 288.0 CENTIPEDE 4714.9 5696.2 3308.1 5013.4 4606.5 5862.1 6395.2 
+
+CHOPPER COMMAND 5987.9 5173.5 6508.0 8174.8 6142.7 7857.3 10551.8 
+
+CRAZY CLIMBER 106037.2 121540.2 110589.1 124345.3 121425.0 119368.5 120757.1 
+
+DEFENDER 9260.5 9195.2 7623.7 22271.0 13766.2 19813.2 26517.9 
+
+DEMON ATTACK 7450.4 6052.2 6607.9 16491.9 6205.8 47948.2 55029.9 
+
+DOUBLE DUNK -2.3 -5.3 9.6 -7.0 3.1 -1.8 2.0 
+
+ENDURO 1773.8 1695.6 1839.1 1748.2 1897.2 2204.7 2127.2 FISHING DERBY 14.6 30.8 15.5 39.0 44.0 42.5 44.9 
+
+FREEWAY 33.8 33.9 33.8 33.9 33.8 33.9 33.9 
+
+FROSTBITE 6151.2 5714.5 6710.5 6697.5 6775.6 6913.1 8556.4 
+
+GOPHER 15184.2 13862.0 13380.0 13337.7 17110.1 18495.5 14897.3 GRAVITAR 1058.7 1334.3 1261.3 846.3 1196.5 876.2 1125.9 
+
+HERO 26142.7 27788.5 24745.0 20885.0 19005.1 22822.0 26173.6 
+
+ICE HOCKEY -7.1 -5.1 -4.5 -2.5 4.9 9.8 7.9 JAMESBOND 848.4 770.2 844.1 648.9 624.2 679.4 539.6 KANGAROO 7690.1 1930.7 8704.5 11540.8 12261.9 12918.2 11563.1 KRULL 8112.6 8666.3 8560.9 8283.4 8758.2 8887.2 9273.0 
+
+KUNG FUMASTER 23924.3 26705.8 24500.2 24845.0 25119.4 25362.0 28962.8 
+
+MONTEZUMA REVENGE 0.0 0.0 0.0 0.0 0.0 0.0 0.0 MSPACMAN 3236.6 3882.0 3301.2 4222.4 4318.7 4261.9 4857.0 
+
+NAME THIS GAME 6810.0 5134.5 6421.4 6203.6 8021.4 14222.0 18136.8 
+
+PHOENIX 5128.0 4656.4 7005.4 4930.3 8814.6 6782.4 8448.9 
+
+PITFALL -62.2 -59.7 -157.4 -8.9 -16.1 -12.3 -23.5 PONG 19.8 19.8 19.8 18.9 19.6 18.7 19.6 
+
+PRIVATE EYE 68.5 -105.4 -241.1 -47.9 -103.0 125.2 100.0 QBERT 14445.4 13913.9 14310.4 14499.8 13709.0 15153.6 16185.5 
+
+RIVERRAID 11169.2 13658.7 12110.3 14068.4 14854.6 13305.8 13487.1 
+
+ROAD RUNNER 53174.3 59137.8 53886.1 54619.0 54881.5 58900.4 60329.1 
+
+ROBOTANK 62.0 62.7 60.8 67.4 67.0 70.5 68.4 SEAQUEST 4620.3 9953.0 7760.2 7155.8 18852.1 8418.8 15313.7 
+
+SKIING -23539.1 -10948.9 -24026.5 -11007.6 -30000.0 -22549.1 -10119.8 
+
+SOLARIS 770.5 4.6 913.6 1189.4 1159.3 1490.9 1273.4 SPACE INVADERS 2922.8 2843.5 3091.7 3906.0 7166.5 11839.3 10930.3 STAR GUNNER 28529.9 46965.0 56808.9 62851.0 51615.8 82905.3 84907.1 
+
+SURROUND -0.5 -2.6 -10.0 4.2 5.3 6.7 7.8 
+
+TENNIS 22.3 22.1 6.7 22.9 23.3 17.1 22.5 
+
+TIME PILOT 8569.5 10599.5 8405.2 12774.8 13706.2 9316.3 16053.7 
+
+TUTANKHAM 102.1 171.5 36.6 195.5 214.1 225.4 221.7 UPND OWN 10570.1 46005.7 11025.4 20121.6 29311.0 27168.5 25773.2 VENTURE 1208.6 0.0 1295.9 238.7 208.4 476.6 581.6 
+
+VIDEO PINBALL 239194.8 219113.3 283539.1 315799.9 270117.5 315433.3 498255.0 
+
+WIZARD OFWOR 4031.7 4185.5 6285.3 7660.8 7826.4 11630.1 8146.0 YARS REVENGE 53891.5 61301.1 58932.9 56972.5 66570.2 51722.7 83357.6 
+
+ZAXXON 10034.8 6837.9 10370.4 10653.4 12278.4 12468.9 14341.8 
+
+Table 2. The mean evaluation score across the last 3 evaluations during training for each algorithm across five seeds. The highest scores for an environment are bolded, with separate comparisons for the IQN variants. 
+
+22
