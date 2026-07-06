@@ -1,0 +1,574 @@
+Title: VLM-AR3L: Vision-Language Models for Absolute and Relative Rewards in Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2607.00483v2
+
+Published Time: Fri, 03 Jul 2026 00:30:47 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# VLM-AR3L: Vision-Language Models for Absolute and Relative Rewards in Reinforcement Learning 
+
+Kuan-Chen Chen 1 , Winston Chen 1 , Wei-Fang Sun 2 and Min-Chun Hu 11Department of Computer Science, National Tsing Hua University 
+
+> 2
+
+NVIDIA AI Technology Center (NVAITC) 
+
+Abstract 
+
+Designing effective reward functions remains a ma-jor challenge in reinforcement learning (RL), par-ticularly in open-ended environments where task goals are abstract and difficult to quantify. In this work, we present VLM-AR3L, a framework that leverages Vision-Language Models (VLMs) to pro-vide both absolute and relative rewards for RL. VLM-AR3L interprets an agent’s visual observa-tions in the context of a natural language task goal, and learns both absolute and relative rewards from VLM-generated preference labels. The absolute re-ward model predicts scalar evaluations for individ-ual states, while the relative reward model com-pares consecutive observations to infer progress or regression toward the task goal. Their inte-gration combines the stability of state-based eval-uation with the robustness of comparative super-vision. We evaluate VLM-AR3L across bench-marks spanning classic control, manipulation, and open-world embodied tasks, with a particular fo-cus on Minecraft given its visual complexity and long-horizon decision-making requirements. Ex-perimental results show that VLM-AR3L consis-tently outperforms prior VLM-based reward learn-ing methods. Videos and code are available on the project website: https://vlm-ar3l.github.io/. 
+
+1 Introduction 
+
+Designing effective reward functions remains a major chal-lenge in reinforcement learning (RL) [Laud, 2004; Leike et al. , 2018; OpenAI, 2019; Gupta et al. , 2022]. This challenge is especially pronounced in open-ended or visually complex environments, where task goals are often abstract and diffi-cult to specify precisely. For example, in open-world environ-ments such as Minecraft, agents are often assigned high-level goals (e.g., “build a shelter”) that require long-horizon plan-ning and semantic understanding, while intermediate states provide little explicit reward signal. As a result, hand-crafting reward functions in such settings is typically impractical, due to ambiguous objectives, sparse feedback, and the absence of privileged state information. To address this bottleneck, recent approaches have explored leveraging large pre-trained models as sources of reward, enabling agents to learn from high-level task descriptions or multimodal alignment signals. Large language models (LLMs) have been shown to pro-vide structured code or textual feedback for RL agents in text-based or programmatic settings. However, these methods often rely on privileged state access or handcrafted program-matic interfaces, limiting their applicability in real-world vi-sual domains. When working with visual observations, con-trastive vision-language models (cVLMs) such as CLIP are widely used to compute similarity scores between observa-tions and goals for reward shaping. While simple and scal-able, these methods typically require task-specific fine-tuning or retraining to be effective across different domains. To move beyond direct similarity-based alignment, preference-based reward modeling has emerged as a promis-ing alternative. These methods learn reward functions by comparing observation pairs and inferring preferences that are typically obtained from human feedback or large pre-trained models. This formulation enables finer-grained feed-back and greater robustness in visually diverse or ambigu-ous environments. For instance, RL-VLM-F [Wang et al. ,2024] leverages generative vision-language models (VLMs) to generate pairwise preferences, which are then used to train a reward model that assigns scalar values to individual states. We call this approach absolute reward . However, we ob-serve that absolute reward signals can be inconsistent across training steps (Fig. 1), due to the continual exposure to newly encountered states as training progresses. These inconsisten-cies, in turn, make long-horizon tasks difficult to optimize. In particular, absolute reward formulations fundamentally col-lapse in cyclic task structures or under ambiguous state order-ings. In these scenarios, progress cannot be uniquely defined by a global state ordering, a limitation illustrated in Fig. 2. To address these limitations, we propose VLM-AR3L (Fig. 3), a framework that leverages VLMs to provide both absolute and relative rewards in reinforcement learning, without requiring fine-tuning or access to privileged internal environment infor-mation. Our contributions are as follows: • Dual-reward Design: We introduce a dual-reward framework that jointly learns absolute and relative re-ward from VLM-generated preferences, with the rel-ative reward providing robustness to reward inconsis-tency during training (Fig. 1) and resolving tasks with ill-defined global state ordering (Fig. 2).          
+
+> arXiv:2607.00483v2 [cs.RO] 2 Jul 2026 Figure 1: Comparison of absolute and relative reward formu-lations. Left: Conceptual illustration in a simple Markov process. Absolute reward assigns scalar values to states, where higher scores indicate proximity to the goal. Relative reward supervises transi-tions by assessing progress between state pairs. Right: Empirical reward trajectories evaluated along the same expert demonstration at different training steps (512k and 942k), showing that absolute reward varies substantially across training, whereas relative reward, after cumulative summation, exhibits greater temporal consistency.
+> Figure 2: RingWorld environment and reward comparison. Left: Illustration of the RingWorld task, where the agent is required to move clockwise along a closed loop. Right: Learning curves for agents trained with absolute or relative reward, showing that ab-solute reward fails under the cyclic state ordering, whereas relative reward enables successful learning.
+
+• Relative reward modeling: We train a Siamese net-work with VLM-generated preference supervision to model relative reward, avoiding repeated VLM inference during policy optimization, which substantially reduces computational overhead and improves performance. • Comprehensive evaluation: We evaluate VLM-AR3L across diverse domains, including structured robotic control and open-ended tasks. VLM-AR3L consistently outperforms prior VLM-based methods and even sur-passes carefully human-designed reward functions. We further conduct detailed ablation studies and VLM accu-racy analyses to assess the reliability and scalability of our approach. 
+
+2 Related Work 
+
+LLM-based Reward Learning. Recent research has ex-plored the use of large pre-trained models, particularly large language models (LLMs), as reward functions for reinforce-ment learning agents. LLM-based approaches have demon-strated the ability to generate structured code for downstream training [Ma et al. , 2024; Xie et al. , 2024; Wang et al. , 2023a; Yu et al. , 2023; Wang et al. , 2023b], or to provide scalar reward signals from textual task descriptions in language-conditioned or text-based environments [Kwon et al. , 2023; Du et al. , 2023; Chu et al. , 2023]. However, many of these methods assume structured environments or require privi-leged state access, making them difficult to apply in high-dimensional, real-world visual domains. Additionally, for many open-ended or complex tasks, it is inherently challeng-ing to specify reward logic in code, particularly when task-specific abstractions are involved or when full observability is lacking. 
+
+CLIP-based Reward Learning. When working with vi-sual observations, a common strategy is to use CLIP-based vision-language models (cVLMs) to compute similarity-based scores between agent observations and language goals, typically via cosine similarity in the shared embedding space [Cui et al. , 2022; Adeniji et al. , 2023; Rocamonde et al. ,2024; Sontakke et al. , 2023; Mahmoudieh et al. , 2022; Palo et al. , 2023; Baumli et al. , 2024; Nam et al. , 2023]. While conceptually simple, these scores are often noisy and fragile, exhibiting high sensitivity to the phrasing of goals. To mitigate this, methods such as MineDojo [Fan et al. , 2022] and CLIP4MC [Jiang et al. , 2024] fine-tune CLIP on domain-specific datasets (e.g., Minecraft videos) to generate denser and more accurate reward signals. Other approaches like LIV [Ma et al. , 2023] and FuRL [Fu et al. , 2024] propose tailored fine-tuning procedures to enhance reward quality. While these methods reduce dependence on explicit ground-truth reward annotations, they typically require task-specific fine-tuning to capture subtle variations in visual input. With-out fine-tuning, CLIP-based methods often fail to provide nu-anced or reliable reward signals, limiting their generalization to new tasks or environments. 
+
+Preference-based Reward Learning. Beyond similarity-based rewards, recent works explore preference-based reward learning, which uses generative VLMs with multimodal rea-soning capabilities, such as Gemini or GPT. A notable direc-tion involves generating preference-based supervision with-out human labels. For instance, Constitutional AI [Bai et al. , 2022] and Motif [Klissarov et al. , 2023] use LLMs to produce preference labels or intrinsic rewards by comparing model outputs under high-level alignment principles. Extend-ing this paradigm to the visual domain, RL-VLM-F [Wang 
+
+et al. , 2024] proposes learning reward functions by query-ing vision-language models to compare agent observation pairs and generate preference labels, which are then used to supervise reward learning. Several follow-up works fur-ther explore the use of VLMs for visual preference mod-eling and feedback generation in various embodied envi-ronments [Venkataraman et al. , 2024; Ghosh et al. , 2025; Liu et al. , 2025]. However, these methods largely adopt ab-solute reward formulations, which are fundamentally limited in cyclic task structures or under ambiguous state orderings, where a consistent global ordering of states is difficult to de-fine. Motivated by this limitation, we explore a dual-reward formulation that augments absolute rewards with relative re-wards, aiming to improve robustness and scalability in com-plex, open-ended environments. Figure 3: Overview of the VLM-AR3L framework. During reward model training (blue path), observation pairs are sampled from the agent’s replay buffer and evaluated by a VLM to determine which observation better aligns with the task goal. The resulting preference labels are used to supervise both absolute and relative reward models. During policy learning (purple path), the trained absolute model evaluates individual observations, while the relative model compares the agent’s current and previous observations to provide complementary absolute and relative reward signals. 
+
+3 Background 
+
+We consider a standard reinforcement learning (RL) setting modeled as a partially observable Markov decision process (POMDP) [Kaelbling et al. , 1998], defined by the tuple 
+
+(S, A, T , O, R, γ ). Here, S denotes the set of environment states, A denotes the set of possible actions, T denotes the (unknown) state transition dynamics, O denotes the obser-vation space, R denotes the reward function, and γ ∈ [0 , 1) 
+
+denotes the discount factor that prioritizes immediate rewards over long-term ones. At each time step t, the agent receives an observation st ∈ O (e.g., an RGB image) and selects an action at ∈ A , which causes the environment state in S to evolve according to T . The objective is to learn a policy π
+
+that maximizes the expected cumulative discounted reward over time. 
+
+Preference-Based Reinforcement Learning. Our work builds on the framework of preference-based reinforcement learning (pbRL), where agents learn reward functions from pairwise comparisons over trajectory segments or behav-ior snippets [Christiano et al. , 2017; Ibarz et al. , 2018; Lee et al. , 2021a; Lee et al. , 2021b]. In pbRL, a trajec-tory segment σ typically consists of a sequence of states 
+
+{s1, . . . , s H }, where H denotes the sequence length of the segment. In this paper, we consider the special case that 
+
+H = 1 , as multi-image or video-based VLM reasoning re-mains less reliable in complex visual environments. Given a pair of segments (σi, σ j ), an annotator provides a preference label y ∈ { 0, 1, −1}, where y = 0 indicates that σi is pre-ferred, y = 1 that σj is preferred, and y = −1 that the two are equally preferable or incomparable. Given a reward func-tion r over the states, we follow the standard Bradley-Terry model [Bradley and Terry, 1952] to compute the preference probability of a pair of segments: 
+
+P[σi ≻ σj ] = exp( r(si)) 
+
+P 
+
+> k∈{ i,j }
+
+exp( r(sk)) . (1) The reward model is then trained by minimizing a cross-entropy loss over a dataset of annotated preferences: 
+
+Lreward (θ) = −E(σi,σ j ,y )∼D 
+
+h
+
+1{y=0 } log Pθ [σi ≻ σj ]+ 1{y=1 } log Pθ [σj ≻ σi]
+
+i
+
+,
+
+(2) where θ denotes the learnable parameters of the reward model. In typical pbRL, the reward model and policy are trained it-eratively: the reward model is updated using newly collected preference annotations, and the policy is optimized with stan-dard RL algorithms using the learned reward model. 
+
+4 Method 
+
+Fig. 3 illustrates the overall architecture of the proposed VLM-AR3L framework. The training process consists of two intertwined pipelines: (1) reward model training and (2) policy learning. In the reward model training phase, ob-servation pairs (σi, σ j ) are sampled from the agent’s replay buffer, along with a high-level language goal g. Each triplet 
+
+(σi, σ j , g ) is passed to a frozen VLM, which outputs a pref-erence label y indicating which observation better reflects progress toward the goal. These preference labels are used to supervise the training of both an absolute reward model and a relative reward model . During policy learning, the abso-lute reward model assigns state-based evaluations to the cur-rent observation st, while the relative reward model estimates progress by comparing the current observation st with a pre-vious observation st−k, jointly providing dense and informa-tive reward signals at each timestep. These signals guide the agent’s policy updates using standard reinforcement learning algorithms, eliminating the need for hand-crafted rewards or privileged state information. 4.1 Absolute Reward Model 
+
+Absolute reward models assign scalar values to individual states, where higher scores reflect states that are closer to the goal. As illustrated in Fig. 1, this state-based formulation pro-vides a stable evaluation signal when a global ordering over the state space is well-defined, as each state is mapped to a fixed reward value independent of the agent’s trajectory. Given a parameterized absolute reward function F abs  
+
+> ψ
+
+over the states, the model outputs a scalar reward value for each state following the formulation in Eq. (1): 
+
+F abs  
+
+> ψ
+
+(st) = rψ (st), (3) where rψ (st) ∈ R denotes the absolute reward assigned to state st. The absolute reward at time step t is then given by: 
+
+R abs  
+
+> ψ
+
+(st) = F abs  
+
+> ψ
+
+(st). (4) 
+
+4.2 Relative Reward Model 
+
+In contrast to the absolute reward model, the relative re-ward model evaluates progress between pairs of states. This design reduces reliance on a global understanding of the task space and improves robustness in partially observable or long-horizon scenarios. When new states are introduced and the reward models are updated, the relative reward of previ-ously seen transitions remains stable. In contrast, absolute reward often suffers from instability, where earlier states may receive drastically different scores due to shifts in global nor-malization or value scaling (Fig. 1). Such robustness is es-pecially beneficial in long-horizon settings, where consistent reward signals are essential for learning. To implement the relative model, we employ a Siamese neural network [Bromley et al. , 1993] to learn a relative func-tion F rel  
+
+> ϕ
+
+. Given a pair of states (si, s j ), the network outputs the preference probability: 
+
+F rel  
+
+> ϕ
+
+(si, s j ) = Pϕ[σi ≻ σj ]. (5) The relative model is trained using the same loss defined in Eq. (2). Architectural and training details are provided in the supplementary material (Appendix B.1). During policy learning, the relative model aims to assess whether a transition indicates progress toward the goal g. To improve the model’s sensitivity to meaningful changes, par-ticularly when consecutive observations are highly similar, we introduce a temporal offset k ≥ 1 and compare the current observation st with a past observation st−k. To ensure the reliability of the model’s predictions, we apply a symmetric confidence check. Specifically, a positive reward is assigned only if the model’s confidence in preferring st over st−k ex-ceeds a threshold τ , and the reverse prediction also indicates that st−k is not preferred over st with confidence exceeding 
+
+τ . This bidirectional check ensures both strong and consis-tent preference. Formally, the relative reward at time step t is computed as: 
+
+R rel  
+
+> ϕ
+
+(st, s t−k) = 
+
+
+
+1, if p+ 
+
+> t
+
+> τ and p− 
+
+> t
+
+< 1 − τ, 
+
+−1, if p− 
+
+> t
+
+> τ and p+ 
+
+> t
+
+< 1 − τ, 
+
+0, otherwise ,
+
+(6) where p+ 
+
+> t
+
+= F rel  
+
+> ϕ
+
+(st, s t−k), p− 
+
+> t
+
+= F rel  
+
+> ϕ
+
+(st−k, s t).
+
+> Figure 4: Environments and tasks used in our experiments, spanning structured control (Gym, SoftGym, MetaWorld) and open-ended vi-sual domains (MineDojo).
+
+4.3 Dual-Reward Design 
+
+Absolute and relative reward models offer complementary perspectives, balancing their individual strengths and weak-nesses. Absolute rewards provide stable, state-based evalua-tions when a global ordering of the state space is well-defined, whereas relative rewards offer robust, transition-level super-vision that remains reliable in cyclic, long-horizon, or par-tially observable settings. Motivated by this complementar-ity, we combine both reward signals to guide policy learning. The dual-reward is computed as: 
+
+R dual  
+
+> ψ,ϕ
+
+(st, s t−k) = αR abs  
+
+> ψ
+
+(st) + (1 − α)R rel  
+
+> ϕ
+
+(st, s t−k), (7) where α is the weighting coefficient for the absolute reward signals, and both absolute and relative rewards are normalized to the same bounded range. Although the framework learns two reward models, both are trained using a single shared VLM querying pipeline. The VLM prompting strategy is de-scribed in Appendix A.1. 
+
+5 Experiments 
+
+5.1 Setup 
+
+Environments and Tasks. To assess the proposed VLM-AR3L, we conduct evaluations on ten tasks across four dis-tinct environments (Fig. 4): Cart Pole from Gym [Brockman 
+
+et al. , 2016]; Straighten Rope and Pass Water from SoftGym [Lin et al. , 2020]; Soccer , Sweep Into , and Drawer Open 
+
+from MetaWorld [Yu et al. , 2019]; and Combat Spider , Milk Cow , Shear Sheep , and Hunt Cow from MineDojo [Fan et al. ,2022]. MineDojo, in particular, features long-horizon, open-ended tasks built on top of Minecraft. These tasks demand multi-step reasoning, complex object interaction, and seman-tic goal understanding, thereby posing significant challenges for visual reward learning. Collectively, these benchmarks encompass both structured robotic manipulation and expan-sive open-world scenarios, facilitating a comprehensive eval-uation of VLM-AR3L’s generalization and adaptability. De-tailed descriptions of the environments and tasks are provided in the Appendix C. Model Cart Pole Straighten Rope Pass Water Soccer Sweep Into Drawer Open Combat Spider Milk Cow Shear Sheep Hunt Cow                                                                                                          
+
+> Gemini-2.0-Flash [DeepMind, 2024] 0.91 0.82 0.70 0.87 0.87 0.84 0.82 0.78 0.80 0.76
+> GPT-4.1-nano [OpenAI, 2025] 0.66 0.81 0.65 0.60 0.81 0.65 0.64 0.62 0.66 0.66 Phi-3.5-Vision-Instruct [Abdin et al. , 2024] 0.56 0.67 0.62 0.52 0.69 0.54 0.63 0.90 0.90 0.66 MiniCPM-o-2.6 [OpenBMB, 2025] 0.53 0.61 0.73 0.65 0.79 0.56 0.59 0.61 0.62 0.64 DeepSeek-VL2-Tiny [Wu et al. , 2024] 0.50 0.50 0.50 0.50 0.50 0.56 0.85 0.68 0.66 0.67 Qwen2.5-VL-7B-Instruct [Team, 2025b] 0.50 0.76 0.70 0.55 0.52 0.67 0.64 0.59 0.72 0.64 InternVL2.5-8B [Chen et al. , 2025] 0.32 0.61 0.50 0.50 0.50 0.50 0.59 0.41 0.66 0.69 Gemma-3-12b-it [Team, 2025a] 0.52 0.51 0.50 0.50 0.50 0.50 0.50 0.50 0.54 0.50 CLIP (ViT-L/14@336px) [Radford et al. , 2021] 0.67 0.54 0.48 0.56 0.47 0.07 0.50 0.62 0.64 0.59 MineCLIP (Attn) [Fan et al. , 2022] ––––––0.45 0.56 0.55 0.39
+
+Table 1: Accuracy of different VLMs in predicting preference labels across tasks. Each task has 50 positive and 50 negative label queries.                                                                                                                                                                                   
+
+> Methods Cart Pole Straighten Rope Pass Water Soccer Sweep Into Drawer Open Combat Spider Milk Cow Shear Sheep Hunt Cow
+> GT Dense (Oracle) 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 0.99 ±0.04 0.38 ±0.15 0.67 ±0.25 0.58 ±0.33 GT Sparse (Oracle) 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 0.84 ±0.10 0.37 ±0.01 0.47 ±0.09 0.15 ±0.13 CLIP 1.00 ±0.00 1.00 ±0.00 0.00 ±0.00 1.00 ±0.00 0.67 ±0.47 0.33 ±0.47 0.59 ±0.16 0.37 ±0.00 0.40 ±0.16 0.02 ±0.02 MineCLIP ------0.11 ±0.09 0.31 ±0.09 0.20 ±0.00 0.09 ±0.08 RL-VLM-F 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 0.53 ±0.36 0.50 ±0.32 0.47 ±0.38 0.29 ±0.22
+> VLM-AR3L (Ours) 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 1.00 ±0.00 0.85 ±0.05 0.95 ±0.00 0.70 ±0.10 0.52 ±0.02
+
+Table 2: Success rate (mean ± standard error) of all evaluated methods across tasks. Results are averaged over 3 random seeds with 5 evaluation episodes per best checkpoint. MineCLIP is only evaluated on MineDojo tasks due to its domain-specific training. 
+
+Baselines. We evaluate our approach against several base-lines that, like our framework, generate reward functions us-ing only text goals and visual observations, without relying on privileged internal environment state information. In addi-tion, we include oracle baselines using ground-truth rewards to assess whether VLM-generated rewards can serve as prac-tical alternatives to human-designed reward functions. • RL-VLM-F [Wang et al. , 2024]: A state-of-the-art preference-based method that queries a VLM for pair-wise preferences between observations to train a scalar-valued reward function over individual states. • CLIP [Rocamonde et al. , 2024]: A similarity-based method using cosine similarity between CLIP embed-dings of the current observation and the language goal for reward shaping. • MineCLIP [Fan et al. , 2022]: A domain-adapted CLIP variant fine-tuned on Minecraft videos, as proposed in MineDojo. Results are not directly comparable to the original paper, as self-imitation learning is omitted to en-sure a fair and consistent training protocol across base-lines. • GT Dense Reward (Oracle): Hand-crafted, incremen-tal reward functions based on full access to environment ground truth. • GT Sparse Reward (Oracle): Binary success/failure signals given only at episode completion. We exclude FuRL [Fu et al. , 2024], RoboCLIP [Sontakke 
+
+et al. , 2023] and CLIP4MC [Jiang et al. , 2024] from our comparisons for the following reasons: FuRL relies on priv-ileged reward signals, which falls outside our problem set-ting; RoboCLIP has been reported to perform poorly under comparable assumptions (as reported in RL-VLM-F); and CLIP4MC does not release its fine-tuned CLIP model, pre-cluding an identical reproduction. Implementation details for all baselines are provided in Appendix D. For policy opti-mization, we employ Soft Actor-Critic (SAC) [Haarnoja et al. , 2017] for Gym, SoftGym, and MetaWorld tasks, and Proximal Policy Optimization (PPO) [Schulman et al. , 2017] for MineDojo tasks, selected based on environment charac-teristics. Comprehensive training configurations and hyper-parameters are detailed in the Appendix B.2. 
+
+5.2 VLM’s Label Accuracy 
+
+To assess the reliability of using VLMs as supervision, we evaluate several VLMs on multi-image reasoning across our tasks. For each task, we construct 100 image pairs with bal-anced pseudo preference labels (a 50/50 split) and prompt each VLM to identify the image that better aligns with the task goal. Table 1 summarizes the accuracy of the tested VLMs across tasks. This evaluation serves to identify which mod-els are most suitable as automated annotators for learning relative rewards. Gemini-2.0-Flash stands out for its con-sistently superior performance, achieving over 70% accu-racy in all tasks, reflecting its robust multimodal reasoning capabilities. In contrast, GPT-4.1-nano underperforms rel-ative to Gemini, showing noticeably lower accuracy across most tasks. Besides Gemini and GPT models, several open-source VLMs demonstrate competitive performance on spe-cific tasks despite lacking general robustness. For example, Phi-3.5-Vision-Instruct achieves 90% accuracy on the Milk Cow and Shear Sheep tasks, while DeepSeek-VL2-Tiny ex-cels in the Combat Spider task with an accuracy of 85%. MiniCPM-o-2.6 performs well in Pass Water, reaching 73%. On the other hand, CLIP and MineCLIP (evaluated only in MineDojo tasks) exhibit weak performance, underscoring their limitations in modeling multi-step interactions and tem-poral dependencies. Additional details and expanded evalua-tion results are provided in the Appendix A.2. 
+
+5.3 Comparison with Baselines 
+
+Building on the evaluation in Section 5.2, we adopt Gemini-2.0-Flash as the primary VLM for both VLM-AR3L and RL-VLM-F, given its consistently superior annotation per-formance across tasks. Table 2 reports the best success Figure 5: Learning curves of all evaluated methods across tasks. The x-axis represents training timesteps. The y-axis denotes episode rewards measured by the ground-truth dense reward. Results are averaged over 3 random seeds with 5 evaluation episodes per checkpoint. Shaded regions indicate standard error. 
+
+rates of all evaluated methods, and Fig. 5 presents the corre-sponding learning curves. We first examine similarity-based baselines such as CLIP and MineCLIP. While CLIP per-forms well in the low-dimensional Cart Pole environment, it struggles significantly in more complex environments. No-tably, MineCLIP fails to generate reliable reward signals de-spite being fine-tuned on Minecraft videos. These results align with prior findings [Fu et al. , 2024; Jiang et al. , 2024; Wang et al. , 2024], suggesting that CLIP-based models often lack the granularity necessary to distinguish subtle visual dif-ferences, resulting in noisy and unstable reward signals dur-ing training. Next, we evaluate RL-VLM-F, a preference-based method that learns scalar rewards over individual states. While RL-VLM-F achieves performance comparable to our method on simpler tasks, its efficacy degrades substantially in long-horizon and visually complex domains such as MineDojo. We attribute this degradation to its reliance on absolute state-based rewards, which requires a global understanding of the task space and often lacks robustness to novel or unseen state variations. In contrast, our proposed VLM-AR3L leverages relative comparisons between transitions, enabling it to gen-erate more stable and goal-consistent rewards even as the state distribution evolves during training. Finally, when compared against ground-truth dense and sparse rewards, our VLM-AR3L shows strong potential as a practical alternative. In most tasks, VLM-AR3L matches the performance of GT Dense Reward. Moreover, in tasks such as Milk Cow, Shear Sheep, and Hunt Cow, where GT Sparse Reward fails to provide sufficient guidance for learning, VLM-AR3L significantly outperforms the baseline, demonstrating its ability to handle sparse feedback and chal-lenging long-horizon scenarios without requiring handcrafted rewards. These results underscore the practical applicability of our method for real-world settings where reward design is often infeasible. 
+
+5.4 Ablation Studies 
+
+The Impact of VLM. While Section 5.2 evaluates VLMs as annotators in terms of preference-label accuracy, we fur-ther study how the choice of VLM affects end-to-end RL performance when used to generate training supervision for VLM-AR3L. Specifically, we instantiate the same training pipeline and only vary the annotator VLM (Gemini-2.0, Phi-3.5, MiniCPM-o 2.6) across all tasks (Fig. 6 ; the full figures and table are provided in the Appendix E.2). Overall, the per-formance trends are broadly consistent with the label accu-racy results in Section 5.2. While Phi-3.5 and MiniCPM-o 2.6 Figure 6: Ablation results with different vision-language models. 
+
+do not excel across all tasks, both exhibit clear task-specific strengths. Given their relatively small model sizes and open-source availability, they offer promising potential for broader adoption in future applications. 
+
+The Impact of Relative Reward Architecture. An alter-native design choice for relative reward, instead of explicitly training a Siamese model (denoted as Siamese in Fig. 7), is to directly query a VLM at each timestep to evaluate progress (denoted as VLM-Direct). Another baseline derives relative rewards based on differences between absolute reward pre-dictions (denoted as Abs-Diff). As shown in Fig. 7, explic-itly training a Siamese model consistently outperforms direct VLM querying during rollouts (VLM-Direct). This improve-ment stems from preference-based training, which reduces noise in VLM judgments by learning a more stable com-parison function, while also lowering computational over-head by avoiding repeated VLM queries at inference time (see Appendix B.3). We observe that computing relative re-wards from absolute reward estimates (Abs-Diff) leads to in-ferior performance. This is because when the absolute reward model fails to assign reliable scores to individual states, the resulting differences become noisy and unreliable, leading to inaccurate relative assessments. We also examine the role of the symmetric comparison rule in Eq. (6) by evaluating a variant that omits this consistency check (Siamese w/o Sym). Removing the rule leads to notable performance drops across tasks, as it no longer filters inconsistent VLM judgments or prevents biased rewards when observations are visually simi-lar. 
+
+The Impact of Absolute and Relative rewards. Fig. 8 (Full figures are provided in the Appendix E.3) analyzes how absolute and relative rewards contribute to each task. Abso-lute rewards are most beneficial in tasks with a well-defined global progress measure. In contrast, relative rewards become critical in tasks with ambiguous state ordering, cyclic struc-
+
+> Figure 7: Ablation studies of the relative reward architecture across all experiments, using Phi-3.5 as the VLM.
+> Figure 8: Ablation studies of absolute and relative rewards.
+
+ture, or long-horizon exploration. Combining the two consis-tently leads to further improvements, indicating that the re-ward signals are complementary. 
+
+The Impact of Hyper-parameters. All results above are obtained using a single shared set of hyperparameters, with 
+
+α = 0 .5, τ = 0 .52 , and k = 16 , without task-specific tuning. We further confirm this robustness through hyperparameter ablation studies (see Appendix E.1), which show only minor performance variations. 6 Conclusion 
+
+Our results demonstrate that absolute and relative rewards provide complementary supervision for reinforcement learn-ing with VLM-generated preferences. Absolute rewards are effective when a global notion of progress is well defined, while relative rewards are more robust in scenarios involving ambiguous, cyclic, or long-horizon state transitions. Integrat-ing both reward types leads to more stable optimization and consistently outperforms existing VLM-based reward learn-ing methods. Notably, in several tasks, our approach even surpasses manually engineered human reward functions. 
+
+Acknowledgements 
+
+This research was funded by the National Science and Tech-nology Council (NSTC) under grant numbers 114-2218-E-007-019. The last author was partially supported by the Hon Hai Research Institute. We express our sincere appreciation to the NVIDIA AI Technology Center (NVAITC) for the tech-nical support and access to the Taipei-1 supercomputer. 
+
+References 
+
+[Abdin et al. , 2024] Marah Abdin, Jyoti Aneja, Hany Awadalla, Ahmed Awadallah, Ammar Ahmad Awan, Nguyen Bach, Amit Bahree, Arash Bakhtiari, Jianmin Bao, Harkirat Behl, Alon Benhaim, Misha Bilenko, Jo-han Bjorck, S´ ebastien Bubeck, Martin Cai, Qin Cai, Vishrav Chaudhary, Dong Chen, Dongdong Chen, Weizhu Chen, Yen-Chun Chen, Yi-Ling Chen, Hao Cheng, Parul Chopra, Xiyang Dai, Matthew Dixon, Ronen Eldan, Vic-tor Fragoso, Jianfeng Gao, Mei Gao, Min Gao, Amit Garg, Allie Del Giorno, Abhishek Goswami, Suriya Gu-nasekar, Emman Haider, Junheng Hao, Russell J. Hewett, Wenxiang Hu, Jamie Huynh, Dan Iter, Sam Ade Jacobs, Mojan Javaheripi, Xin Jin, Nikos Karampatziakis, Piero Kauffmann, Mahoud Khademi, Dongwoo Kim, Young Jin Kim, Lev Kurilenko, James R. Lee, Yin Tat Lee, Yuanzhi Li, Yunsheng Li, Chen Liang, Lars Liden, Xihui Lin, Zeqi Lin, Ce Liu, Liyuan Liu, Mengchen Liu, Weishung Liu, Xiaodong Liu, Chong Luo, Piyush Madan, Ali Mahmoudzadeh, David Majercak, Matt Mazzola, Caio C´ esar Teodoro Mendes, Arindam Mitra, Hardik Modi, Anh Nguyen, Brandon Norick, Barun Patra, Daniel Perez-Becker, Thomas Portet, Reid Pryzant, Heyang Qin, Marko Radmilac, Liliang Ren, Gustavo de Rosa, Corby Rosset, Sambudha Roy, Olatunji Ruwase, Olli Saarikivi, Amin Saied, Adil Salim, Michael Santacroce, Shital Shah, Ning Shang, Hiteshi Sharma, Yelong Shen, Swadheen Shukla, Xia Song, Masahiro Tanaka, Andrea Tupini, Praneetha Vaddamanu, Chunyu Wang, Guanhua Wang, Lijuan Wang, Shuohang Wang, Xin Wang, Yu Wang, Rachel Ward, Wen Wen, Philipp Witte, Haiping Wu, Xiaoxia Wu, Michael Wyatt, Bin Xiao, Can Xu, Jiahang Xu, Weijian Xu, Jilong Xue, Sonali Yadav, Fan Yang, Jianwei Yang, Yifan Yang, Ziyi Yang, Donghan Yu, Lu Yuan, Chenruidong Zhang, Cyril Zhang, Jianwen Zhang, Li Lyna Zhang, Yi Zhang, Yue Zhang, Yunan Zhang, and Xiren Zhou. Phi-3 tech-nical report: A highly capable language model locally on your phone. arXiv preprint , 2024. [Adeniji et al. , 2023] Ademi Adeniji, Amber Xie, Carmelo Sferrazza, Younggyo Seo, Stephen James, and Pieter Abbeel. Language reward modulation for pretraining re-inforcement learning, 2023. [Bai et al. , 2022] Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, Carol Chen, Catherine Olsson, Christopher Olah, Danny Hernandez, Dawn Drain, Deep Ganguli, Dustin Li, Eli Tran-Johnson, Ethan Perez, Jamie Kerr, Jared Mueller, Jeffrey Ladish, Joshua Landau, Kamal Ndousse, Kamile Lukosuite, Liane Lovitt, Michael Sell-itto, Nelson Elhage, Nicholas Schiefer, Noemi Mercado, Nova DasSarma, Robert Lasenby, Robin Larson, Sam Ringer, Scott Johnston, Shauna Kravec, Sheer El Showk, Stanislav Fort, Tamera Lanham, Timothy Telleen-Lawton, Tom Conerly, Tom Henighan, Tristan Hume, Samuel R. Bowman, Zac Hatfield-Dodds, Ben Mann, Dario Amodei, Nicholas Joseph, Sam McCandlish, Tom Brown, and Jared Kaplan. Constitutional ai: Harmlessness from ai feedback. 
+
+arXiv preprint arXiv:2212.08073 , 2022. [Baumli et al. , 2024] Kate Baumli, Satinder Baveja, Feryal Behbahani, Harris Chan, Gheorghe Comanici, Sebas-tian Flennerhag, Maxime Gazeau, Kristian Holsheimer, Dan Horgan, Michael Laskin, Clare Lyle, Hussain Ma-soom, Kay McKinney, Volodymyr Mnih, Alexander Neitz, Dmitry Nikulin, Fabio Pardo, Jack Parker-Holder, John Quan, Tim Rockt¨ aschel, Himanshu Sahni, Tom Schaul, Yannick Schroecker, Stephen Spencer, Richie Steiger-wald, Luyu Wang, and Lei Zhang. Vision-language mod-els as a source of rewards, 2024. [Bradley and Terry, 1952] Ralph Allan Bradley and Milton E Terry. Rank analysis of incomplete block designs: I. the method of paired comparisons. Biometrika , 39(3/4):324– 345, 1952. [Brockman et al. , 2016] Greg Brockman, Vicki Cheung, Ludwig Pettersson, Jonas Schneider, John Schulman, Jie Tang, and Wojciech Zaremba. Openai gym, 2016. [Bromley et al. , 1993] Jane Bromley, Isabelle Guyon, Yann LeCun, Eduard S¨ ackinger, and Roopak Shah. Signature verification using a ”siamese” time delay neural network. In Advances in Neural Information Processing Systems ,1993. [Chen et al. , 2025] Zhe Chen, Weiyun Wang, Yue Cao, Yangzhou Liu, Zhangwei Gao, Erfei Cui, Jinguo Zhu, Shenglong Ye, Hao Tian, Zhaoyang Liu, Lixin Gu, Xue-hui Wang, Qingyun Li, Yiming Ren, Zixuan Chen, Jia-peng Luo, Jiahao Wang, Tan Jiang, Bo Wang, Conghui He, Botian Shi, Xingcheng Zhang, Han Lv, Yi Wang, Wenqi Shao, Pei Chu, Zhongying Tu, Tong He, Zhiyong Wu, Huipeng Deng, Jiaye Ge, Kai Chen, Kaipeng Zhang, Limin Wang, Min Dou, Lewei Lu, Xizhou Zhu, Tong Lu, Dahua Lin, Yu Qiao, Jifeng Dai, and Wenhai Wang. Expanding performance boundaries of open-source mul-timodal models with model, data, and test-time scaling, 2025. [Christiano et al. , 2017] Paul Christiano, Jan Leike, Tom B. Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep reinforcement learning from human preferences. In 
+
+Advances in Neural Information Processing Systems , vol-ume 30. Curran Associates, Inc., 2017. [Chu et al. , 2023] Kun Chu, Xufeng Zhao, Cornelius Weber, Mengdi Li, and Stefan Wermter. Accelerating reinforce-ment learning of robotic manipulations via feedback from large language models, 2023. [Cui et al. , 2022] Yuchen Cui, Scott Niekum, Abhinav Gupta, Vikash Kumar, and Aravind Rajeswaran. Can foundation models perform zero-shot task specification for robot manipulation? In Learning for Dynamics and Con-trol Conference (L4DC) , 2022. [DeepMind, 2024] Google DeepMind. Gemini 2.0: Introducing our new ai model for the agentic era. https://blog.google/technology/google-deepmind/ google-gemini-ai-update-december-2024/, 2024. [Du et al. , 2023] Yuqing Du, Olivia Watkins, Zihan Wang, C´ edric Colas, Trevor Darrell, Pieter Abbeel, Abhishek Gupta, and Jacob Andreas. Guiding pretraining in rein-forcement learning with large language models. In Pro-ceedings of the 40th International Conference on Machine Learning , 2023. [Fan et al. , 2022] Linxi Fan, Guanzhi Wang, Yunfan Jiang, Ajay Mandlekar, Yuncong Yang, Haoyi Zhu, Andrew Tang, De-An Huang, Yuke Zhu, and Anima Anandku-mar. Minedojo: Building open-ended embodied agents with internet-scale knowledge. In Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2022. [Fu et al. , 2024] Yuwei Fu, Haichao Zhang, Di Wu, Wei Xu, and Benoit Boulet. Furl: Visual-language models as fuzzy rewards for reinforcement learning. In Proceedings of the 41st International Conference on Machine Learning ,2024. [Ghosh et al. , 2025] Udita Ghosh, Dripta S. Raychaud-huri, Jiachen Li, Konstantinos Karydis, and Amit Roy-Chowdhury. Preference vlm: Leveraging vlms for scalable preference-based reinforcement learning, 2025. [Gupta et al. , 2022] Abhishek Gupta, Aldo Pacchiano, Yuex-iang Zhai, Sham Kakade, and Sergey Levine. Unpacking reward shaping: Understanding the benefits of reward en-gineering on sample complexity. In Advances in Neural Information Processing Systems , 2022. [Haarnoja et al. , 2017] Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. https://arxiv.org/abs/1801.01290 ,2017. [Ibarz et al. , 2018] Borja Ibarz, Jan Leike, Tobias Pohlen, Geoffrey Irving, Shane Legg, and Dario Amodei. Reward learning from human preferences and demonstrations in atari. In Advances in Neural Information Processing Sys-tems , 2018. [Jiang et al. , 2024] Haobin Jiang, Junpeng Yue, Hao Luo, Ziluo Ding, and Zongqing Lu. Reinforcement learning friendly vision-language model for minecraft. In Euro-pean Conference on Computer Vision (ECCV) , 2024. [Kaelbling et al. , 1998] Leslie Pack Kaelbling, Michael L. Littman, and Anthony R. Cassandra. Planning and act-ing in partially observable stochastic domains. Artificial Intelligence , 101(1):99–134, 1998. [Klissarov et al. , 2023] Martin Klissarov, Pierluca D’Oro, Shagun Sodhani, Roberta Raileanu, Pierre-Luc Bacon, Pascal Vincent, Amy Zhang, and Mikael Henaff. Motif: Intrinsic motivation from artificial intelligence feedback. 
+
+arXiv preprint arXiv:2310.00166 , 2023. [Kwon et al. , 2023] Minae Kwon, Sang Michael Xie, Kale-sha Bullard, and Dorsa Sadigh. Reward design with lan-guage models. In International Conference on Learning Representations (ICLR) , 2023. [Laud, 2004] Adam Daniel Laud. Theory and application of reward shaping in reinforcement learning . PhD thesis, University of Illinois at Urbana-Champaign, USA, 2004. AAI3130966. [Lee et al. , 2021a] Kimin Lee, Laura Smith, and Pieter Abbeel. Pebble: Feedback-efficient interactive reinforce-ment learning via relabeling experience and unsupervised pre-training. In International Conference on Machine Learning , 2021. [Lee et al. , 2021b] Kimin Lee, Laura Smith, Anca Dra-gan, and Pieter Abbeel. B-pref: Benchmarking preference-based reinforcement learning. arXiv preprint arXiv:2111.03026 , 2021. [Leike et al. , 2018] Jan Leike, David Krueger, Tom Everitt, Miljan Martic, Vishal Maini, and Shane Legg. Scalable agent alignment via reward modeling: a research direction, 2018. [Lin et al. , 2020] Xingyu Lin, Yufei Wang, Jake Olkin, and David Held. Softgym: Benchmarking deep reinforcement learning for deformable object manipulation. In Confer-ence on Robot Learning , 2020. [Liu et al. , 2025] Runze Liu, Chenjia Bai, Jiafei Lyu, Shengjie Sun, Yali Du, and Xiu Li. Vlp: Vision-language preference learning for embodied manipulation, 2025. [Ma et al. , 2023] Yecheng Jason Ma, William Liang, Vaidehi Som, Vikash Kumar, Amy Zhang, Osbert Bastani, and Dinesh Jayaraman. Liv: Language-image representa-tions and rewards for robotic control. arXiv preprint arXiv:2306.00958 , 2023. [Ma et al. , 2024] Yecheng Jason Ma, William Liang, Guanzhi Wang, De-An Huang, Osbert Bastani, Dinesh Jayaraman, Yuke Zhu, Linxi Fan, and Anima Anandku-mar. Eureka: Human-level reward design via coding large language models, 2024. [Mahmoudieh et al. , 2022] Parsa Mahmoudieh, Sayna Ebrahimi, Deepak Pathak, and Trevor Darrell. Zero-shot reward specification via grounded natural language, 2022. [Nam et al. , 2023] Taewook Nam, Juyong Lee, Jesse Zhang, Sung Ju Hwang, Joseph J. Lim, and Karl Pertsch. Lift: Un-supervised reinforcement learning with foundation models as teachers, 2023. [OpenAI, 2019] OpenAI. Dota 2 with large scale deep rein-forcement learning, 2019. [OpenAI, 2025] OpenAI. Introducing gpt-4.1 in the api. https://openai.com/index/gpt-4-1/, 2025. Accessed: 2025-05-07. [OpenBMB, 2025] OpenBMB. Minicpm-o 2.6: A gpt-4o-level mllm for vision, speech, and multimodal live stream-ing on your phone, 2025. Accessed: 2025-05-07. [Palo et al. , 2023] Norman Di Palo, Arunkumar Byravan, Leonard Hasenclever, Markus Wulfmeier, Nicolas Heess, and Martin Riedmiller. Towards a unified agent with foun-dation models, 2023. [Radford et al. , 2021] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agar-wal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervi-sion. In Proceedings of the 38th International Conference on Machine Learning , 2021. [Rocamonde et al. , 2024] Juan Rocamonde, Victoriano Montesinos, Elvis Nava, Ethan Perez, and David Lindner. Vision-language models are zero-shot reward models for reinforcement learning. In The Twelfth International Conference on Learning Representations , 2024. [Schulman et al. , 2017] John Schulman, Filip Wolski, Pra-fulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms, 2017. [Sontakke et al. , 2023] Saurabh A Sontakke, Jiapeng Zhang, Spencer Arnold, Karl Pertsch, Emre Biyik, Dorsa Sadigh, Chelsea Finn, and Laurent Itti. Roboclip: One demonstra-tion is enough to learn robot policies. In Thirty-seventh Conference on Neural Information Processing Systems (NeurIPS) , 2023. [Team, 2025a] Gemma Team. Gemma 3, 2025. [Team, 2025b] Qwen Team. Qwen2.5-vl, January 2025. [Venkataraman et al. , 2024] Sreyas Venkataraman, Yufei Wang, Ziyu Wang, Zackory Erickson, and David Held. Real-world offline reinforcement learning from vision language model feedback, 2024. [Wang et al. , 2023a] Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar. Voyager: An open-ended embodied agent with large language models. arXiv preprint arXiv: Arxiv-2305.16291 , 2023. [Wang et al. , 2023b] Yufei Wang, Zhou Xian, Feng Chen, Tsun-Hsuan Wang, Yian Wang, Katerina Fragkiadaki, Za-ckory Erickson, David Held, and Chuang Gan. Robo-gen: Towards unleashing infinite data for automated robot learning via generative simulation. arXiv preprint arXiv:2311.01455 , 2023. [Wang et al. , 2024] Yufei Wang, Zhanyi Sun, Jesse Zhang, Zhou Xian, Erdem Biyik, David Held, and Zackory Er-ickson. Rl-vlm-f: Reinforcement learning from vision language foundation model feedback. In Proceedings of the 41st International Conference on Machine Learning ,2024. [Wu et al. , 2024] Zhiyu Wu, Xiaokang Chen, Zizheng Pan, Xingchao Liu, Wen Liu, Damai Dai, Huazuo Gao, Yiyang Ma, Chengyue Wu, Bingxuan Wang, Zhenda Xie, Yu Wu, Kai Hu, Jiawei Wang, Yaofeng Sun, Yukun Li, Yishi Piao, Kang Guan, Aixin Liu, Xin Xie, Yuxiang You, Kai Dong, Xingkai Yu, Haowei Zhang, Liang Zhao, Yisong Wang, and Chong Ruan. Deepseek-vl2: Mixture-of-experts vision-language models for advanced multimodal understanding, 2024. [Xie et al. , 2024] Tianbao Xie, Siheng Zhao, Chen Henry Wu, Yitao Liu, Qian Luo, Victor Zhong, Yanchao Yang, and Tao Yu. Text2reward: Reward shaping with language models for reinforcement learning. In The Twelfth Inter-national Conference on Learning Representations , 2024. [Yu et al. , 2019] Tianhe Yu, Deirdre Quillen, Zhanpeng He, Ryan Julian, Avnish Narayan, Hayden Shively, Adithya Bellathur, Karol Hausman, Chelsea Finn, and Sergey Levine. Meta-world: A benchmark and evaluation for multi-task and meta reinforcement learning. In Confer-ence on Robot Learning (CoRL) , 2019. [Yu et al. , 2023] Wenhao Yu, Nimrod Gileadi, Chuyuan Fu, Sean Kirmani, Kuang-Huei Lee, Montse Gonzalez Are-nas, Hao-Tien Lewis Chiang, Tom Erez, Leonard Hasen-clever, Jan Humplik, Brian Ichter, Ted Xiao, Peng Xu, Andy Zeng, Tingnan Zhang, Nicolas Heess, Dorsa Sadigh, Jie Tan, Yuval Tassa, and Fei Xia. Language to rewards for robotic skill synthesis. arXiv preprint arXiv:2306.08647 ,2023. A VLM 
+
+A.1 Prompts 
+
+To evaluate VLM prompting strategies, we crafted three prompt templates of increasing reasoning complexity: • S1 — Single Stage 
+
+1. The goal is {task description }.Is the goal better achieved in Image 1 or Image 2? Relay asingle line of 1 if the goal is better achieved in Image 1, or 2 if it is better achieved in Image 2. Reply 0 if the text is unsure or there is no difference. 
+
+• S2 — Two Stages 
+
+1. The goal is {task description }.Is the goal better achieved in Image 1 or Image 2? 
+
+2. Based on the text above, Relay a single line of 1 if the goal is better achieved in Image 1, or 2 if it is better achieved in Image 2. Reply 0 if the text is unsure or there is no difference. 
+
+• S2 + CoT — Two Stages with Chain-of-Thought 
+
+1. – What is shown in Image 1? 
+
+– What is shown in Image 2? 
+
+– The goal is {<task description }.Is there any difference between Image 1 and Image 2 in terms of achieving the goal? 
+
+2. Same as S2 Stage 2. • S1 2 — Single Stages (Binary) 
+
+1. The goal is {task description }.Is Image 2 more likely to achieve the goal? Reply a single line of 1 if yes, otherwise 0. 
+
+• S2 2 — Two Stages (Binary) 
+
+1. The goal is {task description }.Is Image 2 more likely to achieve the goal? 
+
+2. Based on the text above, Reply a single line of 1 if yes, otherwise 0. 
+
+Rationale. 
+
+• Single-Stage (S1). The VLM is asked to output only a categorical label. This setting measures the model’s raw decision quality without exposing its reasoning. • Two-Stage (S2). We first solicit an open-ended answer 
+
+that explains why the goal is better achieved in one im-age. The model then self-produces the final label in Stage 2. Recording Stage 1 lets us inspect the model’s internal rationale and assess whether it is aligned with the label it finally assigns. 
+
+Table 3: Impact of prompt design on VLM accuracy across ten tasks (higher is better).                                                                                                                                                                                   
+
+> Model Prompt CartPole Straighten Pass Soccer Sweep Drawer Combat Milk Shear Hunt Rope Water Into Open Spider Cow Sheep Cow
+> MiniCPM-o-2.6 S1 20.50 0.64 0.50 0.65 0.79 0.56 0.59 0.77 0.57 0.64 S2 20.45 0.61 0.54 0.80 0.61 0.64 0.65 0.61 0.65 0.62 S1 0.50 0.60 0.44 0.53 0.54 0.60 0.53 0.72 0.72 0.53 S2 0.52 0.50 0.54 0.53 0.73 0.60 0.65 0.70 0.58 0.70 S2 + CoT 0.53 0.61 0.73 0.63 0.55 0.76 0.82 0.76 0.62 0.72 Phi-3.5 S1 20.50 0.59 0.50 0.52 0.69 0.54 0.63 0.90 0.90 0.66 S2 20.76 0.50 0.47 0.50 0.75 0.53 0.66 0.83 0.89 0.68 S1 0.68 0.67 0.62 0.51 0.60 0.43 0.62 0.58 0.76 0.66 S2 0.50 0.63 0.55 0.54 0.50 0.52 0.58 0.62 0.76 0.59 S2 + CoT 0.56 0.61 0.56 0.45 0.46 0.51 0.59 0.66 0.72 0.64 GPT-4.1-nano S1 0.48 0.50 0.49 0.84 0.50 0.51 0.58 0.59 0.60 0.53 S2 0.43 0.67 0.58 0.50 0.50 0.41 0.49 0.58 0.62 0.59 S2 + CoT 0.66 0.81 0.65 0.60 0.81 0.65 0.64 0.62 0.66 0.66 Gemini-2.0 S1 0.91 0.82 0.58 0.73 0.87 0.84 0.82 0.78 0.80 0.76 S2 0.86 0.87 0.59 0.61 0.87 0.64 0.72 0.78 0.79 0.73 S2 + CoT 0.91 0.84 0.70 0.87 0.87 0.84 0.62 0.76 0.77 0.76
+
+Table 4: Details of the VLMs we benchmarked on an RTX 3090 (float16, batch = 1, prompt S1). 
+
+Model Params (B) VRAM (GB) Latency (s/query) 
+
+Phi-3.5-Vision-Instruct 4.15 10 0.38 MiniCPM-o-2.6 8.67 18 0.34 DeepSeek-VL2-Tiny 3.37 16 0.20 Qwen2.5-VL-7B-Instruct 8.29 16 0.25 InternVL2.5-8B 8.08 21 1.17 Gemma-3-12b-it 12.2 22 10.36 CLIP (ViT-L/14@336px) 0.43 1 0.03 MineCLIP (Attn) 0.16 2 0.02 
+
+• Two-Stage + CoT (S2 + CoT). Stage 1 is further bro-ken into three fixed sub-questions ( describe Image 1, de-scribe Image 2, compare w.r.t. the goal ). This structured Chain-of-Thought (CoT) explicitly guides the model to observe, compare, and reason step-by-step before emit-ting the label in Stage 2, reducing the chance of shortcut reasoning. • Binary (S1 2 and S2 2). The VLM is required to output a binary label ( 0 or 1). Empirically, we find that some models perform better when the prompt is kept as simple as possible. 
+
+A.2 VLM accuracy 
+
+Evaluation Protocol. For each task we curate 100 image pairs with pseudo ground-truth preference labels: • 50 pairs in which Image 2 represents an improvement over Image 1 ( label = 1 ), and • 50 pairs in which it does not ( label = 0 ). 1
+
+The VLM’s raw prediction y ∈ { 0, 1, 2} is post-processed by 
+
+ˆy = max( y − 1, 0) ,
+
+so that • y = 2 (Image 2 better ) −→ ˆy = 1 , and • y ∈ { 0, 1} (unsure/no difference or Image 1 better ) −→ 
+
+ˆy = 0 .We then compare ˆy with the pseudo ground-truth label for accuracy and other downstream metrics. Table 3 summarizes the performance of different prompt designs evaluated across multiple models. We observed 
+
+> 1
+
+Label 0 subsumes both “Image 1 is better than Image 2” and “the two images are indistinguishable w.r.t. the goal.” Table 5: Siamese reward-model architecture. A shared CNN maps every input image to a 128-D embedding; the two embeddings are concatenated and processed by an MLP head that outputs two logits. # / Stage Layer Specification Activation 
+
+Shared encoder (per image) 
+
+1–6 Custom CNN see Table 9 (128-D) ReLU, Tanh 
+
+Comparison head (MLP, takes 256 = 128 ×2-D) 
+
+7 Linear 256 →64 ReLU 8 Linear 64 →2 —
+
+that for Gemini 2.0 , even the simplest prompt design (S1) yielded strong performance. In contrast, GPT-4.1-nano per-formed better with the slightly more elaborate S2 prompt, and showed further improvements in accuracy with Chain-of-Thought prompting (S2 + CoT). Interestingly, Phi-3.5 ex-hibited the opposite trend in MineDojo-style tasks, favoring simpler prompts—achieving the best results with S1 2, a bi-nary decision format with a single-stage comparison. As a result, in all subsequent experiments, we adopt the following prompt configuration per model: • Gemini 2.0 and MiniCPM use S1 ,• Phi-3.5 uses S1 2.Table 4 provides detailed statistics on computational re-sources and runtime used for evaluating each model. 
+
+B Hyper-parameters and Network Architectures 
+
+B.1 Relative Reward Model (Siamese) 
+
+Architecture 
+
+The overall architecture of the Siamese model is summarized in Table 5. Each image is first processed by a shared CNN en-coder that produces a 128 -dimensional embedding. The two embeddings are concatenated and passed through a fully con-nected layer with 64 hidden units, followed by a final linear layer that outputs a two-dimensional logits vector indicating the preference direction (e.g., regression vs. improvement ). Because the Siamese architecture is inherently symmetric, we relabel y = −1 (“equally preferable” or “incomparable”) to 
+
+y = 0 during training, resulting in a binary target y ∈ { 0, 1}.
+
+Training Details. 
+
+• Loss : cross-entropy on the two-class logits • Ensemble : three independently initialized Siamese models; their softmax outputs are averaged at inference for greater robustness • Sampling strategy : uniform from the replay buffer • Sampling frequency : 50 pairs per 1 000 environment steps • Buffer capacity : 500 000 transition pairs • Training frequency : 50 gradient updates per 1 000 en-vironment steps • Batch size : 32 
+
+Table 6: Tasks, simulation suites, and goal prompts used in our ex-periments.               
+
+> Suite Task ID Goal prompt supplied to the VLM
+> Gym CartPole balance the brown pole on the black cart to be upright SoftGym Straighten Rope straighten the blue rope
+> Pass Water move the container that holds water as close to the red circle as possible without spilling MetaWorld
+> Soccer minimise the distance between the soccer ball and the goal
+> Sweep Into minimise the distance between the green cube and the hole
+> Drawer Open maximise drawer opening MineDojo
+> Combat Spider combat a spider
+> Milk Cow milk a cow
+> Shear Sheep shear a sheep
+> Hunt Cow hunt a cow
+
+Table 7: Goal prompts fed to CLIP and MineCLIP encoders.                    
+
+> Suite Task ID CLIP/MineCLIP prompt
+> Gym CartPole pole vertically upright on top of the cart. SoftGym Straighten Rope The blue rope is straightened.
+> Pass Water The container, which holds water, is as close to the red circle as possible without causing too many water droplets to spill. MetaWorld
+> Soccer The soccer ball is in the goal.
+> Sweep Into The green cube is in the hole.
+> Drawer Open The drawer is opened. MineDojo
+> Combat Spider combat a spider
+> Milk Cow milk a cow
+> Shear Sheep shear a sheep
+> Hunt Cow hunt a cow
+
+B.2 Policy model 
+
+MineDojo tasks. 
+
+• Framework : stable-baselines3 — Proximal Policy Optimization (PPO) • Network : frozen MineCLIP image encoder →
+
+MLP(64, 64) • Entropy coefficient : 0.01 
+
+• Other parameters : default • Vectorised environment : DummyVecEnv with 4workers • Observation wrapper : 4-frame stack 
+
+Other tasks. 
+
+• Framework : modified RL-VLM-F — Soft Ac-tor–Critic (SAC) • Network : 3 hidden layers × 256 units, tanh activations (actor & critic) • Learning rates : 3×10 −4 for both actor and critic • Batch size : 512 • Replay buffer : 500 000 transitions 
+
+B.3 Compute Resources 
+
+All experiments were conducted on NVIDIA L40 GPUs with 48GB memory. We also verified that all experiments can be reproduced on NVIDIA RTX 3090 GPUs with 24GB mem-ory. Each experiment run with a single seed can typically be completed within 24 hours. By training a Siamese relative reward model, our scheduling strategy reduces the number of VLM queries during policy learning by approximately 20 ×
+
+compared to direct VLM querying at rollout time. 
+
+C Details on Tasks and Environments 
+
+We benchmark our approach on ten goal-conditioned control tasks drawn from four simulators: G YM , S OFT GYM , M ETA -WORLD , and M INE DOJO . The tasks are as follows. • CartPole : Balance an upright pole on a moving cart. Table 8: Observation modalities, action spaces, and episode hori-zons for all evaluated tasks.                                    
+
+> Suite Task(s) Observation Action space Horizon
+> Gym CartPole 4-D state ⟨x, ˙x, θ, ˙θ⟩Box ([0 ,1]) – scalar torque 100 SoftGym Straighten Rope 36-D particle positions picker – 2 grippers, 6-D ∆po-sition 40 (rep.=6) Pass Water 7-D state (container size 3, target pos 1, water-height 1, water-in/out 2)
+> Box (R1)–∆pos along con-strained axis 75 (rep.=8) MetaWorld Soccer, Sweep Into, Drawer Open 39-D proprioceptive state (arm 3 + grip-per 1 + object 14 + history 18 + goal 3)
+> Box (R4)–∆x, y, z + gripper open/close 500 MineDojo Combat Spider, Milk Cow, Shear Sheep, Hunt Cow RGB 126 ×256 ×3(first-person) MultiDiscrete ([12, 3]) –12 camera/locomotion, 3 mouse magnitudes 500
+
+• Straighten Rope : Straighten a rope from a randomly tangled configuration. • Pass Water : Move a glass of water to a target location without spilling its contents. • Open Drawer : Use a robotic arm to pull open a drawer on a desk. • Soccer : Push a soccer ball into a designated goal area using a robotic arm. • Sweep Into : Sweep a green cube into a hole on the table using a robotic arm. • Combat Spider : Eliminate a spider in combat. The agent is initialized with a diamond sword, a shield, full diamond armor, and a nearby spider. • Milk Cow : Find and approach a cow, then collect milk using an empty bucket. The agent is initialized with a bucket, and a cow is spawned nearby. • Shear Sheep : Find and approach a sheep, then collect its wool using a shear. The agent starts with a shear and a sheep nearby. • Hunt Cow : Find and approach a cow, then hunt it us-ing a sword. The cow will attempt to flee, requiring the agent to chase it down. The agent is initialized with a diamond sword and a cow nearby. For each task we hand-craft a concise natural-language 
+
+goal prompt that is fed into the VLM during preference querying (see Appendix A.1). Table 6 summarizes the task IDs and the exact goal prompts. For image–language mod-els based on frozen CLIP or MineCLIP encoders we supply a different set of goal descriptions phrased as achievement statements . Table 7 lists the exact prompts; The prompts adopt a declarative “goal achieved” style (e.g. “The drawer is opened.” ) that is empirically more compatible with the im-age–text contrastive objectives. Table 8 summarises the ob-servation modality, action space, and episode horizon of each task. 
+
+Additional notes: 
+
+• Straighten Rope : two end-point pickers are pre-grasped at reset; the 6-D action is the 3-D ∆ position of each picker. • Pass Water : the glass container moves along a single horizontal axis, resulting in a 1-D action. • MetaWorld tasks : we initialise the gripper close to the target object and re-align the camera such that the object is centred, producing cleaner images for the VLM. 
+
+Table 9: Custom CNN backbone. # Layer Specification (kernel / stride) Activation 1 Conv2d 3→16 5×5 / 3 ReLU 2 Conv2d 16 →32 3×3 / 2 ReLU 3 Conv2d 32 →64 3×3 / 2 ReLU 4 Conv2d 64 →128 3×3 / 2 ReLU 5 Flatten — —6 Linear 512 →1 — Tanh Table 10: ResNet-18 backbone used in RL-VLM-F baselines. Stage Layer / Block Specification Activation 0 Conv1 7×7, 64, stride 2 + MaxPool ReLU 1 Layer1 BasicBlock, 64 × 2 ReLU 2 Layer2 BasicBlock, 128 × 2 ReLU 3 Layer3 BasicBlock, 256 × 2 ReLU 4 Layer4 BasicBlock, 512 × 2 ReLU 5 AvgPool AdaptiveAvgPool2d ( 1×1) —6 FC head Linear 512 →1 —
+
+• MineDojo tasks : observations are limited to first-person RGB frames only (no yaw, pitch, GPS, or voxel data) to better reflect real-world vision. We enable fast reset 
+
+with random teleportation, fix the world seed to 123, and constrain the biome to S UNFLOWER PLAINS .
+
+D Details on Baselines 
+
+D.1 VLM-AR3L (Ours) 
+
+In all experiments, we set the absolute reward weighting to 
+
+α = 0 .5, the confidence threshold to τ = 0 .52 , and the tem-poral offset to k = 16 .
+
+D.2 RL-VLM-F 
+
+Released by [Wang et al. , 2024], RL-VLM-F employs two image–reward backbones that differ by environment suite: • Custom CNN : Table 9; used for G YM and M ETA -WORLD .• ResNet-18 : Table 10; used for S OFT GYM and M INE -DOJO .
+
+ResNet-18 Backbone (SoftGym & MineDojo). A vanilla ResNet-18 ( BasicBlock ×[2 , 2, 2, 2] ) is adopted for high-variance visual inputs. ImageNet initialisation is retained, but the final FC layer is replaced with a 1- or 2-unit head. 
+
+Training protocol. Except for the backbone choice above, all optimisation hyper-parameters and data-collection schedules follow the settings described in Section B.1. 
+
+D.3 CLIP 
+
+For image–language matching we use the original OpenAI CLIP ViT-L/14 @ 336 px checkpoint. During interaction we compute a static similarity reward at each step: 1. Text embedding. The goal prompt g is tokenised and encoded once; its feature vector is ℓ2-normalised. Table 11: Shaped dense ground-truth reward for each task ( 1[·] is the indicator).                                           
+
+> Task Reward rt
+> CartPole −| θt|
+> Straighten Rope min  dend (t),1.1Lrope
+> 
+> Pass Water −λspill
+> wout
+> wtot
+> −λdist |xt−xgoal |
+> Soccer max
+> 
+> λobject 1[ball grasped ] + λin-place 1[ball in place ], λ success 1[dball,goal < R goal ]
+> 
+> Sweep Into max
+> 
+> λobject 1[cube grasped ] + λin-place 1[cube in hole ], λ success 1[dcube,hole < R hole ]
+> 
+> Drawer Open λcaging ·caging +λopening ·opening Combat Spider λattack 1[valid attack ] + λsuccess 1[spider eliminated ]
+> Milk Cow λnav max( dmin ,t −1−dmin ,t ,0) + λsuccess 1[milk collected ]
+> Shear Sheep λnav max( dmin ,t −1−dmin ,t ,0) + λsuccess 1[sheep sheared ]
+> Hunt Cow λattack 1[valid attack ] + λnav max( dmin ,t −1−dmin ,t ,0) + λsuccess 1[cow eliminated ]
+
+2. Image embedding. The current RGB observation is passed through the frozen CLIP image encoder, and ℓ2-normalised. 3. Reward. The cosine similarity rt = ⟨fimg , f text ⟩ is used directly as an reward (higher implies closer to the goal). 
+
+D.4 MineCLIP 
+
+For long-horizon visual tasks we employ the MineCLIP-attn 
+
+reward model of [Fan et al. , 2022]. Its inference pipeline consists of three stages: 1. Frame encoder – each RGB frame is embedded by a frozen ViT-B/16 backbone. 2. Temporal aggregator – a 2-layer Transformer (dmodel =512 ) compresses the 16 -frame sequence into a single video feature ∈ RF .3. Reward head – an MLP takes and the tokenised goal prompt and outputs a two-logit vector = [ zPOS , z NEG ];the positive logit is taken as the scalar reward, rt = zPOS .
+
+Implementation notes. 
+
+• A sliding window stores the most recent 16 frames. Only when the window is full do we query MineCLIP; other-wise the reward is set to 0. • Input frames are normalised with the official MineCLIP statistics (μ, σ ).
+
+D.5 GT Dense Reward (Oracle) 
+
+For ablation-style oracle comparisons, we define shaped dense rewards (Table 11) along with their task-specific weighting coefficients (Table 12). The meaning of each vari-able used in these reward definitions is provided in Table 13. 
+
+D.6 GT Sparse Reward (Oracle) 
+
+Sparse rewards remove shaped terms and give a single bonus 
+
+rt = λsuccess 1[task success ] (Table 14). 
+
+E Additional Experimental Results 
+
+E.1 Ablation Hyper-parameters 
+
+We conduct ablation studies on the temporal offset k and the weighting coefficient α. As shown in Fig. 9, varying k does not result in significant performance differences, indicating that our method is relatively insensitive to the choice of tem-poral offset. Fig. 10 investigates the weighting coefficient α
+
+Table 12: Non-zero coefficients λ for the dense rewards. Tasks not listed (CartPole, Straighten Rope) have no tunable λ.
+
+Task Coefficients 
+
+Pass Water λspill =10 , λ dist =1 
+
+Soccer λobject =3 , λ in-place =6 .5, λ success =10 
+
+Sweep Into λobject =2 , λ in-place =6 , λ success =10 
+
+Drawer Open λcaging =5 , λ opening =5 
+
+Combat Spider λattack =1 , λ success =10 
+
+Milk Cow λnav =0 .1, λ success =10 
+
+Shear Sheep λnav =0 .1, λ success =10 
+
+Hunt Cow λattack =1 , λ nav =0 .1, λ success =10 
+
+Table 13: Meaning of the variables used in dense-reward formulas. 
+
+Symbol Description 
+
+θt Pole angle at time t (CartPole). Zero means perfectly upright. 
+
+dend (t) Distance between the two rope end-points at time t (Straighten Rope). 
+
+Lrope Nominal (fully straight) rope length (Straighten Rope). 
+
+wout Number of water particles outside the glass (Pass Water). 
+
+wtot Total number of water particles (Pass Water). 
+
+xt Current x-position of the glass (Pass Water). 
+
+xgoal Target x-position for the glass (Pass Water). 
+
+dball,goal Euclidean distance from soccer ball to goal centre (Soccer). 
+
+Rgoal Acceptable radius around the goal centre (Soccer). 
+
+dcube,hole Distance from cube centre to hole centre (Sweep Into). 
+
+Rhole Acceptable radius around the hole centre (Sweep Into). 
+
+caging Tolerance-shaped reward encouraging the gripper TCP to cage 
+
+the drawer handle (Drawer Open). Formally caging = f ∥xgrip −
+
+xhandle ∥; see reward utils.tolerance .
+
+opening Tolerance-shaped reward for the handle’s displacement toward the fully-open target (Drawer Open). 
+
+dmin ,t Shortest agent-to-animal distance at time t (Milk Cow, Shear Sheep, Hunt Cow). 
+
+1[·] Indicator function, equals 1 if the event inside the brackets is true, 0 otherwise. 
+
+Table 14: Success criteria and sparse-reward scale λsuccess .
+
+Task Success condition λsuccess 
+
+CartPole |θt| < 5◦ 1Straighten Rope dend > 0.95 Lrope 1Pass Water Dense reward > −0.36 1Soccer ball within Rtarget of goal 1Sweep Into cube within Rtarget of hole 1Drawer Open drawer opened beyond Rtarget 1Combat Spider spider eliminated 10 Milk Cow milk collected 10 Shear Sheep wool collected 10 Hunt Cow cow eliminated 10 
+
+for the absolute reward signals. The method performs consis-tently well over a broad range of α, while performance dete-riorates only when extremely small or large values are used. Figure 9: Ablation studies of temporal offset k.  
+
+> Figure 10: Ablation studies of weighting coefficient alpha .
+
+E.2 Ablation VLM 
+
+See Figure 11 and Table 15. Our results show that Phi-3.5 ex-hibits strong performance in interpreting Minecraft-specific visual states. MiniCPM-o 2.6, on the other hand, performs competitively on more structured tasks such as Soccer and Drawer Open. 
+
+E.3 Ablation Absolute and Relative rewards 
+
+See Figure 12. We compare three variants: absolute-only (α=1 ), relative-only ( α=0 ), and the dual reward (default 
+
+α=0 .5). Absolute rewards tend to work well in tasks with a clear global progress measure, while relative rewards pro-vide more reliable guidance in long-horizon or visually am-biguous tasks. Combining them yields the best or near-best performance in most tasks, supporting the complementarity discussed in Section 4. 
+
+F Broader Impact 
+
+Our work leverages vision-language models (VLMs) to pro-vide reward signals for reinforcement learning without requir-ing extensive manual reward engineering. This approach has several positive societal implications, including: • Reducing Development Costs: By using pre-trained VLMs to generate rewards, we reduce the need for domain-specific reward design, potentially lowering the cost and effort required to train RL agents in complex or open-ended environments. • Scalability: The method can be applied to various do-mains without extensive task-specific tuning, facilitating broader adoption of RL in areas like robotics, game en-vironments, and simulation-based training. However, there are also potential negative implications: • Bias Propagation: If the VLMs used for reward label-ing exhibit biases, these biases could be propagated to the RL agents, potentially leading to biased or harmful behaviors. • Unintended Applications: The method could be ex-ploited to train agents for undesirable purposes, such as manipulating environments to achieve harmful objec-tives or reinforcing negative behaviors. To mitigate these risks, we recommend implementing bias detection mechanisms in VLM outputs and restricting the ap-plication of the trained RL agents to controlled and monitored environments. Additionally, transparency in VLM training procedures can further minimize potential harms. Figure 11: Ablation results with different vision-language models. 
+
+Figure 12: Ablation studies of absolute and relative rewards. Table 15: Success rate (mean ± standard error) of policy using difference VLM. Results are averaged over 3 random seeds with 5 evaluation episodes per best checkpoint. 
+
+Methods CartPole Straighten Pass Soccer Sweep Drawer Spider Milk Sheep Hunt Rope Water Into Open Combat Cow Shear Cow 
+
+Gemini2.0 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.85 ± 0.05 0.95 ± 0.00 0.70 ± 0.10 0.52 ± 0.02 
+
+Phi3.5 0.67 ± 0.47 1.00 ± 0.00 0.33 ± 0.47 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.83 ± 0.13 0.81 ± 0.18 0.53 ± 0.34 0.37 ± 0.29 MiniCPM-o2.6 1.00 ± 0.00 1.00 ± 0.00 0.67 ± 0.47 1.00 ± 0.00 1.00 ± 0.00 1.00 ± 0.00 0.52 ± 0.23 0.43 ± 0.09 0.33 ± 0.19 0.19 ± 0.09

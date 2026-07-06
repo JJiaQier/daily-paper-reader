@@ -6,39 +6,38 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-05
-- 运行时间：2026-07-05 21:03:43 UTC
+- 最新运行日期：2026-07-06
+- 运行时间：2026-07-06 20:47:46 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：1
+- 本次总论文数：6
+- 精读区：2
 - 速读区：4
 
 ### 今日简报（AI）
-今日精读一篇多机器人强化学习论文，速读四篇涵盖导航、调度与Q学习加速。
-
-最值得关注的方向是多机器人协调采样与单步策略导航，其中精读论文得分8.0。
-
-建议下一步聚焦多目标多机器人强化学习的采样效率提升方法，并浏览RoamFlow的导航策略细节。
-- 详情：[/202607/05/README](/202607/05/README)
+今日聚焦强化学习与视觉语言导航，精读两篇高效策略论文。最值得关注RoamFlow的一步动作MeanFlow策略及Z-1的视觉语言动作模型强化学习。建议优先阅读精读论文，理解其如何提升导航效率与学习效率。
+- 详情：[/202607/06/README](/202607/06/README)
 
 ### 精读区论文标签
-1. [Sampling-Based Coordination-Informed Multi-Objective Multi-Robot Reinforcement Learning](/202607/05/2606.30893v1-sampling-based-coordination-informed-multi-objective-multi-robot-reinforcement-learning)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：多机器人强化学习框架用于协调和多目标优化，可应用于配送路径规划和区域划分
+1. [RoamFlow: Reinforcement-Aligned One-Step Action MeanFlow Policy for Image-Goal Navigation](/202607/06/2606.29934v1-roamflow-reinforcement-aligned-one-step-action-meanflow-policy-for-image-goal-navigation)  
+   标签：评分：8.0/10、query:rl-path-opt
+   evidence：强化学习用于图像目标导航路径规划
+2. [Z-1: Efficient Reinforcement Learning for Vision-Language-Action Models](/202607/06/2606.31846v1-z-1-efficient-reinforcement-learning-for-vision-language-action-models)  
+   标签：评分：8.0/10、query:rl-path-opt
+   evidence：强化学习用于机器人操作，可应用于末端执行器路径优化
 
 ### 速读区论文标签
-1. [RoamFlow: Reinforcement-Aligned One-Step Action MeanFlow Policy for Image-Goal Navigation](/202607/05/2606.29934v1-roamflow-reinforcement-aligned-one-step-action-meanflow-policy-for-image-goal-navigation)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：强化学习对齐的导航策略，用于图像目标机器人路径规划
-2. [Dynamic Scheduling for Flexible Manufacturing Systems Based on Multi-Agent Deep Reinforcement Learning and Petri Nets](/202607/05/2606.31737v2-dynamic-scheduling-for-flexible-manufacturing-systems-based-on-multi-agent-deep-reinforcement-learning-and-petri-nets)  
+1. [ACPO: Agent-Chained Policy Optimization for Multi-Agent Reinforcement Learning](/202607/06/2606.30072v1-acpo-agent-chained-policy-optimization-for-multi-agent-reinforcement-learning)  
    标签：评分：7.0/10、query:rl-last-mile
-   evidence：多智能体深度强化学习用于动态调度，方法可迁移至车辆路径问题
-3. [Accelerating Q-learning through Efficient Value-Sharing across Actions](/202607/05/2606.29806v1-accelerating-q-learning-through-efficient-value-sharing-across-actions)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：通过跨动作价值共享加速Q学习，可用于车辆路径问题
-4. [Warp RL: Reshaping Base Policy Distributions for Dynamics Adaptation](/202607/05/2606.31043v2-warp-rl-reshaping-base-policy-distributions-for-dynamics-adaptation)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：残差强化学习用于机器人策略适应，可应用于机器人末端执行器路径优化
+   evidence：多智能体强化学习方法，可应用于协同车辆路径问题
+2. [VLM-AR3L: Vision-Language Models for Absolute and Relative Rewards in Reinforcement Learning](/202607/06/2607.00483v2-vlm-ar3l-vision-language-models-for-absolute-and-relative-rewards-in-reinforcement-learning)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：基于VLM的奖励设计方法，可应用于车辆路径优化
+3. [Path-level Hindsight Instructions for Semantic Exploration in Vision-Language Navigation](/202607/06/2607.01754v1-path-level-hindsight-instructions-for-semantic-exploration-in-vision-language-navigation)  
+   标签：评分：7.0/10、query:rl-path-opt
+   evidence：在视觉语言导航中应用强化学习进行路径级探索，与机器人路径优化相关
+4. [Lightweight Safe Reinforcement Learning for End-to-End UAV Navigation](/202607/06/2607.01794v1-lightweight-safe-reinforcement-learning-for-end-to-end-uav-navigation)  
+   标签：评分：7.0/10、query:rl-path-opt
+   evidence：面向无人机导航的轻量安全强化学习，与机器人路径优化相关
 
 
 <div class="dpr-home-promo-card">
