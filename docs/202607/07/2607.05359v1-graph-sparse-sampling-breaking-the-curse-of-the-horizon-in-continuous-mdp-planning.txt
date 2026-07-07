@@ -1,0 +1,2333 @@
+Title: Graph Sparse Sampling: Breaking the Curse of the Horizon in Continuous MDP Planning
+
+URL Source: https://arxiv.org/pdf/2607.05359v1
+
+Published Time: Tue, 07 Jul 2026 03:26:41 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Graph Sparse Sampling: Breaking the Curse of the Horizon in Continuous MDP Planning 
+
+Idan Lev-Yehudi 1 Vadim Indelman 2,31Technion Autonomous Systems Program (TASP), Technion – Israel Institute of Technology 
+
+> 2
+
+Stephen B. Klein Faculty of Aerospace Engineering, Technion – Israel Institute of Technology 
+
+> 3
+
+Faculty of Data and Decision Sciences, Technion – Israel Institute of Technology 
+
+idanlev@campus.technion.ac.il, vadim.indelman@technion.ac.il 
+
+## Abstract 
+
+Planning under uncertainty in continuous domains is essential for autonomous systems, yet computationally demanding. Tree-based search methods such as Monte Carlo Tree Search (MCTS) remain popular, but their branching structure can require sampling budgets that grow exponentially with lookahead depth in the worst case. From a tree perspective, continuous state or action spaces become especially challenging, since the planner must decide where to search in an infinite branching hierarchy. We propose Graph Sparse Sampling (GSS), an online planning algorithm that shares sampled futures across many candidate decisions, rather than sampling separate successors for each candidate action. This branch-free graph exposes large GPU-friendly batches, while using heuristics to focus computation. We prove finite-sample performance guarantees for GSS covering full-rank or low-rank generative simulators via smoothed backups, and discrete or sampled continuous action spaces. Under suitable overlap, regularity, and action-coverage conditions, these bounds have polynomial dependence on the planning horizon, formalizing when shared futures can avoid the exponential horizon dependence of tree-shaped sparse sampling. We demonstrate continuous-control simulations where GSS substantially outperforms tree-based planners on long horizons or achieves near-optimal performance, supporting no-branching graph planning as a complementary design principle for online control. 
+
+## 1 Introduction 
+
+Planning under uncertainty is a fundamental problem in artificial intelligence, and continuous Markov Decision Processes (MDPs) model many physical systems. For discrete MDPs, exact policy computation is computationally constrained: finite-horizon, discounted, and average-cost variants are polynomial-time solvable but P-complete [Papadimitriou and Tsitsiklis, 1987]. Continuous MDPs add a difficulty, since neither the state space nor the action space can be enumerated directly. Sparse Sampling [Kearns et al., 2002] addresses large state spaces by using only a generative model to sample a sparse set of successor states at each state-action pair, yielding online planning bounds independent of the state dimension. However, these are exponential in the effective planning horizon, and worst-case tight when only a black-box simulator is available [Kearns et al., 2002]. Most practical continuous MDP planners build a search tree, and adapt how the tree is widened or how actions are selected. Double Progressive Widening (DPW) [Couëtoux et al., 2011] limits the number of state and action children in continuous Monte Carlo Tree Search; KR-UCT [Yee et al., 2016] shares value estimates between nearby continuous actions; Voronoi Optimistic Optimization (VOO) and VOOT [Kim et al., 2020] use Voronoi-based black-box optimization inside tree search; and VG-UCT [Lee et al., 2020] refines sampled actions using value gradients. Other non-tree approaches include Model Predictive Path Integral control (MPPI) [Williams et al., 2017], which optimizes 
+
+> Preprint.
+> arXiv:2607.05359v1 [cs.AI] 6 Jul 2026
+
+sampled open-loop trajectories with importance-weighted path costs, and stochastic mesh method (SMM) [Broadie et al., 2004] and weighted stochastic mesh (WSM) [Belomestny et al., 2020, 2025], which reuse sampled states in problems such as high-dimensional option pricing and general Markov decision processes. These methods provide important ways to cope with continuous domains, but they either retain a tree-shaped planning object, optimize trajectories rather than shared Bellman layers, or are not designed around fixed-shape batched online control on GPUs. We propose Graph Sparse Sampling (GSS), an online planner that replaces separate sampled subtrees with shared successor layers. Rather than drawing a different successor set for every state-action pair, GSS samples a common next-state layer and evaluates many candidate decisions against it. We design GSS to trade per-sample adaptivity for sampling throughput, so that GSS can scale to far larger sampling budgets in continuous MDPs. Our theoretical results formalize this intuition by showing that under suitable conditions, GSS can achieve polynomial error sample complexity in the horizon, while our experiments show it is effective in practice, reaching far higher sample counts than MCTS-based planners. 
+
+1.1 Main Contributions Algorithmic contribution. We present Graph Sparse Sampling (GSS), a novel planning algorithm for continuous MDPs designed around state sample reuse in predictable shape operations. GSS is built for parallel processing on modern GPUs, and incorporates action and state sampling heuristics that focus budgets on more promising regions of the state and action spaces. 
+
+Theoretical contribution. We provide a general derivation of finite-time, high-probability guarantees of action-value estimates that hold jointly for the entire sampled planning graph, with a polynomial dependence on the horizon. These hold under conditions of density-ratio overlap, backup-stability, and action-coverage assumptions, that are comparable to previous results under different conditions. Furthermore, we show extensions of the bounds to continuous action spaces, and to low-rank transition models of black-box simulators, under suitable conditions. 
+
+Empirical contribution. We demonstrate GSS in three continuous-control benchmarks. We compare it to tree-based planners in similar or extended time budgets, and to closed-loop analytic baselines. GSS is competitive with or improves over tree-based planners in the tested regimes, often at smaller measured planning times, and scales to larger batched sample counts. Furthermore, we show that GSS scales to high-dimensional and long-horizon settings in a physical simulation. 
+
+1.2 Related Work Tree-based online planning with guarantees. Sparse Sampling [Kearns et al., 2002] and UCT [Koc-sis and Szepesvári, 2006] are classical tree-based baselines with finite-sample or asymptotic guaran-tees in discrete-action MDPs. Continuous-domain tree planners add mechanisms for action and state expansion, including DPW [Couëtoux et al., 2011, Auger et al., 2013], kernel regression [Yee et al., 2016], Voronoi optimization [Kim et al., 2020, Lim et al., 2021], and value gradients [Lee et al., 2020]. Non-asymptotic theory for MCTS has been developed for finite or discrete-action settings [Shah et al., 2022, Barenboim and Indelman, 2026], and in continuous domains, for tree-based optimistic partitioning methods [Mao et al., 2020]. These methods remain tree-shaped and do not analyze shared successor layers or SNIS-style graph backups. 
+
+Graph-based online planning and sample reuse. Leurent and Maillard [2020] consider Monte Carlo Graph Search (MCGS), but in discrete MDPs, for repeating state samples. Kujanpää et al. [2024] considered a graph-based planner for continuous MDPs, but without formal guarantees. Lev-Yehudi et al. [2025] make reuse of state sample values via IS in a tree setting. Stochastic Mesh Method (SMM) [Broadie et al., 2004] and Weighted Stochastic Mesh (WSM) [Belomestny et al., 2020, 2025] are the closest methods to GSS in the literature, and Belomestny et al. [2025] prove finite-time bounds for WSM with polynomial dependence on the horizon. Its compact-state tractability result relies on global density lower/upper bounds and regularity assumptions, whereas our SNIS analysis is stated in proposal-overlap terms through Rényi divergences, which can be considered as more general or not directly comparable. Furthermore, we incorporate search heuristics for action and state sampling, steering the algorithm towards closed-loop online planning on GPU hardware. 2... Action Sampling State Sampling Tail Value Graph Backup Figure 1: GSS builds a layered planning graph from the root state s0. Sampled states are shown as circles and actions as rectangles. In the forward pass, we draw candidate actions for each state using the (1) action proposal; the next shared state layer is then drawn by the (2) state proposal. At depth 
+
+T , nodes are evaluated by a (3) tail value. The backward pass applies the (4) graph backup to each node-action pair, backpropagating the best action-value estimates at each node. 
+
+## 2 Background 
+
+Markov Decision Process (MDP): we consider MDPs in the form ⟨S , A, p, r, γ, L ⟩. S ⊆ Rns , A ⊆ 
+
+Rna are the state and action spaces. We use primes for next-step variables: the transition density 
+
+pt(s′|s, a ) describes the next state after taking action a ∈ A at state s ∈ S at time t. We use the shorthand s′ ∼ pt(· | s, a ) to mean that s′ is sampled from the distribution with this density, and use the same convention for other densities. The reward function rt(s, a, s ′) ∈ R satisfies 
+
+|rt(s, a, s ′)| ≤ Rmax , gives the immediate reward of transitioning from state s to s′ by taking action 
+
+a at time t, and the expected reward is rt(s, a ) ≜ Es′|s,a [rt(s, a, s ′)] . γ ∈ (0 , 1] is the discount factor. The MDP starts at time 0 and terminates after L ∈ N ∪ {∞} steps, and if L = ∞ then we assume γ < 1. We consider (possibly time-dependent) deterministic policies π = ( πt)t∈N, i.e. 
+
+πt : S → A , yet we note that our theoretical results can generalize to stochastic policies as well. The value function of a policy π at time t is V πt (st) ≜ Est+1: L|st,π [PL−1 
+
+> i=t
+
+γi−tri(si, π i(si), s i+1 )] ,where we use m : n to denote the range m, . . . , n ∈ Z. For any mapping U : S → R, define the single-sample Bellman target GUt (s, a, s ′) ≜ rt(s, a, s ′) + γU (s′). We define the action-value function as Qπt (s, a ) ≜ Es′∼pt(·| s,a )[GV πt+1  
+
+> t
+
+(s, a, s ′)] . The optimal value and action-value functions are V ∗ 
+
+> t
+
+(s) ≜ sup π V πt (s) and Q∗ 
+
+> t
+
+(s, a ) ≜ Es′∼pt(·| s,a )[GV ∗ 
+
+> t+1
+> t
+
+(s, a, s ′)] respectively, and we denote 
+
+G∗ 
+
+> t
+
+(s, a, s ′) ≜ GV ∗ 
+
+> t+1
+> t
+
+(s, a, s ′). We write Argmax t(s) ≜ arg max a∈A Q∗ 
+
+> t
+
+(s, a ) for the exact optimal-action set. Our planning goal is to return a near-optimal root action at s0.
+
+Importance Sampling (IS): IS [Kloek and Van Dijk, 1978] is a technique in Monte Carlo (MC) estimation where a proposal distribution q is used to generate samples. We use ˆ⊡ for empirical estimators and reserve ˜⊡ for approximate theoretical quantities. The IS estimator for g(x) = 
+
+Ex∼p[f (x)] is ˆgq, IS = N −1 PNi=1 ρpq (xi)f (xi), for importance ratios ρpq (x) ≜ p(x)/q (x). ˆgq, IS is unbiased if q(x) = 0 implies p(x) = 0 . Often, the self-normalized IS (SNIS) estimator is formulated when we only have access to an unnormalized version of p, or for variance reduction purposes, and is given by ˆgq, SNIS = ( PNi=1 ρpq (xi)) −1 PNi=1 ρpq (xi)f (xi). While biased, under weak assumptions it is consistent [Owen, 2013, 9.2]. 
+
+Monte Carlo Tree Search (MCTS): MCTS is an algorithm used to quickly explore large state spaces [Browne et al., 2012]. It iteratively repeats four steps to build a search tree that approximates the action-values, using a best-first strategy. Often UCT [Kocsis and Szepesvári, 2006] is used to balance between exploration of new actions and exploitation of promising ones. Double Progressive Widening (DPW) [Couëtoux et al., 2011] is a technique to limit the branching factor from being infinite in continuous settings. The number of children of a node is artificially limited to kN α for N
+
+visitations, for fixed k > 0 and 0 < α < 1. VOO samples continuous actions by implicitly using Voronoi cells around evaluated actions to balance local and global search [Kim et al., 2020]. VPW uses VOO when progressive widening adds new actions, extending it to stochastic tree search in continuous or hybrid domains [Lim et al., 2021]. 3Algorithm 1 Graph Sparse Sampling 
+
+1: Set s10 ← s0 and S0 ← { s10}.
+
+2: procedure EVALUATE LAYER (t, S t)
+
+3: if t = T , set ˆV jT ← TailValue T (sjT ) for all j ∈ 1: CT and return 
+
+4: For all i ∈ 1: Ct, draw ai, 1: Kt 
+
+> t
+
+∼ qat (· | sit), set At ← ∪ i∈1: Ct {ai, 1: Kt 
+
+> t
+
+}
+
+5: Fit qst ← FitProposal t(t, S 0: t, A 0: t) on all available information 
+
+6: Draw s1: Ct+1  
+
+> t+1
+
+∼ qst and set St+1 ← { s1: Ct+1  
+
+> t+1
+
+}
+
+7: EVALUATE LAYER (t + 1 , S t+1 )
+
+8: For all i ∈ 1: Ct and k ∈ 1: Kt, set ˆQi,k t ← Bt(sit, a i,k t ; St+1 , ˆV 1: Ct+1  
+
+> t+1
+
+, q st )
+
+9: For all i ∈ 1: Ct, set ˆV it ← max k∈1: Kt
+
+ˆQi,k t
+
+10: if t = 0 return a1,ˆk0 
+
+> 0
+
+for ˆk0 ∈ arg max k∈1: K0
+
+ˆQ1,k 
+
+> 0
+
+11: end procedure 
+
+12: return EVALUATE LAYER (0, S 0). 
+
+## 3 Graph Sparse Sampling (GSS) 
+
+3.1 Layered Sparse Graph Structure 
+
+GSS is a finite-lookahead planner from a root state s0 ∈ S , attempting to estimate π∗ 
+
+> 0
+
+(s0). GSS operates by drawing a known number of state and action samples from time 0 until its terminal depth T . We design GSS around decoupling successor-state sampling from action-value estimation, separated into forward pass and backward pass procedures respectively. This decoupling allows GSS to achieve large, regular batches of operations that can be parallelized efficiently on modern GPUs. Algorithm 1 shows pseudocode for GSS, in which each line is a batched operation. 
+
+Forward pass. The forward pass alternates between action sampling and state sampling. Starting from the initial state s0, let C0: T ∈ NT +1 be the state layer widths, denoting the i’th state layer as 
+
+St = {s1: Ct 
+
+> t
+
+}. Each state node st has an action-sampling budget of Kt candidate actions, resulting in a total of CtKt candidate actions at depth t.For action sampling, GSS uses an action proposal density over A, denoted by qat (· | s), in each state sit to draw ai, 1: Kt
+
+> t
+> i.i.d.
+
+∼ qat (· | sit). For state sampling, a state proposal routine chooses a density qst ← FitProposal t(t, S 0: t, A 0: t) on S, and GSS samples s1: Ct+1 
+
+> t+1 i.i.d.
+
+∼ qst . We denote the sets Ait ≜ {ai, 1: Kt 
+
+> t
+
+}, At ≜ ∪i∈1: Ct Ait, and St = {s1: Ct 
+
+> t
+
+}. At the terminal layer, GSS initializes 
+
+ˆV jT ≜ TailValue T (sjT ) for j ∈ 1: CT . The components qat , FitProposal t and TailValue T may be tuned to incorporate domain heuristics, including rollout-based or learned heuristics. 
+
+Backward pass. The backward pass proceeds from t = T − 1 down to t = 0 , alternating between a graph backup and a max-reduction at each layer. Graph backup sets the action-value estimates for each i ∈ 1: Ct and k ∈ 1: Kt via 1 ˆQi,k t ≜ Bt(sit, a i,k t ; St+1 , ˆV 1: Ct+1  
+
+> t+1
+
+, q st ) ∈ R, given the next state layer St+1 , its value estimates ˆV 1: Ct+1  
+
+> t+1
+
+, and the state proposal density qst . The node value estimate is the maximum over sampled actions, i.e. ˆV it ≜ max k∈1: Kt
+
+ˆQi,k t . At the root, the returned action is a1,ˆk0 
+
+> 0
+
+where ˆk0 ∈ arg max k∈1: K0
+
+ˆQ1,k  
+
+> 0
+
+, which is then executed by the online planner before the next planning episode. We denote the short-hand Bellman target estimates, 
+
+ˆGi,k,j t ≜ rt(sit, a i,k t , s jt+1 ) + γ ˆV jt+1 , and give example backups: 
+
+ˆQi,k t, SNIS = η−1
+
+> ρCt+1
+
+X
+
+> j=1
+
+ρi,k t (j) ˆGi,k,j t (1.A) ˆQi,k t, KDE =
+
+PCt+1  
+
+> j=1
+
+wi,k t,h (j) ˆGi,k,j t
+
+PCt+1  
+
+> j=1
+
+wi,k t,h (j) (1.B) 
+
+ˆQi,k t, NN = rt(sit, a i,k t , ˜si,k t+1 ) + γ ˆV jNN  
+
+> t+1
+
+(1.C) ˆQi,k t, learn = Ft,ϕ (sit, a i,k t ; ˆV 1: Ct+1  
+
+> t+1
+
+, Dt) (1.D) 
+
+For SNIS (1.A) , ρi,k t (j) ≜ pt(sjt+1 | sit, a i,k t )/q st (sjt+1 ) and ηρ = PCt+1  
+
+> j=1
+
+ρi,k t (j). When exact transition densities are available, the SNIS backup (1.A) is a convenient choice for GSS. As we show 
+
+> 1
+
+While we could backup ˆQi,k t over a sparse subset Ei,k t ⊆ St+1 to reduce the time complexity below O(Ct · At · Ct+1 ),we find that the dense assignment Ei,k t = St+1 is both simpler in theory and runs faster for simple GPU implementations. 
+
+4in Section 4, it allows to derive finite-time performance guarantees with a polynomial error sample complexity in the horizon in Corollary 4.3, and this is the version of GSS we use in our experiments. When importance weights are unavailable or impractical to use online, one can use simulator draws in several ways. KDE approximation (1.B) [Wand and Jones, 1994] draws xi,k, 1: Mt+1 ∼ pt(· | sit, a i,k t )
+
+and forms ˆpi,k t,h (s) ≜ M −1 PMℓ=1 Kh(s − xi,k,ℓ t+1 ); in (1.B) , wi,k t,h (j) ≜ ˆpi,k t,h (sjt+1 )/q st (sjt+1 ) are the resulting SNIS weights. Nearest-neighbor approximations (1.C) avoid density estimation completely by drawing ˜si,k t+1 ∼ pt(· | sit, a i,k t ) and setting jNN ∈ argmin j∈1: Ct+1 d(˜ si,k t+1 , s jt+1 ). In general, any learned approximation may be used as in (1.D) , conditioning the action-value estimates with offline and online available data Dt.
+
+3.2 Smoothed SNIS Graph Backups for Low-Rank Generative Simulators 
+
+In many continuous simulators, the transition model is only given by the generative process 
+
+s′ = ft(s, a, ξ ), ξ ∼ pξ,t (· | s, a ), (2) with ξ ∈ Rnξ and s, s ′ ∈ Rns . When nξ < n s, i.e. the latent noise dimension is smaller than the state dimension, the map ξ 7 → ft(s, a, ξ ) produces a transition model that is generally singular w.r.t. Lebesgue measure, making the importance ratio pt(· | s, a )/q st not well-defined. Kernel smoothing [Wand and Jones, 1994] addresses this by convolving the target transition density with a kernel density in S, obtaining a density that is nondegenerate w.r.t. Lebesgue measure: 
+
+pt,τ t (x | s, a ) ≜
+
+Z
+
+kt,τ t (x | ft(s, a, ξ )) pξ,t (dξ | s, a ), (3) where kt,τ t (x | y) is a smoothing density on S with bandwidth parameter τt > 0, measurable in y,that is locally concentrated around y as τt → 0. We refer to smoothed SNIS backups as those that use the SNIS formula (1.A) with pt,τ t in place of pt in the importance ratio. We can control the incurred bias by tuning the bandwidth τt, as shown in the following claim. 
+
+Claim 1 (Smoothing bias) . Assume G∗ 
+
+> t
+
+(s, a, ·) : S → R is measurable for (s, a ) ∈ S × A , and 
+
+βst -Hölder with constant Lst , i.e. |G∗ 
+
+> t
+
+(s, a, x ) − G∗ 
+
+> t
+
+(s, a, y )| ≤ Lst d( x, y )βst for all x, y ∈ S . Then: 
+
+|Es′∼pt(·| s,a )[G∗ 
+
+> t
+
+(s, a, s ′)] − Ex∼pt,τ t (·| s,a )[G∗ 
+
+> t
+
+(s, a, x )] | ≤ Lst mβst ,t (τt), (4) where mβst ,t (τt) ≜ sup 
+
+> y
+
+Z
+
+> S
+
+d( x, y )βst kt,τ t (x | y) dx. (5) The proof is in Appendix A.1. The integral (3) is often unavailable in closed form, but can be approximated by various methods. In our implementations, we evaluate the linearized approximation around a chosen noise point ¯ξ (often the mean of pξ,t ): 
+
+˜plin  
+
+> t,τ t
+
+(x | s, a ) ≜
+
+Z
+
+kt,τ t (x | ft(s, a, ¯ξ) + Js,a ξ,t (ξ − ¯ξ)) pξ,t (dξ | s, a ), Js,a ξ,t ≜ Dξ ft(s, a, ¯ξ). (6) When both pξ,t ∼ N (μξ,t , Σξ,t ) and kt,τ t ∼ N (0 , Σk,t ) are Gaussian, this approximation is Gaussian with mean ft(s, a, ¯ξ) + Js,a ξ,t (μξ,t − ¯ξ) and covariance Js,a ξ,t Σξ,t (Js,a ξ,t )⊤ + Σ k,t , which yields a closed-form density evaluation. Other approximations such as sigma-point transformations [Julier et al., 2004] or Monte Carlo density estimates [Owen, 2013] may be used in various settings. 
+
+## 4 GSS Theoretical Analysis 
+
+4.1 Settings and Assumptions 
+
+We first isolate the action-side approximation introduced by replacing the full action space by nodewise sampled action sets. 
+
+Definition 1 (Max-close action sets) . For each depth t < T and realized node sit, we say that the action set Ait is max-close with radius Γt ≥ 0 and local failure probability δat ∈ [0 , 1] if 
+
+0 ≤ V ∗ 
+
+> t
+
+(sit) − max 
+
+> a∈Ait
+
+Q∗ 
+
+> t
+
+(sit, a ) ≤ Γt (7) except with probability at most δat . If A is finite and Ait = A, then (7) holds with Γt = 0 and δat = 0 .5When A is metric and the action sets Ait are sampled from qat , the following assumptions yield explicit Γt and δat .
+
+Assumption 1 (Proposal small-ball coverage) . For each depth t < T , there is a radius cap ¯εt > 0
+
+such that for every ε ∈ (0 , ¯εt] and every s ∈ S , there exists a⋆t,ε (s) ∈ Argmax t(s) such that 
+
+qat ({a ∈ A : dA(a, a ⋆t,ε (s)) < ε } | s) ≥ mt(ε) with mt(ε) > 0.
+
+Assumption 2 (Action-side Hölder regularity) . For each depth t < T , there are constants Lat ≥ 0 and 
+
+βat ∈ (0 , 1] such that |Q∗ 
+
+> t
+
+(s, a ) − Q∗ 
+
+> t
+
+(s, a ′)| ≤ Lat dA(a, a ′)βat for every s ∈ S and all a, a ′ ∈ A .
+
+Claim 2 (One-step sampled-action loss) . Fix εt ∈ (0 , ¯εt] and a node index i ∈ 1: Ct, and suppose that the candidate action set Ait = {ai, 1: Kt 
+
+> t
+
+} is sampled conditionally i.i.d. from qat (· | sit). Under Assumption 1 and Assumption 2, with probability at least 1 − (1 − mt(εt)) Kt , the one-step loss from maximizing only over the sampled actions satisfies 
+
+0 ≤ V ∗ 
+
+> t
+
+(sit) − max 
+
+> a∈Ait
+
+Q∗ 
+
+> t
+
+(sit, a ) ≤ Lat εβat 
+
+> t
+
+(8) The proof is in Appendix A.2. Under Claim 2, the sampled action sets are max-close in the sense of Definition 1, with Γt = Lat εβat 
+
+> t
+
+and δat = (1 − mt(εt)) Kt .For the following graph backup assumptions, we assume that they hold true for all sampled-graph index pairs i ∈ 1: Ct and k ∈ 1: Kt. We write V ∗,1: Ct+1  
+
+> t+1
+
+≜ (V ∗
+
+> t+1
+
+(sjt+1 )) j∈1: Ct+1 for the optimal-value vector at the next layer, and ˆV 1: Ct+1  
+
+> t+1
+
+for the realized next-layer value vector. For the graph backup of an arbitrary vector v ∈ RCt+1 , we shorthand Bi,k t [v] ≜ Bt(sit, a i,k t ; St+1 , v, q st ). For action-value estimates we denote Q∗,i,k t ≜ Q∗ 
+
+> t
+
+(sit, a i,k t ), ˆQi,k,⋆ t ≜ Bi,k t [V ∗,1: Ct+1  
+
+> t+1
+
+], and ˆQi,k t ≜
+
+Bi,k t [ ˆV 1: Ct+1  
+
+> t+1
+
+] respectively for the exact optimal action-value at (sit, a i,k t ), the graph backup output under exact next-layer optimal values, and the realized recursive backup output. 
+
+Assumption 3 (Graph backup bound) . For every i ∈ 1: Ct, k ∈ 1: Kt, and λt > 0, the function δloc ,t 
+
+bounds the failure probability: P(| ˆQi,k,⋆ t − Q∗,i,k t | ≤ λt) ≥ 1 − δloc ,t (λt, C t+1 ).
+
+Assumption 4 (Graph backup stability) . For every i ∈ 1: Ct, k ∈ 1: Kt, and v ∈ RCt+1 , if ∥v −
+
+V ∗,1: Ct+1  
+
+> t+1
+
+∥∞ ≤ α, then |B i,k t [v] − ˆQi,k,⋆ t | ≤ γα. 
+
+Definition 2 (Controlled graph backup) . Bt is controlled if it satisfies Assumptions 3 and 4. For a controlled graph backup, the following bound holds: 
+
+Claim 3 (Controlled graph backup bound) . On the event ∥ ˆV 1: Ct+1  
+
+> t+1
+
+− V ∗,1: Ct+1  
+
+> t+1
+
+∥∞ ≤ αt+1 , under Assumption 3 and Assumption 4, with probability at least 1 − CtKt δloc ,t (λt, C t+1 ), the recursive one-step graph backup error satisfies 
+
+| ˆQi,k t − Q∗,i,k t | ≤ γα t+1 + λt for every i ∈ 1: Ct and k ∈ 1: Kt. (9) The proof is in Appendix A.3. For densities p and q, define the exponentiated Rényi diver-gences [Van Erven and Harremos, 2014] d∞(p∥q) = ess sup x∼q p(x)/q (x) and d2(p∥q) ≜
+
+Ex∼q [( p(x)/q (x)) 2]. For example, under the following theorem’s assumptions with a bounded 
+
+d∞ divergence, the SNIS backup is a controlled graph backup in the sense of Definition 2, with 
+
+λt = λ and δloc ,t = 3 exp  −N t (λ, N )2:
+
+Theorem (SNIS concentration, bounded d∞ Lim et al. [2023]) . Let d∞(p∥q) < ∞. Let 
+
+x1, . . . , x Ni.i.d. 
+
+∼ q and let f satisfy ∥f ∥∞ ≤ fmax . For any λ > 0 such that λ > f max d∞(p∥q)/√N ,define t(λ, N ) ≜ λfmax d∞(p∥q) − 1√N . Then 
+
+P(|ˆμSNIS ,N − Ex∼p[f (x)] | ≤ λ) ≥ 1 − 3 exp  −N t (λ, N )2 . (10) Appendix A.3 shows a controlled Mean-of-Medians SNIS graph backup, for a bounded d2 assumption. 
+
+4.2 Graph Concentration Inequalities and Implications 
+
+Our main graph concentration inequality result turns single-node bounds into graph guarantees. 6Theorem 1 (Graph recursive concentration inequality) . Fix a planning depth T and finite realized candidate actions ai, 1: Kt 
+
+> t
+
+. Let κtail  
+
+> T
+
+≥ 0 and ∆tail  
+
+> T
+
+∈ [0 , 1] . Assume that | ˆV iT − V ∗,i T | ≤ κtail  
+
+> T
+
+,where V ∗,i T ≜ V ∗ 
+
+> T
+
+(siT ), except with probability at most ∆tail  
+
+> T
+
+for each terminal node i ∈ 1: CT .Let κt ≜ λt + Γ t and ∆t ≜ CtKt δloc ,t (λt, C t+1 ) + Ct δat , and define αT = κtail  
+
+> T
+
+and, for 
+
+t = T − 1, . . . , 0, αt = γα t+1 + κt. For each t < T , suppose that the action sets Ait are max-close in the sense of Definition 1 for each node i ∈ 1: Ct, with parameters Γt and δat , and that the selected graph backup is controlled in the sense of Definition 2, so that on the event 
+
+∥ ˆV 1: Ct+1  
+
+> t+1
+
+− V ∗,1: Ct+1  
+
+> t+1
+
+∥∞ ≤ αt+1 Claim 3 holds with parameter λt. Then, with probability at least 
+
+1 − CT ∆tail  
+
+> T
+
+− PT −1 
+
+> t=0
+
+∆t, for every t < T :
+
+∥ ˆQ1: Ct,1: Kt 
+
+> t
+
+− Q∗,1: Ct,1: Kt 
+
+> t
+
+∥∞ ≤ γα t+1 + λt, ∥ ˆV 1: Ct 
+
+> t
+
+− V ∗,1: Ct 
+
+> t
+
+∥∞ ≤ αt. (11) 
+
+Moreover, for every a∗ 
+
+> 0
+
+∈ Argmax 0(s0), it holds that Q∗
+
+> 0
+
+(s0, a ∗
+
+> 0
+
+) − Q∗
+
+> 0
+
+(s0, ˆa0) ≤ 2α0.
+
+The proof is given in Appendix A.4, and the proof strategy is similar to that of Lim et al. [2023]. We now show how Claims 1 and 2 apply to Theorem 1. 
+
+Corollary 4.1 (Sampled-action graph budgets) . In Definition 1, the fully enumerated case Ait = A
+
+gives Γt = 0 and δat = 0 , thus κt = λt and ∆t = Ct|A| δloc ,t (λt, C t+1 ). If instead Ait = {ai, 1: Kt 
+
+> t
+
+}
+
+is sampled as in Claim 2, then Γt = Lat εβat 
+
+> t
+
+and δat = (1 − mt(εt)) Kt , and thus κt = λt + Lat εβat
+
+> t
+
+and ∆t = CtKt δloc ,t (λt, C t+1 ) + Ct(1 − mt(εt)) Kt .
+
+Corollary 4.2 (Smoothed-transition graph budgets) . Suppose the exact transition density is replaced by the smoothed density pt,τ t (· | s, a ) and G∗ 
+
+> t
+
+(s, a, ·) satisfies the assumptions of Claim 1. Then Claim 3 holds for the smoothed SNIS backup with the same δloc ,t and with λt replaced by λt +
+
+Lst mβst ,t (τt).
+
+Finally, we show some of the implications that follow by assuming bounded d∞(pt(· | s, a ) ∥ qst ) on GSS concentration inequalities with SNIS backups. 
+
+Corollary 4.3 (Finite-action, absolutely continuous transition sample complexity) . Assume A is finite and fully enumerated, the terminal estimate is exact, and the exact full-rank SNIS backup is used. Assume also that sup t<T, s,a d∞(pt(· | s, a ) ∥ qst ) ≤ dmax  
+
+> ∞
+
+. Then, for every fixed ϵ > 0 and root failure probability δ ∈ (0 , 1) , choosing a common layer width C = eO(R2max (dmax  
+
+> ∞
+
+)2T 4/ϵ 2)
+
+suffices to make the returned root action ˆa0 satisfy 
+
+Pr( Q∗
+
+> 0
+
+(s0, a ∗
+
+> 0
+
+) − Q∗
+
+> 0
+
+(s0, ˆa0) ≤ ϵ) ≥ 1 − δ for every a∗ 
+
+> 0
+
+∈ Argmax 
+
+> 0
+
+(s0). (12) 
+
+Thus, the number of simulator queries is NGSS = T C = eO R2max (dmax  
+
+> ∞
+
+)2T 5/ϵ 2, and the number of backup operations is O(|A| T C 2) = eO |A| R4max (dmax  
+
+> ∞
+
+)4T 9/ϵ 4.Remark 1 (Comparison with Sparse Sampling) . Corollary 4.3 gives NGSS = eO(R2max (dmax  
+
+> ∞
+
+)2T 5/ϵ 2).If dmax  
+
+> ∞
+
+= O(T n) for n∈N, then NGSS remains polynomial in T , whereas the Sparse Sampling budget NSS required for target accuracy ϵ is exponential in T [Kearns et al., 2002]. See Appendix A.7. 
+
+Corollary 4.4 (Joint schedule for low-rank sampled-action GSS) . Assume the hypotheses of Corol-laries 4.1 and 4.2. Suppose, in addition, that the terminal estimate is exact, or that its tail accuracy and failure budgets can be made small enough after the final width CT is fixed. Assume also that 
+
+Lst mβst ,t (τt) → 0 as τt ↓ 0, and that the smoothed backup can be controlled, uniformly over realized node-action pairs, to any prescribed local accuracy λt > 0 and local failure level ρt ∈ (0 , 1) by increasing the state-side width Ct+1 . Then for every εroot > 0 and δ ∈ (0 , 1) , one can choose band-widths τt, action tolerances εt, action budgets Kt, and state-side widths Ct+1 so that 2α0 ≤ εroot 
+
+and CT ∆tail  
+
+> T
+
++ PT −1 
+
+> t=0
+
+∆t ≤ δ. Consequently, Pr ( Q∗
+
+> 0
+
+(s0, a ∗
+
+> 0
+
+) − Q∗
+
+> 0
+
+(s0, ˆa0) ≤ εroot ) ≥ 1 − δ for every a∗ 
+
+> 0
+
+∈ Argmax 0(s0).
+
+## 5 Experiments and Results 
+
+We evaluate GSS in three continuous-control settings chosen to stress different parts of the method: controlled rollout mismatch, singular non-linear dynamics, and smoothed backups in 70.0 0.3 0.6 0.9 1.2 1.5 
+
+> rotation
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> return
+> Rotating DDI
+> GSS
+> LQR
+> LQG
+> DPW 1s
+> VPW 1s
+
+(a) Rotating DDI 0.01    
+
+> 0.03
+> 0.1
+> 0.32
+> 1
+> time (s)
+> 0
+> 20
+> 40
+> 60
+> 80
+> discounted return
+> Lunar Lander
+> GSS DPW VPW
+
+(b) Lunar Lander 0.4 0.8 1.7 3.2 5.7   
+
+> time (s)
+> 9
+> 8
+> 7
+> 6
+> 5
+> return
+> Reacher
+> PD baseline GSS
+
+(c) Reacher 
+
+Figure 2: Error bars show ±2 standard errors. We report mean planner performance for displayed domains, over discounted returns for Lunar Lander, or over undiscounted returns for the other domains. In Rotating DDI, the x-axis is the rotation parameter α, which controls the mismatch of the rollout guide and the difficulty of the problem. DPW/VPW curves span wall-clock budgets 
+
+0.01 , 0.0316 , 0.1, 0.316 , and 1.0 seconds, with lower-budget curves faded and the 1.0 second curves emphasized; GSS mean runtimes are at most 0.7. In Lunar Lander and Reacher, the x-axis is mean planner runtime per planning session, averaged over the closed-loop execution in the environment. high-dimensional state spaces. All GSS runs use a JAX [Bradbury et al., 2018] implementation with fixed-shape batched graph construction, with domain-dependent action proposal and state proposal. Tail values use a single-sample return from πrollout . Graph backup was either SNIS in the Double-Integrator domain, or smoothed SNIS in Lunar Lander and Reacher. In some domains, we compared GSS to tree-based baselines DPW [Couëtoux et al., 2011] and VPW [Lim et al., 2021] using the same rollout policy. DPW and VPW implementations were based on POMDPs.jl [Egorov et al., 2017] in Julia, to ensure efficient execution. Full configurations, including action mixtures, state proposals, smoothing bandwidths, and DPW/VPW parameters, are in Appendix B. 
+
+Rotating 4D-Double-Integrator (Rotating DDI). Extending the benchmark of Mansley et al. [2011], the state is s = ( x, v ) ∈ R8 and the acceleration action is a ∈ [−2, 2] 4. However, an externally rotating frame introduces aα = a − 2αJv + α2x, where J rotates coordinate pairs (1 , 2) and 
+
+(3 , 4) by 90 ◦. The transition density is the full-rank Gaussian pt(s′ | s, a ) = N (s′; μα(s, a ), Σ) ,where μα(s, a ) is given by Euler numerical integration over the decision interval ∆t = 0 .2, with diagonal isotropic covariance Σ = 0 .02 2I8. We compare against the clipped LQR feedback baseline 
+
+aLQR (x, v ) = −(x − xgoal ) − √2 v projected to [−2, 2] 4, and also report a full-state LQG/Riccati reference that is analytically optimal when α = 0 and actions are unbounded. Thus α = 0 is the matched-guide setting: the LQR rollout/proposal follows the nominal double-integrator controller, and the LQG/Riccati reference is analytically optimal. As the external rotation α increases, the same rollout/proposal becomes increasingly mismatched, so the sweep tests GSS under degrading rollout and proposal quality. GSS uses an LQR-guided action proposal and the LQR rollout distribution for tail values, with action budget 64 and state width 512 . The graph backup is exact SNIS. The state proposal is a top-0.95 
+
+transition-moment mixture: at each layer, state-action components are scored by a sample plus LQR rollout tail, the top fraction of those are retained, and successor states are proposed from the equally weighted mixture over retained transition components. GSS mean planning time is about 0.2 seconds per decision at α = 0 and between 0.6-0.7 seconds for the nonzero-coupling rotating-frame settings. The results are shown in Figure 2a, including DPW/VPW with time budgets ranging from 0.01 
+
+seconds to 1.0 second. As α increases, LQR and LQG degrade sharply from α = 0 .9 onward, while GSS maintains relatively consistent performance despite having a degraded rollout guide. For all tested time budgets, GSS achieves better or comparable performance to DPW/VPW. The tree-based planners show a clear degradation pattern as α increases, achieving competitive performance with GSS in high-rotation regimes only for the highest time budgets. The full results table is in Appendix 1. 
+
+Lunar Lander. The continuous Lunar Lander benchmark of Mern et al. [2021] features a 6D space-craft attempting to land safely from an initially random position. The state is (x, z, θ, v x, v z , ω ) ∈ R6,8containing horizontal position, altitude, attitude, and their respective velocities. The transition model is a deterministic transition function perturbed by 3D additive Gaussian noise, thus it is singular in 
+
+R6. The action space A ⊆ R3 consists of lateral thrust, main thrust, and thruster offset. We compare GSS, DPW, and VPW under the same brake-near-ground guide and rollout policy. In GSS, for action proposal, we use the parallelism of GSS to sample actions from multiple sources: brake-near-ground policy’s deterministic action, perturbed rollout actions, randomly sampled actions, and a few expert-chosen actions. We use rollouts for tail values, and use them in the state proposal: we keep the top-0.8 sampled-transition state-action components, and fit a diagonal Gaussian to those as the next-state proposal. For the graph backup, we use the SNIS formula with the single-point smoothed density (6). The results for Lunar Lander are presented in Figure 2b. GSS reaches the high-discounted-return regime by the medium budget and remains stable as the action and state budgets grow. The tree planners are strongest at short plotted budgets, but their plotted mean performances decline as time budgets increase. 
+
+Reacher. We implement Reacher-v5 [Towers et al., 2024] in JAX [Bradbury et al., 2018] using the MJX interface to MuJoCo [Todorov et al., 2012]. The 10D state contains joint-angle cosines and sines, target coordinates, arm angular velocities, and fingertip-target displacement; the actions are two clipped actuator torques. The transition dynamics are deterministic, and graph backups are smoothed single-point linearized SNIS (6). In Reacher, we compare GSS against a deterministic proportional-derivative (PD) controller. GSS uses this controller in the action proposal, utilizing one controller action and the remaining action budget split between noisy-controller and uniform samples, and also uses it as the rollout policy for tail values. The state proposal is a transition-mixture, without any top-component pruning. The budget frontier in Figure 2c uses planner horizon 20 and rollout cap 50 , spanning state widths of 
+
+256 -2048 and action budgets of 24 -64 . Every tested GSS budget improves the local controller, and increasing the state width and action budget generally improves performance with diminishing returns. This shows that GSS can improve baseline policies and scale effectively in a high-dimensional, deterministic-transition domain. 
+
+## 6 Conclusion 
+
+We present Graph Sparse Sampling, an alternative to tree-based online planning, by sampling shared successor state layers, evaluating many candidate actions against them, and using generalized graph backups to propagate values through a fixed-shape planning graph. GSS changes the bottleneck from branching a search tree, to designing effective state and action proposals to focus on relevant portions of the action and state spaces, yet with enough overlap to support reliable reuse. Our analysis makes this tradeoff explicit, and we show explicit finite-sample performance guarantees in cases of density-ratio overlap, sampled action coverage, and bounded smoothing-bias. We obtain performance guarantees with polynomial horizon dependence in regimes where the shared state layers remain representative, and we discuss how to jointly schedule the state and action budgets and smoothing bandwidths to achieve any desired root accuracy and failure probability in low-rank, sampled-action settings. Empirically, the same design supports large GPU batches, and improves or matches MCTS-based baselines across continuous-control problems with stochastic and deterministic transition cases, challenging horizons, and varying domain dimensions. GSS is proposal-limited, as poor action or state proposals can make the graph spend most of its computation in the wrong regions. It is natural to extend GSS into multiple passes, where proposals are adapted based on earlier value estimates, or use learned approximations as part of GSS components. In future work, we plan to explore these directions, along with tightening our performance guarantees, adapting to anytime settings, and analyzing our methods in partially observable domains. 
+
+## Acknowledgments and Disclosure of Funding 
+
+This work was supported by the Israel Ministry of Innovation, Science and Technology. 9References 
+
+David Auger, Adrien Couetoux, and Olivier Teytaud. Continuous upper confidence trees with polynomial exploration–consistency. In Machine Learning and Knowledge Discovery in Databases: European Conference, ECML PKDD 2013, Prague, Czech Republic, September 23-27, 2013, Proceedings, Part I 13 , pages 194–209. Springer, 2013. M. Barenboim and V. Indelman. Online POMDP planning with anytime deterministic optimality guarantees. Artificial Intelligence , 350:104442, 2026. doi: https://doi.org/10.1016/j.artint.2025. 104442. Denis Belomestny, Maxim Kaledin, and John Schoenmakers. Semitractability of optimal stopping problems via a weighted stochastic mesh algorithm. Mathematical Finance , 30(4):1591–1616, 2020. Denis Belomestny, John Schoenmakers, and Veronika Zorina. Weighted mesh algorithms for general markov decision processes: Convergence and tractability. Journal of Complexity , 88:101932, 2025. James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Yash Katariya, Chris Leary, Dougal Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-Milne, and Qiao Zhang. JAX: composable transformations of Python+NumPy programs, 2018. URL http://github.com/jax-ml/jax. Mark Broadie, Paul Glasserman, et al. A stochastic mesh method for pricing high-dimensional american options. Journal of Computational Finance , 7:35–72, 2004. Cameron B Browne, Edward Powley, Daniel Whitehouse, Simon M Lucas, Peter I Cowling, Philipp Rohlfshagen, Stephen Tavener, Diego Perez, Spyridon Samothrakis, and Simon Colton. A survey of Monte Carlo tree search methods. IEEE Transactions on Computational Intelligence and AI in games , 4(1):1–43, 2012. Adrien Couëtoux, Jean-Baptiste Hoock, Nataliya Sokolovska, Olivier Teytaud, and Nicolas Bonnard. Continuous upper confidence trees. In International conference on learning and intelligent optimization , pages 433–445. Springer, 2011. Hai Dang Dau. Sequential Bayesian Computation . PhD thesis, Institut Polytechnique de Paris, September 2022. URL https://theses.hal.science/tel-03848268. Maxim Egorov, Zachary N Sunberg, Edward Balaban, Tim A Wheeler, Jayesh K Gupta, and Mykel J Kochenderfer. POMDPs.jl: A framework for sequential decision making under uncertainty. The Journal of Machine Learning Research , 18(1):831–835, 2017. Simon J. Julier, Jeffrey, and K. Uhlmann. Unscented filtering and nonlinear estimation. In Proceedings of the IEEE , pages 401–422, 2004. Michael Kearns, Yishay Mansour, and Andrew Y Ng. A sparse sampling algorithm for near-optimal planning in large Markov decision processes. Machine learning , 49(2):193–208, 2002. Beomjoon Kim, Kyungjae Lee, Sungbin Lim, Leslie Kaelbling, and Tomás Lozano-Pérez. Monte Carlo tree search in continuous spaces using Voronoi optimistic optimization with regret bounds. In AAAI Conf. on Artificial Intelligence , volume 34, pages 9916–9924, 2020. Teun Kloek and Herman K Van Dijk. Bayesian estimates of equation system parameters: an application of integration by Monte Carlo. Econometrica: Journal of the Econometric Society ,pages 1–19, 1978. Levente Kocsis and Csaba Szepesvári. Bandit based Monte-Carlo planning. In European conference on machine learning , pages 282–293. Springer, 2006. Kalle Kujanpää, Amin Babadi, Yi Zhao, Juho Kannala, Alexander Ilin, and Joni Pajarinen. Continuous Monte Carlo graph search. In Intl. Conf. on Autonomous Agents and Multiagent Systems (AAMAS) ,pages 1047–1056, 2024. 10 Jongmin Lee, Wonseok Jeon, Geon-Hyeong Kim, and Kee-Eung Kim. Monte-Carlo tree search in continuous action spaces with value gradients. In Proceedings of the AAAI conference on artificial intelligence , volume 34, pages 4561–4568, 2020. Edouard Leurent and Odalric-Ambrym Maillard. Monte-Carlo graph search: the value of merging similar states. In Sinno Jialin Pan and Masashi Sugiyama, editors, Asian Conference on Machine Learning (ACML 2020) , pages 577 – 592, Bangkok, Thailand, November 18-20 2020. Idan Lev-Yehudi, Michael Novitsky, Moran Barenboim, Ron Benchetrit, and Vadim Indelman. Value gradients with action adaptive search trees in continuous (po)mdps. 2025. Michael H Lim, Claire J Tomlin, and Zachary N Sunberg. Voronoi progressive widening: efficient online solvers for continuous state, action, and observation POMDPs. In 2021 60th IEEE conference on decision and control (CDC) , pages 4493–4500. IEEE, 2021. Michael H Lim, Tyler J Becker, Mykel J Kochenderfer, Claire J Tomlin, and Zachary N Sunberg. Op-timality guarantees for particle belief approximation of POMDPs. Journal of Artificial Intelligence Research , 77:1591–1636, 2023. Chris Mansley, Ari Weinstein, and Michael Littman. Sample-based planning for continuous action markov decision processes. In Proceedings of the International Conference on Automated Planning and Scheduling , volume 21, pages 335–338, 2011. Weichao Mao, Kaiqing Zhang, Qiaomin Xie, and Tamer Basar. Poly-hoot: Monte-carlo planning in continuous space mdps with non-asymptotic analysis. volume 33, pages 4549–4559, 2020. John Mern, Anil Yildiz, Zachary Sunberg, Tapan Mukerji, and Mykel J Kochenderfer. Bayesian optimized Monte Carlo planning. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 35, pages 11880–11887, 2021. Art B. Owen. Monte Carlo theory, methods and examples . https://artowen.su.domains/mc/, 2013. Christos H. Papadimitriou and John N. Tsitsiklis. The complexity of Markov decision processes. 
+
+Mathematics of operations research , 12(3):441–450, 1987. Devavrat Shah, Qiaomin Xie, and Zhi Xu. Nonasymptotic analysis of Monte Carlo Tree Search. 
+
+Operations Research , 70(6):3234–3260, 2022. Emanuel Todorov, Tom Erez, and Yuval Tassa. MuJoCo: A physics engine for model-based control. In 2012 IEEE/RSJ International Conference on Intelligent Robots and Systems , pages 5026–5033. IEEE, 2012. doi: 10.1109/IROS.2012.6386109. Mark Towers, Ariel Kwiatkowski, Jordan Terry, John U. Balis, Gianluca De Cola, Tristan Deleu, Manuel Goulão, Andreas Kallinteris, Markus Krimmel, Arjun KG, Rodrigo Perez-Vicente, Andrea Pierré, Sander Schulhoff, Jun Jet Tai, Hannah Tan, and Omar G. Younis. Gymnasium: A standard interface for reinforcement learning environments. arXiv preprint arXiv:2407.17032 , 2024. Tim Van Erven and Peter Harremos. Rényi divergence and kullback-leibler divergence. IEEE Transactions on Information Theory , 60(7):3797–3820, 2014. Matt P Wand and M Chris Jones. Kernel smoothing . CRC press, 1994. Grady Williams, Andrew Aldrich, and Evangelos A. Theodorou. Model predictive path integral control: From theory to parallel computation. Journal of Guidance, Control, and Dynamics , 40(2): 344–357, 2017. doi: 10.2514/1.G001921. Timothy Yee, Viliam Lisý, and Michael Bowling. Monte Carlo Tree Search in continuous action spaces with execution uncertainty. In Subbarao Kambhampati, editor, IJCAI , pages 690–697, 2016. 11 A Proofs and Derivations 
+
+A.1 Proof of Claim 1 
+
+Proof. Fix (s, a ) ∈ S × A . Let Y have transition law pt(· | s, a ) and, conditionally on Y = y, let X
+
+have density kt,τ t (· | y). By the definition of the smoothed density in (3) , the marginal law of X has density pt,τ t (· | s, a ). Therefore, 
+
+|Es′∼pt(·| s,a )[G∗ 
+
+> t
+
+(s, a, s ′)] − Ex∼pt,τ t (·| s,a )[G∗ 
+
+> t
+
+(s, a, x )] |
+
+= |
+
+Z
+
+> S
+
+Z
+
+> S
+
+(G∗ 
+
+> t
+
+(s, a, y ) − G∗ 
+
+> t
+
+(s, a, x )) kt,τ t (x | y) dx p t(dy | s, a )|≤
+
+Z
+
+> S
+
+Z
+
+> S
+
+|G∗ 
+
+> t
+
+(s, a, y ) − G∗ 
+
+> t
+
+(s, a, x )|kt,τ t (x | y) dx p t(dy | s, a )
+
+≤ Lst
+
+Z
+
+> S
+
+Z
+
+> S
+
+d( x, y )βst kt,τ t (x | y) dx p t(dy | s, a )
+
+≤ Lst sup 
+
+> y
+
+Z
+
+> S
+
+d( x, y )βst kt,τ t (x | y) dx = Lst mβst ,t (τt).
+
+The first inequality is the triangle inequality, the second is the assumed successor-state Hölder regularity of G∗ 
+
+> t
+
+(s, a, ·), and the last display is exactly the definition of mβst ,t (τt).
+
+A.2 Proof of Claim 2 
+
+Proof. Fix t < T , εt ∈ (0 , ¯εt], and a realized node sit. Let a⋆t,ε t (sit) ∈ Argmax t(sit) be the witness action supplied by Assumption 1. Conditionally on sit, Assumption 1 implies that one candidate action lands in the εt-neighborhood of a⋆t,ε t (sit) with probability at least mt(εt). The Kt candidates in Ait = {ai, 1: Kt 
+
+> t
+
+} are conditionally independent, hence all of them miss this neighborhood with probability at most (1 − mt(εt)) Kt .On the complementary event, choose ai ∈ Ait with dA(ai, a ⋆t,ε t (sit)) < ε t. Since Q∗ 
+
+> t
+
+(sit, a ⋆t,ε t (sit)) = 
+
+V ∗ 
+
+> t
+
+(sit), Assumption 2 gives 
+
+V ∗ 
+
+> t
+
+(sit) − Q∗ 
+
+> t
+
+(sit, a i) = Q∗ 
+
+> t
+
+(sit, a ⋆t,ε t (sit)) − Q∗ 
+
+> t
+
+(sit, a i) ≤ Lat εβat 
+
+> t
+
+.
+
+Maximizing over all actions in Ait can only improve on ai, so 
+
+0 ≤ V ∗ 
+
+> t
+
+(sit) − max 
+
+> a∈Ait
+
+Q∗ 
+
+> t
+
+(sit, a ) ≤ Lat εβat 
+
+> t
+
+.
+
+This is (8). 
+
+A.3 Additional Graph-Backup Details 
+
+Proof of Claim 3. Work on the event 
+
+∥ ˆV 1: Ct+1  
+
+> t+1
+
+− V ∗,1: Ct+1  
+
+> t+1
+
+∥∞ ≤ αt+1 .
+
+For a fixed pair i ∈ 1: Ct and k ∈ 1: Kt, Assumption 4 gives 
+
+| ˆQi,k t − ˆQi,k,⋆ t | = |B i,k t [ ˆV 1: Ct+1  
+
+> t+1
+
+] − B i,k t [V ∗,1: Ct+1  
+
+> t+1
+
+]| ≤ γα t+1 .
+
+Assumption 3 gives 
+
+| ˆQi,k,⋆ t − Q∗,i,k t | ≤ λt
+
+except with probability at most δloc ,t (λt, C t+1 ). On the intersection of these two events, the triangle inequality yields 
+
+| ˆQi,k t − Q∗,i,k t | ≤ γα t+1 + λt.
+
+Union-bounding the local concentration failures over the CtKt realized node-action pairs gives, with probability at least 1 − CtKt δloc ,t (λt, C t+1 ), the pointwise bound 
+
+| ˆQi,k t − Q∗,i,k t | ≤ γα t+1 + λt for every i ∈ 1: Ct and k ∈ 1: Kt.
+
+Equivalently, 
+
+∥ ˆQ1: Ct,1: Kt 
+
+> t
+
+− Q∗,1: Ct,1: Kt 
+
+> t
+
+∥∞ ≤ γα t+1 + λt.
+
+12 For probability laws P ≪ Q, write ω(y) ≜ dP/dQ (y) and define 
+
+d∞(P ∥Q) ≜ ess sup  
+
+> Y∼Q
+
+ω(Y ), d2(P ∥Q) ≜ EY ∼Q[ω(Y )2].
+
+Definition 3 (SNIS and MoM-SNIS) . Given samples Y1: N ∼ Q, weights ωn = ω(Yn), and values 
+
+f (Yn), SNIS returns 
+
+ˆμSNIS ,N (f ) ≜
+
+PNn=1 ωnf (Yn)
+
+PNn=1 ωn
+
+.
+
+For MoM-SNIS, partition {1, . . . , N } into nonempty blocks B1, . . . , B B , form 
+
+Zb(f ) ≜
+
+P 
+
+> n∈Bb
+
+ωnf (Yn)
+
+P 
+
+> n∈Bb
+
+ωn
+
+, b = 1 , . . . , B, 
+
+and return 
+
+ˆμMoM -SNIS ,N (f ) ≜ median {Z1(f ), . . . , Z B (f )}.
+
+Ordinary SNIS backups satisfy Assumption 4 because their normalized weights are nonnegative and sum to one, so changing the child-value vector by at most α changes the continuation part of the backup by at most γα . The same stability argument holds for median-of-blocks normalized backups: each blockwise normalized average is γ-Lipschitz in child-value sup norm, and the median is nonexpansive in sup norm. The following source theorem is a bounded-d2 analogue for MoM-SNIS. It supplies one possible choice of the local function δloc ,t in Assumption 3. Denote 
+
+σ2CS ≜ d2(P ∥Q) − 1, σ2IS ≜ Ex∼Q
+
+h
+
+ω(x)2 (f (x) − Ez∼P [f (z)]) 2i
+
+.
+
+Theorem (MoM-SNIS one-sided concentration, bounded d2 Dau [2022]) . Fix δ ∈ (0 , 1) and assume 
+
+σ2IS < ∞. If 
+
+N ≥ 8  max {32 σ2CS , 1} log(1 /δ ),
+
+then the MoM-SNIS estimator of Definition 3 satisfies 
+
+P ˆμMoM -SNIS ,N (f ) − Ex∼P [f (x)] ≥ 16 σIS 
+
+r 2 log(1 /δ )
+
+N
+
+!
+
+≤ δ. 
+
+Applying Theorem to f and to −f gives the two-sided statement: for a target local failure level 
+
+ρ ∈ (0 , 1) , if 
+
+N ≥ 8  max {32 σ2CS , 1} log(2 /ρ ),
+
+then 
+
+P |ˆμMoM -SNIS ,N (f ) − Ex∼P [f (x)] | ≤ 16 σIS 
+
+r 2 log(2 /ρ )
+
+N
+
+!
+
+≥ 1 − ρ. 
+
+If ∥f ∥∞ ≤ fmax , then σ2IS ≤ 4f 2max d2(P ∥Q). Indeed, since |f (Y ) − EP f | ≤ 2fmax ,
+
+σ2IS = EY ∼Q
+
+ω(Y )2(f (Y ) − EP f )2 ≤ 4f 2max EY ∼Q[ω(Y )2] = 4 f 2max d2(P ∥Q).
+
+We now translate this local estimator statement into the graph-backup notation of Assumption 3. Fix a depth t < T and a realized node-action pair (sit, a i,k t ). Let 
+
+P i,k t ≜ pt(· | sit, a i,k t ), Qt ≜ qst , N ≜ Ct+1 ,
+
+and apply the MoM-SNIS backup to the exact Bellman target 
+
+f i,k t (x) ≜ G∗ 
+
+> t
+
+(sit, a i,k t , x ) = rt(sit, a i,k t , x ) + γV ∗
+
+> t+1
+
+(x).
+
+Assume that, uniformly over the realized node-action pairs at depth t,
+
+∥f i,k t ∥∞ ≤ fmax ,t , d2(P i,k t ∥Qt) ≤ D2,t < ∞.
+
+Then for every such pair, 
+
+σ2CS ,t = d2(P i,k t ∥Qt) − 1 ≤ D2,t − 1, σ2IS ,t ≤ 4f 2max ,t D2,t .
+
+13 Consequently, for any local failure level ρt ∈ (0 , 1) such that 
+
+Ct+1 ≥ 8 max {32( D2,t − 1) , 1} log(2 /ρ t),
+
+the exact-value MoM-SNIS graph backup satisfies 
+
+P | ˆQi,k,⋆ t − Q∗,i,k t | ≤ 32 fmax ,t 
+
+s
+
+2D2,t log(2 /ρ t)
+
+Ct+1 
+
+!
+
+≥ 1 − ρt.
+
+Thus Assumption 3 holds for the MoM-SNIS backup at depth t with the explicit choice 
+
+λt = 32 fmax ,t 
+
+s
+
+2D2,t log(2 /ρ t)
+
+Ct+1 
+
+, δloc ,t (λt, C t+1 ) = ρt,
+
+provided the displayed lower bound on Ct+1 holds. Equivalently, a uniform depthwise d2 overlap bound supplies the static, exact-next-value concentration term in the same role that the bounded-d∞
+
+theorem plays in the main text. Together with the normalized-weight stability argument above, this makes the MoM-SNIS graph backup controlled in the sense of Definition 2, with the propagated recursive bound then given by Claim 3. 
+
+A.4 Proof of Theorem 1 
+
+Proof. Use the main-text shorthand 
+
+V ∗,i t ≜ V ∗ 
+
+> t
+
+(sit), Q∗,i,k t ≜ Q∗ 
+
+> t
+
+(sit, a i,k t ).
+
+For each depth t, define the value event 
+
+Vt ≜
+
+n
+
+| ˆV it − V ∗,i t | ≤ αt for every i ∈ 1: Ct
+
+o
+
+.
+
+For t < T , define the simultaneous backup event 
+
+Qt ≜
+
+n
+
+| ˆQi,k t − Q∗,i,k t | ≤ γα t+1 + λt for every i ∈ 1: Ct, k ∈ 1: Kt
+
+o
+
+,
+
+and the simultaneous action-coverage event 
+
+At ≜
+
+
+
+0 ≤ V ∗,i t − max 
+
+> k∈1: Kt
+
+Q∗,i,k t ≤ Γt for every i ∈ 1: Ct
+
+
+
+.
+
+The theorem assumptions give 
+
+P(VcT ) ≤ X
+
+> i∈1: CT
+
+P
+
+
+
+| ˆV iT − V ∗,i T | > κ tail 
+
+> T
+
+
+
+≤ CT ∆tail  
+
+> T
+
+,
+
+P(Qct ∩ V t+1 ) ≤ CtKt δloc ,t (λt, C t+1 ),
+
+P(Act ) ≤ Ct δat .
+
+The second inequality is Claim 3 applied on the event Vt+1 . The third inequality is the union bound over the Ct max-close action-set failures. We next prove the deterministic induction step. Assume Vt+1 ∩ Q t ∩ A t holds. Set 
+
+RQt ≜ γα t+1 + λt, Rt ≜ RQt + Γ t = γα t+1 + κt = αt.
+
+For every node index i ∈ 1: Ct,
+
+ˆV it = max 
+
+> k∈1: Kt
+
+ˆQi,k t ≤ max 
+
+> k∈1: Kt
+
+Q∗,i,k t + RQt ≤ V ∗,i t + Rt.
+
+For the lower deviation, 
+
+V ∗,i t − ˆV it ≤ V ∗,i t − max 
+
+> k∈1: Kt
+
+Q∗,i,k t + max 
+
+> k∈1: Kt
+
+Q∗,i,k t − max 
+
+> k∈1: Kt
+
+ˆQi,k t
+
+≤ Γt + max 
+
+> k∈1: Kt
+
+| ˆQi,k t − Q∗,i,k t | ≤ Γt + RQt = Rt.
+
+14 Thus Vt holds. Equivalently, 
+
+∥ ˆV 1: Ct 
+
+> t
+
+− V ∗,1: Ct 
+
+> t
+
+∥∞ ≤ αt.
+
+The event Qt itself is exactly the stated pointwise candidate-backup bound at depth t. Equivalently, 
+
+∥ ˆQ1: Ct,1: Kt 
+
+> t
+
+− Q∗,1: Ct,1: Kt 
+
+> t
+
+∥∞ ≤ γα t+1 + λt.
+
+Now define the total bad event 
+
+F ≜ VcT ∪ 
+
+> T−1
+
+[
+
+> t=0
+
+(Qct ∩ V t+1 ) ∪ 
+
+> T−1
+
+[
+
+> t=0
+
+Act .
+
+By the union bound and the definition of ∆t,
+
+P(F) ≤ CT ∆tail  
+
+> T
+
++ 
+
+> T−1
+
+X
+
+> t=0
+
+[CtKt δloc ,t (λt, C t+1 ) + Ct δat ] = CT ∆tail  
+
+> T
+
++ 
+
+> T−1
+
+X
+
+> t=0
+
+∆t.
+
+On Fc, the terminal event VT holds. If Vt+1 holds, then Qt must hold because Qct ∩ V t+1 has been excluded, and At also holds. The deterministic induction step therefore gives Vt. Backward induction proves that every Vt and every Qt hold simultaneously on Fc. Thus, for every t < T ,the pointwise value and candidate-backup inequalities hold for every i ∈ 1: Ct and k ∈ 1: Kt.Equivalently, the two displayed max-norm inequalities in the theorem hold with probability at least 
+
+1 − CT ∆tail  
+
+> T
+
+− PT −1 
+
+> t=0
+
+∆t.It remains to prove the root-action consequence on the same event. Let ˆk0 ∈ arg max k∈1: K0
+
+ˆQ1,k  
+
+> 0
+
+, so that ˆa0 = a1,ˆk0 
+
+> 0
+
+and ˆV 10 = ˆQ1,ˆk0 
+
+> 0
+
+. For any a∗ 
+
+> 0
+
+∈ Argmax 0(s0),
+
+Q∗
+
+> 0
+
+(s0, a ∗
+
+> 0
+
+) − Q∗
+
+> 0
+
+(s0, ˆa0) = V ∗,10 − ˆV 10 + ˆQ1,ˆk0 
+
+> 0
+
+− Q∗,1,ˆk0
+
+> 0
+
+≤ α0 + γα 1 + λ0 ≤ 2α0,
+
+because γα 1 + λ0 ≤ γα 1 + λ0 + Γ 0 = α0.
+
+A.5 Proof of Corollary 4.1 
+
+Proof. If A is finite and Ait = A for every node, then 
+
+max 
+
+> a∈Ait
+
+Q∗ 
+
+> t
+
+(sit, a ) = max  
+
+> a∈A
+
+Q∗ 
+
+> t
+
+(sit, a ) = V ∗ 
+
+> t
+
+(sit)
+
+deterministically. Thus Definition 1 holds with Γt = 0 and δat = 0 . Substituting these parameters and Kt = |A| into Theorem 1 gives κt = λt and ∆t = Ct|A| δloc ,t (λt, C t+1 ).For sampled action sets, Claim 2 states that each nodewise action set is max-close with 
+
+Γt = Lat εβat 
+
+> t
+
+, δat = (1 − mt(εt)) Kt .
+
+Substituting these parameters into Theorem 1 gives 
+
+κt = λt + Lat εβat 
+
+> t
+
+, ∆t = CtKt δloc ,t (λt, C t+1 ) + Ct(1 − mt(εt)) Kt .
+
+A.6 Proof of Corollary 4.2 
+
+Proof. Fix a depth t < T and a realized node-action pair (sit, a i,k t ). For this proof, the local concentration function δloc ,t is applied to the SNIS estimator whose target density is the smoothed density pt,τ t (· | sit, a i,k t ) and whose proposal is qst . Thus, with the exact next-layer optimal values inserted into the smoothed SNIS backup, the local concentration event is 
+
+| ˆQi,k,⋆ t,τ t − Ex∼pt,τ t (·| sit,a i,k t )[G∗ 
+
+> t
+
+(sit, a i,k t , x )] | ≤ λt,
+
+except with probability at most δloc ,t (λt, C t+1 ). Claim 1 gives the deterministic comparison 
+
+|Ex∼pt,τ t (·| sit,a i,k t )[G∗ 
+
+> t
+
+(sit, a i,k t , x )] − Q∗ 
+
+> t
+
+(sit, a i,k t )| ≤ Lst mβst ,t (τt).
+
+15 Combining the two displays yields the static graph-backup error 
+
+| ˆQi,k,⋆ t,τ t − Q∗,i,k t | ≤ λt + Lst mβst ,t (τt)
+
+with the same local failure probability. Assumption 4 then adds the usual propagated term γα t+1 
+
+when ∥ ˆV 1: Ct+1  
+
+> t+1
+
+− V ∗,1: Ct+1  
+
+> t+1
+
+∥∞ ≤ αt+1 . The proof of Claim 3, with λt replaced by λt + Lst mβst ,t (τt),gives the corollary. 
+
+A.7 Proof of Corollary 4.3 
+
+Proof. In the finite-action fully enumerated case, Corollary 4.1 gives Γt = 0 , δat = 0 , and Kt = |A| .With an exact terminal estimate, κtail  
+
+> T
+
+= ∆ tail  
+
+> T
+
+= 0 . Set C0 = 1 and choose a common successor-layer width Ct = C for 1 ≤ t ≤ T and a common local radius λt = λ. The recursion in Theorem 1 gives 
+
+α0 = 
+
+> T−1
+
+X
+
+> t=0
+
+γtλ ≤ T λ, 
+
+because γ ≤ 1 in the finite-horizon setting. Thus λ = ϵ/ (2 T ) ensures 2α0 ≤ ϵ.We next choose C so that the graph failure probability is at most δ. The bounded reward assumption implies, for every t < T ,
+
+∥V ∗
+
+> t+1
+
+∥∞ ≤ (T − t − 1) Rmax .
+
+Therefore the single-sample Bellman target satisfies 
+
+∥G∗ 
+
+> t
+
+(s, a, ·)∥∞ ≤ Rmax + γ(T − t − 1) Rmax ≤ T R max , BT ≜ T R max .
+
+By the uniform overlap assumption, d∞(pt(· | s, a ) ∥ qst ) ≤ dmax  
+
+> ∞
+
+. Applying Theorem with 
+
+fmax = BT , N = C, and d∞(p∥q) ≤ dmax  
+
+> ∞
+
+gives 
+
+δloc ,t (λ, C ) ≤ 3 exp −C
+
+ λBT dmax 
+
+> ∞
+
+− 1
+
+√C
+
+2!
+
+,
+
+provided λ > B T dmax  
+
+> ∞
+
+/√C. Define 
+
+Aλ ≜
+
+ BT dmax 
+
+> ∞
+
+λ
+
+2
+
+, ℓλ ≜ max 
+
+
+
+1, log 
+
+ 12 eT |A| Aλ
+
+δ
+
+ 
+
+.
+
+Choose 
+
+C ≥ 8Aλℓλ.
+
+Then C ≥ 4Aλ, so the positivity condition in Theorem holds and 
+
+λBT dmax 
+
+> ∞
+
+− 1
+
+√C = 1
+
+√Aλ
+
+− 1
+
+√C ≥ 12√Aλ
+
+.
+
+Consequently, uniformly over depths and realized node-action pairs, 
+
+δloc ,t (λ, C ) ≤ 3 exp 
+
+
+
+− C
+
+4Aλ
+
+
+
+.
+
+It remains to check the graph-level union bound. Since C0 = 1 and Ct = C for t ≥ 1, PT −1 
+
+> t=0
+
+Ct ≤
+
+T C for C ≥ 1. Theorem 1 and Corollary 4.1 therefore require  
+
+> T−1
+
+X
+
+> t=0
+
+Ct|A| δloc ,t (λ, C ) ≤ 3T C |A| exp 
+
+
+
+− C
+
+4Aλ
+
+
+
+.
+
+Let x = C/ (4 Aλ) and M = 12 eT |A| Aλ/δ . The choice of C gives x ≥ 2 max {1, log M }. For such 
+
+x, we have xe −x ≤ e/M : if M ≤ e, then x ≥ 2 gives xe −x ≤ 2e−2 ≤ e/M , while if M > e , then 
+
+xe −x is decreasing for x ≥ 1 and 2 log( M )/M 2 ≤ e/M . Hence 
+
+3T C |A| exp( −C/ (4 Aλ)) = 12 T |A| Aλxe −x ≤ δ. 
+
+Thus the total failure probability in Theorem 1 is at most δ.16 Substituting λ = ϵ/ (2 T ) and BT = T R max gives 
+
+Aλ = 4R2max (dmax  
+
+> ∞
+
+)2T 4
+
+ϵ2 .
+
+Hence the explicit width choice above is 
+
+C ≥ 32 R2max (dmax  
+
+> ∞
+
+)2T 4
+
+ϵ2 max 
+
+
+
+1, log 
+
+ 48 eT |A| R2max (dmax  
+
+> ∞
+
+)2T 4
+
+δϵ 2
+
+ 
+
+.
+
+Equivalently, 
+
+C = eO
+
+ R2max (dmax  
+
+> ∞
+
+)2T 4
+
+ϵ2
+
+
+
+,
+
+where the logarithm is the one displayed above. Theorem 1 then gives the stated root-action bound. Since the graph uses T shared successor layers of width C, the simulator-query count scales as 
+
+NGSS = T C . For the exact dense SNIS backup, count one backup edge operation for one parent-action-child contribution in the sum (1.A) . At depth t, there are Ct|A| enumerated parent-action pairs, and each pair is evaluated against all Ct+1 child states. Hence the total number of backup operations is T −1X
+
+> t=0
+
+Ct|A| Ct+1 = |A| (C + ( T − 1) C2) ≤ |A| T C 2,
+
+where C0 = 1 , Ct = C for 1 ≤ t ≤ T , and C ≥ 1. Substituting the width bound gives 
+
+O(|A| T C 2) = eO
+
+ |A| R4max (dmax  
+
+> ∞
+
+)4T 9
+
+ϵ4
+
+
+
+.
+
+Thus, if dmax  
+
+> ∞
+
+= O(T n) for fixed n ∈ N, NGSS scales polynomially in T .We use the following planner-to-policy conversion, adapted to our notation from Kearns et al. [2002, Lemma 5]. 
+
+Theorem A.1 (Planner-to-policy conversion) . Let a planning subroutine be invoked at states encoun-tered by the induced policy. For the discounted infinite-horizon setting, suppose that for every state s,the returned action ˆa(s) satisfies 
+
+P(Q∗(s, a ∗) − Q∗(s, ˆa(s)) ≤ β) ≥ 1 − ρ, a∗ ∈ arg max 
+
+> a∈A
+
+Q∗(s, a ).
+
+If ∥V ∗∥∞ ≤ Vmax , then the induced randomized policy π satisfies 
+
+V ∗(s) − V π (s) ≤ β + 2 ρV max 
+
+1 − γ for every s. 
+
+For a finite horizon of length T , if the same condition holds at every state and time with Q∗ 
+
+> t
+
+in place of Q∗ and ∥Q∗ 
+
+> t
+
+∥∞ ≤ T R max , then the induced time-dependent policy satisfies 
+
+V ∗ 
+
+> 0
+
+(s) − V π 
+
+> 0
+
+(s) ≤ T (β + 2 ρT R max ).
+
+Additional policy-value scalings. The main text states the root-action consequence because it follows directly from Theorem 1. For completeness, we record how the same local-width calculation changes when the planner is invoked repeatedly to induce a policy. The finite-horizon part of Theorem A.1 applies once the planner has a per-call action-value gap bound β and per-call failure probability ρ. Let ¯β ≜ β + 2 ρT R max . The theorem gives the policy-value loss bound 
+
+V ∗ 
+
+> 0
+
+(s) − V π 
+
+> 0
+
+(s) ≤ T ¯β = T (β + 2 ρT R max ).
+
+Here Theorem 1 gives β = 2 α0 ≤ 2T λ for one planner call. To make the accumulated deterministic gap at most ϵ/ 2, choose 2T λ ≤ ϵ/ (2 T ), equivalently λ = Θ( ϵ/T 2). To make the accumulated failure contribution at most ϵ/ 2, take ρ = O(ϵ/ (Rmax T 2)) . Substituting this λ into the explicit width calculation above, with δ replaced by the per-call budget ρ, yields 
+
+C = eO
+
+ R2max (dmax  
+
+> ∞
+
+)2T 6
+
+ϵ2
+
+
+
+, NGSS = eO
+
+ R2max (dmax  
+
+> ∞
+
+)2T 7
+
+ϵ2
+
+
+
+.
+
+17 For discounted infinite-horizon policy value, let Vmax = Rmax /(1 − γ) and truncate the discounted problem at T = eO(1 /(1 − γ)) so that the tail satisfies γT Vmax = O(ϵ(1 − γ)) . The local envelope becomes Bγ ≤ Rmax + γV max = Vmax . Choosing λ = Θ( ϵ(1 − γ)2) gives α0 ≤ λ/ (1 − γ) = 
+
+O(ϵ(1 − γ)) . The discounted part of Theorem A.1 then requires a per-call failure budget ρ = O(ϵ(1 −
+
+γ)/V max ) so that (2 α0 +2 γT Vmax +2 ρV max )/(1 −γ) = O(ϵ). Substituting Bγ = O(Rmax /(1 −γ)) 
+
+and λ = Θ( ϵ(1 − γ)2) into Aλ = ( Bγ dmax  
+
+> ∞
+
+/λ )2 gives 
+
+C = eO
+
+ R2max (dmax  
+
+> ∞
+
+)2
+
+ϵ2(1 − γ)6
+
+
+
+.
+
+Multiplying by the truncation depth T = eO(1 /(1 − γ)) yields 
+
+NGSS = eO
+
+ R2max (dmax  
+
+> ∞
+
+)2
+
+ϵ2(1 − γ)7
+
+
+
+.
+
+A.8 Proof of Corollary 4.4 
+
+Proof. Choose strictly positive deterministic budgets ηest  
+
+> t
+
+, ηmoll  
+
+> t
+
+, and ηact  
+
+> t
+
+so that the recursion 
+
+¯αT = κtail  
+
+> T
+
+, ¯αt = γ ¯αt+1 + ηest  
+
+> t
+
++ ηmoll  
+
+> t
+
++ ηact  
+
+> t
+
+, t = T − 1, . . . , 0,
+
+satisfies 2¯ α0 ≤ εroot . Equivalently, 
+
+¯α0 = γT κtail  
+
+> T
+
++ 
+
+> T−1
+
+X
+
+> t=0
+
+γt  ηest  
+
+> t
+
++ ηmoll  
+
+> t
+
++ ηact 
+
+> t
+
+ ≤ εroot /2.
+
+Such budgets exist whenever the terminal estimate is exact, or more generally once the terminal tail accuracy has been made small enough to leave positive slack. Choose positive failure allocations 
+
+ζtail  
+
+> T
+
+, ζest  
+
+> t
+
+, and ζact  
+
+> t
+
+such that 
+
+ζtail  
+
+> T
+
++ 
+
+> T−1
+
+X
+
+> t=0
+
+(ζest  
+
+> t
+
++ ζact  
+
+> t
+
+) ≤ δ. 
+
+In the non-exact terminal case, the terminal estimator is understood to be chosen after the final width CT is fixed so that CT ∆tail  
+
+> T
+
+≤ ζtail  
+
+> T
+
+for the selected κtail  
+
+> T
+
+. In the exact terminal case, take 
+
+κtail  
+
+> T
+
+= ∆ tail  
+
+> T
+
+= 0 .Construct the schedule forward in t, starting from C0 = 1 . At depth t < T , assume Ct has already been fixed. First choose τt so that 
+
+Lst mβst ,t (τt) ≤ ηmoll  
+
+> t
+
+,
+
+which is possible by the assumed vanishing of the smoothing bias. Next choose εt ∈ (0 , ¯εt] so that 
+
+Lat εβat 
+
+> t
+
+≤ ηact  
+
+> t
+
+.
+
+For instance, when Lat > 0 it is enough to take εt ≤ min {¯εt, (ηact  
+
+> t
+
+/L at )1/β at }; when Lat = 0 , any 
+
+εt ∈ (0 , ¯εt] suffices. Since Assumption 1 gives mt(εt) > 0, choose 
+
+Kt ≥
+
+ log( Ct/ζ act  
+
+> t
+
+)
+
+mt(εt)
+
+
+
+.
+
+Then, using 1 − x ≤ e−x for x ≥ 0,
+
+Ktmt(εt) ≥ log( Ct/ζ act  
+
+> t
+
+),Ct(1 − mt(εt)) Kt ≤ Ct exp( −Ktmt(εt)) ≤ Ct exp  − log( Ct/ζ act  
+
+> t
+
+) = ζact  
+
+> t
+
+.
+
+Set 
+
+ρest  
+
+> t
+
+≜ ζest 
+
+> t
+
+CtKt
+
+.
+
+Finally, use the assumed uniform controllability of the smoothed backup to choose Ct+1 and the local SNIS radius λt so that 
+
+λt ≤ ηest  
+
+> t
+
+, δloc ,t (λt, C t+1 ) ≤ ρest  
+
+> t
+
+,
+
+18 or equivalently CtKt δloc ,t (λt, C t+1 ) ≤ ζest  
+
+> t
+
+. The same construction can use a common nonroot state width under a bounded-d∞ condition for the fixed smoothed targets. Suppose that, uniformly over realized node-action pairs, 
+
+d∞(pt,τ t (· | sit, a i,k t )∥qst ) ≤ D∞,t 
+
+and that the corresponding Bellman targets are bounded by fmax ,t . Choose fixed local accuracy levels 
+
+0 < λ t ≤ ηest  
+
+> t
+
+and, for a candidate common width C, define 
+
+Ct(C) ≜
+
+1, t = 0 ,C, t ≥ 1, Kt(C) ≜
+
+ log( Ct(C)/ζ act  
+
+> t
+
+)
+
+mt(εt)
+
+
+
+, ρest  
+
+> t
+
+(C) ≜ ζest 
+
+> t
+
+Ct(C)Kt(C) .
+
+Let 
+
+At ≜
+
+ fmax ,t D∞,t 
+
+λt
+
+2
+
+.
+
+Choose a common integer C satisfying 
+
+C ≥ max  
+
+> t<T
+
+4At log 
+
+ 3
+
+ρest  
+
+> t
+
+(C)
+
+
+
+.
+
+Such a C exists because Kt(C) grows logarithmically in C, so the right-hand side grows only logarithmically in C, while the left-hand side grows linearly. Set the actual widths and action budgets by Ct = Ct(C) and Kt = Kt(C). Since ρest  
+
+> t
+
+(C) < 1, the same lower bound gives C ≥ 4At and hence 
+
+λt
+
+fmax ,t D∞,t 
+
+− 1
+
+√C = 1
+
+√At
+
+− 1
+
+√C ≥ 12√At
+
+.
+
+Thus the positivity condition in the bounded-d∞ SNIS concentration bound (10) holds, and for 
+
+Ct+1 = C,
+
+δloc ,t (λt, C ) ≤ 3 exp −C
+
+ λt
+
+fmax ,t D∞,t 
+
+− 1
+
+√C
+
+2!
+
+Therefore 
+
+δloc ,t (λt, C ) ≤ 3 exp 
+
+
+
+− C
+
+4At
+
+
+
+≤ ρest  
+
+> t
+
+(C),
+
+and hence Ct(C)Kt(C) δloc ,t (λt, C ) ≤ ζest  
+
+> t
+
+at every depth. With these choices, Corollaries 4.1 and 4.2 give 
+
+κt ≤ ηest  
+
+> t
+
++ ηmoll  
+
+> t
+
++ ηact  
+
+> t
+
+, ∆t ≤ ζest  
+
+> t
+
++ ζact  
+
+> t
+
+.
+
+Therefore the recursion defining αt in Theorem 1 gives αt ≤ ¯αt for every depth, while the total failure probability is at most δ. The root-action conclusion of Theorem 1 then yields 
+
+Q∗
+
+> 0
+
+(s0, a ∗
+
+> 0
+
+) − Q∗
+
+> 0
+
+(s0, ˆa0) ≤ 2α0 ≤ 2¯ α0 ≤ εroot 
+
+with probability at least 1 − δ, for every a∗ 
+
+> 0
+
+∈ Argmax 0(s0).
+
+## B Experimental Details 
+
+All experiments use the fixed-shape JAX GSS planner described in Section 5. The JAX GSS experiments were run on a GPU machine equipped with an NVIDIA GeForce RTX 2080 Ti with 11 GB VRAM. The Julia DPW/VPW baselines were run on a CPU machine with an AMD Ryzen 7 3700X 8-core/16-thread processor at 3.60 GHz. We record action-mixture counts in the order primitive/rollout/noisy/uniform. The primitive component is a domain-specific list of fixed actions, the rollout component repeats the guide-policy action, the noisy component adds Gaussian perturbations scaled by the action range, and the uniform component samples from the action box. 19 B.1 GSS Configuration 
+
+We use three state-proposal settings across the experiments. In Rotating DDI, parent-action compo-nents are scored by a sampled one-step transition target plus rollout tail, the top fraction is retained, and successor states are sampled from the retained transition-moment mixture. Lunar Lander uses the same top-fraction scoring, but the next-state proposal is one diagonal Gaussian fitted to the sampled one-step successors. Reacher uses an unpruned transition-moment mixture, without top-fraction pruning. When the direct-sample option is enabled, the dense SNIS backup also includes the direct sampled target as an additional backup sample. Graph backups use either an exact-moment density, when the target transition law is the domain’s diagonal Gaussian transition, or a single-point density, when the target transition law is the single-point linearization of the smoothed transition density obtained by adding a positive diagonal bandwidth τ
+
+to the simulator transition moments. All GSS runs use rollout tail values; rollout tails use the same rollout policy as the action proposal. 
+
+B.2 DPW and VPW Baselines 
+
+The Julia baselines use MCTS.DPWSolver with parameters 
+
+(cuct , k a, α a, k s, α s) = (60 .0, 1.45 , 0.60 , 0.1, 0.30) .
+
+The rollout value estimator simulates the named rollout policy under the domain transition. For DPW, new actions are generated by policy_first_random : the first widened action is the guide-policy action, and later widened actions are sampled by the default random action generator. For VPW, the same policy-first wrapper is used, but later widened actions are generated by a VOO action generator. In the DDI VPW runs, VOO uses global exploration probability 0.9 and a diagonal Gaussian local sampler with standard deviation 0.5 in each action dimension. In the Lunar VPW implementation, the local covariance is diag(0 .22, 0.52, 0.05 2).
+
+B.3 4D D-Double-Integrator 
+
+The DDI benchmark uses the 4D double-integrator domain with D = 4 . States are ordered as 
+
+s = ( x, v ) with x, v ∈ R4, and actions are accelerations a ∈ [−2, 2] 4. The initial state is (14, 04)
+
+and the goal is the origin. The rotating-frame experiments use 
+
+∆t = 0 .2, σx = σv = 0 .02 , γ = 0 .99 .
+
+We also set the drag substep count to 32 and enable the rotating-frame coupling. The implementation uses one Euler step when drag and nonlinear coupling are inactive, and 32 Euler substeps when the rotating-frame coupling is active; in this sweep, α = 0 is the single-step nominal DDI case and nonzero α uses the 32-substep rotating-frame integration. Within each microstep, 
+
+x+ = x + ∆ tsub v, v+ = v + ∆ tsub aα,
+
+where 
+
+aα = a − 2αJv + α2x
+
+and J rotates each adjacent coordinate pair by 90 ◦. The sampled transition then adds independent Gaussian noise with standard deviation 0.02 to each position and velocity coordinate. Episodes terminate when any coordinate leaves [−2, 2] or after 50 steps. The reward uses the current state and clipped action, 
+
+r(s, a, s ′) = 1 − ∥x∥22 + ∥a∥22
+
+8D ,
+
+with no velocity cost. The rotating-frame GSS sweep uses α ∈ { 0.0, 0.3, 0.6, 0.9, 1.2, 1.5}, 100 seeds, a 50-step planner horizon, and a 50-step rollout cap. GSS uses action budget 64, state width 512, action mixture 
+
+0/1/31 /32 (one LQR guide action, 31 noisy-LQR actions, and 32 uniform actions), and an LQR guide and rollout policy. Graph backups use exact-moment SNIS densities with rollout tail values, and the state proposal is the top-fraction transition-moment mixture described above, with top fraction 
+
+0.95 , fitted from transition moments and without proposal inflation, using direct rollout targets at all 20 depths. The companion Julia DPW/VPW rotating-frame runs use the same DDI dynamics, 100 seeds, the same alpha grid, and per-action wall-clock budgets in seconds 
+
+0.01 , 0.0316227766 , 0.1, 0.3162277660 , 1.0.
+
+Table 1 reports the full DPW/VPW budget sweep against the GSS row used in Figure 2a. 
+
+Table 1: Rotating DDI DPW/VPW budget sweep. Entries are mean undiscounted return ±2 standard errors over 100 seeds. The GSS column reports the JAX GSS row for the same α and is repeated for each planner.                                                                                                                                                                                                                                            
+
+> αPlanner GSS 0.01s 0.0316s 0.1s 0.316s 1.0s 0.0 DPW 48.194 ±0.035 48.172 ±0.036 48.006 ±0.043 47.850 ±0.045 47.992 ±0.039 47.998 ±0.032 0.0 VPW 48.194 ±0.035 48.113 ±0.034 47.972 ±0.031 47.939 ±0.029 48.081 ±0.025 48.119 ±0.023 0.3 DPW 48.085 ±0.034 48.148 ±0.037 47.885 ±0.042 47.750 ±0.039 47.823 ±0.038 47.920 ±0.033 0.3 VPW 48.085 ±0.034 48.009 ±0.031 47.905 ±0.031 47.836 ±0.028 47.956 ±0.023 48.064 ±0.022 0.6 DPW 47.586 ±0.045 47.362 ±0.058 47.215 ±0.048 47.199 ±0.051 47.354 ±0.041 47.509 ±0.035 0.6 VPW 47.586 ±0.045 47.333 ±0.046 47.299 ±0.043 47.348 ±0.038 47.557 ±0.030 47.694 ±0.027 0.9 DPW 46.796 ±0.049 45.944 ±0.076 46.090 ±0.064 46.118 ±0.074 46.360 ±0.053 46.546 ±0.044 0.9 VPW 46.796 ±0.049 46.047 ±0.082 46.241 ±0.049 46.390 ±0.051 46.649 ±0.042 46.825 ±0.034 1.2 DPW 44.138 ±0.839 42.266 ±1.250 43.345 ±0.767 44.038 ±0.081 44.391 ±0.084 44.694 ±0.074 1.2 VPW 44.138 ±0.839 42.892 ±1.006 43.343 ±1.055 44.478 ±0.071 44.761 ±0.067 45.109 ±0.055 1.5 DPW 37.258 ±2.286 26.072 ±3.492 32.929 ±2.960 34.781 ±2.764 38.134 ±2.151 39.242 ±1.970 1.5 VPW 37.258 ±2.286 29.664 ±3.290 34.332 ±2.798 36.641 ±2.519 36.387 ±2.640 38.262 ±2.390
+
+B.4 Lunar Lander 
+
+The Lunar Lander domain follows the benchmark used by Mern et al. [2021] and Lim et al. [2021]. The state is s = ( x, z, θ, v x, v z , ω ). The action is (Fx, T, δ ) with 
+
+Fx ∈ [−5, 5] , T ∈ [0 , 15] , δ ∈ [−1, 1] .
+
+The parameters are mass m = 1 , inertia I = 10 , gravity 9.0, and ∆t = 0 .4. The transition computes 
+
+fx = cos( θ)Fx − sin( θ)T, fz = cos( θ)T + sin( θ)Fx,τ = −δF x, ˙ω = τ /I, v′ 
+
+> x
+
+= vx + ∆ t f x/m + ϵ1 0.1, v′ 
+
+> z
+
+= vz + ∆ t (fz /m − 9.0) + ϵ2 0.1,ω′ = ω + ∆ t ˙ω + ϵ3 0.01 , x′ = x + ∆ t v x,z′ = z + ∆ t v z , θ′ = θ + ∆ t ω, 
+
+where ϵ1, ϵ 2, ϵ 3 are independent standard normal variables. The transition is therefore low-rank in the six-dimensional state, and GSS uses the single-point smoothed density. The default initial mean is 
+
+(0 , 50 , 0, 0, −10 , 0) with diagonal initialization standard deviations 
+
+p(0 .1, 0.1, 0.01 , 0.1, 0.1, 0.01) .
+
+Termination occurs when |x| ≥ 15 , |θ| ≥ 0.5, or z ≤ 1. The reward is 
+
+r(s, a, s ′) = 
+
+
+
+−1000 , |x′| ≥ 15 or |θ′| ≥ 0.5,
+
+100 − | x′| − (v′ 
+
+> z
+
+)2, z′ ≤ 1,
+
+−1, otherwise .
+
+The discount is γ = 0 .99 .The Lunar Lander experiments use 100 seeds and a brake-near-ground policy for both guide and rollout. Graph backups use single-point smoothed densities with rollout tail values and smoothing bandwidth (0 .02 , 0.02 , 0.005 , 0.02 , 0.02 , 0.002) . The state proposal is the top-fraction transition-moment Gaussian described above, fitted to the sampled one-step successors, with top fraction 0.8
+
+and inflated by a factor 1.1, and the direct sampled target is added to the backup. The planner horizon is 12, the rollout cap and closed-loop cap are 24, and the GSS action and state sweep uses the 21 following configurations: label action budget state width primitive/rollout/noisy/uniform 
+
+xs 10 384 2/1/5/2
+
+small 16 512 4/1/6/5
+
+medium 24 1024 6/1/8/9
+
+large 40 1536 6/1/16 /17 
+
+xl 50 2048 6/1/21 /22 
+
+The Julia Lunar tree curves use the same brake-near-ground guide and rollout policy, 100 seeds, a 35-step closed-loop cap, and per-action budgets 
+
+0.0001 , 0.000316228 , 0.001 , 0.00316228 , 0.01 , 0.0316228 , 0.1, 0.316228 , 1.0
+
+seconds. DPW uses policy_first_random action generation, and VPW uses the policy-first VOO wrapper described above. Table 2 reports the Lunar planner-performance rows corresponding to the plotted comparison. 
+
+Table 2: Lunar Lander planner performance from Figure 2b. Return entries are discounted mean episode return ± SE over 100 seeds.                                                                                               
+
+> Planner Config/budget Action/state Time (s) Return GSS xs 10/384 0.00962 30.763 ±20.144 GSS small 16/512 0.0114 65.407 ±9.904 GSS medium 24/1024 0.0287 75.570 ±1.407 GSS large 40/1536 0.0529 78.641 ±0.108 GSS xl 50/2048 0.1065 78.618 ±0.180 DPW 0.01s –0.0100 73.582 ±0.208 DPW 0.0316s –0.0316 73.219 ±0.257 DPW 0.1s –0.100 71.908 ±0.316 DPW 0.316s –0.316 70.125 ±0.227 DPW 1.0s –1.000 68.747 ±0.251 VPW 0.01s –0.0100 74.402 ±0.353 VPW 0.0316s –0.0316 73.795 ±0.296 VPW 0.1s –0.100 73.391 ±0.161 VPW 0.316s –0.316 71.161 ±0.329 VPW 1.0s –1.000 69.835 ±0.268
+
+B.5 Reacher 
+
+The Reacher benchmark is implemented in JAX [Bradbury et al., 2018] using the MJX interface to MuJoCo [Todorov et al., 2012], with a Gymnasium Reacher-v5-style model and observation/action convention [Towers et al., 2024]. The MJX model has nq = 4 , nv = 4 , and nu = 2 . The planner state is the 10D observation 
+
+s =  cos q0, cos q1, sin q0, sin q1, g x, g y , ˙q0, ˙q1, d x, d y
+
+,
+
+where g = ( gx, g y ) is the target coordinate and d is the fingertip-target displacement. Actions are 2D torques clipped to the XML actuator control range [−1, 1] 2. The transition converts the 10D observation back to MJX state variables, applies the clipped control for frame skip two with 
+
+∆t = 0 .02 , and maps the resulting MJX data back to the same 10D observation. There is no transition noise and no early terminal condition. Initial states sample the two arm angles uniformly from 
+
+[−0.1, 0.1] , arm angular velocities from [−0.005 , 0.005] , and the target uniformly in a disk of radius 
+
+0.2. The reward is 
+
+r(s, a, s ′) = −∥ d′∥2 − ∥ a∥22,
+
+and the discount is γ = 0 .99 .The default controller used for the PD baseline, guide policy, and rollout policy is a clipped task-space PD-style controller. From the observation, it recovers q = ( q0, q 1) by applying atan2 to the sine and cosine coordinates, takes ˙q = ( ˙ q0, ˙q1) from the velocity entries, and uses d = ( dx, d y ) as the fingertip-target displacement. With link lengths ℓ1 = ℓ2 = 0 .1, let 
+
+J(q) = 
+
+−ℓ1 sin q0 − ℓ2 sin( q0 + q1) −ℓ2 sin( q0 + q1)
+
+ℓ1 cos q0 + ℓ2 cos( q0 + q1) ℓ2 cos( q0 + q1)
+
+
+
+22 be the planar fingertip Jacobian. The implemented controller is 
+
+aPD (s) = clip [−1,1] 2
+
+ −12 J(q)⊤d − 0.35 ˙ q.
+
+Thus the proportional term acts on fingertip-target displacement through the Jacobian transpose, and the derivative term damps the two arm angular velocities. Because the Reacher transition is deterministic in the ambient 10D observation representation, the domain only permits the single-point smoothed density with positive bandwidth. The Reacher GSS sweeps use dense SNIS backups with rollout tail values: graph leaves are valued by a single rollout under the default rollout policy, capped by the 50-step rollout/episode horizon. The state proposal is an unpruned transition-moment mixture fitted from transition moments, without proposal inflation; rollout-based proposal pruning and direct sampled backup targets are not used. The action guide is the default controller, and each action set contains one guide action plus noisy-guide and uniform samples. The bandwidth vector is 
+
+(0 .05 , 0.05 , 0.05 , 0.05 , 0.02 , 0.02 , 0.10 , 0.10 , 0.03 , 0.03) .
+
+The closed-loop cap and rollout cap are 50 steps, and all Reacher GSS budget-scaling experiments use planner horizon 20 and 20 seeds. The reported sweep varies state width and action budget over 
+
+(256 , 24) , (512 , 24) , (512 , 32) , (512 , 48) , (768 , 32) ,
+
+(768 , 48) , (1024 , 48) , (1280 , 48) , (1024 , 64) , (1536 , 48) ,
+
+(1280 , 64) , (1792 , 48) , (1536 , 64) , (2048 , 48) , (2048 , 64) ,
+
+where each pair is (state width, action budget). The action mixtures, reported as rollout/noisy/uniform, are 1/3/20 for action budget 24, 1/4/27 for action budget 32, 1/6/41 for action budget 48, and 
+
+1/8/55 for action budget 64. Table 3 reports the Reacher budget-scaling results used in Figure 2c. The default PD-style controller baseline has undiscounted return −9.358 ± 1.232 SE and no planner call. 
+
+Table 3: Reacher GSS budget-scaling rows. Time is mean planning time per decision in seconds; return entries are undiscounted 50-step return ± SE.                                                                               
+
+> State width Action budget Time (s) Return 256 24 0.40 -8.006 ±0.862 512 24 0.54 -7.552 ±0.777 512 32 0.60 -7.549 ±0.679 512 48 0.80 -7.097 ±0.638 768 32 0.83 -6.982 ±0.639 768 48 1.21 -6.785 ±0.578 1024 48 1.70 -6.631 ±0.360 1280 48 2.27 -6.308 ±0.454 1024 64 2.40 -6.240 ±0.459 1536 48 2.93 -6.302 ±0.462 1280 64 3.22 -6.384 ±0.513 1792 48 3.49 -6.267 ±0.430 1536 64 4.10 -6.280 ±0.452 2048 48 4.23 -6.123 ±0.398 2048 64 5.69 -6.144 ±0.427
+
+23

@@ -1,0 +1,868 @@
+Title: A Sliding-Window-Based Reinforcement Learning for Dynamic Assembly Flow Shop Scheduling with Multi-Product Delivery
+
+URL Source: https://arxiv.org/pdf/2607.02941v1
+
+Published Time: Tue, 07 Jul 2026 00:35:45 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+> 1
+
+# A Sliding-Window-Based Reinforcement Learning for Dynamic Assembly Flow Shop Scheduling with Multi-Product Delivery 
+
+Junhao Qiu, Jianjun Liu, Ting Liu, Rongjie Liao, Zhantao Li, Qingfu Zhang, Fellow, IEEE 
+
+Abstract —Multi-product kitting delivery imposes significant challenges for real-time scheduling in hybrid manufacturing systems that integrate processing and assembly, as dynamic order arrivals simultaneously alter supply dependencies and the set of feasible job-machine assignments. This paper proposes a sliding-window-based reinforcement learning (SWRL) framework for end-to-end online scheduling in the flexible assembly flow shop scheduling problem with complex kitting constraints. The prob-lem is formulated as a heterogeneous graph-based Markov deci-sion process that captures the dual-layer kitting structure and the tail-product bottleneck dynamics that produce a sparse reward landscape. To address the resulting challenges, SWRL integrates a sliding-window filtering mechanism that filters inactive nodes and prioritizes kitting-critical operations, a spatiotemporal graph encoding network that tracks bottleneck shifts across consecutive decision states, and a dynamic action mapping module with a constrained waiting strategy that adapts to the changing action space under variable topologies. Experiments on real-world instances from a home appliance manufacturer demonstrate that SWRL achieves consistent tardiness reductions over classical dispatching rules and existing deep reinforcement learning meth-ods, and exhibits robust performance across varying resource configurations, order loads, and arrival concentrations. 
+
+Index Terms —Flexible assembly flow shop, multi-product de-livery, dynamic scheduling, reinforcement learning, end-to-end learning. 
+
+I. I NTRODUCTION 
+
+# THE increasing demand for scenario-based suite orders has driven hybrid manufacturing systems that integrate processing and assembly toward customer-centric production models [1], [2]. Traditionally, coordination between processing and assembly stages has relied on inventory buffers [3], but dynamic order arrivals render such static buffers ineffective. In such systems, uncertainty in order arrivals repeatedly desta-bilizes planned schedules and degrades delivery performance. Online scheduling methods that can respond to multi-stage disruptions and track kitting progress across parallel product flows are therefore essential for the dynamic flexible assembly                       
+
+> This research was supported by the National Natural Science Foundation of China (Grant no: 52375489, 51975129) and the Guangdong Basic and Applied Basic Research Foundation of China (Grant no: 2024A1515011211).
+> (Corresponding author: Jianjun Liu.)
+> Junhao Qiu is with the School of Electromechanical Engineering, Guang-dong University of Technology, Guangzhou, China, and also with the De-partment of Computer Science, City University of Hong Kong, Hong Kong (Email: junhaoqiu2-c@my.cityu.edu.hk). Jianjun Liu, Ting Liu, Rongjie Liao and Zhantao Li are with the School of Electromechanical Engineering, Guangdong University of Technology, Guangzhou, China (Email: jianjun.liu@gdut.edu.cn, 1112401015@mail2.gdut.edu.cn, liaorongjie1@mails.gdut.edu.cn, lzt@gdut.edu.cn). Qingfu Zhang is with the Department of Computer Science, City University of Hong Kong, Hong Kong (Email: qingfu.zhang@cityu.edu.hk).
+
+flow shop scheduling problem with multi-product delivery (DFAFSP-MPD). The flexible assembly flow shop scheduling problem (FAFSP) is an NP-hard extension of the classical flow shop problem, incorporating part kitting assembly under flexible resource constraints [4]. It is widely applied in industries such as home appliances [5] and automotive [6]. The difficulty of DFAFSP-MPD originates from its dual-layer kitting structure. At the product level, assembly kitting requires all component parts to be completed before final assembly. At the order level, multi-product delivery requires all products within a single order to be completed simultaneously, such that the order lead time is determined by its tail product. Under dynamic arrivals, the identity of this tail product shifts with sequence-dependent setup times and varying processing speeds, producing a mov-ing bottleneck that is difficult to predict. The resulting decision space requires both job sequencing and machine assignment under flexible processing qualifications, where the tardiness signal is sparse across actions. Centralized static methods, including mixed-integer linear programming [7] and metaheuristics [8], [9], provide effective look-ahead optimization but are computationally infeasible for real-time decisions at the second or millisecond scale [10]. Approximate methods [11] offer a practical trade-off for moderate-scale instances. Robust scheduling approaches em-bed disturbance tolerance through time buffers and scenario analysis [12], while rescheduling methods repair plans after disruptions [13], [14]. However, their effectiveness degrades under high-frequency or large-scale disturbances, a common condition in online FAFSP environments [15], [16]. These lim-itations highlight the need for adaptive, data-driven scheduling policies learned directly from system interactions. Deep reinforcement learning (DRL) has been widely adopted for dynamic scheduling due to its adaptive decision-making capability [17], [18]. One approach uses DRL to select priority dispatching rules (PDRs) at each decision step, for-mulated as a Markov decision process (MDP) [19], [20]. [21] applied deep Q-network (DQN) for dispatching rule selection in FJSP, while [15], [22] extended this to distributed FSP settings. [23] further improved generalization through multi-objective DQN. PDR-based methods provide a guaranteed per-formance lower bound and can be extended to complex shop floors [24]–[27], but their dependence on fixed rule sets limits attainable performance. An alternative paradigm employs end-to-end DRL solvers with graph representations to directly allocate operations and resources [28]–[30]. [28] combined GNNs with DRL for JSP, using graph representations for state encoding and proximal policy optimization for scheduling decisions. [31] applied a heterogeneous graph neural network 
+
+> arXiv:2607.02941v1 [cs.AI] 3 Jul 2026 2
+
+to model FJSP states and achieved competitive makespan performance. This approach was further extended to dynamic job arrivals by [32]. [10] proposed a hierarchical reinforcement learning framework for large-scale dynamic FJSP, using a high-level agent to manage job release and lower-level agents for operation sequencing. However, these end-to-end methods are primarily designed for static graph structures [33] and do not address the challenges specific to DFAFSP-MPD, where the graph topology and action space evolve dynamically due to assembly kitting constraints [34]. Applying existing end-to-end DRL methods to DFAFSP-MPD introduces three technical challenges. 1) State represen-tation under dual kitting constraints. Multi-product delivery couples parallel products through a max operator: each order’s tardiness depends only on its tail product. This produces a stepped reward surface where most job-machine pairs cause no immediate change in tardiness, impeding the agent’s ability to identify bottleneck-critical actions [35]. Simultaneously, dynamic order arrivals expand the candidate job set, submerg-ing bottleneck-related signals in noise from irrelevant parallel operations. 2) Capturing spatiotemporal correlations in dy-namic environments. The tail product bottleneck is not static, but shifts as sequence-dependent setup times and processing speeds alter each product’s relative completion progress. Exist-ing methods that encode the scheduling state as a static graph at each decision step fail to capture the temporal dependencies between consecutive states [10], making it difficult for the agent to anticipate where kitting pressure will accumulate next. 3) Sparse reward under complex constraints. The dual-layer kitting structure creates a highly constrained action space where only a limited subset of job-machine pairs reduces order tardiness at any given step. Most actions yield zero immediate reward, and each decision step advances only a single job [25]. The resulting reward signal is both sparse and delayed, providing limited gradient information for policy optimization, a problem that intensifies with problem scale. To address these challenges, this paper proposes a sliding-window-based reinforcement learning (SWRL) framework. SWRL integrates three corresponding components: a sliding-window-based filtering mechanism that filters inactive nodes to mitigate feature dilution, a spatiotemporal graph encoding network that tracks bottleneck shifts across consecutive de-cision states, and a dynamic action mapping module with a constrained waiting strategy that adapts to changing action spaces under sparse reward conditions. The contributions of this research are summarized as follows: 1) The DFAFSP-MPD is formulated as a mixed-integer linear programming model and a heterogeneous graph-based MDP. The model captures the dual kitting con-straints including assembly-level part coupling and order-level product synchronization, as well as the tail-product bottleneck dynamics that create a sparse and shifting reward landscape. 2) A sliding-window-based reinforcement learning frame-work, termed SWRL, is proposed for end-to-end online scheduling under variable topologies and action spaces. A sliding-window filtering mechanism dynamically fil-ters inactive job nodes and prioritizes kitting-critical ones as the graph structure evolves. Node features from temporally correlated graph states are extracted by a spatiotemporal graph neural network for state repre-sentation. A dynamic action mapping module with a constrained waiting strategy is then adopted to align feasible job-machine pairs under changing action spaces. 3) Comprehensive experiments are conducted on both gen-erated and real-world instances, including parameter sensitivity analysis, ablation studies, comparative evalu-ation with state-of-the-art DRL-based scheduling meth-ods, and robustness verification across varying problem scales and arrival patterns. SWRL consistently outper-forms existing approaches in tardiness minimization while requiring substantially fewer training episodes. Ablation studies further validate the contribution of each designed component to the overall performance. The remainder of this paper is organized as follows. Section II describes the FAFSP and its heterogeneous graph modeling. Section III presents the SWRL framework. Section IV presents experimental results and section V concludes this work. II. P ROBLEM FORMULATION OF FAFSP-MPD 
+
+A. Problem Description 
+
+DFAFSP-MPD is derived from a real-world assembly and processing workshop of home appliance companies. This processing-assembly hybrid manufacturing system consists of 
+
+Mp unrelated processing machines and Ma assembly lines. Its problem description is as follows: 1) Flexible processing capability : The qualifications and processing efficiency of machines at different stages vary when performing the same job. Switching between job j1 and job 
+
+j2 of different products requires a setup time of ST j1,j 2 .2) Assembly kitting constraint : The products of order i are divided into corresponding processing and assembly jobs j
+
+according to their structure. All supporting parts need to be completed before final assembly to ensure the hierarchical coupling constraints of supply. 3) Multi-product delivery : Each order i has a specific de-livery time DT i, containing at least one product. All products in the order are completely assembled before delivery. 4) Dynamic arrival of orders : With orders arriving dy-namically, it is necessary to respond quickly to disruptions and adjust the planned schedule, coordinating processing and assembly resources to reduce delays for multi-product orders. The notations used in this article are summarized as follows: 
+
+i : Order index, i ∈ Ip : Product index, p ∈ Pj : Job index, j1, j 2 ∈ Jm : Machine index, m ∈ MQj,m : 1 if machine m is qualified to process job j, 0 otherwise 
+
+Pj1,j 2 : 1 if job j1 is the immediate predecessor of job j2, 0 otherwise 
+
+P T j,m : Processing time of job j on machine mAp,j : 1 if job j is an assembly task for product p, 0 otherwise 
+
+Oi,p : 1 if product p belongs to order i, 0 otherwise 
+
+DT i : Delivery time of order i3
+
+AT i : Arrival time of order iST j1,j 2 : Setup time for switching from job j1 to job j2
+
+V : A sufficiently large positive constant 
+
+tt i : Tardiness of order if t i : Completion time of order ict j : Completion time of job jst j : Start time of processing for job jxj1,j 2,m : 1 if job j1 is processed immediately after job j2 on machine m, 0 otherwise The goal is to minimize the total tardiness while satisfying the following assumptions and constraints. 1) This study does not consider transportation. 2) Each machine can process only one job at a time. 3) Once the operation has started, no interruption is allowed. 4) A job can only proceed to the assembly stage after all its components have been fully completed. The objective is to minimize the total tardiness of orders, as defined in 1. 
+
+min 
+
+> I
+
+X
+
+> i=1
+
+(tt i) (1) 
+
+Order delays for tail products : The tardiness of orders i
+
+varies drastically, with the final delay depending on the com-pletion time of the last product, f t i = max  
+
+> ∀p,j
+
+(ct j ×Ap,j ×Oi,p ).Constraints can be represented as 2 and 3. 
+
+f t i ≥ ct j + V × (Ap,j + Oi,p − 2) ,
+
+∀i ∈ I, p ∈ P, j ∈ J (2) 
+
+tt i ≥ f t i − DT i, ∀i ∈ I (3) 
+
+Flexibility and hierarchical coupling constraint : Flexible processing capabilities are represented as 4 by qualification matrix, and hierarchical coupling constraints ensure that the order of processing paths is satisfied as 5. 
+
+xj1,j 2,m ≤ Qj2,m , ∀j1 ∈ [0] ∪ J, j 2 ∈ J, m ∈ M (4) 
+
+ct j2 ≥
+
+> M
+
+X
+
+> m=1
+> J
+
+X
+
+> j3=0
+
+(xj3,j 2,m × (P T j2,m + ST j3,j 2 )) +Pj1,j 2 × ct j1 , ∀j1, j 2 ∈ J
+
+(5) 
+
+Flow and sequence restrictions : Define the workflow and sequence constraints for jobs on the machine as 6 and 7. Note that j = 0 represents a virtual order, while ct j = 0 .
+
+> M
+
+X
+
+> m=1
+> J
+
+X
+
+> j1=0
+
+xj1,j 2,m = 1 , ∀j2 ∈ J (6) 
+
+> J
+
+X
+
+> j1=0
+
+xj1,j 2,m −
+
+> J
+
+X
+
+> j1=0
+
+xj2,j 1,m = 0 , ∀j2 ∈ J, m ∈ M (7) 
+
+Time window limit : The start and end times of the job are constrained as 8-10 to ensure compliance with processing time and arrival time limits. 
+
+st j ≥ (Ap,j + Oi,p − 2) × V + AT i,
+
+∀i ∈ I, p ∈ P, j ∈ J (8) 
+
+st j2 ≤ ct j2 − P T j2,m + V ×
+
+1 −
+
+> J
+
+X
+
+> j1=0
+
+xj1,j 2,m 
+
+ ,
+
+∀j2 ∈ J, m ∈ M
+
+(9) 
+
+ct j2 ≥ ct j1 × P T j2,m + ST j1,j 2 + V × (xj1,j 2,m − 1) ,
+
+∀j1 ∈ [0] ∪ J, j 2 ∈ J, m ∈ M (10) The tt i, f t i, ct j , st j ≥ 0, ∀i ∈ I, j ∈ J specify the feasible range of decision variables. 
+
+B. Complexity analysis 
+
+The complexity of DFAFSP-MPD arises from the coupling of job sequencing, machine assignment, and hierarchical kit-ting constraints. Let N = PIi=1 
+
+P|Pi| 
+
+> p=1
+
+|Ji,p | denote the total number of jobs. Since the job sequence within each product is fixed 5, the effective number of sequencing permutations is Y = N !/ Q
+
+> i,p
+
+(|Ji,p |!) , accounting for repeated operations within each product. For machine assignment, each job j can be processed on any qualified machine m ∈ Mj , yielding 
+
+Z = Q 
+
+> j
+
+|Mj | possible assignments. The overall search space Y × Z is compounded by the tail-product bottleneck dynamics. While the tardiness of each order is determined by the completion time of its last fin-ishing product ( f t i = max ∀p,j ct j · Ap,j · Oi,p ), the identity of this tail product is not fixed. Sequence-dependent setup times ST j1,j 2 and varying processing speeds P T j,m cause the relative completion progress across products to shift over time, meaning that any job has the potential to become the critical determinant of its order’s delivery performance. This creates a decision space where the effective bottleneck moves dynamically across the production horizon. 
+
+C. Heterogeneous Graph 
+
+In traditional JSP, multiple directed arcs are commonly used to form start-to-end paths representing the processing sequence of different jobs. Accurately characterizing the job-machine arc features introduced by flexible processing constraints is challenging, as it can significantly increase graph density. In this study, FAFSP is formulated as a structure of heterogeneous graph H = ( N , M, C, E), N is the set of job nodes, and it still adopts the directed acyclic graph to describe the topology of job nodes, N = {N j |∀ j} ∪ { Start, End }. C is the set of connected arcs of jobs, which describes the processing se-quence of all jobs in terms of directed connected arcs. E is the arc set of job-machine pairs introduced by considering flexible processing characteristics, where En1,n 2 ∈ E is an undirected arc connecting different jobs and compatible machine nodes 
+
+m. Select a job-machine arc for each node and determine its direction to construct the scheduling scheme for FAFSP. III. M ETHOD 
+
+This section presents the SWRL framework for online scheduling under variable topologies and action spaces, as illustrated in Fig. 1. Solving online FAFSP requires adap-tively selecting job-machine pairs at each decision step. The framework comprises three modules that operate sequentially 4Scheduling State            
+
+> S
+> 3
+> 6
+> 7
+> 4
+> 10
+> 11
+> A0
+> 1
+> 8
+> 5
+> 2
+> 9
+> F
+> A1
+> S
+> 3
+> 6
+> 7
+> 4
+> 10
+> 11
+> A0
+> 1
+> 8
+> 5
+> 2
+> 9
+> F
+> A1
+> Sliding -window -based Filtering
+> Job Edge
+> Machine
+> j1
+> j2
+> j3
+> ...
+> j1
+> j2
+> jn
+> ...
+> j2
+> j3
+> jn-1
+> m1m2m3...
+> Spatiotemporal Graph Encoding
+> Raw
+> Node
+> Features
+> Raw
+> Edge
+> Features
+> ...
+> ...
+> ×L
+> GAT GRU
+> Decision -making
+> Critic
+> Actor
+> MLP
+> Softmax
+> MLP
+> v(s t)
+> Π
+> (At|s t)
+> Critic
+> Actor
+> MLP
+> Softmax
+> MLP
+> v(s t)
+> Π
+> (At|s t)
+> Action
+> ...
+> ...
+> a1
+> a2
+> am
+> a3
+> a4
+> 4
+> 6
+> 2
+> 31
+> 5
+> Estimated revenue
+> Action
+> A0
+> 1
+> 8
+> 2
+> 5
+> 9
+> 3
+> 4
+> 6
+> 7
+> 10
+> 11
+> 15 A1
+> Env
+> 14
+> 15 16
+> Order arrive
+> Job -Machine 4
+> 5
+> 6
+> 2
+> 31
+> Assembly Processing
+> Order arrive
+> A2
+> Dynamic Action
+> Mapping
+> State Transfer
+> •Reward Calculation
+> •Update to next decision moment
+> •Update Status
+
+Fig. 1. End-to-end online scheduling framework of the proposed SWRL, integrating three modules: sliding-window-based filtering mechanism, spatiotemporal graph encoding, and dynamic action mapping. TABLE I NODE FEATURES 
+
+Index Expression Description 
+
+Nt, 1 avg( Pj,m ) Average processing time 
+
+Nt, 2 min( Tt, st j ) − AT t Job waiting time 
+
+Nt, 3 Mj,t Number of compatible machines 
+
+Nt, 4 max( ct j − DT i, 0) Job tardiness at step t
+
+Nt, 5 {0, 1} Processability flag 
+
+Mt, 1 W T t,m Machine cumulative idle time 
+
+Mt, 2 EC t,m Machine setup change count 
+
+Mt, 3 F J t,m Completed job count 
+
+Mt, 4 CJ t,m Available jobs count 
+
+Mt, 5 {0, 1} Machine availability 
+
+at each step. First, the sliding-window filtering mechanism (Section III-B1) filters inactive job nodes and maintains a fixed-size set of kitting-critical candidate nodes. Second, the spatiotemporal graph encoder (Section III-B2) extracts features from the filtered graph state, capturing both spatial dependen-cies and temporal evolution across consecutive decision steps. Third, the dynamic action mapping module (Section III-B3) aligns the policy output to feasible job-machine pairs and executes the selected action. The MDP formulation defines the state, action, reward, and transition dynamics. 
+
+A. MDP Formulation 1) State: The state st at decision step t is represented as a heterogeneous graph Ht = ( Tt, Mt, Ct, Et), where Tt and Mt
+
+are the job and machine node feature sets, and Ct and Et are the arc sets representing job dependencies and job-machine compatibility, respectively. The node features are summarized in Table I. The arc set Ct encodes the immediate supply relationships between jobs, where fCj1,j 2 = 1 if the processing condition between j1 and j2 is satisfied at step t, and 0 otherwise. The arc set Et encodes job-machine pairs, with fEj,m storing the processing time of job j on machine m. Both arc sets are recomputed at each step to reflect changes caused by job completions and new arrivals. 
+
+2) Action: The actions at ∈ At at step t are an arc set consisting feasible job-machine pairs (j, m ) and a waiting action await . Waiting refers to the decision not to execute any action (j, m ) at t, with idle machine resources remaining in a state of readiness until the next event triggers a decision [24]. All the immediately preceding jobs of job j ∈ J have been completed and satisfy the qualification requirements of ma-chine m while m ∈ M is in an idle state. Also, At is related to the decision step and needs to be dynamically processed based on the arrival time and supply relationship. Meanwhile, since there are qualification and stage differences among different machines, then Jm < M , so |At| < j × m. Applying the wait action enables the agent to refrain from executing (j, m ) pairs, reserving processing capacity for urgent orders and expanding the agent’s pre-decision capabilities. To avoid the dilemma of continuous waiting, a waiting action restriction strategy that considers topology-variable is proposed (Section III-B3). 
+
+3) Reward: Reward function is structured based on delayed performance and penalties derived from balancing long-term and short-term perspectives. The ct i,t is last processing time of order i at decision step t, and ∆ct i,t denotes the additional delay at the current step at decision step t, calculated as: 
+
+∆ct i,t = max( ct i,t − DT i, 0) − max( ct i,t −1 − DT i, 0) . (11) The δ is the time step penalty coefficient, satisfying δ > 0.
+
+Tt denotes the time of the current decision step, Tt−1 denotes the time of the previous decision step, and Tt − Tt−1 denotes the time interval between t-1 and t. The reward is calculated: 
+
+rt = − X
+
+> i∈Iall
+> t
+
+∆ct i,t − δ(Tt − Tt−1). (12) Since the tardiness of all orders is T = PIi=1 (tt i), the absolute value of the total reward is equal to this quantity. This implies that the reward function effectively distributes the total order tardiness across the decision-making process. 5
+
+The coefficient δ introduces a secondary penalty on the elapsed time between decisions, which implicitly discourages unnecessarily long processing sequences. The sensitivity of this trade-off between tardiness and throughput is examined in the orthogonal experiment (Section IV-B). 
+
+4) Transfer: After action at is executed, the simulation ad-vances to the next decision step. Each decision step is triggered by the earliest event in which either a machine completes its current job and becomes idle, or a new order arrives. At that point, the environment state is updated: completed job nodes and their incident edges are removed from the heterogeneous graph, new nodes from arriving orders are inserted, and the edge features are recomputed to reflect the updated processing conditions. This transition produces a new state st+1 with an updated action set At+1 .𝜋 𝜃                                         
+
+> 𝑜𝑙 𝑑 𝑎 𝑡 𝑠 𝑡 GAT
+> GRU
+> Linear
+> ...
+> ...
+> Critic
+> Env
+> Sliding -window -based Filtering
+> Softmax 𝜋 𝜃 𝑎 𝑡 𝑠 𝑡 𝑉 𝜙  (𝑠 𝑡  )
+> Error 𝑎 𝑡
+> Select
+> Advantage
+> Calculate 𝒜 𝑡 (𝑠 𝑡 ,𝑎 𝑡 )
+> Action Mapping
+> and Transcription
+> Param
+> Update
+> Spatiotemporal Graph Encoding
+> ×L
+> Sample
+> Sample
+> ... ℋ𝑡 =(𝒯 𝑡 ,ℳ𝑡 ,𝒞 𝑡 ,ℰ𝑡 )𝑓 𝒞 (𝑗 1,𝑗 2)(𝑠 𝑡 ,𝑎 𝑡 ,𝑟 𝑡 ,𝑠 𝑡 +1)
+> Actor
+> Decision Tracks 𝑠 0,𝑎 0,𝑟 0,𝑠 1,𝑎 1,𝑟 1,…ℋ𝑓 ℰ(𝑗 ,𝑚 )
+> Node 𝜌 𝑡 =𝜋 𝜃 (𝑎 𝑡 |𝑠 𝑡 )
+> 𝜋 𝜃
+> 𝑜𝑙𝑑 (𝑎 𝑡 |𝑠 𝑡 )
+
+Fig. 2. Construction of end-to-end agent variable topology inputs. It supports the normalization of variable inputs and extracts spatiotemporal features from decision trajectories. 
+
+B. Agent Architecture 
+
+The SWRL agent architecture is illustrated in Fig. 2. The filtered graph from the sliding-window filtering mechanism is processed by the spatiotemporal encoder, and the resulting embedding is passed to the policy network for action selection. 
+
+1) Sliding-Window Filtering Mechanism: As orders arrive dynamically, the total number of job nodes in the heteroge-neous graph grows monotonically. Encoding all nodes equally dilutes the features of kitting-critical nodes among a large number of irrelevant parallel operations, impeding the agent’s ability to identify bottleneck jobs. The sliding-window filtering mechanism addresses this by maintaining a fixed-size active node set N wt (the window). As illustrated in Fig. 3, each job node becomes active when its predecessors are completed and is removed from the window once finished. The vacated slot is reassigned to a pending node with the highest in-degree ID n measured within the conjunctive arc set Ct.When a node exits the window, its associated job-machine pairs are removed from the action space, and the newly admitted node’s pairs are inserted. This filtering reduces the action space dimension from the full set of all candidate pairs to a focused set of currently relevant decisions. 1 8                                     
+
+> 25912
+> 346710 11 13 14
+> 15
+> 16 18
+> 17 10 20
+> Finish
+> Order
+> Arrival
+> Node & Action Window
+> ΔtΔ
+> t
+> 21
+> ...
+> Filtering Capturing
+> Machine: Order: 1815 21 102345102345Machine: Order: 1815 21 102345
+
+Fig. 3. Dynamic filtering and node capture process. At time ∆t, the window filters out completed nodes and captures newly available nodes based on in-degree priority. 
+
+The complete window update and action mapping process is given in Algorithm 1. The window update proceeds in two phases. First, all finished nodes are identified and their job-machine pairs are removed from the action space (lines 4-14). A finished node is only evicted after all its predecessor jobs have been completed, ensuring that no kitting-critical inter-mediate state is discarded prematurely. Second, each vacated slot in the eviction phase is filled by a pending node with the minimum in-degree among all candidates outside the current window (lines 15-24). The in-degree is measured within the conjunctive arc set Ct, where lower in-degree indicates that fewer prerequisites remain before the job becomes schedula-ble. The condition on line 21 checks that the candidate node brings enough feasible job-machine pairs to fill the available action slots; if it does not, the slot is left temporarily empty and will be filled at the next decision step when more nodes become available. 
+
+2) Spatiotemporal Graph Encoding: The sliding-window filtering mechanism produces a filtered subgraph that captures the current spatial structure of active jobs and machines. How-ever, the tail product bottleneck shifts over time as setup times and processing speeds alter each order’s relative completion progress. A static graph encoding that considers only the current snapshot does not capture this temporal evolution. To address this, the filtered node and edge features are pro-cessed through a spatiotemporal encoding network composed of L stacked layers, each containing a graph attention (GAT) module for spatial aggregation followed by a gated recurrent unit (GRU) for temporal fusion. The node features Nn,t at step t are first projected into a unified dimension. For any two connected nodes, the attention coefficient is computed as: 
+
+βn1,n 2 = LeakyReLU  ηT [Wf Nn1,t , W f Nn2,t ] , (13) where η is a learnable vector and Wf is a projection matrix. The raw attention scores are then gated by the edge features 
+
+f(n,n ′) (which is fC for job-job edges or fE for job-machine edges) and normalized via softmax across each node’s neigh-borhood. The normalized coefficient αn,n ′ = softmax( βn,n ′ ·
+
+f(n,n ′)) allows the network to assign different importance to different neighbors depending on both their features and the type of relation (supply dependency or machine compatibility). At layer l, the GAT module produces node embeddings 
+
+h(l) 
+
+> n,t
+
+by attending over neighbors. These embeddings are then 6
+
+Algorithm 1: Sliding-window-based action mapping . 
+
+Input : Action space AJM t , set of invalid action indexes Aempty t at t, set of ( j,m) pairs JM n
+
+and predecessor node set of node n is N sn.
+
+output: Action space At and state Ht at step t. 
+
+> 1
+
+Get node space N wt in the window, set of completed job nodes N nf t and filtered nodes N dt at step t; 
+
+> 2
+
+foreach nf inish ∈ N nf t do  
+
+> 3
+
+Get the Predecessor node set N snf inish ; 
+
+> 4
+
+if All jobs in N snf inish have been completed then  
+
+> 5
+
+Add nf inish to N dt and its corresponding index 
+
+ni in N nf t to T w,e t ; 
+
+> 6
+
+Remove the invalid actions contained in the set 
+
+JM nf inish from AJM t ; 
+
+> 7
+
+Add all removed invalid action indexes at 
+
+Aempty t and nf inish in N nf t ; 
+
+> 8
+
+if set of invalidated node indices T w,e t̸ = ∅ then  
+
+> 9
+
+foreach Indice nx i ∈ T w,e t do  
+
+> 10
+
+Find node nnext and the corresponding 
+
+JM nnext based on the minimum ID n; 
+
+> 11
+
+if len (JM nnext ) ≥ len (Aempty t ) then  
+
+> 12
+
+T wt [nx i] ← nnext ; 
+
+> 13
+
+Insert the j-m pair in JM nnext into AJM t
+
+according to Aempty t ; 
+
+> 14
+
+Remove nx i from T w,e t and the index of the inserted action from Aempty t ; 
+
+> 15
+
+At ← AJM t and update Ht;passed to a GRU that merges them with the hidden state h(l)
+
+> n,t −1
+
+from the previous decision step, following the standard GRU formulation. This temporal connection allows the network to track how each node’s completion progress evolves across consecutive states. After L layers, a global embedding for decision-making is obtained by pooling the final node representations: 
+
+hglobal  
+
+> t
+
+= concat 
+
+ 1
+
+|Bj |
+
+X
+
+> j∈Bj
+
+h′(L) 
+
+> j,t
+
+, 1
+
+|Bh|
+
+X
+
+> n∈Bh
+
+h′(L)
+
+> n,t
+
+ , (14) where Bj is the set of job nodes and Bh = Nj ∪ N m is the set of all nodes. The resulting embedding encodes both the spatial structure of the current graph and the temporal trends accumulated over past decision steps. 
+
+3) Action Mapping and Transcription: The action space at step t consists of the job-machine pairs within the current window plus a waiting action a0. As the sliding window up-dates, the set of feasible pairs changes: pairs corresponding to completed jobs are removed, and new pairs become available when new nodes enter the window. To maintain a fixed policy output dimension despite this changing set, a mapping table 
+
+Mt : k → (j, m ) is maintained. When a job-machine pair is removed, its index k is immediately reassigned to a newly available pair, a process referred to as index recycling, as illustrated in Fig. 4. Time ：                 
+
+> ...
+> Action J-MSet
+> a1
+> a2
+> a3
+> an
+> 21
+> 34
+> 44
+> ww
+> 21
+> Action J-MSet
+> a1
+> a2
+> a3
+> an
+> 21
+> 4
+> 44
+> ww
+> 21
+> 17
+> ... ...
+> ... ...
+> Action J-MSet
+> a1
+> a2
+> a3
+> an
+> 1
+> 4
+> ww
+> 1
+> ... ...
+> Δt1
+> 2
+> 4
+> 2
+> Order Arrival
+> empty
+> mask
+> shield
+> Δt2
+> t1t2t3
+> Completed &
+> Disabled Update &
+> Activate
+> Fig. 4. Dynamic mapping between action indices and job-machine pairs. Action indices are reassigned as jobs complete and new nodes enter the window.
+
+The waiting action a0 allows the agent to defer a decision, reserving capacity for future urgent arrivals. To prevent in-definite waiting, the number of consecutive waiting actions is constrained by aw 
+
+> 0
+
+≤ jout  
+
+> t
+
+, where jout  
+
+> t
+
+is the number of pending nodes outside the current window. This ensures that after at most jout  
+
+> t
+
+waiting steps, a new node must enter the window and force a processing decision. Given the global embedding hglobal  
+
+> t
+
+, the policy network outputs a mean vector νt and a standard deviation vector σt.A binary mask AMt,k ∈ { 0, 1} is applied to restrict actions to feasible pairs. The masked log probability used for policy gradient computation is: 
+
+πlog  
+
+> θ
+
+= X
+
+> k∈At
+
+AMt,k 
+
+(at,k − νt,k )2
+
+σ2
+
+> t,k
+
++ log(2 πσ 2
+
+> t,k
+
+)
+
+!
+
+. (15) The mask is constructed according to the current mapping table and the waiting constraint, as detailed in Algorithm 2. Only actions with AMt,k = 1 contribute to the gradient, ensuring that the policy learns only from feasible decisions. The overall scheduling process proceeds as follows. At each decision step t, the current heterogeneous graph Ht is first processed by the sliding-window filtering mechanism to produce a filtered subgraph and action set. The spatiotemporal encoder then computes the global embedding hglobal  
+
+> t
+
+from the filtered graph, and the policy network outputs an action distribution. After applying the mask from Algorithm 2, the action with the highest probability is selected and executed, which assigns a specific job j to a machine m or chooses the waiting action. The simulation then advances to the next event-driven decision step, and the transition (st, a t, r t, s t+1 )
+
+is stored in the replay buffer for training. This process repeats until all orders are completed. The policy is trained using proximal policy optimization with generalized advantage estimation. The total objective combines the clipped policy loss (computed over unmasked actions) with a value estimation error term. Network hyperpa-rameters and training details are provided in Section IV-B. IV. EXPERIMENTAL STUDY This section describes the experimental setup and presents results on real-world and extended instances to validate the SWRL framework. A series of experiments are conducted: parameter sensitivity analysis, training evaluation, ablation study, comparative evaluation, and robustness verification. 7
+
+Algorithm 2: Action transcription mechanism. 
+
+Input : Nodes spaces N wt in the window, waiting action a0, number of uncaptured nodes outside the window jout t , policy network πθ .
+
+output: Action at and the corresponding j-m pair  
+
+> 1
+
+Get action space At, current number of waiting action aw 
+
+> 0
+
+, and initialize the mask AMt,a 
+
+corresponding to all actions to 0;  
+
+> 2
+
+foreach a ∈ At do  
+
+> 3
+
+if a = a0 and N wt̸ = ∅ and aw 
+
+> 0
+
+≤ jout t then  
+
+> 4
+
+AMt,a 0 ← 1; 
+
+> 5
+
+else if Action a is valid then  
+
+> 6
+
+Get the j-m pair represented by action a; 
+
+> 7
+
+if j and m meet start requirements then  
+
+> 8
+
+AMt,a ← 1; 
+
+> 9
+
+Execution action at is obtained from 
+
+max ( πθ (at|st)) and the mask AMt,a ; 
+
+> 10
+
+if a = a0 then  
+
+> 11
+
+aw 
+
+> 0
+
++ = 1  
+
+> 12
+
+else  
+
+> 13
+
+Find corresponding j and m for a from AJM t ;
+
+A. Experimental Setup 1) Evaluation Instances: The real-world instances are con-structed from annual order and product data of a home appli-ance manufacturer in China, encompassing diverse resource configurations and order demands across multiple factories and time periods. To compensate for the lack of standardized benchmarks for online FAFSP, additional test instances with varying scales are generated following established practices in dynamic scheduling research. The resource allocation is represented by the machine configuration m1 ×m2. Ten generic product structures ranging from simple to complex are selected from actual production data. The number of products q per order follows a geometric distribution P (q = k) = (1 /2) k with k ∈ [1 , 2, . . . ].The processing speed v of assembly lines follows a normal distribution v ∼ N (8 , 2) , and the average assembly speed is four-fifths of the processing stage speed. 
+
+L = max 
+
+(
+
+max 
+
+> m∈P M
+
+ X
+
+> j∈Jp
+
+pj,m 
+
+
+
++ min 
+
+> m∈AM
+
+ X
+
+> j∈Ja
+
+pj,m 
+
+
+
+,
+
+max 
+
+> m∈AM
+
+ X
+
+> j∈Ja
+
+pj,m 
+
+) (16) 
+
+Rm i =
+
+
+
+DT i − max  
+
+> m∈M
+
+(pj,m × Bi,j )
+
+
+
+× d, ∀i ∈ I (17) Following prior studies [25], [36], [37], order delivery times DT i are determined by a uniform distribution over 
+
+[L(1 − T − R/ 2) , L (1 − T + R/ 2)] , where L is the lower bound of completion time from (16) and parameters T, R ∈
+
+[0 , 1] . Order arrival times satisfy RT i ∈ [0 , Rm i] sampled from a normal distribution. By varying d ∈ { 0.3, 0.5, 0.7, 0.9},instances with different arrival frequencies are generated to test robustness against disturbances. The resulting experimental conditions are summarized in Table V. 
+
+2) Implementation Details: All experiments are run on the same hardware platform: an Intel Core i9-13900K CPU and an NVIDIA RTX 3060 GPU (12 GB). The framework is implemented in Python (3.8+) using NumPy (1.24.3) and PyTorch (2.0.1+). The spatiotemporal encoding network uses 
+
+L = 3 stacked GAT-GRU layers with a hidden dimension of 64 and 4 attention heads. The policy and value networks each consist of two fully connected layers with 128 hidden units. The initial learning rate is set to 3 × 10 −4 and decays over the course of training. All DRL-based methods are trained for 2000 episodes per instance set and evaluated on 20 independently generated instances [21], [25], [31], [38]. All methods share identical data splits and evaluation protocols to ensure fair comparison. 
+
+B. Parameter Sensitivity Analysis 
+
+The SWRL framework introduces several hyperparame-ters that affect convergence and scheduling performance. A Taguchi orthogonal experiment is conducted to analyze the sensitivity of five key factors: the PPO clipping threshold ξ, the time step penalty coefficient δ, the reward discount factor γ,the number of policy replay epochs Kepochs , and the experience replay ratio μ. Each parameter is assigned four levels, as shown in Table II.                                                         
+
+> TABLE II ORTHOGONAL EXPERIMENT RESULTS FOR PARAMETER SENSITIVITY
+> Level ξδγKepo μ
+> Value Tavg Value Tavg Value Tavg Value Tavg Value Tavg
+> 10.1 4183 0.1 4234 0.9 4312 44148 0.3 4100
+> 20.2 4306 0.3 4164 0.94 4232 64295 0.5 4190 30.25 4163 0.5 4279 0.97 4121 84236 0.7 4294 40.3 4204 0.7 4180 0.99 4191 10 4177 0.9 4272 Note: Each parameter is assigned 4 levels with average tardiness Tavg as the response variable. The optimal level for each parameter is shown in bold.
+
+Rank-order analysis of the response ranges indicates that the relative influence on tardiness follows the order μ > γ > Kepochs > ξ > δ . The experience replay ratio and the discount factor are the most influential parameters, while the time step penalty has the smallest impact. Based on these results, the optimal parameter combination ξ = 0 .25 , δ = 0 .3, γ = 0 .97 ,
+
+Kepochs = 4, and μ = 0.3 is adopted in all subsequent experiments. 
+
+C. Training Process and Convergence 
+
+Fig. 5 shows the training curve of SWRL on 30 real-world instances using the Adam optimizer. The cumulative reward increases steadily while the average tardiness decreases, with both metrics stabilizing after approximately 800 episodes. The convergence trend indicates that the spatiotemporal encoding network is able to learn effective job-machine assignment strategies from the sparse reward signals introduced by the dual-layer kitting constraints. 8                                                        
+
+> Fig. 5. Training trends of reward and tardiness. Solid curves show raw data, and lighter curves indicate 40-point moving averages. TABLE III ABLATION STUDY :MODULE CONFIGURATION AND PERFORMANCE
+> Method Module Tardiness SW ST CW ALL Tavg Train TTest T
+> EDD (dispatching rule) –––3128.3 3409.0 2847.5 DQN (rule-selection DRL) –––2389.7 2259.6 2519.7 HGNN backbone –––2233.9 2077.9 2233.9 + CW ––✓2176.1 2115.7 2176.1 + ST –✓–1897.1 1939.5 1897.1 + SW ✓✓–1773.9 1699.6 1848.2 + SWRL ✓✓✓1689.2 1725.2 1653.2
+> Module acronyms: SW = Sliding Window, ST = Spatiotemporal encoder, CW = Constrained Waiting strategy. ✓indicates the module is enabled. CPU times (ms) are: EDD 0.875, DQN 5.482, backbone 11.355, +CW 11.454, +ST 12.284, +SW 16.063, SWRL 14.079.
+
+Training variance is high initially due to the large action space. As the sliding-window filtering mechanism focuses attention on kitting-critical nodes, the effective action space shrinks and policy updates stabilize. After convergence, SWRL achieves consistent performance across repeated runs, confirm-ing training stability. 
+
+D. Ablation Experiment 
+
+This section conducts ablation studies on 20 real-world instances to assess the contribution of each SWRL module: the sliding-window filtering mechanism, the spatiotemporal graph encoder, and the constrained waiting strategy. Two baseline methods are included: the EDD dispatching rule, and DQN for adaptive rule selection. All end-to-end variants share the same heterogeneous graph backbone [31] and are trained for 2,000 episodes. The module configuration and performance are summarized in Table III. Each SWRL module contributes measurable improvements. The HGNN backbone alone achieves Tavg = 2233 .9, already outperforming both DQN and EDD. Adding the constrained waiting action yields a modest improvement, while the spa-tiotemporal encoder provides a substantial reduction (-15.1%), confirming that tracking bottleneck shifts across consecutive decision steps is critical in FAFSP. The sliding-window filter-ing mechanism further reduces tardiness, and the full SWRL achieves the best overall performance with Tavg = 1689 .2 on all instances and Tavg = 1653 .2 on the test set. Inference time is measured as wall-clock time from event trigger to action selection. All end-to-end variants complete within 11–16 ms, well below typical manufacturing decision intervals (seconds to minutes). Notably, SWRL (14.079 ms) runs faster than SW (16.063 ms) despite including additional modules, because the constrained waiting mechanism reduces the candidate action set and lowers the policy network’s computational load. This confirms that the performance gains of SWRL do not come at the cost of inference efficiency. As shown in Fig. 6, SWRL consistently outperforms both the rule-based EDD and the DQN-based rule-selection ap-proach across all evaluation metrics. Despite the overhead of graph-structured feature processing, SWRL maintains a prac-tical decision time of 14.079 ms per step (Fig. 7), confirming its feasibility for real-time scheduling.   
+
+> Fig. 6. Performance comparison of SWRL and its ablation variants against EDD and DQN in all instances.
+> Fig. 7. Computation time per decision step across methods. Despite higher graph-processing overhead, SWRL remains within the real-time scheduling requirement.
+
+E. Comparative Experiments 
+
+This section compares SWRL against representative DRL-based scheduling methods, none of which directly ad-dress the dynamic FAFSP with multi-product delivery. The rule-selection baselines include Q-learning [15], DQN [21], DDPG [39], and MLAC-DQN [25]. The end-to-end baselines include HGNN [31] and DANIEL [38], both designed for standard FJSP without assembly kitting constraints. SWRL introduces three domain-specific improvements: (i) a sliding-window filtering mechanism, (ii) a spatiotemporal graph en-coder, and (iii) a constrained waiting strategy, which are absent 9
+
+TABLE IV COMPARATIVE RESULTS ACROSS 20 TEST INSTANCES                                                                                                                                                                          
+
+> Inst. Rule-selection DRL End-to-end DRL Q learing DQN DDPG MLAC-DQN HGNN DANIEL SWRL 11674.3 1486.5 2418.5 1678.9 498.2 581.0 522.0 21963.1 2703.8 2663.7 2971.8 2215.2 2050.9 1595.8
+> 32198.5 2971.8 2027.4 467.2 745.1 1566.5 1321.0 43256.5 2133.8 3247.1 2026.4 4717.7 3756.6 3522.3 52874.6 2037.5 2779.6 1315.7 1580.0 1524.3 1204.0
+> 61467.6 1315.7 1334.2 1111.7 2509.1 2045.1 2255.6 71964.7 1669.2 2252.1 1669.2 3141.7 2432.7 2897.4 82848.1 2098.5 2631.7 2098.5 1704.0 1927.2 1419.8
+> 95101.4 3892.9 4908.8 711.7 2316.8 1878.0 1433.4 10 3062.0 2286.6 3550.0 1953.3 1351.0 1425.2 1081.0
+> 11 2169.8 1897.8 1423.2 1897.8 3534.1 3545.0 3084.4 12 633.6 553.2 850.1 553.2 3017.2 3057.1 1644.1 13 1748.3 1840.0 2543.8 1840.0 2244.7 1980.5 2249.4 14 4025.3 3474.8 4478.0 2898.1 1619.3 2053.1 1059.1
+> 15 5188.1 5780.2 6103.6 1450.3 1980.8 2843.6 1725.4 16 4347.0 4652.2 4032.6 2985.6 2609.1 2944.6 1103.7
+> 17 794.3 685.0 684.1 685.0 2077.9 841.7 789.8 18 2436.3 2461.5 2700.7 2925.8 2042.6 1754.4 1834.3 19 2671.4 3135.7 3474.1 3135.7 3162.4 3441.1 1371.0
+> 20 1241.0 717.1 1086.2 717.1 1611.0 1709.5 1670.7
+> Tavg 2583.3 2389.7 2759.5 1754.7 2233.9 2167.9 1689.2
+> σ1294.5 1326.7 1401.2 887.4 973.1 863.5 772.1
+> W/T/L 13/0/7 12/0/8 13/0/7 9/0/11 16/0/4 16/0/4 –W/T/L: instances where SWRL achieves a lower (W), equal (T), or higher (L) tardiness than the column method. Other methods are trained for 20,000 episodes; SWRL, HGNN and DANIEL for 2,000 episodes.
+
+in existing end-to-end FJSP methods. The implementation is developed on the basis of open-source scheduling bench-marks [40]. The MDP and training configuration follow [25], with rule-selection methods trained for 20,000 iterations and end-to-end methods for 2,000 episodes. As shown in Table IV, Q-learning and DDPG, despite performing well in continuous action spaces, fail to achieve satisfactory results in online FAFSP, with average tardiness of 2583.3 and 2759.5, respectively. Even with DDPG’s actor-critic deterministic policy structure, capturing the complex state-to-rule mapping remains challenging. DQN, adept at discrete action spaces, consistently ranks among the top three across most instances. After 20,000 training epochs, MLAC-DQN outperforms others on several cases by decomposing multi-stage rules to expand the solution space and selecting rule combinations across multiple workshops. In contrast, SWRL achieves the lowest average tardiness (1689.2) with only 2,000 training episodes, while also exhibit-ing the lowest standard deviation ( σ = 772 .1). In pairwise comparisons, SWRL outperforms Q-learning, DQN, DDPG, and HGNN in the majority of instances (13/20, 12/20, 13/20, and 16/20 wins, respectively), achieves a comparable 9/11 split against MLAC-DQN, and also exceeds DANIEL (16/20 wins). Within the end-to-end group, SWRL achieves the best overall performance ( Tavg = 1689 .2), followed by DANIEL (Tavg = 2167 .9), which outperforms the HGNN backbone (Tavg = 2233 .9). A Friedman test confirms statistically sig-nificant differences across all methods ( p = 0 .019 ). 
+
+F. Robustness Verification 
+
+The sliding-window filtering mechanism is designed to filter irrelevant nodes and maintain focus on kitting-critical operations regardless of the total order volume. This design is expected to confer robustness across different problem scales and resource configurations. To verify this, SWRL is 
+
+TABLE V ROBUSTNESS COMPARISON ACROSS FOUR OPERATING CONDITIONS                                                        
+
+> Method III III IV (0.3,3 ×6,5) (0.5,5 ×10,10) (0.7,7 ×10,15) (0.9,10 ×15,30) EDD 452.0 776.2 3173.6 18004.3 FIFO+SPT 426.9 785.4 2908.7 17302.3 FIFO+EET 440.8 808.6 3054.6 17852.8 MOPNR+SPT 501.3 796.7 2899.0 17301.3
+> MOPNR+EET 512.8 835.2 3090.7 17845.2 LWKR+SPT 369.8 750.9 2911.5 17320.8 LWKR+EET 379.2 787.0 3069.0 17860.0 MWKR+SPT 486.5 770.2 2903.8 17318.9 MWKR+EET 489.2 794.1 3079.6 17866.3 Best rule 369.8 750.9 2899.0 17301.3 SWRL 341.5 644.8 2353.1 14478.4
+> Improvement +7.7% +14.2% +18.8% +16.3% Each condition contains 40 instances, totaling 160 instances across all conditions.
+
+evaluated under four experimental conditions that vary in resource availability ( m1 × m2), number of orders ( itotal ), and arrival concentration ( d), as described in Table V. Each condition includes 40 instances, with 20 used for training and 20 for testing, totaling 160 instances. SWRL is compared against nine composite dispatching rules commonly used in industrial practice [41]. The dispatching rules exhibit strong condition-dependent performance. LWKR+SPT achieves the best rule-level per-formance in Conditions I and II (small scale), while MOPNR+SPT becomes optimal in Conditions III and IV (larger scale), confirming that the best rule shifts with resource availability and order load. Selecting the appropriate rule for a given operating condition would require expert knowledge of the production environment, and even the best rule lags significantly behind SWRL. SWRL consistently achieves the lowest tardiness across all four conditions, with improvements over the best dispatching rule ranging from 7.7% (Condition I) to 18.8% (Condition III). Notably, the improvement grows with problem scale, indicating that the sliding-window filtering mechanism and spatiotemporal encoding become increasingly valuable as the scheduling complexity increases. This consistent advantage demonstrates that DRL-based end-to-end scheduling adapts to diverse operating environments without manual rule engineer-ing, making it robust for real-world production settings with fluctuating conditions. V. C ONCLUSION 
+
+This paper proposed a sliding-window-based reinforcement learning framework for online scheduling in the dynamic flexible assembly flow shop problem with multi-product de-livery. The dual-layer kitting constraints were formalized as a heterogeneous graph-based MDP that captures the tail-product bottleneck dynamics and the resulting sparse reward structure. The SWRL framework integrates three components designed to address the specific challenges of DFAFSP-MPD: a sliding-window filtering mechanism that filters inactive nodes and pri-oritizes kitting-critical operations under evolving topologies, a spatiotemporal graph encoding network that tracks bottleneck shifts across consecutive decision states, and a dynamic action mapping module with a constrained waiting strategy that handles changing action spaces and sparse feedback. 10 
+
+Experimental results on real-world instances from a home appliance manufacturer demonstrated that SWRL achieves consistent improvements over classical dispatching rules and existing DRL methods across varying resource configurations, order loads, and arrival concentrations. Ablation studies con-firmed the contribution of each designed module to the overall performance, and the parameter sensitivity analysis provided guidelines for practical deployment. Limitations of the current framework include a fixed sliding-window size and the assumption of stationary machine avail-ability, which may limit generalization to varying problem scales or sudden breakdowns. Future work will address these limitations through adaptive window sizing and online fault-adaptation mechanisms, and will extend the framework to in-corporate additional constraints such as automated guided ve-hicle scheduling and energy-aware objectives. Transfer learn-ing across different shop floor configurations and the joint optimization of sliding-window selection and policy learning are also promising directions. REFERENCES [1] Y. Fang, C. Peng, P. Lou, Z. Zhou, J. Hu, and J. Yan, “Digital-Twin-Based Job Shop Scheduling Toward Smart Manufacturing,” IEEE Trans. Ind. Informat. , vol. 15, no. 12, pp. 6425–6435, 2019. [2] J. Chen, J. Sun, and G. Wang, “From unmanned systems to autonomous intelligent systems,” Engineering , vol. 12, pp. 16–19, 2022. [3] C. Zhao, N. Kang, J. Li, and J. A. Horst, “Production Control to Reduce Starvation in a Partially Flexible Production-Inventory System,” IEEE Trans. Autom. Control , vol. 63, no. 2, pp. 477–491, 2018. [4] T. Liu, J. Liu, J. Qiu, C. Lai, and Z. Zhang, “Recent advances in assem-bly flow shop scheduling and its extensions to distributed manufacturing and integrated supply chain,” Comput. Ind. Eng. , p. 111711, 2025. [5] R. Liao, J. Liu, J. Qiu, and C. Peng, “Collaborative optimisation framework for multi-stage flexible assembly shop scheduling with mixed production pattern,” Int. J. Prod. Res. , pp. 1–19, 2025. [6] C.-J. Liao, C.-H. Lee, and H.-C. Lee, “An efficient heuristic for a two-stage assembly scheduling problem with batch setup times to minimize makespan,” Comput. Ind. Eng. , vol. 88, pp. 317–325, 2015. [7] C.-C. Wu, X. Zhang, A. Azzouz, W.-L. Shen, S.-R. Cheng, P.-H. Hsu, and W.-C. Lin, “Metaheuristics for two-stage flow-shop assembly problem with a truncation learning function,” Eng. Optim. , vol. 53, no. 5, pp. 843–866, 2021. [8] Q.-Y. Li, Q.-K. Pan, L. Wang, L. Gao, and W.-M. Li, “Dynamic cascaded flow-shop scheduling using an evolutionary greedy algorithm,” IEEE Trans. Evol. Comput. , 2025. [9] G. Zhang, B. Liu, L. Wang, D. Yu, and K. Xing, “Distributed Co-Evolutionary Memetic Algorithm for Distributed Hybrid Differentiation Flowshop Scheduling Problem,” IEEE Trans. Evol. Comput. , vol. 26, no. 5, pp. 1043–1057, 2022. [10] K. Lei, P. Guo, Y. Wang, J. Zhang, X. Meng, and L. Qian, “Large-scale dynamic scheduling for flexible job-shop with random arrivals of new jobs by hierarchical reinforcement learning,” IEEE Trans. Ind. Informat. ,vol. 20, no. 1, pp. 1007–1018, 2023. [11] S. Hatami, R. Ruiz, and C. Andr´ es-Romano, “Heuristics and meta-heuristics for the distributed assembly permutation flowshop scheduling problem with sequence dependent setup times,” Int. J. Prod. Econ. , vol. 169, pp. 76–88, 2015. [12] X. Feng, F. Zheng, and Y. Xu, “Robust scheduling of a two-stage hybrid flow shop with uncertain interval processing times,” Int. J. Prod. Res. ,vol. 54, no. 12, pp. 3706–3717, 2016. [13] D. Rahmani and R. Ramezanian, “A stable reactive approach in dynamic flexible flow shop scheduling with unexpected disruptions: A case study,” Comput. Ind. Eng. , vol. 98, pp. 360–372, 2016. [14] P. Guo, H. Shi, Y. Wang, and J. Xiong, “Multi-objective scheduling of cloud-edge cooperation in distributed manufacturing via multi-agent deep reinforcement learning,” Int. J. Prod. Res. , pp. 1–25, 2024. [15] S. Yang, J. Wang, and Z. Xu, “Real-time scheduling for distributed per-mutation flowshops with dynamic job arrivals using deep reinforcement learning,” Adv. Eng. Inf. , vol. 54, p. 101776, 2022. [16] Y. Li, Q. Wang, X. Li, L. Gao, L. Fu, Y. Yu, and W. Zhou, “Real-time scheduling for flexible job shop with Agvs using multiagent reinforcement learning and efficient action decoding,” IEEE Trans. Syst., Man, Cybern., Syst. , 2025. [17] V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G. Bellemare, A. Graves, M. Riedmiller, A. K. Fidjeland, G. Ostrovski 
+
+et al. , “Human-level control through deep reinforcement learning,” 
+
+Nature , vol. 518, no. 7540, pp. 529–533, 2015. [18] L. Wang, Z. Pan, and J. Wang, “A review of reinforcement learning based intelligent optimization for manufacturing scheduling,” Complex Syst. Model. Simul. , vol. 1, no. 4, pp. 257–270, 2021. [19] N. Zhang, Y. Shen, Y. Du, L. Chen, and X. Zhang, “Counterfactual-attention multi-agent reinforcement learning for joint condition-based maintenance and production scheduling,” J. Manuf. Syst. , vol. 71, pp. 70–81, 2023. [20] L. Wang, Z. Pan, and J. Wang, “A review of Reinforcement Learning Based Intelligent Optimization for Manufacturing Scheduling,” Complex Syst. Model. Simul. , vol. 1, no. 4, pp. 257–270, 2021. [21] S. Luo, “Dynamic scheduling for flexible job shop with new job insertions by deep reinforcement learning,” Appl. Soft Comput. , vol. 91, p. 106208, 2020. [22] S. Yang, J. Wang, L. Xin, and Z. Xu, “Real-time and concurrent opti-mization of scheduling and reconfiguration for dynamic reconfigurable flow shop using deep reinforcement learning,” CIRP J. Manuf. Sci. Technol. , vol. 40, pp. 243–252, 2023. [23] H. Wang, J. Cheng, C. Liu, Y. Zhang, S. Hu, and L. Chen, “Multi-objective reinforcement learning framework for dynamic flexible job shop scheduling problem with uncertain events,” Appl. Soft Comput. ,vol. 131, p. 109717, 2022. [24] M. Wang, J. Zhang, P. Zhang, L. Cui, and G. Zhang, “Independent double Dqn-based multi-agent reinforcement learning approach for online two-stage hybrid flow shop scheduling with batch machines,” 
+
+J. Manuf. Syst. , vol. 65, pp. 694–708, 2022. [25] J. Qiu, J. Liu, Z. Li, and X. Lai, “A multi-level action coupling reinforcement learning approach for online two-stage flexible assembly flow shop scheduling,” J. Manuf. Syst. , vol. 76, pp. 351–370, 2024. [26] S. Luo, L. Zhang, and Y. Fan, “Real-time scheduling for dynamic partial-no-wait multiobjective flexible job shop by deep reinforcement learning,” 
+
+IEEE Trans. Autom. Sci. Eng. , vol. 19, no. 4, pp. 3020–3038, 2021. [27] H. Wang, B. R. Sarker, J. Li, and J. Li, “Adaptive scheduling for assembly job shop with uncertain assembly times based on dual Q-learning,” Int. J. Prod. Res. , vol. 59, no. 19, pp. 5867–5883, 2021. [28] Z. Liu, Y. Wang, X. Liang, Y. Ma, Y. Feng, G. Cheng, and Z. Liu, “A graph neural networks-based deep Q-learning approach for job shop scheduling problems in traffic management,” Inf. Sci. , vol. 607, pp. 1211–1223, 2022. [29] Y. Li, Q. Liu, C. Zhang, X. Li, and L. Gao, “Graph-based dual-agent deep reinforcement learning for dynamic human–machine hybrid reconfiguration manufacturing scheduling,” IEEE Trans. Syst., Man, Cybern., Syst. , 2025. [30] C.-L. Liu and T.-H. Huang, “Dynamic job-shop scheduling problems using graph neural network and deep reinforcement learning,” IEEE Trans. Syst., Man, Cybern., Syst. , vol. 53, no. 11, pp. 6836–6848, 2023. [31] W. Song, X. Chen, Q. Li, and Z. Cao, “Flexible job-shop scheduling via graph neural network and deep reinforcement learning,” IEEE Trans. Ind. Informat. , vol. 19, no. 2, pp. 1600–1610, 2022. [32] Y. Zhang, H. Zhu, D. Tang, T. Zhou, and Y. Gui, “Dynamic job shop scheduling based on deep reinforcement learning for multi-agent man-ufacturing systems,” Rob. Comput. Integr. Manuf. , vol. 78, p. 102412, 2022. [33] K. Lei, P. Guo, W. Zhao, Y. Wang, L. Qian, X. Meng, and L. Tang, “A multi-action deep reinforcement learning framework for flexible Job-shop scheduling problem,” Expert Syst. Appl. , vol. 205, p. 117796, 2022. [34] J. Park, Y. Su, and F. Ju, “Deep reinforcement learning with dynamic graph pruning for scalable flexible job shop scheduling,” IISE Trans. ,no. just-accepted, pp. 1–31, 2026. [35] D. Johnson, G. Chen, and Y. Lu, “Multi-agent continuous decision-making for the continuous dynamic flexible job shop scheduling prob-lem,” IEEE Trans. Autom. Sci. Eng. , 2026. [36] S. A. Basir, M. M. Mazdeh, and M. Namakshenas, “Bi-level genetic algorithms for a two-stage assembly flow-shop scheduling problem with batch delivery system,” Comput. Ind. Eng. , vol. 126, pp. 217–231, 2018. [37] A. Allahverdi, A. Aydilek, and H. Aydilek, “Minimizing the number of tardy jobs on a two-stage assembly flowshop,” J. Ind. Prod. Eng. ,vol. 33, no. 6, pp. 391–403, 2016. [38] R. Wang, G. Wang, J. Sun, F. Deng, and J. Chen, “Flexible job shop scheduling via dual attention network-based reinforcement learning,” 11 
+
+IEEE Trans. Neural Netw. Learn. Syst. , vol. 35, no. 3, pp. 3091–3102, 2023. [39] F. Zhao, S. Di, and L. Wang, “A hyperheuristic with Q-learning for the multiobjective energy-efficient distributed blocking flow shop scheduling problem,” IEEE Trans. Cybern. , vol. 53, no. 5, pp. 3337–3350, 2022. [40] R. Reijnen, I. G. Smit, H. Zhang, Y. Wu, Z. Bukhsh, and Y. Zhang, “Job shop scheduling benchmark: Environments and instances for learning and non-learning methods,” Ann. Math. Artif. Intell. , pp. 1–31, 2026. [41] A. Baykaso˘ glu and L. ¨Ozbakır, “Analyzing the effect of dispatching rules on the scheduling performance through grammar based flexible scheduling system,” Int. J. Prod. Econ. , vol. 124, no. 2, pp. 369–381, 2010.

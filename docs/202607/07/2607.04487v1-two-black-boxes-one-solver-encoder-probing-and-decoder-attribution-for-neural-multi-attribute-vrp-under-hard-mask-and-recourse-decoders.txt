@@ -1,0 +1,403 @@
+Title: Two Black Boxes, One Solver: Encoder Probing and Decoder Attribution for Neural Multi-Attribute VRP under Hard-Mask and Recourse Decoders
+
+URL Source: https://arxiv.org/pdf/2607.04487v1
+
+Published Time: Tue, 07 Jul 2026 02:23:58 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Two Black Boxes, One Solver: Encoder Probing and Decoder Attribution for Neural Multi-Attribute VRP under Hard-Mask and Recourse Decoders 
+
+## Sohaib Afifi 
+
+## Univ. Artois, UR 3926, Laboratoire de G´ enie Informatique et d’Automatique de l’Artois (LGI2A), F-62400 B´ ethune, France sohaib.afifi@univ-artois.fr 
+
+## Abstract 
+
+Neural autoregressive solvers for the Multi-Attribute Vehicle Routing Problem (MAVRP) reach competitive cost but offer no per-step jus-tification, a problem when dispatchers must val-idate, accept, or compare them. We open two complementary black boxes in one protocol. On the encoder side, linear probes, spontaneous-organization metrics, rank-based richness mea-sures, and discovered-direction analyses with in-tervention validation characterize how the latent represents constraint families at the graph, node, and edge level. On the decoder side, three at-tribution methods (gradient, integrated gradients, DeepLIFT) feed three reading angles: abduc-tive, contrastive against the best feasible alterna-tive, and counterfactual (smallest input change that switches the action or restores feasibility). Expla-nations are scored on fidelity, concentration, stabil-ity, sanity, and actionability. Across six variants combining three encoders (A TT baseline, U NIMP ,UNIMP MOE ) with two decoders (H ARD -M ASK ,RECOURSE ), we find that graph inductive bias im-proves both representational predictability and de-coder sanity, that the Mixture-of-Experts encoder represents constraints in a distributed rather than axis-aligned way, and that the R ECOURSE training regime, not merely its softer mask, produces poli-cies that represent infeasibility usefully, exposing make-feasible counterfactuals that H ARD -M ASK 
+
+policies fail to produce even when fed infeasible alternatives externally. 
+
+## 1 Introduction 
+
+The Multi-Attribute Vehicle Routing Problem (MAVRP) packs several VRP variants into a single combinatorial prob-lem: a single instance can simultaneously activate capac-ity, time-window, distance-limit, backhaul, and open-route constraints [Kool et al. , 2019; Berto et al. , 2024]. Neu-ral autoregressive solvers built on attention [Vaswani et al. , 2017; Kool et al. , 2019] or graph encoders such as UniMP [Shi et al. , 2021], optionally with conditional com-pute through a Mixture-of-Experts (MoE) layer [Shazeer et al. , 2017], now match strong heuristics on these benchmarks, including graph-based unified models built specifically for MAVRP [Jari et al. , 2025]. They remain, however, opaque: at every decoding step the policy emits an action with no exposed justification of which inputs mattered, which con-straints dominated, which alternative was close, or what min-imal change would have flipped the decision. This opacity is an operational liability rather than a purely epistemic one. Logistics dispatchers need (i) diagnosis of anomalous routes, (ii) validation against explicit business rules, (iii) acceptability of the solver’s recommendations, and (iv) comparability between candidate solver families. These four needs cut across both representation and decision: an encoder may legibly encode a constraint that the decoder ig-nores, and a decoder may attribute mass to a feature whose representation is degenerate. We therefore argue that neural CO solvers require a joint XAI account of both stages, evalu-ated on the same checkpoints with a shared grid. We make four contributions. First, we propose a two-pillar protocol that probes the encoder for predictability, spontaneous organization, richness, and discovered direc-tions, while attributing decoder decisions through three complementary reading angles. Second, we introduce a constraint-family taxonomy that aggregates raw input gradi-ents into operations-readable groups (capacity/demand, ge-ometry, time windows, route-recourse). Third, we apply the protocol to six MAVRP solver variants combining three en-coder families (A TT baseline, U NIMP , U NIMP MOE ) with two decoder variants (H ARD -M ASK and R ECOURSE ) and report under five XAI criteria. We deliberately compare a strong-mask decoder (H ARD -M ASK , feasibility-by-construction) against a weak-mask decoder (R ECOURSE , feasibility-by-learning) because the gap is itself the contribution: the re-course decoder is the only one in which “why was this al-ternative not chosen?” has a non-trivial answer, and where 
+
+make-feasible counterfactuals can exist at all. Fourth, we expose phenomena invisible to inference cost alone: dis-tributed coding in U NIMP MOE , sanity gap between A TT 
+
+and the graph encoders, and a representational gap between HARD -M ASK and R ECOURSE policies that make-feasible counterfactuals reveal even after we control for the mask. 
+
+> arXiv:2607.04487v1 [cs.LG] 5 Jul 2026
+
+## 2 Setup 
+
+Problem. An instance of MAVRP is a directed graph G =(V, E ) with one depot and n customers. Each customer car-ries linehaul/backhaul demands, a service time, and a time window; each instance carries a vehicle capacity, an optional distance limit, and a flag for open routes. Following the uni-fied parameterization of [Berto et al. , 2024] we sample in-stances such that any subset of constraint families may be active, so the same encoder–decoder pair must handle every variant. We use n = 50 customers throughout. 
+
+Solver family. The policy πθ first encodes the whole in-stance into per-node embeddings h ∈ Rn×d, then au-toregressively decodes a permutation by attending over the masked candidate set. We compare three encoders: A TT , a Transformer-style attention encoder used as the baseline ar-chitecture; U NIMP , a graph encoder with structural inductive bias [Shi et al. , 2021; Jari et al. , 2025]; U NIMP MOE , the same backbone augmented with a Mixture-of-Experts layer for conditional compute [Shazeer et al. , 2017]. 
+
+Decoder variant. We pair every encoder with two decoder variants that differ only in how feasibility is delivered. The HARD -M ASK decoder enforces every active constraint (ca-pacity, time windows, distance, backhaul, open-route) di-rectly in the action mask: only feasible candidates ever reach the softmax, so feasibility is guaranteed by construction. The RECOURSE decoder masks only already-visited customers and leaves the policy itself to learn the constraints; infeasible selections are allowed during training and pay a recourse cost in the reward, and the decoder is given per-step state features (remaining capacity, time slack, recourse cost) so it can be-come aware of constraint slack at decoding time. Both share the same attention-masked autoregressive backbone, so the comparison isolates the effect of how feasibility is delivered. The six (encoder × decoder) checkpoints are the unit of com-parison throughout the paper. 
+
+## 3 Method 
+
+We instrument both stages of the trained policy and score every output on a single five-criterion grid. The protocol is implemented as a batch runner that consumes a checkpoint and returns a structured report combining encoder probes, de-coder attributions, and evaluation metrics. We run three seeds per (encoder × decoder × method) cell over 128 instances. 
+
+3.1 Encoder Probing 
+
+We ask four questions of the frozen latent h, all answered at the graph, node, and edge level. 
+
+Predictability. Can the active constraint families be lin-early recovered from h? We train per-family linear probes [Alain and Bengio, 2017] and report ROC-AUC for binary indicators and macro-F1 for multi-class targets. Two complementary unsupervised readouts are computed on PCA/ICA components of h: an axis-unique score (best cor-relation with a single component) and a top-k subspace score (best correlation with a k-dimensional subspace). The gap between the two diagnoses distributed coding: information that lives across components rather than along a single axis. 
+
+Spontaneous organization. Without labels, k-means on h
+
+should partition instances by constraint family. We score the partition with silhouette [Rousseeuw, 1987], NMI [Vinh et al. , 2010], and ARI [Hubert and Arabie, 1985], and visualise it with t-SNE [van der Maaten and Hinton, 2008]. 
+
+Richness. The effective rank and stable rank of h [Roy and Vetterli, 2007] detect collapse to a low-dimensional subspace and serve as denominators in the rank-vs-organization syn-thesis (Figure 2). 
+
+Discovered directions. PCA and ICA decompositions of h
+
+produce candidate latent axes; we then align each axis with a known reference bank of constraint indicators and concept descriptors. To validate the resulting alignments causally, we intervene along each direction in the latent and check whether the targeted concept moves in the predicted direction ( inter-vention validation ); we also measure the across-seed stability of these directions. 
+
+3.2 Decoder Attribution: Three Reading Angles 
+
+At decoding step t the policy emits logits ut,a over the masked candidate set; let at = arg max a ut,a be the chosen action and a′ 
+
+> t
+
+the best feasible alternative. We attribute every step with three input attribution methods (gradient, integrated gradients [Sundararajan et al. , 2017], and DeepLIFT [Shriku-mar et al. , 2017]) using Captum [Kokhlikyan et al. , 2020]. 
+
+Abductive. For each method we obtain an input-attribution tensor gi,f at step t, then aggregate it to per-node si =P 
+
+> f
+
+|gi,f |, per-feature sf = 1
+
+> N
+
+P 
+
+> i
+
+|gi,f |, and per-constraint-family sfam = P  
+
+> f∈fam
+
+sf . The top-k on each level answers 
+
+“why this action?” .
+
+Contrastive. We compute the margin ∆t = ut,a t − ut,a ′
+
+> t
+
+and attribute ∂∆t/∂x i,f . Features whose contrastive attribu-tion is largest are those that depart the chosen action from its closest feasible rival. The margin |∆t| also doubles as a confidence signal: a large value indicates a clear preference, a small value a tight call. 
+
+Counterfactual. A directed search guided by the con-trastive gradient looks for the smallest input perturbation that either (i) flips the chosen action ( switch ) or (ii) restores fea-sibility for an infeasible alternative ( make-feasible ). Both modes test actionability : can a dispatcher reach a different decision through a small, plausible change to the instance? We specify the search fully rather than tune it. It runs only when a feasible alternative a′ 
+
+> t
+
+exists and the margin ∆t =
+
+ut,a t − ut,a ′ 
+
+> t
+
+is finite and positive, and ranges over a fixed dictionary of seven signed relaxations, each pushing a bind-ing constraint the way that helps: node-level time-window end ( ↑), service time ( ↓), linehaul and backhaul demand ( ↓), and instance-level vehicle capacity, distance limit and depot time-window end ( ↑). For each candidate c the first-order step δc = ∆ t/|∂∆t/∂x c| estimates the change that closes the margin; we discard it if the gradient points the wrong way, if the move is inadmissible (e.g. a value below zero), or if its relative size δc/ max( |xc|, 1) exceeds a 5× budget cap. The three smallest survivors are verified by applying the move (with a 5% overshoot) and replaying one decode step, record-ing a switch if a′ 
+
+> t
+
+becomes the arg max or a make-feasible Instance Encoder Latent Decoder action at                
+
+> {xi}ni=1 , g ATT |UNIMP |UNIMP MOE h∈Rn×dHARD -M ASK |RECOURSE logits →softmax
+> state &mask update
+
+PILLAR 1: encoder probes (§4)       
+
+> •supervised probes (AUC, F1)
+> •axis-unique vs. subspace
+> •NMI / silhouette / eff. rank
+> •PCA / ICA +intervention
+
+PILLAR 2: decoder attribution (§5)          
+
+> •abductive: top-kon ∂u t,a t
+> •contrastive: ∂(ut,a t−ut,a ′
+> t)
+> •counterfactual: switch / make-feas.
+> •scored on 5 criteria
+
+Figure 1: Solver pipeline (top row) and the two XAI pillars. The pipeline encodes the instance into a per-node latent h and autoregressively decodes a permutation; the dashed gray arrow is the action loop: at every step t the chosen at updates the decoder state and the feasibility mask before the next decision. P ILLAR 1 probes the frozen latent (§4); P ILLAR 2 attributes the per-step action under three reading angles, scored on five criteria (§5). Both pillars share the same six (encoder family × decoder variant) checkpoints, so all comparisons are made on the same trained policies. 
+
+if the infeasible a′ 
+
+> t
+
+turns feasible; we return the first success, else the smallest attempt. The search is thus deterministic with a fixed budget of three replays, so the rates in §5.7 are lower bounds a larger budget could only raise. 
+
+3.3 Five-Criterion Evaluation 
+
+Each criterion answers one operational question; we state what it measures and what a dispatcher reads from it. For each (model, method) we report: • Fidelity : do the highlighted inputs really drive the de-cision? A deletion test perturbs the top-k attributed nodes and measures the action flip rate ( flip@ k) and log-probability drop ( ∆logp@ k); a faithful explanation flips the action when its own top nodes are removed. • Concentration : focused or diffuse? focus@ k is the mass on the top-k features and clarity is one minus the normalised entropy of the attribution, so a sharp story scores high and a smeared one low. • Stability : would a differently seeded model tell the same story? We re-run the attribution on indepen-dently seeded checkpoints of the same variant and mea-sure agreement on the top node ( node@1 ), top-3 set (node@3 , Jaccard), dominant family ( family ), and best alternative ( alt. ); this is the standard reproducibility-under-retraining notion, quantified in Table 6. • Sanity : learned saliency or architectural artefact? 
+
+The ratio of flip@1 between the trained policy and a randomised-weight copy, after [Adebayo et al. , 2018]: a ratio near one means the attribution survives destroy-ing the weights and cannot be trusted. • Actionability : can a small instance change reach a dif-ferent decision? The counterfactual availability rate (any switch or make-feasible found) and the make-feasible rate. The same grid applies to all (model, method) pairs, including the A TT baseline. Because no prior joint encoder–decoder                                                 
+
+> Model NMI macro-F1 route-open F1 flow-struct F1 eff-rank silhouette ATT / H ARD -M ASK 0.48 0.23 0.48 0.94 14.4 0.36 ATT / R ECOURSE 0.50 0.22 0.50 0.94 14.2 0.39 UNIMP / H ARD -M ASK 0.57 0.36 1.00 0.93 15.7 0.19 UNIMP / R ECOURSE 0.67 0.50 1.00 0.95 15.3 0.24 UNIMP MOE / H ARD -M ASK 0.55 0.36 1.00 0.91 15.95 0.20 UNIMP MOE / R ECOURSE 0.64 0.43 0.99 0.97 15.5 0.22
+
+Table 1: Graph-level encoder summary. NMI / macro-F1 of k-means signatures vs. constraint families; F1 on two illustrative families; effective rank; best silhouette over k.
+
+XAI protocol for neural CO solvers exists to benchmark against, the grid carries its own controls: the randomised-weight policy is the negative control for every attribution cri-terion (§5.5), and the A TT /H ARD -M ASK cell (un-graph en-coder, feasibility-by-construction decoder) is the reference against which the graph-bias and recourse effects are read. 
+
+## 4 Encoder Results 
+
+4.1 Predictability and Distributed Coding 
+
+Table 1 reports the supervised picture. Both graph encoders dominate A TT on signature NMI ( 0.55 –0.67 vs. 0.48 –0.50 )and on multi-class macro-F1 ( 0.36 –0.50 vs. 0.22 –0.23 ). They reach the ceiling on simple binary indicators ( e.g. route open-ness, 1.00 vs. 0.48 –0.50 ). Pairing the graph encoders with the R ECOURSE decoder adds another 0.05 –0.14 on NMI on top of either H ARD -M ASK pairing, so the ranking is stable: UNIMP /RECOURSE ≻ UNIMP MOE /RECOURSE ≻ either HARD -M ASK variant of the graph family ≻ ATT .The unsupervised PCA/ICA readouts add a more nuanced picture. Read on a single dominant axis, U NIMP MOE under-performs U NIMP on several constraint families. As soon as we allow a top-k subspace, U NIMP MOE catches up to within 
+
+∼ 0.04 of U NIMP . The implication is that U NIMP MOE does not encode less information; it encodes it in a more dis-tributed, non-axis-aligned way. Without the second readout, a researcher would conclude that U NIMP MOE is a worse en-coder than U NIMP ; with it, the difference is one of represen-tational geometry, not capacity. 14.0 14.5 15.0 15.5 16.0 16.5  
+
+> effective rank of h
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> NMI of  k-means signatures vs.
+> constraint families
+> A/HM
+> A/R
+> Unimp/HM
+> Unimp/R
+> MoE/HM
+> MoE/R
+> encoder
+> A
+> Unimp
+> MoE
+> decoder
+> Hard-Mask
+> Recourse
+> macro-F1
+> F1=0.25
+> F1=0.40
+> F1=0.50
+
+Figure 2: Joint reading of the encoder pillar. X: effective rank of h.
+
+Y: NMI of k-means signatures with constraint families. Point size :multi-class macro-F1 of the constraint probe. Color encodes encoder family; marker encodes decoder variant. A TT sits at the bottom-left with small markers; U NIMP /R ECOURSE dominates on organization and F1; U NIMP MOE is rich and distributed. 
+
+4.2 Spontaneous Organization and Richness 
+
+Even without supervision the latent organises by constraint family. NMI of k-means signatures (Table 1) ranks the en-coders in the same order as the supervised probes, but the ab-solute values are higher than what the silhouette score alone would suggest, which is why combining both metrics is nec-essary. A TT wins on silhouette ( 0.36 –0.39 , vs. 0.19 –0.24 for the graph encoders): its clusters are tight but smaller and less informative. Effective rank and stable rank tell a complementary story. The graph encoders use a measurably wider portion of their representation space (U NIMP ∼ 15 .7, UNIMP MOE 
+
+∼ 15 .95 ) than A TT (∼ 14 .4), without collapse. Plot-ted jointly with NMI (Figure 2), the picture is unambigu-ous: A TT at the bottom-left, U NIMP leading on organization, UNIMP MOE leading on richness while remaining well organ-ised. A single-metric reading would have hidden the rank– organization trade-off. 
+
+4.3 Concepts, Nodes, and Edges 
+
+Moving from raw constraint indicators to constructed con-cepts (compactness, clustering, outliers, capacity pressure, combined tension) flattens the ranking: concept macro-F1 sits at 0.56 –0.60 across all six variants, A TT slightly ahead on a few binary concepts. The graph advantage is thus on the raw constraint skeleton, not on derived concepts. The picture also changes with granularity. At the node level the graph encoders still lead (node-role macro-F1 0.62 –0.64 vs. 0.57 –
+
+0.59 , widest on route position). At the edge level it inverts on one informative axis: same-route prediction is high across all encoders (AUC 0.90 –0.92 ), with A TT on par or slightly above; attention encodes pairwise relational structure as well as a graph encoder does, even when its global summary is less organised. The graph advantage is therefore not uniform: it concentrates on global structure and per-node role, not on pairwise relational bookkeeping. 
+
+Method mean gap best on OR-Tools 1.94% 0MTPOMO 2.45% 0MVMoE 2.29% 0CaDA 1.71% 6ATT / H ARD -M ASK 1.82% 0UNIMP / H ARD -M ASK 1.54% 0UNIMP MOE / H ARD -M ASK 1.39 % 10 
+
+ATT / R ECOURSE 2.87% 0UNIMP / R ECOURSE 2.91% 0UNIMP MOE / R ECOURSE 2.78% 0Table 2: Inference cost across 16 MAVRP variants at n = 50 (gap-to-BKS averaged, “best on” counts the variants where the method wins). HARD -M ASK checkpoints reach published-baseline level; UNIMP MOE /H ARD -M ASK tops the grid. R ECOURSE checkpoints pay an explicit ∼ 1% gap for their interpretability properties. 
+
+4.4 Discovered Directions and Intervention 
+
+PCA and ICA decompositions of h surface candidate latent axes. Aligning each axis against the known reference bank (Figure 3), several principal components correlate strongly with one or two constraint families: route openness, geom-etry, and capacity pressure are recoverable from the leading axes, while time-window-related families remain spread over multiple components. This is qualitative evidence that the encoder’s leading directions are interpretable without super-vision, which we then test causally. Intervention validation (Figure 4) pushes each aligned axis in the latent and checks whether the targeted concept moves in the predicted direction. Concept-level success is 1.00 on all six variants, confirming that the alignments carry causal weight. Direction-level success is more modest at 0.48 –
+
+0.59 , with PCA correlations small or negative for U NIMP 
+
+and U NIMP MOE , in line with the distributed-coding result of §4.1: the linear axis used for the intervention captures only part of the underlying signal in the GNN latents. Stability across seeds confirms that the leading axes themselves are reliable artefacts of the trained encoder, not of the random PCA/ICA initialisation. 
+
+## 5 Decoder Results 
+
+5.1 Inference Cost: the Solvers Are Competitive 
+
+Before reading the XAI signal, it matters that the poli-cies under study are actually competitive. Table 2 reports the mean gap-to-BKS across 16 MAVRP variants at n =50 , alongside the published learning baselines [Berto et al. ,2024]. The H ARD -M ASK checkpoints land in the 1.39 –
+
+1.82% band, matching or beating every published baseline (U NIMP MOE /H ARD -M ASK wins outright on 10 of 16 vari-ants and CaDA on 6). The R ECOURSE checkpoints sit at 
+
+2.73 –2.91% , roughly 1 point worse than their H ARD -M ASK 
+
+counterparts and on the same order as MTPOMO/MVMoE. The cost is therefore an explicit trade-off: R ECOURSE buys the interpretability properties documented below at a measur-able but bounded gap penalty. This rules out the alternative reading in which R ECOURSE “looks more interpretable” sim-ply because its policy is degenerate. Figure 3: Alignment of the leading PCA components with the known constraint-and-concept bank, one panel per encoder family (each averages that family’s two decoder variants). Rows are components PC1–PC8; columns are constraint indicators (left group) and derived concepts (right group); a cell is the signed correlation between the component and the reference, red positive, blue negative. Read the leading rows: A TT ’s PC1 locks onto route openness ( −1.00 ) while the graph encoders’ PC1 locks onto time windows ( ∼ 0.98 ); the remaining constraints spread across several components, the distributed pattern quantified in §4.1. PCA dir.\,success ICA dir.\,success PCA aligned r ICA aligned r
+
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> score
+> Intervention validation by metric (concept success = 1.0 for all models)
+> A/HM
+> A/R
+> Unimp/HM
+> Unimp/R
+> MoE/HM
+> MoE/R
+
+Figure 4: Intervention validation grouped by metric: directional suc-cess (PCA / ICA) and aligned-perturbation correlation (PCA / ICA). Bars within each metric compare the six (encoder × decoder) vari-ants. Hatched bars are R ECOURSE decoders; bar color is the encoder family. Concept-level success is 1.0 for all variants and is omitted. 
+
+5.2 Constraint Families that Drive Decisions 
+
+Figure 5 reports the average constraint-family share of attri-bution mass. Two patterns emerge. First, the dominant fam-ily is method-sensitive : gradient favours capacity/demand for ATT (∼ 60% ) and geometry for U NIMP /U NIMP MOE ; inte-grated gradients flips this to time-windows for A TT (> 40% )and geometry for the graph encoders ( > 50% ); DeepLIFT pushes the largest share into the dynamic decoder-state “other” bucket, especially under R ECOURSE . The qualita-
+
+Model alt. rate ∆logit ∆logp ATT / H ARD -M ASK 0.74 2.01 9.92 ATT / R ECOURSE 0.81 1.82 8.54 UNIMP / H ARD -M ASK 0.75 2.21 9.74 UNIMP / R ECOURSE 0.86 2.24 9.82 UNIMP MOE / H ARD -M ASK 0.76 1.99 9.21 UNIMP MOE / R ECOURSE 0.83 2.29 9.55 
+
+Table 3: Contrastive readout. “alt. rate” = fraction of steps with at least one feasible alternative; ∆ is the chosen-vs-alternative margin. 
+
+tive reading thus depends on the method; this is evidence for a multi-criterion grid, not a flaw of any single attribution. Second, the R ECOURSE decoder inflates the “other” bucket (route-recourse and dynamic decoder-state features) by ∼ 7–
+
+11 points under gradient/IG and ∼ 20 under DeepLIFT: it shifts the decision horizon off raw inputs and onto its running state. The three methods therefore agree on the regime effect 
+
+even while disagreeing on the family ranking .
+
+5.3 Contrastive: Recourse Exposes More Alternatives 
+
+Table 3 shows that the alternative-availability rate climbs from 0.74 –0.76 under the H ARD -M ASK decoder to 0.81 –A/HM 
+
+> A/R
+> Unimp/HM
+> Unimp/R
+> MoE/HM
+> MoE/R
+> 0.0
+> 0.5
+> 1.0
+> attribution share
+
+Gradient 
+
+> A/HM
+> A/R
+> Unimp/HM
+> Unimp/R
+> MoE/HM
+> MoE/R
+
+Integrated Gradients 
+
+> A/HM
+> A/R
+> Unimp/HM
+> Unimp/R
+> MoE/HM
+> MoE/R
+
+DeepLIFT 
+
+cap/dem geometry TW/svc other Figure 5: Stacked attribution share over the four constraint families, by (encoder × decoder), under gradient, integrated gradients, and DeepLIFT (left to right). The three methods agree on the R ECOURSE decoder shifting mass into “other” but disagree on the dominant family, which is what motivates a multi-criterion grid. Model flip@1 flip@3 flip@5 ∆logp@1 ∆logp@3 ATT / H ARD -M ASK 0.471 0.509 0.521 6.37 4.56 ATT / R ECOURSE 0.474 0.499 0.518 6.00 3.62 UNIMP / H ARD -M ASK 0.468 0.474 0.474 7.28 5.29 UNIMP / R ECOURSE 0.518 0.537 0.560 8.01 5.40             
+
+> UNIMP MOE / H ARD -M ASK 0.463 0.493 0.510 7.15 5.27 UNIMP MOE / R ECOURSE 0.487 0.497 0.527 7.41 4.93
+
+Table 4: Deletion faithfulness (gradient method, trained weights). UNIMP /R ECOURSE leads on every metric; the worst-best gap on flip@5 is ∼ 9 points. 
+
+0.86 under the R ECOURSE decoder, across all three en-coders. The R ECOURSE decoder systematically widens the local choice set without inflating the margin: gaps stay tight at ∼ 2 logits, meaning many decisions are close calls, the set-ting in which contrastive explanations are most informative. Note that the contrastive readout is method-independent: it only requires knowing the chosen action and the next-best feasible candidate. 
+
+5.4 Faithfulness 
+
+Table 4 reports the deletion-faithfulness numbers for the gra-dient method. Perturbing the single most-attributed node already flips the decision in ∼ 47 –52% of steps, and the log-prob drop is consistently larger for the graph en-coders ( ∆logp@1 7.15 –8.01 ) than for A TT (6.00 –6.37 ). UNIMP /R ECOURSE leads on every metric. The choice of attribution method barely moves faithfulness: averaged over all six variants, gradient, integrated gradients, and DeepLIFT stay within 0.02 of each other on flip@1 and within 0.20 
+
+on ∆logp@3. They are equally faithful even though they disagree on which family they highlight (Figure 5): equal-fidelity attributions can tell different qualitative stories, which is exactly why the scorecard separates fidelity from concen-tration. 
+
+5.5 Sanity 
+
+Table 5 contrasts trained and randomized weights. All en-coders pass: trained policies flip more often and the log-prob drops are an order of magnitude larger. Strikingly, the trained/random ratio on flip@1 is ∼ 1.7× for A TT but ∼ 3.5–
+
+flip@1 ratio ∆logp@1 Encoder trained random trained/rand trained random ATT 0.47 0.27 ∼ 1.7× 6.18 0.01 UNIMP 0.49 0.12 ∼ 4.2× 7.65 -0.32 UNIMP MOE 0.47 0.14 ∼ 3.5× 7.28 -0.40 
+
+Table 5: Sanity check: trained vs. randomized-weight policies (gra-dient method). Graph encoders pass much more decisively than ATT .Model node@1 node@3 family alt. ATT / H ARD -M ASK 0.504 0.514 0.985 0.509 ATT / R ECOURSE 0.512 0.519 0.948 0.508 UNIMP / H ARD -M ASK 0.517 0.512 0.808 0.506 UNIMP / R ECOURSE 0.520 0.518 0.627 0.515 UNIMP MOE / H ARD -M ASK 0.509 0.521 0.894 0.509 UNIMP MOE / R ECOURSE 0.504 0.516 0.631 0.505 Table 6: Cross-seed stability (gradient method): mean agreement of explanations across independently seeded checkpoints of the same variant, over all  42
+
+ = 6 seed pairs. node@1 / node@3 : agree-ment on the top attributed node / top-3 node set (Jaccard); family :agreement on the dominant constraint family; alt. : agreement on the identified best alternative. Higher is more reproducible. 
+
+4.2× for the graph encoders. Part of A TT ’s saliency is there-fore architectural rather than learned, a finding only the sanity criterion exposes, and one which would silently bias a head-to-head comparison restricted to flip@ k alone. 
+
+5.6 Stability 
+
+Stability is the pillar most easily asserted and least often mea-sured, so we quantify it directly. Table 6 re-runs the gradient attribution on four independently seeded checkpoints of each variant and reports how often the explanations agree across the six seed pairs. Node-level saliency reproduces only mod-erately and uniformly: the top node agrees about half the time ( node@1 0.50 –0.52 ), the top-3 set overlaps similarly (node@3 0.51 –0.52 ), and the named best alternative shows the same near-tie ( alt. ∼ 0.51 ). This floor is expected: many nodes carry comparable mass and the margins are tight ( ∼ 2logits, §5.3), so the exact ranking is seed-sensitive even when the story is not. The dominant family is far more reproducible, and how reproducible is itself informative. ATT and the HARD -M ASK policies pin the same family almost every time ( 0.95 –0.99 for A TT ; 0.81 –0.89 for U NIMP /U NIMP MOE 
+
+under H ARD -M ASK ), whereas the graph encoders under RECOURSE fall to ∼ 0.63 . This mirrors the constraint-share result (§5.2): when a policy spreads its decision onto dis-tributed decoder-state features, which family reads as dom-inant is less determined and flips more across seeds. The property that makes R ECOURSE explanations richer thus makes their one-line family summary less stable, a trade-off a fidelity-only reading would hide. The pattern is method-robust: IG and DeepLIFT give the same ∼ 0.50 node floor and family agreement in the 0.63 –0.85 band. 
+
+5.7 Counterfactuals and Make-Feasible 
+
+The search finds at least one switch or make-feasible can-didate at 32 –49% of steps, with U NIMP /R ECOURSE on top ( 0.49 ). The make-feasible mode has rate 0.00 for all three H ARD -M ASK decoders and 0.03 –0.06 for all three RECOURSE decoders, and R ECOURSE ’s perturbations are smaller ( 0.82 –1.23 vs. 1.03 –1.46 ): smaller and more fre-quent. By itself the asymmetry is mechanical (H ARD -M ASK 
+
+masks infeasible candidates out by construction, so the search has nothing to operate on), which raises the real question: could the H ARD -M ASK policy produce make-feasible coun-terfactuals if we lifted that restriction? We test this next. 
+
+Representational ablation. To isolate the policy effect from the mask effect, we re-ran the search on the three HARD -M ASK checkpoints with the alt-selector externally widened to the visited-only candidate pool, the same pool RECOURSE sees at training. The widened alt-availability rate matches the R ECOURSE regime ( 0.88 , 0.72 , 0.86 for A TT ,UNIMP , U NIMP MOE ), yet the make-feasible rate stays at 
+
+0.00 across all three encoders. The H ARD -M ASK policy was never trained to assign meaningful logit mass to infeasible candidates, so the next-best alternative the alt-selector returns is almost always already feasible and the perturbation has nothing to re-feasibilize. The H ARD -M ASK vs. R ECOURSE 
+
+make-feasible gap is therefore a property of the trained pol-icy, not of the mask: training under recourse cost is what pro-duces a policy whose counterfactual neighbourhood contains actionable make-feasible moves. 
+
+5.8 Scorecard 
+
+Figure 6 folds the eight headline metrics into one heatmap. It covers four of the five criteria (fidelity, concentration, san-ity, actionability) as per-checkpoint columns; the fifth, sta-bility, is a cross-seed quantity reported separately in Ta-ble 6. UNIMP /R ECOURSE wins on five of the eight met-rics, including faithfulness and counterfactual availability, and A TT /H ARD -M ASK wins on none; the R ECOURSE rows are uniformly greener than the H ARD -M ASK rows, except on 
+
+∆logp@3. Read with the stability table the picture is nuanced rather than a clean sweep: R ECOURSE buys richer, more ac-tionable explanations at the cost of a less stable single-family flip@1                                           
+
+> flip@5
+> logp@3
+> alt rate
+> logit gap
+> cf avail
+> make-feas
+> sanity ratio
+> A/HM
+> A/R
+> Unimp/HM
+> Unimp/R
+> MoE/HM
+> MoE/R
+> 0.47 0.52 4.56 0.74 2.01 0.35 0.00 1.70
+> 0.47 0.52 3.62 0.81 1.82 0.39 0.03 1.70
+> 0.47 0.47 5.29 0.75 2.21 0.39 0.00 4.20
+> 0.52 0.56 5.40 0.86 2.24 0.49 0.06 4.20
+> 0.46 0.51 5.27 0.76 1.99 0.32 0.00 3.50
+> 0.49 0.53 4.93 0.83 2.29 0.44 0.05 3.50
+> Decoder XAI scorecard (color = column-normalized rank)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 6: Decoder XAI scorecard across eight metrics cover-ing fidelity, contrast, actionability, and sanity. Color is column-normalized rank; cell text is the raw value. 
+
+summary. The scorecard makes both the encoder ranking and the decoder effect visible at a glance, which is what an oper-ations team needs from a comparability tool. 
+
+## 6 Related Work 
+
+Linear probing of frozen representations [Alain and Ben-gio, 2017] is standard for linear decodability; we extend it to structural MAVRP constraints and add axis-unique vs. subspace readouts to expose distributed coding. Gradi-ent, integrated gradients [Sundararajan et al. , 2017], and DeepLIFT [Shrikumar et al. , 2017] via Captum [Kokhlikyan 
+
+et al. , 2020] are mature in vision/NLP but rarely combined on neural CO solvers; we adopt the sanity protocol of [Ade-bayo et al. , 2018] as the criterion that flags architecturally-induced saliency. GNNExplainer [Ying et al. , 2019] and attention-flow methods [Abnar and Zuidema, 2020] target a single forward pass on a static graph, whereas we attribute au-toregressive actions whose state evolves with each decision, forcing the per-step contrastive reading. Classical counter-factuals seek the smallest input change that flips a class; the 
+
+make-feasible mode (smallest change that turns an infeasible alternative feasible) is, to our knowledge, specific to recourse-style policies with no direct analogue in classification XAI. 
+
+## 7 Discussion and Conclusion 
+
+What XAI revealed. Architecture matters for both repre-sentation and decision. Graph inductive bias lifts probe qual-ity, sharpens spontaneous organization, and passes the sanity check more decisively; and the MoE encoder is not less infor-mative than U NIMP but represents constraints in a distributed subspace, visible only beyond axis-aligned probes. None of this could be read off the inference cost alone. 
+
+Decoder matters. The R ECOURSE decoder widens the contrastive landscape and shifts attribution toward dynamic decoder-state features; crucially, its training regime is what produces a policy whose neighbourhood contains make-feasible counterfactuals, which the H ARD -M ASK policy fails to produce even when fed infeasible alternatives externally. The decoder is therefore not just a performance choice but an 
+
+interpretability choice: it changes what kind of explanation the solver can produce at all. 
+
+Scale robustness. On all six n = 100 checkpoints the gradient-method picture holds: graph encoders lead A TT on faithfulness ( ∆logp@1 up to 10 .7 vs. 8.9–9.5), R ECOURSE 
+
+widens the contrastive landscape (alt rate 0.89 –0.91 vs. 0.84 –
+
+0.85 ), and the make-feasible asymmetry is textbook ( 0.03 for every R ECOURSE , 0.00 for every H ARD -M ASK ). The proto-col is not overfit to n = 50 .
+
+Limits and outlook. Three limits scope the claims: the en-coder pillar relies on a supervised concept dictionary, so it tests only for structure we thought to name; the counterfac-tual search is a first-order, fixed-budget proposal (§3.2), so its rates are lower bounds a heavier optimiser would raise; and the n = 100 check uses one seed per cell, so only the n = 50 grid is variance-controlled. Four directions follow: (i) dispatcher-in-the-loop evaluation in the spirit of HCXAI, measuring whether operators diagnose, accept, or override routes faster with the explanations in hand; (ii) a stability-regularised or multi-family attribution that resolves the stability–richness trade-off we surface (§5.4); (iii) port-ing the make-feasible counterfactual to other recourse-trained policies (scheduling, bin packing, soft-constrained dispatch-ing) to test how VRP-specific the effect is; and (iv) growing this grid and its controls into the standard XAI benchmark neural CO still lacks. The protocol is reproducible on any MAVRP checkpoint trained with the rl4co interface [Berto et al. , 2024]. 
+
+## References 
+
+[Abnar and Zuidema, 2020] Samira Abnar and Willem Zuidema. Quantifying attention flow in transformers. In 
+
+ACL , 2020. [Adebayo et al. , 2018] Julius Adebayo, Justin Gilmer, Michael Muelly, Ian Goodfellow, Moritz Hardt, and Been Kim. Sanity checks for saliency maps. In NeurIPS , 2018. [Alain and Bengio, 2017] Guillaume Alain and Yoshua Ben-gio. Understanding intermediate layers using linear classi-fier probes. In ICLR Workshop , 2017. arXiv:1610.01644. [Berto et al. , 2024] Federico Berto, Chuanbo Hua, Juny-oung Park, Laurin Luttmann, Yining Ma, Fanchen Bu, Jiarui Wang, Haoran Ye, Minsu Kim, Sanghyeok Choi, Andr´ e Hottung, Jianan Zhou, Jieyi Bi, Yu Hu, Fei Liu, Hyeonah Kim, Jiwoo Son, Haeyeon Kim, Wouter Kool, Zhiguang Cao, Jie Zhang, Kijung Shin, Cathy Wu, Sung-soo Ahn, Guojie Song, Changhyun Kwon, Lin Xie, and Jinkyoo Park. RL4CO: An extensive reinforcement learn-ing for combinatorial optimization benchmark. In NeurIPS Datasets and Benchmarks , 2024. [Hubert and Arabie, 1985] Lawrence Hubert and Phipps Arabie. Comparing partitions. Journal of Classification ,2:193–218, 1985. [Jari et al. , 2025] Amine Jari, Sohaib Afifi, Rym Nesrine Guibadj, and Eric Lef` evre. G-UniRouting: A graph-based unified neural model for solving multi-attribute vehicle routing problems. In 2025 IEEE 37th International Con-ference on Tools with Artificial Intelligence (ICTAI) , pages 491–498. IEEE, 2025. [Kokhlikyan et al. , 2020] Narine Kokhlikyan, Vivek Miglani, Miguel Martin, Edward Wang, Bilal Alsal-lakh, Jonathan Reynolds, Alexander Melnikov, Natalia Kliushkina, Carlos Araya, Siqi Yan, and Orion Reblitz-Richardson. Captum: A unified and generic model interpretability library for PyTorch. arXiv preprint arXiv:2009.07896 , 2020. [Kool et al. , 2019] Wouter Kool, Herke van Hoof, and Max Welling. Attention, learn to solve routing problems! In 
+
+ICLR , 2019. [Rousseeuw, 1987] Peter J. Rousseeuw. Silhouettes: Agraphical aid to the interpretation and validation of cluster analysis. Journal of Computational and Applied Mathe-matics , 20:53–65, 1987. [Roy and Vetterli, 2007] Olivier Roy and Martin Vetterli. The effective rank: A measure of effective dimensional-ity. In EUSIPCO , 2007. [Shazeer et al. , 2017] Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hin-ton, and Jeff Dean. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. In ICLR ,2017. [Shi et al. , 2021] Yunsheng Shi, Zhengjie Huang, Shikun Feng, Hui Zhong, Wenjing Wang, and Yu Sun. Masked label prediction: Unified message passing model for semi-supervised classification. In IJCAI , 2021. [Shrikumar et al. , 2017] Avanti Shrikumar, Peyton Green-side, and Anshul Kundaje. Learning important features through propagating activation differences. In ICML ,2017. [Sundararajan et al. , 2017] Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep net-works. In ICML , 2017. [van der Maaten and Hinton, 2008] Laurens van der Maaten and Geoffrey Hinton. Visualizing data using t-SNE. Jour-nal of Machine Learning Research , 9:2579–2605, 2008. [Vaswani et al. , 2017] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention is all you need. In NeurIPS , 2017. [Vinh et al. , 2010] Nguyen Xuan Vinh, Julien Epps, and James Bailey. Information theoretic measures for cluster-ings comparison: Variants, properties, normalization and correction for chance. Journal of Machine Learning Re-search , 11:2837–2854, 2010. [Ying et al. , 2019] Rex Ying, Dylan Bourgeois, Jiaxuan You, Marinka Zitnik, and Jure Leskovec. GNNExplainer: Generating explanations for graph neural networks. In 
+
+NeurIPS , 2019.
