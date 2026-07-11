@@ -1,0 +1,1006 @@
+Title: Robust Feasible Route Construction through Collaborative Partition Optimization
+
+URL Source: https://arxiv.org/pdf/2607.03694v1
+
+Published Time: Tue, 07 Jul 2026 01:25:55 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+https://pubsonline.informs.org/journal/opre 
+
+Submitted to Operations Research 
+
+OPERATIONS RESEARCH 
+
+> Vol. 00, No. 0, Xxxxx 0000, pp. 000–000 ISSN 0030-364X, EISSN 1526-5463
+
+# Robust Feasible Route Construction through Collaborative Partition Optimization 
+
+Oguzhan Karaahmetoglu 
+
+Department of Electrical and Computer Engineering, Carnegie Mellon University, okaraahm@cmu.edu 
+
+Hyong Kim 
+
+Department of Electrical and Computer Engineering, Carnegie Mellon University, kim@ece.cmu.edu 
+
+Authors are encouraged to submit new papers to INFORMS journals by means of a style file template, which includes the journal title. However, use of a tem-plate does not certify that the paper has been accepted for publication in the named journal. INFORMS journal tem-plates are for the exclusive purpose of submitting to an INFORMS journal and are not intended to be a true representa-tion of the article’s final published form. Use of this template to distribute papers in print or online or to submit papers to another non-INFORM publication is prohibited. 
+
+Abstract. Large-scale Capacitated Vehicle Routing Problems (CVRPs) are com-monly solved by partitioning customers into smaller routing problems that can be optimized independently. While this substantially reduces computational complex-ity, independently constructed routing solutions may leave some customer demand unserved even when sufficient resources exist elsewhere in the fleet. We present Collab-orative Routing Constructors (CoRC), a routing framework that enables independently solved subproblems to exchange customers and vehicles during optimization rather than relying solely on a fixed partition or a subsequent global re-optimization stage. Computational experiments on AGS benchmark instances and synthetic instances containing up to 200,000 customers compare CoRC against independent routing, post-routing global re-optimization, and state-of-the-art, end-to-end routing frameworks. Across all evaluated partitioning strategies, CoRC consistently constructs feasible routing solutions where competing partition-based methods do not. Furthermore, it remains effective on problem instances for which the evaluated end-to-end routing frameworks did not produce solutions under the same computational budget. These results demonstrate that collaboration between routing subproblems provides a robust and scalable approach for feasible large-scale route construction. 
+
+Key words: Vehicle routing, Capacitated vehicle routing problem, Large-scale optimization, Optimization 
+
+1. Introduction 
+
+We consider the Capacitated Vehicle Routing Problem (CVRP) with both homogeneous (Dantzig and Ramser 1959) and heterogeneous vehicle fleets (Golden et al. 1984, Toth and Vigo 2014). Given a set of customers with known demands and a fleet of capacitated vehicles, the objective is to build sequence of customer visits that serve every customer while minimizing the total routing cost without violating vehicle-capacity constraints. The CVRP is one of the fundamental optimization 
+
+1   
+
+> arXiv:2607.03694v1 [cs.AI] 4 Jul 2026 Karaahmetoglu and Kim: Collaborative Partition Optimization
+> 2Article submitted to Operations Research
+
+problems in transportation and logistics, with applications including freight distribution (Crainic and Laporte 1997), parcel and last-mile delivery (Boysen et al. 2020), humanitarian logistics (Campbell et al. 2008), and urban service operations such as waste collection and street maintenance (Anily and Federgruen 1993, Yam´ ın et al. 2024). The CVRP is NP-hard (Lenstra and Rinnooy Kan 1981). Consequently, the literature has devel-oped a broad range of exact algorithms, heuristics, metaheuristics, and decomposition techniques for obtaining high-quality routing solutions (Clarke and Wright 1964, Gillett and Miller 1974, Pisinger and Ropke 2018). Among these, decomposition-based approaches have become an important com-ponent of modern vehicle-routing heuristics, particularly for large routing instances (Santini et al. 2023). One prominent decomposition paradigm is the cluster-first route-second (CFRS) framework (Gillett and Miller 1974, Jingjing et al. 2022). In this framework, the original routing instance is partitioned into multiple routing subproblems, where each subproblem consists of a subset of customers together with an assigned subset of vehicles. Each subproblem therefore defines a smaller CVRP that can subsequently be routed independently. Thus, a routing algorithm is applied to each subproblem to construct local vehicle routes (Kerscher and Minner 2024, Pisinger and Ropke 2018). Finally, the routes obtained from all subproblems are then merged to produce a solution for the original large-scale instance. This separation between partitioning and routing naturally raises the question of how routing should be performed after the decomposition has been obtained. To this end, we discuss the proposed methods for this paradigm in the next subsection. 
+
+1.1. Prior Art 
+
+Early CFRS methods focused primarily on geometric partitioning. Representative examples include the sweep algorithm (Gillett and Miller 1974) and centroid-based clustering approaches (Abdellaoui et al. 2024), which partition customers according to their spatial locations before building routes independently within each partition. Numerous subsequent methods have continued to build upon geometric partitioning principles while proposing alternative clustering procedures (Cakir et al. 2015, Gaon et al. 2025). Subsequent work incorporated additional operational information into the partitioning stage. Rather than relying exclusively on customer locations, these methods also consider quantities such as customer demand, vehicle capacities, or routing-related workload measures when constructing Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research 3
+
+partitions (Alesiani et al. 2022, Jingjing et al. 2022, Linfati et al. 2022). More recently, learning-based approaches have used optimization feedback to guide decomposition decisions through reinforcement learning, neural combinatorial optimization, and large language models (Chin and Schiffer 2026, Da Ros et al. 2026, Li et al. 2022, Thind et al. 2025, Xiu et al. 2026). These modern approaches extend the former by exploiting the patterns collected in the historical data by estimating a policy via empirical risk minimization (Vapnik 1991). After the decomposition has been constructed, the most common routing strategy is to solve each routing subproblem independently before combining the resulting routes into a complete solution (Battarra et al. 2014, Gillett and Miller 1974). Under this strategy, each cluster is processed via a routing solver using only the customers and vehicles assigned to its own subproblem. Another line of studies perform an additional optimization stage after the independently produced routes have been merged (Kerscher and Minner 2024). These approaches apply global improvement procedures, such as adaptive large neighborhood search (Ropke and Pisinger 2006) or decompose-route-improve strategies, to refine the combined routing solution. By optimizing the merged routing plan together with the combined customer and vehicle assignments, these methods provide an additional opportunity to improve the solution obtained from independent route construction. This aims to reduce routing cost or incorporate customers that remained unserved after the independent routing stage. Existing routing paradigms either preserve the initial decomposition throughout route construc-tion or introduce coordination only through a subsequent global re-optimization stage. However, route construction itself generates optimization information that is unavailable during the initial decomposition, including unserved demand, unused vehicles, and remaining vehicle capacity. These quantities characterize the current routing state of each subproblem and may indicate opportunities to revise customer and vehicle assignments before the routing process is complete. Motivated by this observation, we investigate an alternative organization of the routing stage. Rather than restricting coordination to the initial decomposition or postponing it until a subsequent global optimization stage, we introduce an intermediate collaboration stage during route construc-tion. In this scheme, routing subproblems exchange summaries of their local routing outcomes, enabling customer transfers, vehicle transfers, and partition merges before the final solution is assembled. Because the collaboration mechanism operates on an existing initial decomposition, it is complementary to geometric, operational, and learning-based partitioning methods. Karaahmetoglu and Kim: Collaborative Partition Optimization 
+
+4 Article submitted to Operations Research 
+
+2. Problem Definition 
+
+Our method builds upon the classical CVRP and its decomposition under a cluster-first route-second framework. Accordingly, we first formulate the underlying routing problem, then define the corresponding decomposition, and finally introduce a dynamic extension that allows routing subproblems to interact during routing. 
+
+(a) Capacitated Vehicle Routing Problem formulation. 
+
+(b) Static Cluster-First Route-Second (CFRS) formulation. 
+
+(c) Evolving CFRS formulation with incumbent solutions.      
+
+> Figure 1 Mathematical progression of the presented formulation. (a) CVRP formulation defining routes and routing solutions. (b) Conventional CFRS formulation, where a fixed decomposition Pinduces independent routing subproblems whose incumbent solutions Sare combined into a global solution. (c) Evolving CFRS formulation, where the decomposition and incumbent solutions evolve over optimization steps through redistribution operations while preserving unaffected incumbent routes.
+
+2.1. Capacitated Vehicle Routing with Unsplittable Demands 
+
+In this section, we introduce the formulation and the notation used throughout the paper along with the CVRP objective and constraints. A simple case is illustrated in Figure 1a. Let 𝐶 denote the set of customers, 𝑀 the set of vehicles, and 𝐿 = 𝐶 ∪ { 0} the set of all locations including the depot. Each customer 𝑐 ∈ 𝐶 has demand 𝑑 𝑐 , each vehicle 𝑚 ∈ 𝑀 has capacity 𝑄 𝑚 , and the travel cost between locations 𝑖, 𝑗 ∈ 𝐿 is given by 𝑡 𝑖 𝑗 .
+
+DEFINITION 1 (R OUTE ). A route for vehicle 𝑚 ∈ 𝑀 is an ordered sequence of locations 𝑅 𝑚 =
+
+(0, 𝑣 (1) 
+
+> 𝑚
+
+, . . . , 𝑣 (𝑙 𝑚 ) 
+
+> 𝑚
+
+, 0), where 𝑙 𝑚 is the route length of vehicle 𝑚 and 𝑣 𝑖 ∈ 𝐶 are distinct customers visited by vehicle 𝑚 , the route begins and ends at the depot, and the total demand served along the route does not exceed the vehicle capacity, Í𝑐 ∈𝑅 𝑚 𝑑 𝑐 ≤ 𝑄 𝑚 .Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research 5
+
+DEFINITION 2 (R OUTING SOLUTION ). A routing solution is a collection of routes 𝑆 = {𝑅 𝑚 }𝑚 ∈𝑀 ,containing at most one route for each vehicle in the fleet. Throughout this paper, we distinguish several types of routing solutions. 
+
+DEFINITION 3 (S OLUTION TERMINOLOGY ). Let 𝑆 denote a routing solution. 
+
+• A feasible solution satisfies all routing constraints of the optimization model but may leave some customer demand unserved. 
+
+• A full solution is a feasible solution in which every customer is served. To accommodate routing instances in which the available vehicle resources are insufficient to serve all customer demand, or intermediate optimization stages in which a complete solution has not yet been constructed, we permit customers to remain temporarily unserved. Let 𝑥 𝑖 𝑗𝑚 be a binary variable indicating whether vehicle 𝑚 traverses arc (𝑖, 𝑗 ), let 𝑧 𝑐𝑚 be a binary variable indicating whether customer 𝑐 is assigned to vehicle 𝑚 , and let 𝑦 𝑐 indicate whether customer 𝑐 remains unserved. We consider the following objective: min ∑︁ 
+
+> 𝑚 ∈𝑀
+
+∑︁ 𝑖 ∈𝐿 ∑︁ 𝑗 ∈𝐿 
+
+𝑡 𝑖 𝑗 𝑥 𝑖 𝑗𝑚 + 𝜌 ∑︁ 
+
+> 𝑐 ∈𝐶
+
+𝑑 𝑐 𝑦 𝑐 , (1) where 𝜌 ∈ R+ is a penalty coefficient associated with unserved demand. The objective minimizes total travel cost while penalizing customer demand that is not served. The routing solution is subject to standard assignment, flow-conservation, and vehicle-capacity constraints (Laporte 2009). Each customer must either be visited exactly once or remain unserved, ∑︁ 
+
+> 𝑚 ∈𝑀
+
+∑︁ 𝑗 ∈𝐿 
+
+𝑥 𝑐 𝑗𝑚 + 𝑦 𝑐 = 1, ∀𝑐 ∈ 𝐶. (2) Flow conservation requires that every vehicle entering a customer location must also depart from that location, ∑︁  
+
+> 𝑗 ∈𝐿
+
+𝑥 𝑖 𝑗𝑚 =∑︁  
+
+> 𝑗 ∈𝐿
+
+𝑥 𝑗𝑖𝑚 , ∀𝑖 ∈ 𝐶, 𝑚 ∈ 𝑀. (3) Vehicle capacities are enforced through ∑︁ 
+
+> 𝑐 ∈𝐶
+
+𝑑 𝑐 𝑧 𝑐𝑚 ≤ 𝑄 𝑚 , ∀𝑚 ∈ 𝑀. (4) Additional routing constraints, including depot connectivity, subtour elimination, and binary-domain restrictions, follow the standard CVRP formulation and are omitted for brevity. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> 6Article submitted to Operations Research
+
+2.2. Cluster-First Route-Second Formulation 
+
+We next formalize the cluster-first route-second (CFRS) framework used throughout this paper. We begin with the conventional static formulation, in which the decomposition remains fixed during route construction. We then extend this formulation by allowing customer and vehicle assignments to evolve over successive optimization rounds, providing the mathematical basis for the collaborative routing method developed in the following sections. 
+
+2.2.1. Static Formulation A cluster-first route-second (CFRS) decomposition partitions a CVRP instance into a collection of smaller routing subproblems as shown in Figure 1b. Let 
+
+P = {( 𝐶 1, 𝑀 1), (𝐶 2, 𝑀 2), . . . , (𝐶 𝐾 , 𝑀 𝐾 )} (5) denote a decomposition of the customer set 𝐶 and vehicle fleet 𝑀 , where each routing subproblem consists of a customer subset 𝐶 𝑘 ⊆ 𝐶 and an associated vehicle subset 𝑀 𝑘 ⊆ 𝑀 . The customer and vehicle assignments form disjoint partitions, 
+
+𝐶 𝑖 ∩ 𝐶 𝑗 = ∅, ∀𝑖 ≠ 𝑗, (6) 
+
+> 𝐾
+
+Ø
+
+> 𝑘 =1
+
+𝐶 𝑘 = 𝐶, (7) 
+
+𝑀 𝑖 ∩ 𝑀 𝑗 = ∅, ∀𝑖 ≠ 𝑗, (8) 
+
+> 𝐾
+
+Ø
+
+> 𝑘 =1
+
+𝑀 𝑘 = 𝑀. (9) Each partition defines an independent routing subproblem 𝑋 𝑘 = (𝐶 𝑘 , 𝑀 𝑘 ), which is solved using a routing procedure 
+
+𝑆 𝑘 = 𝜎 (𝑋 𝑘 ) = {𝑅 𝑚 }𝑚 ∈𝑀 𝑘 , (10) where 𝑆 𝑘 denotes the incumbent solution associated with subproblem 𝑋 𝑘 . Note that the routes contained in the set are only for the vehicles of the partition 𝑘 . The collection of incumbent solutions is given by S = {𝑆 1, . . . , 𝑆 𝐾 }.
+
+DEFINITION 4 (S UBPROBLEM SOLUTION ). The incumbent solution 𝑆 𝑘 ∈ S associated with routing subproblem 𝑋 𝑘 is referred to as a subproblem solution .Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research 7
+
+DEFINITION 5 (G LOBAL SOLUTION ). The global solution is obtained by combining the incum-bent solutions of all routing subproblems, 
+
+𝑆 =
+
+> 𝐾
+
+Ø
+
+> 𝑘 =1
+
+𝑆 𝑘 . (11) In the conventional CFRS framework, the decomposition P remains fixed throughout route construction. Therefore, each incumbent solution is computed using only the customers and vehicles assigned to its corresponding routing subproblem. 
+
+2.2.2. Evolving Formulation We extend the static formulation by allowing the decomposi-tion to evolve over a sequence of optimization steps. In this paper, an evolution step refers to a redistribution of customers or vehicles across routing subproblems. The redistribution changes the subproblem definitions as shown in Figure 1c, but it does not directly modify incumbent routes whose assigned customers and vehicles remain unchanged. To make this distinction explicit, let C( 𝑆 𝑘 ) = {𝑐 ∈ 𝐶 𝑘 : 𝑐 is served in 𝑆 𝑘 } denote the customers served by incumbent solution 𝑆 𝑘 , and let M ( 𝑆 𝑘 ) = {𝑚 ∈ 𝑀 𝑘 : 𝑅 𝑚 ∈ 𝑆 𝑘 } denote the vehicles used in 𝑆 𝑘 . An incumbent subproblem solution 𝑆 (𝑡 −1) 
+
+> 𝑘
+
+can be preserved at step 𝑡 whenever its served customers and used vehicles remain assigned to the same subproblem, 
+
+C( 𝑆 (𝑡 −1) 
+
+> 𝑘
+
+) ⊆ 𝐶 (𝑡 ) 
+
+> 𝑘
+
+and M ( 𝑆 (𝑡 −1) 
+
+> 𝑘
+
+) ⊆ 𝑀 (𝑡 ) 
+
+> 𝑘
+
+. (12) Equivalently, an incumbent route is affected only if at least one of its served customers or its associated vehicle is redistributed to another subproblem. Let 
+
+P(𝑡 ) =
+
+n
+
+(𝐶 (𝑡 ) 
+
+> 1
+
+, 𝑀 (𝑡 ) 
+
+> 1
+
+), . . . , (𝐶 (𝑡 ) 
+
+> 𝐾
+
+, 𝑀 (𝑡 ) 
+
+> 𝐾
+
+)
+
+o
+
+(13) denote the decomposition after optimization step 𝑡 . Each decomposition induces routing subprob-lems 
+
+𝑋 (𝑡 ) 
+
+> 𝑘
+
+= (𝐶 (𝑡 ) 
+
+> 𝑘
+
+, 𝑀 (𝑡 ) 
+
+> 𝑘
+
+), (14) and corresponding incumbent solutions 
+
+𝑆 (𝑡 ) 
+
+> 𝑘
+
+= 𝜎 
+
+
+
+𝑋 (𝑡 ) 
+
+> 𝑘
+
+, 𝑆 (𝑡 −1)
+
+> 𝑘
+
+
+
+. (15) By a slight abuse of notation, we allow the routing procedure 𝜎 to accept the previous incumbent solution as an additional argument. This indicates that previously computed routing information may be used when constructing the updated incumbent solution. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> 8Article submitted to Operations Research
+
+The collection of incumbent solutions after optimization step 𝑡 is 
+
+S(𝑡 ) =
+
+n
+
+𝑆 (𝑡 ) 
+
+> 1
+
+, . . . , 𝑆 (𝑡 )
+
+> 𝐾
+
+o
+
+, (16) and the corresponding global solution is 
+
+𝑆 (𝑡 ) =
+
+> 𝐾
+
+Ø
+
+> 𝑘 =1
+
+𝑆 (𝑡 ) 
+
+> 𝑘
+
+. (17) The optimization therefore evolves through a sequence of decompositions and incumbent solu-tions, 
+
+(P (0) , S(0) ) → (P (1) , S(1) ) → · · · → (P (𝑇 ) , S(𝑇 ) ). (18) At each optimization step, subproblems whose assigned customers or vehicles change may require re-optimization, while incumbent routes whose customers and vehicles remain assigned to the same subproblem can be preserved. The formulation presented here establishes the mathematical framework for the proposed rout-ing methodology. The following section describes the collaboration operations and optimization procedure that evolve the decomposition and incumbent solutions during the routing process. 
+
+3. Collaborative Route Construction 
+
+Building upon the evolving CFRS formulation introduced in Section 2, CoRC introduces an inter-mediate coordination stage into route building, enabling routing subproblems to exchange customers and vehicles while preserving independent optimization. Figure 2 illustrates the overall organization of our method. Starting from an initial decomposition, routing agents repeatedly (i) update incumbent routing solutions, (ii) derive and exchange routing statistics, and (iii) perform collaboration operations before the affected routing subproblems are re-optimized. The remainder of this section describes these three components in detail. 
+
+3.1. Routing State Management by Partition Agents 
+
+As defined in Section 2, each routing subproblem 𝑋 (𝑡 ) 
+
+> 𝑘
+
+maintains an incumbent solution 𝑆 (𝑡 ) 
+
+> 𝑘
+
+,obtained through the routing procedure 𝜎 (·) in (15). The formulation permits 𝜎 (·) to exploit the incumbent solution from the previous optimization step but otherwise remains agnostic to the underlying CVRP solver. Thus, any routing algorithm compatible with the formulation of Section 2 may be employed within the framework. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research
+
+9
+
+Figure 2 Overview of the collaborative route-construction framework. Independent routing agents solve decomposed subprob-lems, compute and advertise local solution statistics (such as ”Capacity deficit”), exchange resources when shortages and surpluses are detected, and iteratively rebuild routes until a globally feasible solution is obtained. 
+
+3.1.1. Routing Statistics Following each invocation of the routing procedure, every routing agent derives a compact summary of its current routing outcome, 
+
+Φ(𝑡 ) 
+
+> 𝑘
+
+= 𝑓 
+
+
+
+𝑋 (𝑡 ) 
+
+> 𝑘
+
+, 𝑆 (𝑡 )
+
+> 𝑘
+
+
+
+, (19) where 𝑓 (·) denotes the statistics extraction procedure. The resulting statistics summarize the routing resources currently required by the routing subproblem together with the resources that remain available for collaboration. Let 𝑈 (𝑡 ) 
+
+> 𝑘
+
+⊆ 𝐶 (𝑡 ) 
+
+> 𝑘
+
+denote the set of customers that remain unserved after route construction. The smallest missed customer demand is 
+
+𝐷 min  
+
+> 𝑘
+
+= min   
+
+> 𝑐 ∈𝑈 (𝑡 )
+> 𝑘
+
+𝑑 𝑐 , (20) representing the smallest customer demand that remains unserved. This quantity is used to determine whether another routing subproblem possesses sufficient remaining capacity to accommodate at least one missed customer. The remaining vehicle capacity is 
+
+𝑄 free  
+
+> 𝑘
+
+=∑︁   
+
+> 𝑚 ∈𝑀 (𝑡 )
+> 𝑘
+
+𝑄 𝑚 −∑︁      
+
+> 𝑐 ∈𝐶 (𝑡 )
+> 𝑘 \𝑈 (𝑡 )
+> 𝑘
+
+𝑑 𝑐 , (21) which measures the unused carrying capacity available after the incumbent routing solution has been constructed. Karaahmetoglu and Kim: Collaborative Partition Optimization 
+
+10 Article submitted to Operations Research 
+
+The number of unserved customers is 
+
+𝑁 miss  
+
+> 𝑘
+
+= |𝑈 (𝑡 ) 
+
+> 𝑘
+
+|, (22) while the number of vehicles that remain unused is 
+
+𝑁 free  
+
+> 𝑘
+
+= |𝐸 (𝑡 ) 
+
+> 𝑘
+
+|. (23) Finally, each routing agent records the aggregate customer demand and available vehicle capacity within the routing subproblem, 
+
+𝐷 tot  
+
+> 𝑘
+
+=∑︁   
+
+> 𝑐 ∈𝐶 (𝑡 )
+> 𝑘
+
+𝑑 𝑐 , 𝑄 tot  
+
+> 𝑘
+
+=∑︁   
+
+> 𝑚 ∈𝑀 (𝑡 )
+> 𝑘
+
+𝑄 𝑚 . (24) Collectively, these quantities define the routing statistics vector 
+
+Φ(𝑡 ) 
+
+> 𝑘
+
+=
+
+
+
+𝐷 min  
+
+> 𝑘
+
+, 𝑄 free  
+
+> 𝑘
+
+, 𝑁 miss  
+
+> 𝑘
+
+, 𝑁 free  
+
+> 𝑘
+
+, 𝐷 tot  
+
+> 𝑘
+
+, 𝑄 tot 
+
+> 𝑘
+
+
+
+. (25) The routing statistics provide a compact summary of the current optimization state and are exchanged between routing subproblems during collaboration, avoiding the need to communicate complete routing solutions. 
+
+3.2. Collaboration Operations 
+
+The routing statistics determine whether the current decomposition should be revised during route building. Specifically, routing subproblems evaluate the advertised statistics of other subproblems to identify opportunities for collaboration before selecting one of the decomposition update operations introduced below. 
+
+REMARK 1 (C OMMUNICATION TOPOLOGY ). Our study uses a fully connected communication topology in which every routing subproblem exchanges advertisements with all others. More restrictive topologies can be incorporated to reduce communication overhead; however, the fully connected topology yielded the best empirical performance in our experiments and is therefore adopted in this work. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research 11
+
+3.2.1. Collaboration Selection Each routing subproblem evaluates the advertised routing statistics and assigns a collaboration priority to every candidate subproblem. The framework is independent of the particular priority policy; in this work, we employ the following heuristic to rank candidate collaborations before selecting one of the collaboration operations introduced below. 
+
+𝑠 (𝑖, 𝑗 ) =
+
+
+
+2, 𝑁 miss  
+
+> 𝑖
+
+> 0
+
+∧ 𝐷 min  
+
+> 𝑖
+
+< 𝑄 free  
+
+> 𝑗
+
+,
+
+2, 𝑁 miss  
+
+> 𝑗
+
+> 0
+
+∧ 𝐷 min  
+
+> 𝑗
+
+< 𝑄 free 
+
+> 𝑖
+
+∧ 𝑁 free  
+
+> 𝑖
+
+> 0,
+
+1, 𝑁 miss  
+
+> 𝑖
+
++ 𝑁 miss  
+
+> 𝑗
+
+> 0
+
+∧ 𝐷 tot  
+
+> 𝑖
+
++ 𝐷 tot  
+
+> 𝑗
+
+≤ 𝑄 tot  
+
+> 𝑖
+
++ 𝑄 tot  
+
+> 𝑗
+
+,
+
+0, otherwise .
+
+(26) 
+
+REMARK 2 (C OLLABORATION RANKING METRIC ). The collaboration policy used in this work represents one possible realization of the CoRC framework. More sophisticated decision poli-cies may incorporate additional routing statistics, learned decision models, or optimization-based selection mechanisms without changing the collaboration operations or the evolving formulation. 
+
+3.2.2. Customer Transfer A customer transfer is performed when routing subproblem 𝑖 con-tains unserved customers while routing subproblem 𝑗 possesses sufficient remaining capacity to accommodate at least the smallest unserved customer demand in 𝑖 . Formally, if 
+
+𝑁 miss  
+
+> 𝑖
+
+> 0, 𝐷 min  
+
+> 𝑖
+
+< 𝑄 free  
+
+> 𝑗
+
+, (27) CoRC transfers a subset of the unserved customers from 𝑖 to 𝑗 . Let Δ𝐶 ⊆ 𝑈 (𝑡 ) 
+
+> 𝑖
+
+denote the transferred customer set. The updated customer assignments become 
+
+𝐶 (𝑡 +1) 
+
+> 𝑖
+
+= 𝐶 (𝑡 ) 
+
+> 𝑖
+
+\ Δ𝐶, 𝐶 (𝑡 +1) 
+
+> 𝑗
+
+= 𝐶 (𝑡 ) 
+
+> 𝑗
+
+∪ Δ𝐶. (28) The affected routing subproblems are subsequently re-optimized according to the evolving decomposition formulation. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> 12 Article submitted to Operations Research
+
+3.2.3. Vehicle Transfer A vehicle transfer is performed when routing subproblem 𝑗 contains unserved customers while routing subproblem 𝑖 possesses sufficient remaining capacity together with at least one unused vehicle. Formally, if 
+
+𝑁 miss  
+
+> 𝑗
+
+> 0, 𝐷 min  
+
+> 𝑗
+
+< 𝑄 free  
+
+> 𝑖
+
+, 𝑁 free  
+
+> 𝑖
+
+> 0, (29) CoRC transfers one or more unused vehicles from 𝑖 to 𝑗 . Let Δ𝑀 ⊆ 𝐸 (𝑡 ) 
+
+> 𝑖
+
+denote the transferred vehicle set. The updated vehicle assignments are 
+
+𝑀 (𝑡 +1) 
+
+> 𝑖
+
+= 𝑀 (𝑡 ) 
+
+> 𝑖
+
+\ Δ𝑀, 𝑀 (𝑡 +1) 
+
+> 𝑗
+
+= 𝑀 (𝑡 ) 
+
+> 𝑗
+
+∪ Δ𝑀. (30) The affected routing subproblems are subsequently re-optimized using the routing procedure 
+
+𝜎 (·) as in (15). 
+
+3.2.4. Subproblem Merge When neither customer nor vehicle transfers satisfy the collabora-tion conditions, the two routing subproblems are merged into a single routing problem. The merged routing subproblem is defined as 
+
+𝐶 (𝑡 +1) 
+
+> 𝑖 𝑗
+
+= 𝐶 (𝑡 ) 
+
+> 𝑖
+
+∪ 𝐶 (𝑡 ) 
+
+> 𝑗
+
+, 𝑀 (𝑡 +1) 
+
+> 𝑖 𝑗
+
+= 𝑀 (𝑡 ) 
+
+> 𝑖
+
+∪ 𝑀 (𝑡 ) 
+
+> 𝑗
+
+. (31) The merged routing subproblem is subsequently re-optimized, while all unaffected routing sub-problems retain their incumbent solutions. Accepted proposals update the affected routing subproblems, after which the corresponding incumbent solutions and routing statistics are recomputed according to the evolving decomposition formulation. 
+
+3.3. Asynchronous Agent Decision Cycle 
+
+CoRC is implemented as an asynchronous optimization cycle executed independently by each routing agent as described in Algorithm 1. At optimization step 𝑡 , agent 𝑘 maintains routing subproblem 𝑋 (𝑡 ) 
+
+> 𝑘
+
+= (𝐶 (𝑡 ) 
+
+> 𝑘
+
+, 𝑀 (𝑡 ) 
+
+> 𝑘
+
+) and incumbent solution 𝑆 (𝑡 ) 
+
+> 𝑘
+
+. Whenever the customer or vehicle assignment of the subproblem changes, the agent invokes the routing operator 𝜎 to update its incumbent solution and then recomputes the statistics vector Φ(𝑡 ) 
+
+> 𝑘
+
+. These statistics are advertised to the other agents and are also used to evaluate received advertisements. The asynchronous structure allows that agents do not wait for a global synchronization round before acting. Instead, each agent alternates between local route construction, advertisement pub-lication, advertisement reading, and proposal validation. Sleep parameters are included to avoid Karaahmetoglu and Kim: Collaborative Partition Optimization    
+
+> Article submitted to Operations Research 13
+> Table 1 CoRC parameters used in the computational experiments.
+
+Parameter Description Value 
+
+𝜎 Routing operator OR-Tools GLS (Didier et al. 2023) 
+
+𝜏 adv Advertisement wait time 5,000 ms 
+
+𝜏 prop Proposal wait time 200 ms 
+
+𝑇 Optimization time budget Instance/Experiment dependent continuous polling and to control the frequency of communication and proposal processing. These parameters, together with the choice of routing operator 𝜎 , are reported in the computational settings. An agent remains active until either the global time budget is exhausted or all of its cus-tomers and vehicles have been transferred to another routing subproblem. In the latter case, the agent reaches an absorbing state and no longer participates in the optimization process. Hence, successive merge operations produce progressively larger routing subproblems that accumulate customers, vehicles, and incumbent routing information over time. Rather than performing a single global re-optimization after all independent routing has been completed, as in decomposition-based approaches such as (Kerscher and Minner 2024), CoRC incrementally increases the optimization scope through localized merge operations. This allows larger routing subproblems to emerge only where collaboration indicates additional joint optimization may be beneficial, while unaffected routing subproblems continue to evolve independently. The proposed framework exposes a small number of configurable parameters that determine the behavior of the optimization cycle. These include the routing operator 𝜎 , the advertisement and proposal waiting times (𝜏 adv , 𝜏 prop ), and the overall optimization time budget. The waiting times regulate the frequency of inter-agent communication and proposal evaluation, balancing communication overhead against responsiveness in the asynchronous optimization process. Table 1 summarizes the parameter values used throughout the computational experiments. Unless stated otherwise, these values were selected empirically based on preliminary tuning and were held fixed across all benchmark instances. 
+
+4. Experiments and Evaluation 
+
+This section describes the computational study conducted to evaluate the CoRC framework. We first introduce the experimental methodology, including the evaluation metrics and comparison methods, Karaahmetoglu and Kim: Collaborative Partition Optimization 
+
+14 Article submitted to Operations Research 
+
+Algorithm 1 Asynchronous CoRC Optimization Cycle for Agent 𝑘 
+
+Require: Initial subproblem 𝑋 (0) 
+
+> 𝑘
+
+= (𝐶 (0) 
+
+> 𝑘
+
+, 𝑀 (0) 
+
+> 𝑘
+
+), initial incumbent 𝑆 (− 1) 
+
+> 𝑘
+
+, routing operator 𝜎 , end time 𝑇 , advertisement wait time 𝜏 adv , proposal wait time 𝜏 prop  
+
+> 1:
+
+𝑡 ← 0 
+
+> 2:
+
+while current time < 𝑇 do  
+
+> 3:
+
+if state has changed, i.e., 𝑋 (𝑡 ) 
+
+> 𝑘
+
+≠ 𝑋 (𝑡 −1) 
+
+> 𝑘
+
+then  
+
+> 4:
+
+Invoke routing operator, 𝑆 (𝑡 ) 
+
+> 𝑘
+
+← 𝜎 
+
+
+
+𝑋 (𝑡 ) 
+
+> 𝑘
+
+, 𝑆 (𝑡 −1)
+
+> 𝑘
+
+ 
+
+> 5:
+
+Recompute statistics, Φ(𝑡 ) 
+
+> 𝑘
+
+← 𝑓 
+
+
+
+𝑋 (𝑡 ) 
+
+> 𝑘
+
+, 𝑆 (𝑡 )
+
+> 𝑘
+
+ 
+
+> 6:
+
+else  
+
+> 7:
+
+Retain 𝑆 (𝑡 ) 
+
+> 𝑘
+
+← 𝑆 (𝑡 −1) 
+
+> 𝑘
+> 8:
+
+Retain Φ(𝑡 ) 
+
+> 𝑘
+
+← Φ(𝑡 −1) 
+
+> 𝑘
+> 9:
+
+end if  
+
+> 10:
+
+Publish advertisement Φ(𝑡 ) 
+
+> 𝑘
+
+to other agents  
+
+> 11:
+
+Sleep for 𝜏 adv duration  
+
+> 12:
+
+Read advertisements from other agents {Φ(𝑡 ℓ ) 
+
+> ℓ
+
+: ℓ ≠ 𝑘 } 
+
+> 13:
+
+Find the highest candidate, 𝑗 ★ ← arg max 𝑗 ≠𝑘 𝑠 (𝑘, 𝑗 ) 
+
+> 14:
+
+if 𝑠 (𝑘, 𝑗 ★) > 0 then  
+
+> 15:
+
+Generate proposal 𝑎 ∈ { CustomerTransfer , VehicleTransfer , Merge } 
+
+> 16:
+
+Sleep for 𝜏 prop duration  
+
+> 17:
+
+if 𝑎 is valid under current advertisements then  
+
+> 18:
+
+Apply 𝑎 to update affected subproblems  
+
+> 19:
+
+𝑋 (𝑡 +1) 
+
+> 𝑘
+
+← ( 𝐶 (𝑡 +1) 
+
+> 𝑘
+
+, 𝑀 (𝑡 +1) 
+
+> 𝑘
+
+) 
+
+> 20:
+
+end if  
+
+> 21:
+
+end if  
+
+> 22:
+
+if no customers and no vehicles in the partition then  
+
+> 23:
+
+break  
+
+> 24:
+
+end if  
+
+> 25:
+
+𝑡 ← 𝑡 + 1 
+
+> 26:
+
+end while  
+
+> 27:
+
+return 𝑆 (𝑡 )   
+
+> 𝑘 Karaahmetoglu and Kim: Collaborative Partition Optimization
+> Article submitted to Operations Research 15
+
+and then present a sequence of experiments designed to assess the effectiveness, scalability, and robustness of the collaboration mechanism. 
+
+4.1. Experiment Setup 
+
+4.1.1. Evaluation Metrics We evaluate our study using three performance measures. The primary metric is the time to full solution , defined as the elapsed time required to construct a feasible solution in which all customer demand is served. For instances where multiple methods reach a full solution, we additionally report the corresponding routing distance. When a method does not produce a full solution within the prescribed time limit, its progress is quantified using the percentage of customer demand that remains unserved, MissedDemand (%) = 100 ·
+
+Í𝑐 ∈𝑈 𝑑 𝑐 
+
+Í𝑐 ∈𝐶 𝑑 𝑐 
+
+, (32) where 𝑈 denotes the set of unserved customers. These metrics jointly evaluate solution quality, convergence speed, and progress toward complete feasibility. For methods that could not complete due to computational resource limitations (e.g., memory exhaustion) are reported as N/A, whereas methods that completed execution but failed to construct a full solution within the prescribed time budget are reported as INF in the results tables. 
+
+4.1.2. Clustering Methods To evaluate the proposed collaboration framework under diverse decomposition strategies, we consider four representative clustering methods. Sweep (Gillett and Miller 1974) and Grid generate spatially uniformly split rectangular boundaries. CC-CVRP (Ale-siani et al. 2022) builds routing subproblems using demand and capacity information during decomposition. Finally, Random assigns customers to routing subproblems without considering either spatial or operational structure, providing a challenging reference decomposition. Unless the clustering algorithm outlines the vehicle distribution mechanism explicitly, we dis-tribute the vehicles in a balanced manner so that clusters with higher total demand receive higher total vehicle capacity, proportionally. These methods span a broad spectrum of decomposition characteristics, allowing the collabora-tion mechanism to be evaluated independently of any particular clustering strategy. 
+
+4.1.3. Compared Methods The evaluated methods are grouped into four categories. The first category consists of independent optimization frameworks, denoted by the suffix -Ind .For each clustering method, routing subproblems are solved independently using the common routing operator 𝜎 , after which the resulting routes are combined to form the final routing solution. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> 16 Article submitted to Operations Research
+
+The second category consists of global re-optimization baseline, denoted by the suffix -Reopt .This method first solves the decomposed routing subproblems independently, as in the -Ind base-lines. The only difference is that the independent solvers are terminated when the routing solver determines no more customers can be served, or half of the total allotted time is reached. The combined solution is then used as the initial solution for a global optimization step, which is run for the remaining time budget of 6 hours. The third category applies the CoRC framework to the same decompositions. Since the inde-pendent, global re-optimization, and CoRC variants share identical decompositions and routing operators, these comparisons isolate the effect of when coordination is introduced during the routing process. We label these runs with the suffix -CoRC . All methods under independent, re-optimization, and the CoRC use Guided Local Search (Voudouris and Tsang 1999) in Or-Tools implementation (Didier et al. 2023). The fourth category consists of complete routing frameworks that do not explicitly separate decomposition and routing. We consider ScaleNet (Liu et al. 2026), a learning-based routing framework, and Hybrid Genetic Search (HGS) (Vidal 2022), one of the strongest general-purpose metaheuristics for the CVRP. 
+
+4.2. Performance on Benchmark and Large-Scale Instances 
+
+Our first computational study evaluates the overall routing performance of the CoRC framework across both established benchmark instances and large-scale synthetic instances. The objective is to compare CoRC against independent routing, post-routing global re-optimization, and complete routing frameworks under a common experimental setting while assessing its behavior across a broad range of problem sizes. The study consists of two datasets. The first is the AGS benchmark suite (Arnold et al. 2019) comprising the Ghent1 (10K), Brussels1 (15K), Flanders1 (20K), and Flanders2 (30K) instances. The second consists of synthetic instances containing 100,000 and 200,000 customers. Customer locations are sampled uniformly over the service region. Vehicle capacities are drawn uniformly from the interval [2𝑑 max , 5𝑑 max ], where 𝑑 max denotes the maximum customer demand. The fleet size is fixed to 400 vehicles for both synthetic instances, and the generated capacities are normalized to obtain an overall capacity utilization of 0 .95. The computational budget is set to one hour for the AGS benchmark instances and six hours for the large-scale synthetic instances, due to the significant difference in problem sizes. Results for the AGS and synthetic datasets are reported in Tables 2 and 3, respectively. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research 17
+
+Tables 2 and 3 demonstrate that CoRC is the only decomposition-based routing framework that consistently constructs full solutions across all AGS benchmark instances and both synthetic large-scale instances. In contrast, neither Independent routing nor post-routing global re-optimization reaches a full solution under any decomposition. Although the global re-optimization stage generally reduces the amount of unserved demand relative to Independent routing, substantial portions of customer demand remain unserved, particularly on the synthetic instances. These results indicate that introducing coordination during route construction is considerably more effective at recovering feasibility than postponing coordination until a subsequent global optimization stage. The routing distances further demonstrate that CoRC complements rather than replaces the underlying decomposition strategy. While collaboration consistently restores feasibility, the result-ing routing distances continue to reflect the quality of the initial partitioning. In particular, Random decomposition produces substantially longer routes despite reaching full solutions, whereas Grid and CC-CVRP generally yield shorter routes. This behavior suggests that decomposition quality primarily determines route efficiency, while the proposed collaboration mechanism improves the ability to yield complete solutions across diverse decomposition strategies. On the AGS benchmark instances, the complete routing frameworks ScaleNet and HGS generally produce shorter routing distances than the decomposition-based methods, as expected from optimiz-ing the original routing problem directly. However, neither framework successfully produced routing solutions for the 100K or 200K synthetic instances within the available computational resources, whereas CoRC continued to obtain full routing solutions across all evaluated decompositions. These results suggest that collaborative partition optimization provides a practical complement to decomposition-based routing, extending its applicability to substantially larger problem instances while preserving the flexibility of the underlying decomposition strategy. 
+
+4.3. Sensitivity and Robustness Analysis 
+
+The previous experiments demonstrated the overall effectiveness of CoRC, but they did not isolate the impact of the initial decomposition method. In this section, we evaluate the robustness of the framework under increasingly challenging partitioning conditions. To provide a controlled setting, all experiments use grid partitioning, which does not exploit spatial or demand information and therefore represents one of the least balanced clustering strategies, offering a challenging benchmark for collaboration. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> 18 Article submitted to Operations Research
+
+(a) Influence of routing subproblem granularity on solution quality. 
+
+(b) Impact of increasing vehicle starvation on the missed demand of frameworks. The dashed reference line denotes the starvation level ( 𝑦 = 𝑥 ).  
+
+> Figure 3 Sensitivity of the three routing strategies to decomposition granularity and vehicle imbalance.
+
+4.3.1. Sensitivity to Decomposition Granularity In this experiment, we investigate the sen-sitivity of the collaboration method to the granularity of the decomposition itself. Specifically, we study how the number of routing subproblems influences the behavior of independent routing, global re-optimization, and CoRC. The experiment is conducted on the Gen200K synthetic instance using the Grid decomposition method. The number of routing subproblems is varied over {9, 49 , 100 , 484 , 961 } (all have integer square-roots and are closest to {10 , 50 , 100 , 500 , 1000 }, respectively) while all remaining exper-imental settings, including the routing operator 𝜎 , remain unchanged. For each decomposition, we evaluate the three routing strategies introduced previously: independent routing ( -Ind ), global re-optimization ( -Reopt ), and the CoRC. Unlike the benchmark and scalability studies, complete routing frameworks are not included in this experiment because the objective is to isolate the effect of decomposition granularity within decomposition-based routing methods. Figure 3a evaluates the sensitivity of the routing strategies to the number of routing subproblems. As the number of clusters increases, the missed demand decreases for all methods, indicating that finer decompositions produce routing subproblems that are easier to solve independently. At very coarse decompositions (9 and 49 clusters), both Independent and Reopt fail to yield feasible solutions, leaving more than half of the demand unserved. In contrast, CoRC consistently recovers a feasible solution with zero missed demand, demonstrating that collaboration can effectively compensate for challenging initial decompositions. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research 19
+
+The advantage of collaboration gradually diminishes as the decomposition becomes finer. At 484 and 961 clusters, Independent and Reopt also achieve low missed demand, leaving little opportunity for collaborative repair. This behavior indicates that CoRC primarily improves robustness rather than benefiting from any particular decomposition granularity. While the independent approaches rely on carefully selecting an appropriate number of routing subproblems, CoRC maintains high solution quality across a broad range of cluster counts, substantially reducing the sensitivity of the overall framework to decomposition design. 
+
+4.3.2. Robustness to Resource-Imbalanced Decompositions Here, we investigate how the collaboration model behaves under increasingly imbalanced customer and vehicle assignments. The objective is to evaluate the ability of the routing strategies to adapt when the initial decomposition intentionally creates routing subproblems with highly uneven resource availability. The experiment is conducted on the Gen200K synthetic instance (200K customers) using the Grid decomposition with 100 routing subproblems. Starting from a balanced decomposition, an increasing fraction of routing subproblems is selected to receive no vehicles, while their vehicles are redistributed among the remaining subproblems, preserving the overall fleet capacity. Five imbal-ance scenarios are considered, where 1%, 25%, 50%, 75%, and 99% of the routing subproblems are initialized without assigned vehicles. The three routing strategies ( Ind , Reopt , and CoRC ) are then evaluated under identical routing and optimization settings. This experiment isolates the effect of resource imbalance while keeping the decomposition method, routing operator, and overall fleet resources fixed. Consequently, differences in performance can be attributed to the ability of each routing strategy to adapt to increasingly uneven customer and vehicle assignments. Figure 3b evaluates the robustness of the routing strategies under progressively increasing levels of vehicle starvation. Independent routing exhibits an almost linear increase in missed demand, closely tracking the imposed starvation level, indicating that isolated partitions have little ability to compensate for missing fleet resources. Re-optimization provides partial improvements at moderate starvation levels but displays a non-monotonic trend, with its best performance occurring under intermediate starvation. This behavior suggests that re-optimization is challenged at both extremes: when starvation is low, the independently produced cluster solutions are already of high quality, making the time spent on global re-optimization less effective than further local optimization; conversely, under severe starvation, the partition-level infeasibility becomes too substantial to repair within the remaining time budget. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> 20 Article submitted to Operations Research
+
+In contrast, CoRC maintains complete feasibility for starvation levels up to 75% by proactively redistributing vehicles and customers between partitions before routing. Even under the extreme 99% starvation scenario, CoRC serves approximately two-thirds of the total demand, substantially outperforming both independent routing and re-optimization. These results demonstrate that collab-oration not only improves routing performance but also makes partition-based routing considerably more robust to severe resource imbalance. 
+
+5. Conclusion 
+
+We presented Collaborative Routing Constructors (CoRC), a collaborative routing framework that introduces an intermediate coordination stage into cluster-first route-second solution methods for the CVRP. By allowing routing subproblems to exchange customers and vehicles during route con-struction, CoRC complements existing decomposition strategies without modifying the underlying routing solver. Computational experiments on AGS benchmark instances and synthetic instances containing up to 200,000 customers showed that CoRC consistently constructs full routing solu-tions where independent routing and post-routing global re-optimization do not, while remaining effective at scales where the evaluated complete routing frameworks did not produce solutions under the same computational budget. These findings demonstrate that collaborative partition opti-mization provides a robust approach to feasible large-scale routing and motivate further research into optimization frameworks that dynamically adapt decompositions during route construction. 
+
+6. Code and Data Disclosure 
+
+The code and data to support the numerical experiments in this paper can be requested from the corresponding author. 
+
+References          
+
+> Abdellaoui A, Benabbou L, Hallaoui IE (2024) Towards a connection between the capacitated vehicle routing problem and the constrained centroid-based clustering. arXiv preprint arXiv:2403.14013 .Alesiani F, Ermis G, Gkiotsalitis K (2022) Constrained clustering for the capacitated vehicle routing problem (cc-cvrp).
+> Applied artificial intelligence 36(1):1995658. Anily S, Federgruen A (1993) Two-echelon distribution systems with vehicle routing costs and central inventories.
+> Operations Research 41(1):37–47. Arnold F, Gendreau M, S¨ orensen K (2019) Efficiently solving very large-scale routing problems. Computers & operations research 107:32–42. Karaahmetoglu and Kim: Collaborative Partition Optimization
+> Article submitted to Operations Research
+
+21 Battarra M, Erdo˘ gan G, Vigo D (2014) Exact algorithms for the clustered vehicle routing problem. Operations Research 
+
+62(1):58–71. Boysen N, Fedtke S, Schwerdfeger S (2020) Last-mile delivery concepts: a survey from an operational research perspective. OR spectrum 43(1):1–58. Cakir F, Street WN, Thomas BW (2015) Revisiting cluster first, route second for the vehicle routing problem. no. August .Campbell AM, Vandenbussche D, Hermann W (2008) Routing for relief efforts. Transportation science 42(2):127–145. Chin SJ, Schiffer M (2026) Neural cluster first, route second: One-shot capacitated vehicle routing via differentiable optimal transport. arXiv preprint arXiv:2605.09301 .Clarke G, Wright JW (1964) Scheduling of vehicles from a central depot to a number of delivery points. Operations research 12(4):568–581. Crainic TG, Laporte G (1997) Planning models for freight transportation. European journal of operational research 
+
+97(3):409–438. Da Ros F, Soprano M, Di Gaspero L, Roitero K (2026) Large language models for combinatorial optimization: A systematic review. ACM Computing Surveys 58(11):1–53. Dantzig GB, Ramser JH (1959) The truck dispatching problem. Management science 6(1):80–91. Didier F, Perron L, Mohajeri S, Gay SA, Cuvelier T, Furnon V (2023) Or-tools’ vehicle routing solver: a generic constraint-programming solver with heuristic search for routing problems. Gaon T, Gabay Y, Weiss Cohen M (2025) Optimizing electric vehicle routing efficiency using k-means clustering and genetic algorithms. Future Internet 17(3):97. Gillett BE, Miller LR (1974) A heuristic algorithm for the vehicle-dispatch problem. Operations research 22(2):340– 349. Golden B, Assad A, Levy L, Gheysens F (1984) The fleet size and mix vehicle routing problem. Computers & Operations Research 11(1):49–66. Jingjing L, Fang Y, Tang N (2022) A cluster-based optimization framework for vehicle routing problem with workload balance. Computers & Industrial Engineering 169:108221. Kerscher C, Minner S (2024) Spatial-temporal-demand clustering for solving large-scale vehicle routing problems with time windows. arXiv preprint arXiv:2402.00041 .Laporte G (2009) Fifty years of vehicle routing. Transportation Science 43(4):408–416. Lenstra JK, Rinnooy Kan AHG (1981) Complexity of vehicle routing and scheduling problems. Networks 11(2):221– 227. Li B, Wu G, He Y, Fan M, Pedrycz W (2022) An overview and experimental study of learning-based optimization algorithms for the vehicle routing problem. IEEE/CAA Journal of Automatica Sinica 9(7):1115–1138. Karaahmetoglu and Kim: Collaborative Partition Optimization 
+
+22 Article submitted to Operations Research 
+
+Linfati R, Y´ a˜ nez-Concha F, Escobar JW (2022) Mathematical models for the vehicle routing problem by considering balancing load and customer compactness. Sustainability 14(19):12937. Liu S, Cao Z, Yin N, Ong YS (2026) Scale-net: a hierarchical u-net framework for cross-scale generalization in multi-task vehicle routing. Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, 14295–14303. Pisinger D, Ropke S (2018) Large neighborhood search. Handbook of metaheuristics , 99–127 (Springer). Ropke S, Pisinger D (2006) An adaptive large neighborhood search heuristic for the pickup and delivery problem with time windows. Transportation Science 40(4):455–472, URL http://dx.doi.org/10.1287/trsc. 1050.0135 .Santini A, Schneider M, Vidal T, Vigo D (2023) Decomposition strategies for vehicle routing heuristics. INFORMS Journal on Computing 35(3):543–559. Thind R, Sun Y, Liang L, Yang H (2025) Optimai: Optimization from natural language using llm-powered ai agents. 
+
+arXiv preprint arXiv:2504.16918 .Toth P, Vigo D (2014) Vehicle Routing: Problems, Methods, and Applications (SIAM). Vapnik V (1991) Principles of risk minimization for learning theory. Advances in neural information processing systems 
+
+4. Vidal T (2022) Hybrid genetic search for the cvrp: Open-source implementation and swap* neighborhood. Computers & Operations Research 140:105643. Voudouris C, Tsang E (1999) Guided local search and its application to the traveling salesman problem. European journal of operational research 113(2):469–499. Xiu X, Li J, Fan J, Liu W (2026) Large language models for operations research: A comprehensive survey. arXiv preprint arXiv:2605.20849 .Yam´ ın D, Medaglia AL, Akkinepally AP (2024) Reliable routing strategies on urban transportation networks. Trans-portation Science 58(2):377–393. Karaahmetoglu and Kim: Collaborative Partition Optimization   
+
+> Article submitted to Operations Research
+
+23 
+
+Table 2 Comparison of decomposition-based and complete methods on the AGS benchmark instances. Runs that did not obtain a full solution within the 6-hour limit are denoted “INF” and experiments failing due to excessive memory are ”N/A”. 
+
+(a) Ghent1 (10K) 
+
+Method Time (s) Distance Missed (%) 
+
+Sweep-Ind INF 714,447 1.95 Sweep-Reopt INF 520,747 2.12 Sweep-CoRC 0.04 2,686,808 0.00 Grid-Ind INF 428,595 47.69 Grid-Reopt INF 330,197 49.16 Grid-CoRC 0.04 1,644,217 0.00 Random-Ind INF 1,799,392 1.92 Random-Reopt INF 957,593 1.86 Random-CoRC 0.04 5,556,353 0.00 CC-CVRP-Ind INF 577,955 3.11 CC-CVRP-Reopt INF 495,373 1.68 CC-CVRP-CoRC 10.42 1,515,806 0.00 ScaleNet 18,176.20 469,531 0.00 HGS 833.77 515,551 0.00 (b) Instance: Brussels1 (15K) 
+
+Method Time (s) Distance Missed (%) 
+
+Sweep-Ind INF 1,393,274 1.77 Sweep-Reopt INF 646,201 2.03 Sweep-CoRC 0.04 4,272,195 0.00 Grid-Ind INF 800,341 42.46 Grid-Reopt INF 418,720 43.70 Grid-CoRC 0.04 2,354,391 0.00 Random-Ind INF 3,884,946 1.77 Random-Reopt INF 1,279,333 2.03 Random-CoRC 0.04 8,958,221 0.00 CC-CVRP-Ind INF 939,889 2.13 CC-CVRP-Reopt INF 541,737 3.40 CC-CVRP-CoRC 15.42 2,160,617 0.00 ScaleNet 22,656.22 1,253,335 0.00 HGS 469.61 567,312 0.00 (c) Instance: Flanders1 (20K) 
+
+Method Time (s) Distance Missed (%) 
+
+Sweep-Ind INF 21,984,887 7.49 Sweep-Reopt INF 7,710,955 9.61 Sweep-CoRC 0.05 53,668,458 0.00 Grid-Ind INF 11,609,403 35.79 Grid-Reopt INF 6,743,007 37.33 Grid-CoRC 0.05 26,310,823 0.00 Random-Ind INF 69,229,907 1.08 Random-Reopt INF 16,682,198 1.28 Random-CoRC 0.05 139,684,941 0.00 CC-CVRP-Ind INF 12,363,983 9.38 CC-CVRP-Reopt INF 6,412,808 11.85 CC-CVRP-CoRC 20.08 31,615,917 0.00 ScaleNet 15,712.07 7,240,118 0.00 HGS 786.27 7,858,437 0.00 (d) Instance: Flanders2 (30K) 
+
+Method Time (s) Distance Missed (%) 
+
+Sweep-Ind INF 44,560,865 8.19 Sweep-Reopt INF 7,523,698 8.39 Sweep-CoRC 0.04 47,103,331 0.00 Grid-Ind INF 14,364,824 37.58 Grid-Reopt INF 6,026,707 38.04 Grid-CoRC INF 31,618,713 9.38 Random-Ind INF 151,233,810 1.59 Random-Reopt INF 25,411,542 4.03 Random-CoRC 0.04 202,791,738 0.00 CC-CVRP-Ind INF 21,213,338 8.37 CC-CVRP-Reopt INF 5,553,576 9.33 CC-CVRP-CoRC 20.07 35,773,046 0.00 ScaleNet 32,581.33 4,373,244 0.00 HGS 3,043.79 5,154,561 0.00 Karaahmetoglu and Kim: Collaborative Partition Optimization 
+
+24 Article submitted to Operations Research 
+
+Table 3 Comparison of decomposition-based and complete routing methods on large synthetic instances. Runs that did not obtain a full solution within the 6-hour limit are denoted “INF” and experiments failing due to excessive memory are ”N/A”. 
+
+(a) Gen100K 
+
+Method Time (s) Distance Missed (%) 
+
+Sweep-Ind INF 38,751,662 88.49 Sweep-Reopt INF 1,613,939,369 1.75 Sweep-CoRC 0.04 1,778,882,015 0.00 Grid-Ind INF 94,889,835 77.25 Grid-Reopt INF 327,742,615 51.59 Grid-CoRC 0.05 1,145,379,681 0.00 Random-Ind INF 101,295,538 89.55 Random-Reopt INF 7,996,921,805 0.11 Random-CoRC 0.04 8,564,687,063 0.00 CC-CVRP-Ind INF 29,420,504 88.92 CC-CVRP-Reopt INF 1,083,989,629 1.42 CC-CVRP-CoRC 20.15 1,339,605,849 0.00 ScaleNet N/A N/A 100.00 HGS N/A N/A 100.00 (b) Gen200K 
+
+Method Time (s) Distance Missed (%) 
+
+Sweep-Ind INF 59,121,323 96.25 Sweep-Reopt INF 2,116,206,210 56.17 Sweep-CoRC 0.06 7,519,598,597 0.00 Grid-Ind INF 70,788,586 93.42 Grid-Reopt INF 2,094,541,196 56.80 Grid-CoRC 0.07 4,224,960,278 0.00 Random-Ind INF 249,427,628 96.35 Random-Reopt INF 11,809,494,910 55.44 Random-CoRC 0.05 39,980,572,554 0.00 CC-CVRP-Ind INF 60,971,185 96.18 CC-CVRP-Reopt INF 16,754,947,193 42.79 CC-CVRP-CoRC 20.19 5,474,016,941 0.00 ScaleNet N/A N/A 100.00 HGS N/A N/A 100.00

@@ -1,0 +1,283 @@
+Title: Sample-Efficient Pareto Front Modeling for Energy-Aware Reinforcement Learning Using Bayesian Optimization
+
+URL Source: https://arxiv.org/pdf/2607.03140v1
+
+Published Time: Tue, 07 Jul 2026 00:45:10 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Sample-Efficient Pareto Front Modeling for Energy-Aware Reinforcement Learning Using Bayesian Optimization 
+
+Georg Schäfer 1,2, Jakob Rehrl 1, Stefan Huber 1, and Simon Hirlaender 2 
+
+> 1
+
+Josef Ressel Centre for Intelligent and Secure Industrial Automation, Salzburg University of Applied Sciences, Salzburg, Austria  
+
+> 2
+
+Department of Artificial Intelligence and Human Interfaces, Paris Lodron University of Salzburg, Salzburg, Austria 
+
+georg.schaefer@fh-salzburg.ac.at 
+
+Abstract. Industrial automation increasingly demands control strate-gies that balance operational performance with strict energy efficiency requirements. A common approach to solving this multi-objective prob-lem, particularly within the framework of reinforcement learning (RL), is to formulate a single, scalar reward function that linearly combines the competing objectives. However, the manual weighting of these dif-ferent objectives is heavily reliant on domain intuition, incredibly time-consuming, prone to human bias, and frequently fails to uncover opti-mal trade-off solutions. This work addresses the critical challenge of au-tomating the weight selection process to systematically and efficiently discover the Pareto front of optimal trade-off policies. We formulate the weight selection process as a multi-objective Bayesian optimization (MOBO) problem and evaluate its sample efficiency against a stan-dard uniform grid search baseline. Using a physical Quanser Aero 2 testbed configured for 1-Degree-of-Freedom (DoF) pitch control, our results demonstrate that the MOBO approach, utilizing the Expected Hypervolume Improvement (qEHVI) acquisition function, consistently outperforms uniform grid sampling. MOBO achieves superior hypervol-ume and maximum spread, successfully identifying high-quality, diverse trade-off policies with a reduced evaluation budget, thereby enabling highly efficient energy-aware control in complex mechatronic systems. 
+
+Keywords: Reinforcement Learning · Bayesian Optimization · Multi-Objective Optimization · Industrial Control · Pareto Front. 
+
+# 1 Introduction 
+
+The rapid modernization of industrial automation has brought forward a crit-ical design paradigm: systems must no longer be optimized solely for opera-tional performance, but must concurrently adhere to strict energy efficiency and sustainability constraints [2]. Traditional control methodologies, while robust, often struggle to adapt to the highly nonlinear dynamics, complex environmen-tal interactions, and shifting objectives present in modern mechatronic systems.  
+
+> arXiv:2607.03140v1 [cs.LG] 3 Jul 2026 2G. Schäfer et al.
+
+Consequently, RL has emerged as a powerful, data-driven framework capable of learning optimal control policies through continuous interaction with an envi-ronment [6]. Indeed, recent empirical evaluations have demonstrated that policy gradient methods can offer highly competitive adaptability and rapid response characteristics when benchmarked against traditional Model Predictive Control (MPC) on non-linear mechatronic systems [15]. However, integrating energy efficiency into the RL framework fundamentally transforms the control task into a multi-objective optimization problem. The agent must balance at least two inherently conflicting goals: maximizing primary operational performance, such as precise setpoint regulation, dynamic trajectory tracking, or process throughput, and minimizing the physical energy expended during actuation. Traditional approaches frequently treat energy consumption as a secondary heuristic via fixed, manually tuned reward penalties. While our approach utilizes a similar linear scalarization to combine competing objectives, we address the critical limitation of manual tuning by formulating a framework that automates the discovery of the optimal trade-off surface [13]. In industrial practice, this selection is predominantly achieved through man-ual tuning. A control engineer intuitively selects a weight, trains a complete RL agent, evaluates the physical performance, and iteratively adjusts the weight based on the observed outcome. This methodology is incredibly time-consuming, highly susceptible to human bias, and frequently fails to uncover the true Pareto front, i.e., the set of optimal solutions where no single objective can be improved without degrading another [4]. Because training an RL agent on physical hard-ware or high-fidelity simulators is computationally expensive and subjects ma-chinery to physical wear, there is a pressing need for sample-efficient automation of this process. To address these challenges, this paper proposes an automated framework for modeling the optimal trade-off surface in energy-aware continuous control. Our main contributions are as follows: 
+
+– We formulate the multi-objective reward weighting process as a black-box optimization problem and apply MOBO to automate the discovery of the Pareto front. 
+
+– We conduct a rigorous empirical comparison between the proposed MOBO approach and a standard uniform grid search baseline, utilizing a high-fidelity environment of a Quanser Aero 2 mechatronic testbed. 
+
+– We demonstrate that MOBO achieves superior Pareto front approxima-tions across multiple quantitative metrics (hypervolume, spacing, maximum spread) while drastically reducing the required computational budget and environment interactions. The remainder of this paper is structured as follows. Section 2 provides the necessary theoretical background and discusses related work in the fields of multi-objective RL and Bayesian optimization. Section 3 details the system architec-ture of the mechatronic testbed and formally defines the reinforcement learning problem. Section 4 outlines our implementation and evaluation methodology. Fi-Bayesian Pareto Modeling for RL 3
+
+nally, Section 5 discusses the empirical results, followed by concluding remarks and directions for future research in Section 6. 
+
+# 2 Background and Related Work 
+
+2.1 Multi-Objective Reinforcement Learning 
+
+Standard RL operates on the premise of maximizing a single scalar reward sig-nal, traditionally modeled as a Markov decision process (MDP) [20]. However, industrial applications inherently involve multiple conflicting feedback signals. As Roijers et al. [13] establish, converting a multi-objective problem into a single-objective one via fixed scalarization is often undesirable when the end-user’s specific performance-versus-energy preferences are unknown a priori. In such scenarios, the objective shifts from finding a single optimal policy to identifying the set of Pareto-optimal policies. Recent literature emphasizes that explicitly multi-objective methods are required to solve complex planning problems effi-ciently [5]. Let the performance of a policy π be evaluated by a vector of objective functions J(π) = [ J1(π), J 2(π), . . . , J k(π)] T . A policy π∗ is considered Pareto op-timal if there does not exist another policy π such that Ji(π) ≤ Ji(π∗) for all objectives i, and Jj (π) < J j (π∗) for at least one objective j [8]. The set of all such non-dominated policy evaluations forms the Pareto front. 
+
+2.2 Energy-Aware Control in Industrial Automation 
+
+In modern industrial robotics, balancing system performance, such as precise trajectory tracking or manipulation, with energy efficiency is critical. Traditional approaches frequently treat energy consumption as a secondary heuristic or a simple reward penalty. However, sustainable operation demands that actuation energy is explicitly regulated. Recent frameworks address this by treating the task as a Constrained MDP or a multi-objective problem, seeking to minimize long-term energy budgets while preserving strict operational reliability [7]. Our approach aligns with this paradigm by directly modeling the trade-off between tracking error and power consumption, focusing specifically on automating the discovery of the optimal trade-off surface. 
+
+2.3 Bayesian Optimization for Pareto Front Modeling 
+
+To map the Pareto front without exhaustively training RL policies for every pos-sible weight combination, sample-efficient black-box optimization is necessary. Bayesian optimization (BO) [19] has become a standard approach for optimiz-ing expensive functions, utilizing a Gaussian process (GP) [12] surrogate model to approximate the objective landscape and quantify uncertainty. In the multi-objective context (MOBO), Gaussian Processes are combined with specialized acquisition functions, such as Expected Hypervolume Improvement (qEHVI) [3], to intelligently select query points that maximally expand the non-dominated 4 G. Schäfer et al. 
+
+solution set. Recent advancements focus on efficiently evaluating Pareto-frontier entropy [21] and selecting diverse batches of parameters to ensure broad cov-erage [1]. Our work directly applies these MOBO principles to automate the hyperparameter weighting of an RL reward function. 
+
+# 3 System Architecture and Problem Formulation 
+
+3.1 The Quanser Aero 2 Testbed 
+
+To rigorously validate our approach, we require a mechatronic system featur-ing non-linear dynamics and measurable physical energy states. We utilize the Quanser Aero 2 system (Fig. 1). For the scope of this evaluation, the testbed is configured in a 1-DoF setup: the yaw axis is mechanically locked, while the pitch axis remains unlocked and free to rotate.  
+
+> Fig. 1. The Quanser Aero 2 mechatronic testbed. For this study, the system is config-ured in a 1-DoF mode where the yaw axis is locked and the pitch axis is controlled via the dual DC motors.
+
+The system is actuated by two DC motors equipped with propellers. Let 
+
+u0 and u1 represent the voltage signals applied to the respective motors. In the 1-DoF pitch configuration, the control input u is symmetric and defined as Bayesian Pareto Modeling for RL 5
+
+u = u0 = −u1. The primary output y = Θ represents the pitch angle of the main beam. The system dynamics are inherently non-linear due to the aerodynamic drag, friction, and thrust characteristics of the propellers, providing an estab-lished, highly representative benchmark for evaluating advanced learning-based control algorithms [15]. 
+
+3.2 State and Action Space Formulation 
+
+The task assigned to the Proximal Policy Optimization (PPO) agent [18] is to orient the beam to a desired, time-varying target angle while minimizing the electrical power consumed by the DC motors. The state space S is fully observable and represented as a continuous vector containing the current pitch angle, the angular velocity, and the current target reference angle: 
+
+st =
+
+h
+
+Θt, ˙Θt, Θ ref t
+
+iT
+
+(1) The action space A comprises the continuous voltage signal applied to the mo-tors, bounded by the physical limits of the hardware: 
+
+at = [ ut] ∈ [−24 V, 24 V] (2) 
+
+3.3 Reward Function Design 
+
+The behavior of the agent is entirely dictated by the parameter α in the scalarized reward function. At each time step t, the reward Rt is computed as: 
+
+Rt = −(1 − α) · | ∆t| − α · Pt (3) To ensure stable neural network updates and meaningful scalarization, the terms 
+
+∆t (absolute tracking error) and Pt (power consumption) are normalized to a 
+
+[0 , 1] scale. As demonstrated in our prior investigations regarding the formula-tion of RL environments, strict normalization of observation spaces and actions is a crucial prerequisite for stable policy convergence and the successful transfer of simulated policies to the physical system [14]. The power consumption Pt is calculated dynamically based on the applied voltage and the internal resistance characteristics of the Aero 2 motors. By manipulating α ∈ [0 , 1] in our previous work [17], we observed that the problem spans the entire spectrum from maxi-mum tracking performance to maximum energy conservation, validating its use as the core tunable hyperparameter. 
+
+# 4 Methodology 
+
+4.1 Software and Implementation Details 
+
+The RL environment was built as a high-fidelity digital twin of the physical Quanser Aero 2 system to ensure that all trained policies are highly deploy-able. This environment utilizes our previously established Python-Simulink co-simulation framework [16], which enables the seamless integration of numerically 6 G. Schäfer et al. 
+
+robust Simulink models with flexible Python-based machine learning environ-ments. The PPO [18] agent was implemented utilizing the Stable Baselines3 framework [11], backed by PyTorch [10] for automatic differentiation and neu-ral network optimization. Both the actor and critic networks feature continuous multi-layer perceptron (MLP) architectures. 
+
+4.2 MOBO-RL Integration Workflow 
+
+To automate the discovery of the Pareto front, we integrate the RL training pro-cess within an outer-loop optimization framework managed by the BoTorch/Ax library [9]. The optimization is initialized by defining the continuous parameter bounds α ∈ [0 .0, 1.0] and the two minimization objectives: tracking error ( f1)and power consumption ( f2).        
+
+> Stable Baselines3 Ax / BoTorch API
+> MOBO Controller
+> (GP + qEHVI)
+> Suggests optimal weight α
+> RL Training Phase
+> PPO Rollout & Update
+> Converge to policy πi
+> Policy Evaluation
+> Run validation profile: Measure f1,f2
+> Surrogate Update
+> Complete trial via API Update GP posterior
+> Sample
+> αi
+> Trained Policy πi
+> Yield
+> (f1,i , f 2,i )
+> Log Data
+> Fig. 2. The proposed MOBO-RL integration workflow. The Bayesian optimizer iter-atively samples the reward weighting parameter α. For each sampled weight, an RL agent is trained to convergence and its physical performance is evaluated. The resulting empirical observations update the surrogate model to intelligently guide future sam-pling.
+
+The structure of this framework is illustrated in Fig. 2. The surrogate model approximates the objective functions using a GP. For each sequential trial, the optimizer queries this surrogate model to suggest the next most promising α
+
+weight utilizing the Expected Hypervolume Improvement (qEHVI) acquisition function. A fresh PPO agent is instantiated and trained to convergence using this specific scalarized reward formulation. Following training, the resultant policy π
+
+is deployed in a deterministic evaluation environment to record the true tracking error and electrical power draw. Finally, these empirical results are passed back to the optimizer via the API, dynamically updating the posterior distribution of the surrogate model and informing the subsequent iteration. Bayesian Pareto Modeling for RL 7
+
+4.3 Exploration Strategies 
+
+To approximate the Pareto front, we enforce a strict, heavily constrained max-imum budget of 11 full RL training runs (evaluations). This budget simulates the real-world constraints of hardware training times. We compare two distinct strategies for exploring the parameter space of α:
+
+– Uniform Grid Search (Baseline): We manually select 11 equally spaced values for α ∈ [0 , 1] . While providing simple, uniform coverage of the param-eter space, this method is fundamentally inefficient as it cannot adapt to the underlying non-linear mapping between α and the bi-objective performance. 
+
+– Multi-Objective BO (MOBO): To prevent premature convergence and provide a baseline statistical variance, the MOBO optimization is initialized with 5 quasi-random Sobol points. This is followed by 6 sequentially guided BO selections. The total remains exactly 11 trials to ensure a mathematically fair comparison against the baseline. 
+
+4.4 Quantitative Evaluation Metrics 
+
+We quantitatively assess the quality of the generated Pareto fronts using three standard multi-objective metrics. Let P be the approximated Pareto front. 1. Hypervolume (HV): Evaluates the total dominated n-dimensional volume in the objective space between the Pareto solutions and a predefined, worst-case reference point r.HV (P) = Λ [
+
+> x∈P
+
+[f1(x), r 1] × [f2(x), r 2]
+
+!
+
+(4) where Λ denotes the Lebesgue measure. A larger volume indicates a front that is closer to the true Pareto optimal set and possesses a better spread. 2. Spacing ( S): Measures the uniformity of the solution distribution along the front. It is defined as the variance in the Euclidean distance between adjacent solutions: 
+
+S =
+
+vuut 1
+
+n − 1
+
+> n
+
+X
+
+> i=1
+
+( ¯d − di)2 (5) where di is the distance to the nearest neighbor for the i-th solution, and ¯d
+
+is the mean of all di. Lower values indicate a more evenly distributed set of choices. 3. Maximum Spread ( M S ): Assesses the maximal range coverage by calcu-lating the Euclidean distance between the extreme boundary points of the discovered front in the objective space. Let K be the number of objectives. The maximum spread is defined as the Euclidean norm of the objective ranges: 
+
+M S =
+
+vuut KX
+
+> k=1
+
+
+
+max  
+
+> x∈P
+
+fk(x) − min  
+
+> x∈P
+
+fk(x)
+
+2
+
+(6) 8 G. Schäfer et al. 
+
+A higher M S value indicates that the algorithm successfully explored the absolute outer limits of the performance trade-off, providing a broader spec-trum of operational modes. 
+
+# 5 Results and Discussion 
+
+5.1 Quantitative Results 
+
+Table 1 summarizes the final performance of both exploration strategies after the strict budget of 11 evaluations was exhausted. The automated MOBO approach consistently outperforms the uniform grid sampling across all three defined multi-objective metrics.                    
+
+> Table 1. Comparison of Pareto front quality metrics after 11 trials. Metric Grid Search MOBO Difference Hypervolume 762.78 ↓769.48 ↑+6.71 Spacing 12.26 ↓11.22 ↑-1.04 Maximum Spread 51.31 ↓51.33 ↑+0.02
+
+The higher Hypervolume demonstrates that MOBO discovered policies that objectively dominate those found by the uniform grid, as visualized in Fig. 3. Crucially, the non-linear relationship between the weight α and the actual phys-ical system performance causes a uniform grid search in the parameter space to map to a highly non-uniform cluster of points in the objective space. As ob-served in our experiments, the Grid Search wasted a significant portion of its 11 evaluations on adjacent α values that resulted in similar physical system behav-ior, largely failing to map the critical “knee” of the Pareto front where the most viable trade-offs reside. 
+
+5.2 Sample Efficiency and Progression 
+
+The most significant and practical advantage of the MOBO approach is its re-markable sample efficiency, which directly translates to saved computational time and reduced hardware degradation during physical training. Analyzing the progression of the hypervolume (Fig. 4), MOBO rapidly identifies high-quality solutions. Because the qEHVI acquisition function explicitly targets areas of the objective space that maximize expected improvement, it intelligently avoids redundant regions of the parameter space. Remarkably, the MOBO approach achieves the final, maximum hypervolume of the 11-trial Grid Search baseline in just 4 evaluation trials. In a real-world in-dustrial context, where training a single policy to convergence might take hours or days of continuous operation, matching baseline performance in 4 trials rep-resents a reduction in computational and temporal cost of approximately 64%. Bayesian Pareto Modeling for RL 94 6 8 10 12 14 16 
+
+Tracking Deviation (°)   
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Power Consumption (W)
+> Uniform Grid Search
+> MOBO Selection
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 Weight  α
+> Fig. 3. Comparison of all sampled configurations between the uniform grid search and MOBO selection, highlighting the discovered Pareto front.
+
+Similarly, the maximum spread progression (Fig. 5) highlights the capacity of BO for active boundary exploration. The algorithm matched the grid search’s maximum spread by trial 8. This proves that MOBO does not merely exploit a single high-performing region, but actively pushes the boundaries of the known objective space. It ensures that fundamentally diverse trade-off policies, spanning from ultra-precise, high-energy trajectory tracking to loose, highly conservative energy-saving modes, are systematically discovered and made available to the control engineer without requiring tedious manual intervention. 
+
+# 6 Conclusion and Future Work 
+
+This work rigorously validates Multi-Objective Bayesian Optimization as a highly effective, sample-efficient, and automated method for multi-objective weight se-lection in industrial RL continuous control tasks. By successfully balancing elec-trical energy consumption and tracking performance on the Quanser Aero 2 testbed, we demonstrated that MOBO fundamentally eliminates the biases and inefficiencies of manual heuristic weighting. The approach consistently creates a 10 G. Schäfer et al. 2 4 6 8 10 
+
+Number of Evaluation Trials  
+
+> 730
+> 735
+> 740
+> 745
+> 750
+> 755
+> 760
+> 765
+> 770
+> Hypervolume
+> MOBO
+> Grid Search Baseline
+> Match (4 trials)
+> Fig. 4. Progression of hypervolume across the evaluation trials compared to the grid search baseline.
+
+superior approximation of the Pareto front while significantly reducing the re-quired evaluation budget, marking a critical step toward accessible, sustainable intelligent automation. Future work will focus on extending this methodology to the full, highly cou-pled 2-DoF (pitch and yaw) configuration of the Quanser Aero 2 to handle more complex trajectory tracking tasks. Furthermore, because exploring the bound-aries of the weight parameter space, specifically where tracking performance is heavily prioritized over energy conservation ( α → 0), can lead to aggressive, po-tentially hardware-damaging “bang-bang” policies, we intend to integrate strict Safe RL constraints into the optimization framework. This ensures that bound-ary exploration remains physically safe during early training phases. Finally, we will investigate the transferability of these findings, utilizing the identified Pareto optimal weights from the Aero 2 to jump-start and accelerate RL training pro-cesses on similar, yet mathematically distinct, industrial mechatronic systems. 
+
+Acknowledgments Financial support for this study was provided by the Chris-tian Doppler Research Association (CDG) through the Josef Ressel Centre for In-telligent and Secure Industrial Automation, the corresponding WISS Co-project of Land Salzburg, and by the European Interreg project BA0100172 AI4GREEN. Bayesian Pareto Modeling for RL 11 2 4 6 8 10 
+
+Number of Evaluation Trials 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+50 
+
+> Maximum Spread
+
+MOBO 
+
+Grid Search Baseline 
+
+Match (8 trials) 
+
+Fig. 5. Progression of maximum spread across the evaluation trials compared to the grid search baseline. 
+
+# References 
+
+1. Ahmadianshalchi, A., Belakaria, S., Doppa, J.R.: Pareto front-diverse batch multi-objective bayesian optimization. In: Proceedings of the AAAI Conference on Arti-ficial Intelligence. vol. 38, pp. 10845–10853 (2024) 2. Biel, K., Glock, C.H.: Energy-efficient automation: A review of control strategies. International Journal of Production Research 58 (15), 4771–4793 (2020) 3. Daulton, S., Balandat, M., Bakshy, E.: Differentiable expected hypervolume im-provement for parallel multi-objective bayesian optimization. In: Advances in Neu-ral Information Processing Systems. vol. 33, pp. 9851–9864 (2020) 4. Deb, K.: Multi-objective optimization using evolutionary algorithms. John Wiley & Sons (2014) 5. Hayes, C.F., Rădulescu, R., Bargiacchi, E., Källström, J., Macfarlane, M., Rey-mond, M., Verstraeten, T., Zintgraf, L.M., Dazeley, R., Heintz, F., et al.: A prac-tical guide to multi-objective reinforcement learning and planning. Autonomous Agents and Multi-Agent Systems 36 (1), 26 (2022) 6. Kober, J., Bagnell, J.A., Peters, J.: Reinforcement learning in robotics: A survey. The International Journal of Robotics Research 32 (11), 1238–1274 (2013) 7. Liu, C., Zhang, Y., Xu, P.: Energy-aware reinforcement learning for robotic ma-nipulation of articulated components in infrastructure operation and maintenance. arXiv preprint arXiv:2602.12288 (2026) 8. Miettinen, K.: Nonlinear multiobjective optimization. Springer Science & Business Media (1998) 12 G. Schäfer et al. 9. Olson, M., Santorella, E., Tiao, L.C., Cakmak, S., Garrard, M., Daulton, S., Lin, Z.J., Ament, S., Beckerman, B., Onofrey, E., Igusti, P., Lara, C., Letham, B., Car-doso, C., Shen, S.S., Lin, A.C., Grange, M., Kashtelyan, E., Eriksson, D., Balandat, M., Bakshy, E.: Ax: A Platform for Adaptive Experimentation. In: AutoML 2025 ABCD Track (2025) 10. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al.: Pytorch: An imperative style, high-performance deep learning library. Advances in neural information processing sys-tems 32 (2019) 11. Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., Dormann, N.: Stable-baselines3: Reliable reinforcement learning implementations. Journal of Ma-chine Learning Research 22 (268), 1–8 (2021), https://jmlr.org/papers/v22/20-1364.html 12. Rasmussen, C.E., Williams, C.K.: Gaussian processes for machine learning. MIT press (2006) 13. Roijers, D.M., Vamplew, P., Whiteson, S., Dazeley, R.: A survey of multi-objective sequential decision-making. Journal of Artificial Intelligence Research 48 , 67–113 (2013) 14. Schäfer, G., Krau, T., Rehrl, J., Huber, S., Hirlaender, S.: The Crucial Role of Problem Formulation in Real-World Reinforcement Learning. In: 2025 IEEE 8th International Conference on Industrial Cyber-Physical Systems (ICPS). IEEE, Em-den, Germany (05 2025). https://doi.org/10.1109/ICPS65515.2025.11087883 15. Schäfer, G., Rehrl, J., Huber, S., Hirlaender, S.: Comparison of Model Predictive Control and Proximal Policy Optimization for a 1-DOF Helicopter System. In: 2024 IEEE 22nd International Conference on Industrial Informatics (INDIN’24). IEEE, Beijing, China (08 2024). https://doi.org/10.1109/INDIN58382.2024.10774357, best presentation award 16. Schäfer, G., Schirl, M., Rehrl, J., Huber, S., Hirlaender, S.: Python-Based Rein-forcement Learning on Simulink Models. In: 11th International Conference on Soft Methods in Probability and Statistics (SMPS 2024). Salzburg, Austria (09 2024). https://doi.org/10.1007/978-3-031-65993-5_55 17. Schäfer, G., Seliger, R., Rehrl, J., Huber, S., Hirlaender, S.: Multi-Objective Re-inforcement Learning for Energy-Efficient Industrial Control. In: Database and Expert Systems Applications - DEXA 2025 Workshops. pp. 67–72. Communica-tions in Computer and Information Science, Springer Cham, Bangkok, Thailand (08 2025). https://doi.org/10.1007/978-3-032-02003-1 18. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O.: Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 (2017) 19. Shahriari, B., Swersky, K., Wang, Z., Adams, R.P., De Freitas, N.: Taking the human out of the loop: A review of bayesian optimization. Proceedings of the IEEE 104 (1), 148–175 (2015) 20. Sutton, R.S., Barto, A.G.: Reinforcement learning: An introduction. MIT press (2018) 21. Suzuki, S., Takeno, S., Tamura, T., Shitara, K., Karasuyama, M.: Multi-objective bayesian optimization using pareto-frontier entropy. In: Proceedings of the 37th International Conference on Machine Learning. pp. 9279–9288. PMLR (2020)

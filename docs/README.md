@@ -6,26 +6,37 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-10
-- 运行时间：2026-07-10 21:32:28 UTC
+- 最新运行日期：2026-07-11
+- 运行时间：2026-07-11 21:23:03 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：5
+- 精读区：3
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读1篇、速读1篇，聚焦强化学习改进策略。最值得关注的是《Optimal Transport Q-Learning》中的流策略加速方法（9.0分），以及《Lightweight Safe Reinforcement Learning》中无人机安全导航框架（7.0分）。建议优先精读高评分论文，从中提取最优传输与Q学习的结合思路，速读论文可快速了解轻量安全机制的实现。
-- 详情：[/202607/10/README](/202607/10/README)
+今日推荐5篇论文，精读2篇聚焦动态订单履行与最优运输Q学习在策略加速中的应用。
+最值得关注的是《A Policy Decomposition Framework for Dynamic Order Fulfillment Operations》和《Optimal Transport Q-Learning for Flow Policy Steering and Acceleration》，均获8.0高分。
+建议普通读者先速读《Robust Feasible Route Construction》和《Sample-Efficient Pareto Front Modeling》，快速把握决策鲁棒性与能效优化方向的实用方法。
+- 详情：[/202607/11/README](/202607/11/README)
 
 ### 精读区论文标签
-1. [Optimal Transport Q-Learning for Flow Policy Steering and Acceleration](/202607/10/2607.06262v1-optimal-transport-q-learning-for-flow-policy-steering-and-acceleration)  
-   标签：评分：9.0/10、query:rl-path-opt
-   evidence：基于强化学习的流策略优化用于机器人路径规划
+1. [A Policy Decomposition Framework for Dynamic Order Fulfillment Operations](/202607/11/2607.04056v1-a-policy-decomposition-framework-for-dynamic-order-fulfillment-operations)  
+   标签：评分：8.0/10、query:rl-last-mile
+   evidence：基于深度强化学习的策略分解框架用于动态订单履约，涉及配送阶段
+2. [Optimal Transport Q-Learning for Flow Policy Steering and Acceleration](/202607/11/2607.06262v1-optimal-transport-q-learning-for-flow-policy-steering-and-acceleration)  
+   标签：评分：8.0/10、query:rl-path-opt
+   evidence：使用强化学习微调机器人流策略，涉及路径优化与加速
+3. [Safe Reinforcement Learning using Ideas from Model Predictive Control](/202607/11/2607.07252v1-safe-reinforcement-learning-using-ideas-from-model-predictive-control)  
+   标签：评分：8.0/10、query:rl-path-opt
+   evidence：结合MPC的安全强化学习用于机器人路径规划
 
 ### 速读区论文标签
-1. [Lightweight Safe Reinforcement Learning for End-to-End UAV Navigation](/202607/10/2607.01794v1-lightweight-safe-reinforcement-learning-for-end-to-end-uav-navigation)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：强化学习用于无人机导航路径规划
+1. [Robust Feasible Route Construction through Collaborative Partition Optimization](/202607/11/2607.03694v1-robust-feasible-route-construction-through-collaborative-partition-optimization)  
+   标签：评分：7.0/10、query:path-preproc
+   evidence：协作分区优化解决大规模带容量约束车辆路径问题
+2. [Sample-Efficient Pareto Front Modeling for Energy-Aware Reinforcement Learning Using Bayesian Optimization](/202607/11/2607.03140v1-sample-efficient-pareto-front-modeling-for-energy-aware-reinforcement-learning-using-bayesian-optimization)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：样本高效的帕累托前沿建模用于多目标强化学习，可应用于路径优化
 
 
 <div class="dpr-home-promo-card">

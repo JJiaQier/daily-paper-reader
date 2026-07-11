@@ -1,0 +1,2116 @@
+Title: A Policy Decomposition Framework for Dynamic Order Fulfillment Operations
+
+URL Source: https://arxiv.org/pdf/2607.04056v1
+
+Published Time: Tue, 07 Jul 2026 01:53:34 GMT
+
+Number of Pages: 42
+
+Markdown Content:
+# A Policy Decomposition Framework for Dynamic Order Fulfillment Operations 
+
+Gal Neria a, ∗, Michal Tzur b, Marlin W. Ulmer c
+
+> aMassachusetts Institute of Technology, Cambridge, 02139, MA, USA
+> bSchool of Industrial and Intelligent Systems Engineering, Tel Aviv University, Tel Aviv, 6997801, Israel
+> cOtto-von-Guericke Universitat Magdeburg, Magdeburg, Germany
+
+Abstract 
+
+Modern supply chains span diverse operational environments, ranging from e-commerce distribution networks to customized production-to-order manufacturing lines. Across these settings, operational efficiency depends on tightly coordinating two highly interdependent stages: order preparation and downstream delivery. Although these stages are traditionally managed in isolation, real-world fulfillment systems must satisfy stringent delivery expectations under dynamic stochastic order arrivals. To bridge this gap, we introduce the Dynamic Order Fulfillment Problem (DOFP), a new problem class unifying logistical challenges previously studied separately. We model DOFP as a Markov decision process whose state and decision spaces are partitioned into preparation and delivery sub-spaces, linked by synchronization constraints. While state-of-the-art approaches attempt to optimize both fulfillment stages simultaneously over myopic rolling horizons, our framework isolates and optimizes the downstream delivery policy using stochastic look-ahead anticipation, treating preparation strictly as a state-level constraint filter. To solve this, we develop the Decomposition-Driven Framework with Value Function Approximation (DDF-VFA), which utilizes a novel policy-level decomposition. This design partitions the search into a delivery-stage master problem and a preparation-stage compatibility subproblem, iteratively refined via feedback loops. DDF-VFA executes this strategy by combining a large-neighborhood search over partial delivery decisions with a neural-network value function approximation for the cost-to-go. Numerical illustrations on two example variants using real-world datasets show that DDF-VFA consistently outperforms benchmarks that optimize the two stages independently or jointly without decomposition. Finally, the framework naturally scales to accommodate additional real-world complexities as modular add-ons, including batched or multi-stage preparation, and heterogeneous resources. 
+
+Keywords: (O) Transportation, Dynamic order fulfillment, Policy decomposition, Markov decision processes, Approximate dynamic programming      
+
+> ∗Corresponding author
+> Email addresses: galneria@mit.edu (Gal Neria), tzurm@tauex.tau.ac.il (Michal Tzur),
+> marlin.ulmer@ovgu.de (Marlin W. Ulmer)
+> arXiv:2607.04056v1 [math.DS] 4 Jul 2026
+
+1. Introduction 
+
+Driven by the rapid expansion of e-commerce and on-demand delivery services, global logistics spending reached an estimated $12.8 trillion in 2024 and is projected to exceed $14 trillion by 2029 (Statista, 2024). These industries, encompassing warehousing, production, and food services, face increasing pressure to deliver orders promptly and efficiently (Waßmuth et al., 2023; Chen and Hu, 2024). This pressure often leads to overlapping capture and fulfillment phases, where orders arrive while deliveries are still ongoing (Fleckenstein et al., 2023; Erazo and Toriello, 2025). Addressing these challenges requires seamless real-time coordination across preparation and delivery stages. In e-commerce, companies such as Walmart must align warehouse picking operations with delivery schedules to ensure timely and cost-effective fulfillment of shipments. Competitive pressures drive continual reductions in delivery times, as seen in Amazon’s response to local Berlin competitors by introducing 60-minute delivery deadlines (Ulmer, 2017). Similarly, on-demand production requires precise coordination between manufacturing and distribution. This is evident in firms that must deliver customized materials to construction sites just in time (Dallasega, 2017). In manufacturing sectors such as metalworking and packaging, complex production planning with setup times must align with outbound distribution to maximize resource utilization (Berghman et al., 2023). In meal delivery platforms, synchronized meal preparation and driver dispatch are required, with added complexity when combining orders from multiple restaurants, as early preparation risks freshness, and delays affect customer satisfaction. Lastly, in healthcare and humanitarian logistics, coordination between preparation and delivery is crucial to ensure the efficient distribution of pharmaceuticals, chemotherapy treatments, radio-pharmaceuticals, food donations, and blood supplies, avoiding waste and ensuring critical medicines reach patients on time (Eisenhandler and Tzur, 2022; Torrado and Barbosa-Póvoa, 2022; Li et al., 2024). Across the aforementioned diverse industries, these fulfillment applications share a core structure of two interdependent stages: preparation and delivery. Both stages require complex real-time optimization in a combinatorial environment, with preparation constrained by limited resources and delivery incurring most or all real-time decision-dependent costs, such as routing expenses and customer delays. This cost asymmetry is a key insight supported by prior literature: preparation costs are often relatively fixed, largely determined by the number of available pickers, personnel, or machines, and are not highly sensitive to small variations in task timing. In contrast, costs in delivery operations such as fuel consumption or non-monetary cost of unpunctuality are highly variable, depending on dynamic routing decisions and dispatch timing. The dynamic nature of order arrivals demands flexible, adaptive decision-making to ensure synchronized and efficient operations. To address such settings, we introduce the Dynamic Order Fulfillment Problem (DOFP), a new problem class that unifies diverse domains in which synchronization of preparation and delivery stages under dynamic, stochastic conditions is desired. We model the class using a novel Markov decision process (MDP), which partitions the state space into two sub-spaces, each associated with a decision sub-space, representing the preparation and delivery stages. Uniquely, the decision sub-spaces are interdependent as they are linked by a set of constraints that represent the required synchronization 2in two-stage systems. Derived from our unique MDP formulation, we propose a decomposition framework for policy optimization that draws inspiration from the iterative refinement logic of traditional decomposition frameworks, but is fundamentally different in structure and scope. While classical decomposition methods operate over static decision variables in deterministic or two-stage stochastic settings, our method decomposes over a space of policies in a real-time, dynamic, and stochastic environment. Specifically, we separate the policy search into a master problem that proposes delivery policies and a subproblem that verifies the existence of compatible preparation policies. This formulation extends decomposition principles to the policy level within an MDP framework, enabling tractable optimization under uncertainty and temporal interdependence. Building on this decomposition for the DOFP class, we propose the Decomposition-Driven Framework with Value Function Approximation (VFA) ( DDF-VFA ). This solution method leverages the policy decomposition to alternate between solving the master and subproblem iteratively, using feedback mechanisms to refine decisions across stages. That is, the DDF-VFA includes methods to solve the policy master problem and the policy sub-problem and iterate between them using feedback loops. In this way, our solution framework utilizes the unique problem structure of the class of problems that we address. In our implementation, the policy master problem is optimized using a large neighborhood search (LNS) heuristic which searches over partial solutions of the second-stage decisions while an innovative auxiliary algorithm completes them. To address the subproblem, the Synchronized Preparation Scheduling (SPS) algorithm rapidly constructs a compatible preparation-stage decision or generates feasibility cuts. Finally, the evaluation employs a VFA to estimate the long-term impacts of decisions, ensuring a balanced approach to immediate and future objectives. In a meta-analysis, we specify and implement the DDF-VFA for two selected problems from the two major areas of warehousing and production, each with its own domain-specific constraints and objectives. We compare our solution framework to several benchmark policies from the literature. We show that our approach provides the best performance and is robust to changes in data, constraints, and objective functions. For each component of the DDF-VFA , we further present an alternative to illustrate their value and functionality. 
+
+1.1. Summary of Contributions 
+
+On the theoretical side, we define the DOFP class (Section 3), present a novel MDP formulation (Section 3.3), and introduce a policy-based decomposition approach to MDPs (Section 4). Method-ologically, we propose the DDF-VFA solution framework tailored to the DOFP class structure (Section 5), enhance it with specialized feature add-ons for broader applicability, and demonstrate its adaptability on two representative problems (Section 6). Computationally, we demonstrate superior performance over previous approaches on two problems and two real-world datasets (Section 7), and present a component-level analysis showing robustness across varying objectives, constraints, and data conditions. In the next section, we position our contributions in the related literature. 32. Literature Review 
+
+We organize the related literature in two streams. Section 2.1 reviews application-domain work on in-tegrated preparation-delivery operations. Section 2.2 discusses methodological work on decomposition and reinforcement-learning approaches that inform our policy decomposition. 
+
+2.1. Integrated Preparation-Delivery Operations 
+
+The integration of preparation and delivery operations has attracted growing attention across multiple domains. Recent approaches address this systemic challenge through joint optimization models that attempt to synchronize both fulfillment stages concurrently. However, while making progress relative to disjoint optimization, these approaches still fail to fully exploit fundamental structural characteristics typical to preparation-delivery operations. Specifically, while variable costs concentrate heavily in the delivery stage and preparation capacity is largely determined by fixed staffing decisions made independently of real-time operations, existing frameworks treat both stages equally. Consequently, they fail to leverage the cost asymmetry inherent in these systems, which suggests prioritizing downstream delivery efficiency subject to upstream preparation feasibility. The following review examines how this tension manifests across literature streams. In integrated picking and delivery, while several studies in static and deterministic settings demonstrate the clear benefits of joint planning, they typically treat the optimization of both stages uniformly rather than tailoring the solution methods to their distinct characteristics. Neves-Moreira et al. (2019) consider fixed wages in the preparation stage, meaning that operational costs accrue primarily in delivery; Jamili et al. (2022) examine collaborative warehouses with shared resources and delivery-stage tardiness; and Rijal et al. (2023) show that joint picking-delivery optimization outperforms sequential decision-making. Only a few studies explicitly consider uncertainty: Raj et al. (2024) address tactical-level decisions through simulation, and D’Haen et al. (2024) propose a metaheuristic for dynamic operations that minimizes tardiness and travel time without anticipatory mechanisms. Following Rijal et al. (2023) and D’Haen et al. (2024), we adopt the Integrated method (defined in Section 7.2) as a baseline benchmark. In integrated production and delivery, studies similarly emphasize the dominance of outbound logistics expenses over preparation constraints. Ganji et al. (2022) show that aligning production and delivery schedules with respect to due dates and time windows reduces costs, emissions, and customer dissatisfaction; further objectives include delivery tardiness (Ullrich, 2013), time-window violations (Wu et al., 2022), and total delivery times (Pereira and Nagano, 2022). Dynamic and stochastic settings remain less explored: Liu et al. (2022) integrate production and delivery under dynamic arrivals with fixed vehicle departure times, and Kermani et al. (2024) use a two-stage stochastic program with uncertain demand; for a recent review, see Berghman et al. (2023). While these works heavily weigh delivery-side penalties in their objective functions, they treat both stages similarly during optimization rather than decoupling them to exploit the rigid nature of preparation capacities relative to variable delivery costs. Related streams of literature also arise in the context of meal preparation and delivery, where 4researchers primarily focus on optimizing courier logistics (Ulmer et al., 2021). These studies implicitly isolate delivery costs by treating meal preparation durations as exogenous constants or simple stochastic invariants, thereby focusing exclusively on minimizing courier delays or maximizing fulfilled orders within strict deadlines. However, by omitting the active scheduling of the preparation stage, they do not address the operational interdependencies between processing and distribution, limiting their ability to optimize both stages simultaneously. An exception is Neria et al. (2025), who study ghost kitchens sharing a facility. They propose an integrated anticipatory method for combined order preparation and delivery, utilizing an LNS to explore decisions that are subsequently evaluated by a VFA; a technique we adapt as an additional benchmark (referred to as AI ). Despite these advances, the literature lacks a unified framework for integrated preparation-delivery operations under dynamic and stochastic order arrivals with explicit anticipation of future arrivals across both stages. Moreover, existing solution methodologies consistently fail to exploit the concentration of variable operational costs within the downstream delivery stage. By assigning equal attention to both decision spaces, conventional joint optimization introduces prohibitive computational burdens. Our policy-level decomposition framework directly mitigates this algorithmic challenge by isolating preparation as a feasibility-only subproblem. 
+
+2.2. Decomposition and Reinforcement-Learning Approaches 
+
+Decomposition methods address the computational challenges of large-scale optimization by dividing problems into smaller, more manageable components that can be solved iteratively (Wolsey and Nemhauser, 2014). They have proven highly effective in combinatorial optimization (Fontaine and Minner, 2023; Godbersen et al., 2024). A notable approach is the Dantzig-Wolfe decomposition that partitions the decision space into subproblems coordinated by a master problem (Dantzig and Wolfe, 1960). Extensions are successfully applied to non-convex problems (Byers and Hug, 2023; Jacquillat et al., 2025), multi-stage stochastic programming (Singh et al., 2009), and other problems with stochastic elements (Rostami et al., 2021). These advancements demonstrate the flexibility of the Dantzig-Wolfe framework in addressing uncertainty and complex constraints. However, they remain focused on static decision-making. Another widely used approach, the Benders decomposition, iteratively refines solutions by parti-tioning decision variables into a master problem and subproblem(s) (Benders, 1962). Although highly effective for problems with separable structures (Geoffrion, 1972), it struggles with inseparability and synchronization requirements. Several extensions to two-stage stochastic programming (Wang and Jacquillat, 2020), and Bilevel optimization (Beck et al., 2023) are presented. Recent advancements introduce hybrid methods (Rostami et al., 2023). While distinct from Benders decomposition, these methods share its iterative refinement notion. A related contribution is the work of Liu and Luo (2023), who apply Benders decomposition to a deterministic MILP approximation of a dynamic last-mile delivery problem. However, their method does not decompose a policy space or operate on the full state dynamics of an MDP, but rather optimizes on a tractable surrogate model. Applying such approaches to dynamic systems with evolving states and interdependent decisions remains unexplored. 5Reinforcement Learning (RL) decompositions offer another perspective, classified broadly into Hierarchical RL (HRL) and Multi-Agent Systems (MAS). HRL simplifies the state space but often assumes a small decision space, limiting its focus to state complexity rather than decision complexity (Barto and Mahadevan, 2003; Vezhnevets et al., 2017; Zhang et al., 2026). Multi-Agent Systems (MAS) distribute decisions across agents to reduce computational complexity but typically assume independence between agents, which restricts their applicability to tightly coupled problems (Lowe et al., 2017; Zhang et al., 2021; Ahadi et al., 2023; Guillet and Schiffer, 2023). An exception is the work of Kullman et al. (2021), which addresses an electric vehicle routing problem with known customer locations and uncertainty at charging stations. Their Benders-based decomposition method exploits the problem’s structure by separating deterministic routing decisions from recharging decisions, which are solved in a subproblem using queuing theory approximations. Our work extends decomposition techniques to a broader class of dynamic stochastic systems, explicitly addressing synchronization constraints and iterative feedback between decision stages. Furthermore, our framework uniquely integrates immediate and future costs through dynamic feedback, enabling coordinated decision-making across interdependent stages. 
+
+3. The DOFP Class Definition 
+
+In this section, we introduce the DOFP class of problems, which models the complexities of a two-stage fulfillment operation. Note that the term “two-stage” refers to the sequential nature of fulfillment operations (comprising preparation followed by delivery) and does not imply a two-stage stochastic programming formulation. Our model captures real-time decision making under dynamic and stochastic order arrivals. We begin with a general description in Section 3.1, detailing its core structure and components. In Section 3.2, we provide an example to illustrate a problem in this class. Next, Section 3.3 presents an MDP formulation for any problem in this class, capturing its inherent dynamics and uncertainties. 
+
+3.1. Class Description 
+
+To precisely characterize the types of problems that belong to the DOFP class, we outline the key defining elements below. 1. Orders arrive dynamically and stochastically over time at a facility in a given location. 2. Each order has to be prepared and then delivered to a destination location indicated by the order. 3. There are two sets of disjoint resources: preparation and delivery. Typically, the second stage resources are vehicles. The resources in each set could be either homogeneous or heterogeneous and are responsible for performing the preparation and delivery operations subject to various constraints. The preparation stage may represent complex environments, e.g., sequence dependent set-up times between orders, multiple sub-stages or simultaneous processing of multiple orders (batching), as long as any costs associated with this stage remain fixed, independent of the specific operational decisions made within this stage. The delivery 6stage may represent an intricate process, e.g., delivery to a micro-hub from which delivery is made to the order’s destination. 4. Upon the arrival of the kth order, there are two types of decisions to be made: x(1)  
+
+> k
+
+that allocates preparation resources to the new order and possibly modifies previous allocations of preparation resources to other orders; and x(2)  
+
+> k
+
+that allocates delivery resources to the new order, and possibly modifies previous allocations of delivery resources to other orders. 5. Synchronization between the preparation and delivery stages is essential to maintain feasible and efficient operations. Specifically, timing must be coordinated so that prepared orders are ready when delivery resources dispatch them. The extent of required coordination may vary across different problem variants within this class. 6. The delivery operations incur variable costs that depend on the decisions, whereas the costs of preparation operations are fixed and do not depend on operational decisions. This cost asymmetry reflects industry practice in which preparation capacity is determined by the number of available pickers, personnel, or machines on shift and is largely insensitive to small variations in task timing, while delivery costs (routing, fuel, unpunctuality) vary directly with operational decisions (Moons et al., 2018; Neves-Moreira et al., 2019; Rijal et al., 2023; Neria et al., 2025). 7. Decisions made in both stages are non-preemptable: in-progress preparation tasks must be completed, and a vehicle already en route must finish its current trip before its plan can be revised at a subsequent decision epoch. This design mirrors dispatching and production practices in dynamic fulfillment systems, avoiding the significant coordination overhead required to interrupt tasks or recall vehicles mid-route. For convenience, throughout the remainder of the paper, we refer to preparation resources simply as "resources" and to delivery resources as "vehicles". 
+
+3.2. Example 
+
+To illustrate the components of the DOFP class and to prepare the model, we present a small example of a state of the problem in Figure 1. To keep the presentation simple, we omit detailed mathematical notation. The figure summarizes an example state of the system. In this state, six orders are managed, represented as rectangles. White rectangles represent orders for which preparation has not started yet. The width of each white rectangle corresponds to the order’s processing time, while black rectangles indicate orders currently in preparation, with their remaining processing time shown by their widths. Two resources (machines or employees) handle these orders. Order 1 has already been processed and is ready for delivery, indicated by its grey shade. Orders 4 and 2 are in preparation, while orders 5 and 3 are scheduled next. The small gap between orders 4 and 5 might be the result of some additional constraint such as setup times, perishability of orders, or time windows. Order 6 has just arrived and is not yet assigned to any resource. The delivery fleet consists of two vehicles, each currently on their way. Their return times are reflected by the length of the solid line. 7Figure 1: Example for a general state of a problem in the DOFP class 1. Processing  2. Delivery      
+
+> 5
+> 23
+> 4
+> 6
+> New Planned schedules Ready
+> 1
+> 14
+> 2
+> 3
+> 5
+> Processing resource
+> (picker, cook, machine, etc.)
+> Order to be prepared
+> Order in preparation
+> Order ready for delivery
+> Delivery vehicle
+> Delivery location Feasibility Objective
+> Flexibility
+> 6
+
+One vehicle is scheduled to deliver orders 3 and 5 once it returns and both are ready. The second vehicle is scheduled to deliver orders 1, 4, and 2 once it returns and they are ready. Each trip has a planned departure time, ensuring all assigned orders are prepared, and the vehicle is available at departure. While in the example, only one planned trip per vehicle is scheduled, in the model, multiple subsequent planned trips per vehicle are possible in a state. A decision in this state has several components. First, with respect to the processing stage, a decision must be made about how to integrate the new order 6 into the existing schedules. One option is to add order 6 at the end of the current preparation sequence on one of the resources in a first-in, first-out manner. In that case, if no constraints are violated, order 6 might be scheduled after order 5. Alternatively, order 6 could be inserted before order 5 or 3, changing the sequence. It is also possible to reallocate orders between resources, such as assigning order 6 to the top resource while moving order 5 to the bottom resource before order 3. Besides sequencing, decisions about the precise starting times for each order’s preparation are required. All components of a decision regarding the first stage need to ensure feasibility on the first stage and in connection to the second stage. In the second stage, the delivery, the components of the decision contain the assignment of the new order to a trip and the update of the planned trips. For example, order 6 could be added to one of the scheduled trips or assigned a subsequent delivery trip. Alternatively, orders might be reassigned and new trips generated, e.g., by creating three trips for orders 1 and 4, for orders 2 and 5, and for orders 3 and 6. Again, all trips require determination of timing and need to ensure feasibility with respect to the problem constraints. In the second stage the objective is realized and affects the decisions. Even this small example already highlights the complexity of the decision space with the challenge of finding an effective second stage plan with respect to the objective while ensuring feasibility in connection to the first stage and in the first stage itself. At the same time, since the problem is stochastic and dynamic, all resources should be kept flexible with respect to future developments. 83.3. MDP Formulation of the DOFP 
+
+We next present an MDP formulation for a general problem in the DOFP class, following the modeling framework of Ulmer et al. (2020) (route-plan based model). The DOFP involves two tightly interdependent stages: preparation and delivery. To effectively capture this structure, the MDP explicitly represents these stages by separating the state and decision variables. This decomposition emphasizes the synchronization challenges between stages, enhances interpretability, and supports the decomposition-based solution frameworks introduced later. Below, we define the key components of the MDP formulation, starting with general notation. Orders arrive during [0 , T c] and are processed and delivered during [0 , T ] (T > T c). We represent the complete set of orders by I. Each order i ∈ I is associated with an arrival time to the system toi
+
+and a customer location li (the order’s destination), as well as a set of problem-specific attributes. The set of resources (of the first stage) is denoted by C. The set V represents the vehicles. We define the facility’s location, where orders are prepared, as 0. The travel time between the locations of orders i ∈ I ∪ { 0} and j ∈ I ∪ { 0} (with i = 0 or j = 0 representing the facility) is denoted by ttij .
+
+Decision Points. A decision point k arises each time a new order is placed, as well as at time T c.Given that the arrival of orders is stochastic, the total number of decision points K is a random variable. 
+
+States. A state Sk ∈ S at each decision point k is defined as Sk = ( S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+), where S(1)  
+
+> k
+
+and S(2) 
+
+> k
+
+represent the information relevant to the preparation and delivery stages, respectively. These sets may share mutual information critical to each of the stages and their coordination. The sets S(1)  
+
+> k
+
+and S(2)  
+
+> k
+
+each contain information on the set of open orders Ik. This set includes all orders, along with the information that comes with them, that have been placed but not yet dispatched, including orders currently in preparation or completed but awaiting dispatch, as well as the newly arrived order ik. Specifically, we denote the information on open orders in each stage as I(1)  
+
+> k
+
+for the preparation stage and I(2)  
+
+> k
+
+for the delivery stage. I(1)  
+
+> k
+
+includes details relevant to preparation, such as order-specific processing requirements, while I(2)  
+
+> k
+
+covers delivery-relevant information, including order-specific delivery requirements and customer locations. Together, Ik = I(1)  
+
+> k
+
+∪ I(2)  
+
+> k
+
+.The set S(1)  
+
+> k
+
+contains I(1)  
+
+> k
+
+, the details of the current first-stage plan denoted by Ψk, and the associated starting times tsk for each preparation task (of one or several orders simultaneously). The set S(2)  
+
+> k
+
+contains I(2)  
+
+> k
+
+, the second-stage plan Θk which includes plans for all vehicles v ∈ V , and information regarding times associated with planned trips and vehicles. Specifically, each vehicle’s plan Θkv ∈ Θk includes trips that are organized as a sequence θkv 1, θ kv 2, . . . , with each trip containing specific order sequences and planned departure times tdk (either from a facility or from a customer, when applicable). The return times trk for all vehicles indicate the next expected returns to the facility, accounting for whether each vehicle is idle or on a previous trip. The end time of preparation for each order that began before tk, denoted tmk , is derived from (Ψ k, t sk) ∈ S(1)  
+
+> k
+
+and is included in 9S(2)  
+
+> k
+
+due to the required synchronization between the two stages. To summarize: 
+
+S(1)  
+
+> k
+
+=   tk
+
+|{z} 
+
+> Time
+
+, I (1) 
+
+> k
+
+|{z} 
+
+> Orders
+
+, Ψk, t sk
+
+| {z } 
+
+> Resources
+
+, S (2)  
+
+> k
+
+=   I(2) 
+
+> k
+
+|{z} 
+
+> Orders
+
+, t mk
+
+|{z} 
+
+> Sync
+
+, Θk, t dk, t rk
+
+| {z }
+
+> Vehicles
+
+, S k =   tk
+
+|{z} 
+
+> Time
+
+, Ik
+
+|{z} 
+
+> Orders
+
+, Ψk, t sk
+
+| {z } 
+
+> Resources
+
+, Θk, t dk, t rk
+
+| {z }
+
+> Vehicles
+
+
+
+(1) where tmk does not appear explicitly in Sk because, as mentioned above, it is derived from (Ψ k, t sk).
+
+Decisions. A decision xk = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) ∈ X (Sk) at each decision point k consists of two components. The preparation plan update x(1)  
+
+> k
+
+= (Ψ xk , t s,x k ) ∈ X (1) (S(1)  
+
+> k
+
+) incorporates the allocation of ik to preparation resources and may involve rescheduling other orders or even modifying the entire plan, except for already started tasks; it satisfies a set of preparation constraints Qprep (S(1)  
+
+> k
+
+).The delivery plan update x(2)  
+
+> k
+
+= (Θ xk , t d,x k ) ∈ X (2) (S(2)  
+
+> k
+
+) incorporates ik in the vehicles’ schedule, possibly reassigning other orders or trips and adjusting them (and potentially modifying the entire vehicles’ schedule), and satisfies a set of delivery constraints Qdeliv (S(2)  
+
+> k
+
+). A combined decision 
+
+xk = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) ∈ X (Sk) additionally meets a set of synchronization constraints Qsync (Sk); when this holds, we say that x(1)  
+
+> k
+
+and x(2)  
+
+> k
+
+are compatible decisions . At the final decision point K (time 
+
+T c), the decision xK focuses solely on optimizing existing schedules and resource allocations without considering either a new order or future orders. 
+
+Costs. In accordance with the definition of the DOFP, variable operational costs are incurred solely from the decisions x(2)  
+
+> k
+
+and not x(1)  
+
+> k
+
+. Thus, the immediate cost associated with state Sk = ( S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+)
+
+and decision x(2)  
+
+> k
+
+is defined by C(S(2)  
+
+> k
+
+, x (2)  
+
+> k
+
+).
+
+Post-Decision States. A post-decision state Sxk ∈ S x captures the system’s state immediately after a decision is made but before any new order arrives (i.e., before transitioning to the next state with the arrival of ik+1 ). Starting from the current state Sk = ( tk, I k, Ψk, t sk, Θk, t dk, t rk) and applying the decision xk = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) = (Ψ xk , t s,x k , Θxk , t d,x k ), the resulting post-decision state is defined as 
+
+Sxk = ( tk, I k, Ψxk , t s,x k , Θxk , t d,x k , t rk).
+
+Stochastic Information. The stochastic information Wk+1 ∈ Ω consists of the new order ik+1 , which includes the order placement time toik+1 , the order location lik+1 , and possibly other relevant attributes specific to the problem. In a special case where no additional orders are received, represented by 
+
+Wk+1 = ∅, the decision process advances to the final state at T c.
+
+Transition. Given a state Sk = ( S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+), a decision xk = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+), and the stochastic information 
+
+Wk+1 , the next state Sk+1 = ( S(1) 
+
+> k+1
+
+, S (2) 
+
+> k+1
+
+) is determined by the transition function SM (Sk, x k, W k+1 ).During the transition, the current time is updated to tk+1 = toik+1 . The new set of open orders, Ik+1 ,includes all orders from the updated trip plans Θxk with departure times later than tk+1 , as well as the new order ik+1 . The resource schedules in S(1)  
+
+> k+1
+
+for each resource c ∈ C and the vehicle trip plans in S(2)  
+
+> k+1
+
+for each vehicle v ∈ V are then updated to reflect only the orders in Ik+1 . Correspondingly, 
+
+tmk+1 in S(2)  
+
+> k+1
+
+is updated to include the end times of preparation for all open orders in Ik+1 that began preparation prior to tk+1 . The return time trk+1 ,v in S(2)  
+
+> k+1
+
+for each vehicle v ∈ V is updated 10 to reflect the return time from its last trip departing before tk+1 , or it is set to tk+1 if the vehicle is idle at that time. 
+
+Objective. A policy, denoted by π ∈ Π, is a mapping that assigns a feasible decision π(Sk) = 
+
+xk = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) ∈ X (Sk) to each state Sk ∈ S . Specifically, let Π(1) and Π(2) represent the sets of corresponding feasible policies for the first and second stages, respectively. A first-stage policy 
+
+π(1) ∈ Π(1) is defined by the mapping π(1) (S(1)  
+
+> k
+
+) = x(1)  
+
+> k
+
+∈ X (1) (S(1)  
+
+> k
+
+), while a second-stage policy 
+
+π(2) ∈ Π(2) is defined by π(2) (S(2)  
+
+> k
+
+) = x(2)  
+
+> k
+
+∈ X (2) (S(2)  
+
+> k
+
+). Together, a complete policy π = ( π(1) , π (2) )
+
+is feasible and belongs to Π if and only if, for each state Sk = ( S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+), π(1) (S(1)  
+
+> k
+
+) and π(2) (S(2)  
+
+> k
+
+)
+
+are compatible decisions. Then, we also refer to π(1) and π(2) as compatible policies .Starting from the initial state S0 = (0 , ∅, ∅, ∅, ∅, ∅, ∅, ∅), the goal is to find a policy π∗ =(π(1) ∗, π (2) ∗) that minimizes the expected cumulative marginal costs across all decision points: 
+
+π∗ = ( π(1) ∗, π (2) ∗) ∈ arg min 
+
+> π=( π(1) ,π (2) )∈Π
+
+E
+
+" KX
+
+> k=0
+
+C(S(2)  
+
+> k
+
+, π (2) (S(2)  
+
+> k
+
+)) | S0
+
+#
+
+. (2) The optimal value of a state Sk, denoted by V (Sk), represents the minimum expected future cost starting from Sk and can be expressed recursively as: 
+
+V (Sk) = min      
+
+> xk=( x(1)
+> k,x (2)
+> k)∈X (Sk)
+
+n
+
+C(S(2)  
+
+> k
+
+, x (2)  
+
+> k
+
+) + E[V (Sk+1 ) | Sk, x k]
+
+o
+
+, ∀k ≤ K, (3) where V (SK ) = C(S(2)  
+
+> K
+
+, x (2)  
+
+> K
+
+), for all SK and xK = ( x(1)  
+
+> K
+
+, x (2)  
+
+> K
+
+) ∈ X (SK ). The term E[V (Sk+1 ) |
+
+Sk, x k] represents the expected value of V (Sk+1 ) given state Sk and decision xk (the cost-to-go) with the expectation taken over Wk+1 (the scenario at tk+1 ). Equation (3) illustrates the dependency of each immediate cost on S(2)  
+
+> k
+
+and x(2)  
+
+> k
+
+only, while x(1)  
+
+> k
+
+impacts future costs through the transition function that determines Sk+1 .
+
+4. Policy Decomposition 
+
+In this section we propose a novel decomposition formulation to address the computational complexity of solving the DTS-OSP. Unlike traditional decomposition methods designed for static or deterministic problems, this formulation accommodates the complexity of dynamic, stochastic systems where the solution is defined as a policy. 
+
+Preliminaries. Recall that the policies π(1) ∈ Π(1) and π(2) ∈ Π(2) govern the preparation and delivery stages, respectively, satisfying the stage-specific constraints Qprep (S(1)  
+
+> k
+
+) and Qdeliv (S(2)  
+
+> k
+
+) for all states (S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+) ∈ S . Notably, π(1) , and π(2) , may not have a compatible policy in the other stage. Therefore, we define ˜Π(2) = {π(2) ∈ Π(2) | ∃ π(1) ∈ Π(1) such that (π(1) , π (2) ) ∈ Π} as the set of second-stage policies that have a compatible first-stage policy. Given the definition of ˜Π(2) , we now introduce an alternative problem representation to leverage the structure of the DOFP class. 
+
+Alternative Problem Representation. The optimal delivery-stage policy can be defined by Eq.(4). 
+
+π(2) ∗ = arg min  
+
+> π(2) ∈˜Π(2)
+
+E
+
+" KX
+
+> k=0
+
+C(S(2)  
+
+> k
+
+, π (2) (S(2)  
+
+> k
+
+)) | S0
+
+#
+
+(4) 11 This representation is motivated by the special structure of problems belonging to the DOFP class, in which the costs depend only on the second-stage policy. From (4) , we observe that the objective value is supposedly independent of π(1) and is only a function of π(2) . However, π(1) has a role in determining the set of ˜Π(2) ⊆ Π(2) , which might be challenging to do in advance. Thus, we suggest a decomposition that leverages the two-stages structure of the problem, as detailed below. 
+
+Policy Decomposition. We separate the optimization tasks into a Policy Master-Problem ( PMP ), which focuses on delivery policies, and a Policy Sub-Problem ( PSP ), which ensures compatibility with the preparation policies. Together, they iteratively refine the solution space until optimality is achieved. The PMP is defined as determining a delivery-stage policy π(2) ∗ 
+
+> MP
+
+as follows: 
+
+PMP : π(2) ∗ 
+
+> MP
+
+= arg min 
+
+> π(2) ∈Π(2)
+> MP
+
+E
+
+" KX
+
+> k=0
+
+C(S(2)  
+
+> k
+
+, π (2) (S(2)  
+
+> k
+
+)) | S0
+
+#
+
+, (5) where Π(2)  
+
+> MP
+
+is a set of delivery-stage decisions in Π(2) that were not shown to be infeasible at a given iteration, hence, ˜Π(2) ⊆ Π(2)  
+
+> MP
+
+⊆ Π(2) . The initial set Π(2)  
+
+> MP
+
+includes all delivery-stage policies Π(2) but can be later pruned according to the PSP . The solution π(2) ∗ 
+
+> MP
+
+minimizes the objective value, but it does not necessarily ensure the existence of a compatible policy in Π(1) , i.e., feasibility. The PSP , given π(2) ∗ 
+
+> MP
+
+, searches for a compatible preparation-stage policy π(1)  
+
+> SP
+
+∈ Π(1)  
+
+> SP
+
+(π(2) ∗ 
+
+> MP
+
+) = 
+
+{π(1) ∈ Π(1) | π(1) and π(2) ∗ 
+
+> MP
+
+are compatible }, where Π(1)  
+
+> SP
+
+(π(2) ∗ 
+
+> MP
+
+) denotes the set of compatible preparation-stage policies to π(2) ∗ 
+
+> MP
+
+. The problem is defined as: 
+
+PSP : Find π(1)  
+
+> SP
+
+∈ Π(1)  
+
+> SP
+
+(π(2) ∗ 
+
+> MP
+
+). (6) Note that PSP is a feasibility problem and it either obtains a feasible π(1)  
+
+> SP
+
+(then π(2) ∗ 
+
+> MP
+
+is optimal) or concludes that there is no feasible solution, and hence π(2) ∗ 
+
+> MP
+
+(and possibly other second-stage policies) is excluded from the set Π(2) 
+
+> MP
+
+. Then, the PMP should be solved again with the updated Π(2) 
+
+> MP
+
+.Unlike classical decomposition methods, which generates optimality cuts to form lower bounds for a relaxed master problem, our policy-based decomposition framework does not rely on explicit dual information or linear relaxations. Instead, the refinement of the master policy space is driven by two components: (i) feasibility checks via the subproblem, which prune incompatible policies, and (ii) the cost-to-go which guides selection among candidate delivery-stage decisions. While these mechanisms do not yield formal bounds in the classical sense, they enable informed and structured exploration of the policy space under dynamic uncertainty. 
+
+Claim 1 (The iterative approach obtains an optimal policy) . Provided that the sets Π(1) and Π(2) 
+
+are finite, the iterative approach described above obtains an optimal policy π∗ = ( π(1) ∗, π (2) ∗) that satisfies Eq. (2) (assuming that Π̸ = ∅). Proof. Each refinement of Π(2)  
+
+> MP
+
+ensures a strictly smaller feasible set, and because Π(2) is finite, our approach will terminate after a finite number of steps. Upon termination, the resulting pair 
+
+(π(1)  
+
+> SP
+
+, π (2) ∗ 
+
+> MP
+
+) is optimal because PMP minimizes the cost over the refined feasible set, and PSP 
+
+ensures feasibility. 12 Building on the theoretical basis above, we demonstrate how the PMP and PSP can be practically solved within a sequential decision-making framework, as common in dynamic optimization (e.g., via Bellman equations). To this end, we define XMP and XSP below as the sets of delivery and preparation decisions that correspond to Π(2)  
+
+> MP
+
+and Π(1)  
+
+> SP
+
+, respectively. 
+
+XMP (S(2)  
+
+> k
+
+) = {π(2) (S(2)  
+
+> k
+
+) | π(2) ∈ Π(2) 
+
+> MP
+
+}, ∀S(2)  
+
+> k
+
+(7) 
+
+XSP (Sk, x (2)  
+
+> k
+
+) = {π(1) (S(1)  
+
+> k
+
+) | π(1) ∈ Π(1)  
+
+> SP
+
+(π(2) 
+
+> MP
+
+), π (2)  
+
+> MP
+
+∈ Π(2)  
+
+> MP
+
+such that π(2) 
+
+> MP
+
+(S(2)  
+
+> k
+
+) = x(2)  
+
+> k
+
+}, ∀Sk, x (2)  
+
+> k
+
+(8) 
+
+The presentation of the latter can also be simplified to XSP (Sk, x (2)  
+
+> k
+
+) = {x(1)  
+
+> k
+
+∈ X (1) (S(1)  
+
+> k
+
+) |
+
+(x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) are compatible }.Then, solving PMP can be done by addressing an alternative representation of the PMP ,referred to as MP , defined as follows. 
+
+Master-Problem ( MP ):. Find π(2) ∗ 
+
+> MP
+
+, the solution to PMP , by solving: 
+
+MP : π(2) ∗ 
+
+> MP
+
+(S(2)  
+
+> k
+
+) ∈ arg min   
+
+> x(2)
+> k∈X MP (S(2)
+> k)
+
+{C(S(2)  
+
+> k
+
+, x (2)  
+
+> k
+
+) + VSP (Sk, x (2)  
+
+> k
+
+)}, ∀Sk = ( S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+), (9) where the second component of the objective, VSP (Sk, x (2)  
+
+> k
+
+), represents the expected future costs obtained by solving the Sub-Problem ( SP ), as defined below. Notably, while the minimization is performed over x(2)  
+
+> k
+
+, the term VSP introduces a dependency on x(1)  
+
+> k
+
+, coupling the two decision stages. The formulation in (9) solves the PMP by incorporating dynamic state transitions and future cost evaluations, aligning with the sequential decision-making framework. 
+
+Sub-Problem ( SP ):. The Sub-Problem defined according to the sequential decision making framework, searches for a solution that is not only a compatible first-stage policy but also accounts for the expected future cost through its impact on the feasible delivery-stage policies. Thus, 
+
+SP : VSP (Sk, x (2)  
+
+> k
+
+) = min    
+
+> x(1)
+> k∈X SP (Sk,x (2)
+> k)
+
+E[V (Sk+1 ) | Sk, x k = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+)] (10) If XSP (Sk, x (2)  
+
+> k
+
+) = ∅, the corresponding x(2)  
+
+> k
+
+is not feasible, and it is required to generate feasibility cuts to prune it (and possibly other decisions) from XMP (S(2)  
+
+> k
+
+). This sequential decision making formulation provides an optimal solution, but it now requires evaluating the effect of x(1)  
+
+> k
+
+on future costs rather than evaluating only policies π2.To conclude, our decomposition method decouples the problem into a Policy Master-Problem and a Policy Sub-Problem. By that, it systematically reduces computational efforts, solving smaller, more focused problems iteratively rather than the entire problem at once. For convenience, Appendix A summarizes the notation presented thus far. 
+
+5. The Decomposition-Driven Solution Framework 
+
+This section introduces the DDF-VFA , developed to efficiently solve the DOFP by leveraging the decomposition structure outlined in Section 4. The framework is composed of two solution approaches: one targeting the MP in (9) , and the other addressing the SP in (10) , for each state 
+
+Sk = ( S(1)  
+
+> k
+
+, S (2)  
+
+> k
+
+).13 Figure 2: The DDF-VFA overview. Contrary to the benchmark that jointly searches, the combined (x(1)        
+
+> k, x (2)
+> k)decision space, DDF-VFA delegates x(1)
+> kto a feasibility-only subproblem (SPS) and concentrates the search effort on x(2)
+> k,where all variable cost is incurred.
+
+[Missing figure: figures/two stage solution overview figure.pdf ] 
+
+A main challenge in solving the MP is the vast decision space, XMP (S(2)  
+
+> k
+
+). Thus, an efficient solution mechanism is required to balance computational efforts and solution quality, as these decisions determine both immediate and future costs. Building on the concept of partial solutions introduced by Neria et al. (2025), where partial solutions were explored across multiple stages without decomposition, our approach focuses exclusively on partial solutions for the second stage. Specifically, we propose a heuristic method based on an LNS (large neighborhood search) algorithm to explore partial delivery decisions (sequences of trips excluding departures scheduling and vehicle assignments) while completing them using a separate innovative algorithm, as detailed in 5.1. Solving the SP , given a decision x(2)  
+
+> k
+
+, presents significant challenges. To tackle this, we propose a fast heuristic approach, named the Synchronized Preparation Scheduling (SPS) algorithm, designed to efficiently generate a feasible decision, x(1)  
+
+> k
+
+∈ X SP (Sk, x (2)  
+
+> k
+
+). If no feasible x(1)  
+
+> k
+
+is found, the algorithm generates feasibility cuts to refine the MP (Claim 1). An additional challenge in (10) lies in the computational effort required to evaluate the cost E[V (Sk+1 ) | Sk, x k = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+)] for each considered compatible decision x(1)  
+
+> k
+
+. To address this, we incorporate a VFA (value function approximation) using neural networks (NNs) (Neria and Tzur, 2024). Because the first-stage decision influences the objective value only indirectly through its impact on future second-stage feasible decisions, the SPS employs a fast algorithm that prioritizes identifying feasible first-stage decisions without exhaustively optimizing them. By that, it enables saving limited real-time computational resources to second-stage delivery decisions in the MP . That is, the DDF-VFA leverages the structure of the DOFP problem class, where costs are incurred in the second stage and envisions an optimization framework that focuses on these second-stage decisions. The DDF-VFA facilitates a structured interaction between the MP and the SP , iteratively refining the solution space to ensure compatibility between preparation and delivery stages while optimizing computational efficiency. Figure 2 illustrates this workflow. At each iteration, the framework generates a delivery-stage decision x(2)  
+
+> k
+
+and searches for a compatible preparation-stage decision x(1)  
+
+> k
+
+. If a feasible x(1)  
+
+> k
+
+is identified, the combined decision (x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) is evaluated based on its immediate cost, C(S(2)  
+
+> k
+
+, x (2)  
+
+> k
+
+), and its estimated future cost, denoted ˆV (Sxk ), given by the VFA. This iterative process continues until a stopping criterion is met, yielding the best decision found x∗
+
+> k
+
+for state Sk. In the following subsections, we provide more details on the solution approaches for the 
+
+MP (5.1) and the SP (5.2). A psuedocode is provided in Appendix B. 14 5.1. A Solution Approach to the MP 
+
+To address the MP we develop an LNS algorithm which creates partial delivery decisions , denoted as θ = ( θ(1) , θ (2) , . . . ), representing sequences of trips across all vehicles. These partial delivery decisions do not include the specific vehicle assignments and departure times. For the example in Figure 1, such partial delivery decisions may be ((1 , 4, 2) , (3 , 6, 5)) or ((1 , 4) , (2 , 5) , (3 , 6)) , etc. The latter means that first a vehicle starts a trip θ(1) to deliver orders 1 and 4, then a vehicle starts a trip θ(2) to deliver orders 2 and 5, and finally a vehicle starts a trip θ(3) to deliver orders 3 and 6. The exact vehicle assignments and departure times remain unspecified, and then each partial delivery decision is passed to a dedicated algorithm, the Trip Assignment and Scheduling (TAS), which complements those partial delivery decisions to x(2)  
+
+> k
+
+∈ X MP (S(2)  
+
+> k
+
+).
+
+5.1.1. The Large Neighborhood Search. 
+
+The LNS framework starts with an initial decision, based on appending the new order to the plan in 
+
+Sk, using a first-in-first-out heuristic, referred to as the FIFO benchmark, which we present later in Section 7.2. The LNS then employs problem-specific operators in each iteration to explore the space of partial delivery decisions (descriptions of the operators can be found in Appendix C). These operators modify the grouping of orders into trips, the sequence of order visits within each trip, and the sequence of trip departures. During the generation process, the LNS ensures that each trip is at least feasible in isolation , meaning it adheres to basic constraints such as capacity limits. 
+
+5.1.2. The Trip Assignment and Scheduling Algorithm. 
+
+The TAS transfers the partial delivery decision θ into a (complete) second-stage decision x(2)  
+
+> k
+
+.First, it checks whether θ can potentially become a decision x(2)  
+
+> k
+
+∈ X MP (S(2)  
+
+> k
+
+). If it can, then it sequentially generates departure times and vehicle assignments for each trip in θ, where after each such assignment, it verifies feasibility, given the current state, for the already scheduled trips with a potential compatible decision x(1)  
+
+> k
+
+, see below the detailed steps. 
+
+Initial Check. The first step is to verify whether the partial delivery decision θ satisfies the delivery-stage constraints Qdeliv (S(2)  
+
+> k
+
+). This check identifies any obvious conflicts, such as orders necessitating departure times that violate vehicle availability. If θ fails this check, it is deemed infeasible, and the LNS generates a new partial delivery decision. If the check passes, the algorithm proceeds to the next phase. 
+
+Assigning Departure Times. Departure times are assigned sequentially for each trip in θ. Let 
+
+l = 1 , . . . , |θ| represent the index of trips in θ. The algorithm follows the following steps: 1. Current Trip Assignment: The departure time of the current trip θ(l) is scheduled as early as possible, considering the availability of vehicles and the restrictions of orders in the trip, e.g., the lower bounds on orders’ ready times (after preparation). 2. First-Stage and Synchronization Feasibility: Once a departure time for the current trip is assigned, the potential of reaching a decision x(2)  
+
+> k
+
+that has a compatible decision x(1)  
+
+> k
+
+is evaluated by considering all orders in trips θ(1) , . . . , θ (l). That is, the feasibility of synchronizing these 15 trips with the preparation-stage is verified for their departure times that were set in Step 1. This check is performed using the SPS algorithm (see Section 5.2.1). If feasibility is confirmed, the TAS proceeds to the next trip. 3. Postponing Departure Times: If feasibility is not achieved, the departure time for the current trip is incrementally postponed (e.g., by one time-unit), and feasibility is re-evaluated in Step 2. The postponement in Step 3 may cascade to subsequent trips, as θ specifies a sequence of trips. If θ(l) requires a later departure time, all trips θ(l+1) , . . . , θ (|θ|) must also depart no earlier than the adjusted time of θ(l). This cascading adjustment eliminates from consideration a larger set of infeasible policies, streamlining the search process. If this postponement renders θ infeasible, the TAS terminates, and the LNS generates a new partial decision. Otherwise, the algorithm produces a feasible complete decision x(2)  
+
+> k
+
+for evaluation. The TAS can straightforwardly accommodate several optional features as small additions to its initial check, departure-assignment, or vehicle-assignment steps; the only case when a substantive extension to TAS is required is when the objective function minimizes soft-delivery-window violations, which leads to a DP-based refinement. Appendix D details examples of several per-feature adjustments (including the DP-refinement). 
+
+5.2. A Solution Approach to the SP 
+
+The SP obtains the delivery-stage decision x(2)  
+
+> k
+
+found by MP in 5.1. Towards that, we describe the SPS algorithm that aims to generate feasible preparation-stage decisions efficiently and a VFA framework to evaluate decisions. These components are described in the following subsections. 
+
+5.2.1. Synchronized Preparation Scheduling Algorithm. 
+
+The SPS algorithm determines a compatible preparation-stage decision x(1)  
+
+> k
+
+∈ X SP (Sk, x (2)  
+
+> k
+
+), or asserts that no compatible decision exists. To do so, it first computes feasible starting preparation time windows [ai, b i] for each order i ∈ I(1)  
+
+> k
+
+. These windows are derived solely from the synchronization constraints Qsync (Sk). For example, we ensure that preparation is completed before the associated delivery trip departs in x(2)  
+
+> k
+
+by setting bi = tdθ(i) − tpi , where tdθ(i) is the departure time of the trip containing order i. Within these time windows, the solution x(1)  
+
+> k
+
+needs to satisfy only preparation-stage constraints, Qprep (S(1)  
+
+> k
+
+). We obtain a MILP formulation, which can be solved optimally or heuristically by traditional operations research tools. The following steps summarize our algorithm. First, select order i from the set of all unassigned orders according to earliest due date (EDD), break a tie by SPT. Then, attempt to assign order i to the resource that minimizes the setup time from its last assigned order. For this assignment to be considered, the algorithm checks whether it is possible to feasibly assign the next two orders to any available resources after assigning order 
+
+i. This lookahead step ensures that the selected machine and its updated availability after order i
+
+can still accommodate at least two future jobs without violating their due dates. If no resource can feasibly assign order i while maintaining the feasibility of the next two orders, return "infeasible." If the assignment is successful, update the availability of the selected resource, and repeat the process 16 for the next order, using the same procedure for assigning jobs and checking future feasibility. Note that when no sequence-dependent setups exist between orders the procedure reduces to a standard EDD-based assignment heuristic (without lookahead). Concretely, it is equivalent to the H1 method of Ho and Chang (1995), originally proposed for parallel-machine scheduling: orders are sorted by EDD (ties broken by shortest processing time, SPT) and each order i is assigned to the busiest available resource, i.e., the one with the latest availability that can complete it without tardiness; if no such resource exists, the instance is declared infeasible. Otherwise the resource’s availability is updated and the next order is processed. Beyond the implementation described above, the SPS accommodates several other optional features either as a parameter-style update to its scheduling rule (heterogeneous resources) or as a full algorithmic substitution of the SPS itself (e.g., batched preparation or multi-stage preparation). See Appendix E for more details. The SPS results in a preparation decision x(1)  
+
+> k
+
+, which together with the MP outcome, x(2)  
+
+> k
+
+, form the decision xk. This decision is used to approximate the future cost as described next. 
+
+5.2.2. Future Cost Approximation. 
+
+In Eq. (10) , the value of each considered x(1)  
+
+> k
+
+, E[V (Sk+1 ) | Sk, x k], denoted as V (Sxk ), represents the cost-to-go of the post-decision state Sxk , obtained from Sk and xk = ( x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+). In the DDF-VFA , the exact cost-to-go is computationally prohibitive to calculate within a reasonable time frame. Hence, we employ NN-based VFA for fast estimation. NNs are able to approximate complex, nonlinear relationships between post-decision-states and their future costs, making them well-suited for the DOFP. The VFA predicts expected costs given aggregated post-decision states, which summarize key details such as resources and vehicle availability, along with the current time tk, thus enabling scalability and transfer learning. The VFA is refined offline through training, iteratively minimizing prediction errors between estimated and observed costs in a simulated environment using RL. Once trained, the model is applied online to evaluate decisions, enabling efficient decision-making and dynamic schedule updates. The VFA output, denoted as ˆV (Sxk ), integrates seamlessly into the 
+
+DDF-VFA , enhancing its ability to balance immediate and future costs effectively. Implementation details, including feature selection and architecture, are consistent with Neria et al. (2025). 
+
+6. Dynamic Fulfillment Problem Variants 
+
+We present two problem variants as case studies within the DOFP class. These variants were chosen to demonstrate the versatility of the DOFP class across diverse domains by addressing real-world challenges and highlighting structural differences. Each variant emphasizes a distinct operational focus: the Picking Variant minimizes travel time and penalized delay; and the Production Variant minimizes soft time window violations while incorporating sequence-dependent setup constraints. Together, these variants showcase the framework’s adaptability to diverse objectives, constraints, and decision spaces. To formally ground these distinct operational characteristics within the DOFP framework, we describe a MILP formulation to rigorously define and bound the feasible decision space X (Sk)
+
+17 given an individual system state Sk at decision epoch k. In particular, the below MILP defines the feasible preparation decisions X(1) (S(1)  
+
+> k
+
+), delivery decisions X(2) (S(2)  
+
+> k
+
+), synchronization constraints 
+
+Qsync (Sk), and the objective function J(Θ , t d) introduced abstractly in 3.3. While the theoretical breadth of the broader DOFP class makes a single, exhaustive MILP formulation that captures every possible permutation mathematically impractical, the unified MILP below is designed specifically to encompass the structural components of our two example variants. 
+
+6.1. Formulation of the Decision Space at a Given State in the Example Variants 
+
+The constraints below are written in a feature-parameterized form allowing each example variant to be recovered by fixing the values of the parameters sij , di, and (ai, b i, ρ e, ρ l) introduced below. 
+
+Preparation Stage. At each decision point k, the preparation state S(1)  
+
+> k
+
+consists of all orders 
+
+i ∈ I(1)  
+
+> k
+
+, each characterized by a processing time tpi . The preparation resources form a set C
+
+of homogeneous/hetrogeneous units (the concrete role - e.g., pickers or production machines - is variant-specific). The preparation assignment plan Ψk defines the sequence of orders allocated to each resource, with Ψkc denoting the assignments specific to resource c ∈ C. The set tsk represents the start times for processing each order. The feasible decision set X(1) (S(1)  
+
+> k
+
+) is formulated as a MILP. We define a binary variable 
+
+zict ∈ { 0, 1}, where zict = 1 indicates that resource c starts processing order i at time t. Note that the preparation decision x(1)  
+
+> k
+
+= (Ψ xk , t s,x k ) can then be derived from the values of zict for all i, c, and 
+
+t. Constraints (11)–(15) define the set of first-stage constraints Qprep (S(1)  
+
+> k
+
+):
+
+X
+
+> c∈CT
+
+X
+
+> t=toi
+
+zict = 1 , ∀i ∈ I(1)  
+
+> k
+
+(order assigned once) (11) 
+
+X
+
+> i∈I(1)
+> k
+
+zict ≤ 1, ∀c ∈ C, t k ≤ t ≤ T (resource capacity) (12) 
+
+X
+
+> j∈I(1)
+> k
+
+
+
+t′ + tpj + sji 
+
+
+
+zjct ′ ≤ T + zict (t − T ), ∀i, c, t k ≤ t′ < t ≤ T (resource availability) (13) 
+
+zict = 1 , ∀c ∈ C, i ∈ Ψkc , t ∈ { tsik ≤ tk | i ∈ I(1)  
+
+> k
+
+} (14) 
+
+zict ∈ { 0, 1}, ∀i ∈ I(1)  
+
+> k
+
+, c ∈ C, t k ≤ t ≤ T (binary definition) (15) These constraints ensure that each order in I(1)  
+
+> k
+
+is assigned exactly once, with no overlap in assignments for any resource at any time, and that tasks already started remain unchanged. In Constraint (13) we introduce a setup time sji . Setting sji = 0 for all i, j recovers a no-setup form. 
+
+Delivery Stage. At each decision point k, the delivery state S(2)  
+
+> k
+
+characterizes each order i ∈ I(2)  
+
+> k
+
+by its location li and placement time toi . Orders are transported by vehicles v ∈ V with a capacity of κ
+
+units, and each order i consumes di units of capacity. The feasible decision set X(2) (S(2)  
+
+> k
+
+) is also formulated as a MILP. The binary variable yivt ∈ { 0, 1}
+
+indicates whether vehicle v departs with order i at time t. Another binary variable, qijt ∈ { 0, 1},specifies whether orders i and j are delivered sequentially on a trip departing at time t. The 18 discrete variable tai ∈ [tk, T ] represents the arrival time of order i at the customer’s location, while 
+
+trvt ∈ [0 , T ] denotes the return time of vehicle v if dispatched at time t. Note that the delivery decision 
+
+x(2)  
+
+> k
+
+= (Θ xk , t d,x k ) can then be derived from the values of these decision variables. The constraints defining Qdeliv (S(2)  
+
+> k
+
+) are: 
+
+X
+
+> v∈VT
+
+X
+
+> t=tk
+
+yivt = 1 , ∀i ∈ I(2)  
+
+> k
+
+(assign each order to one trip) (16) 
+
+(yivt − 1) · T + tai + tti0 ≤ trvt , ∀i, v, t k ≤ t ≤ T (vehicle availability) (17) 
+
+trvt ′ ≤ yivt · t + T (1 − yivt ), ∀i, v, t k ≤ t′ < t ≤ T (time sequencing) (18) 
+
+X
+
+> i∈I(2)
+> k
+
+di · yivt ≤ κ, ∀v, t k ≤ t ≤ T (capacity constraints) (19) 
+
+X
+
+> i∈I(2)
+> k
+
+yivt − 1 ≤ X  
+
+> j∈I(2)
+> k,j ̸=i
+
+qjit , ∀v, t k ≤ t ≤ T (trip sequence) (20) 
+
+2 · qjit ≤ yivt + yjvt , ∀i, j, v, t k ≤ t ≤ T (trip inclusion) (21) 
+
+(qijt − 1) · T + ttij ≤ taj − tai , ∀i̸ = j, t k ≤ t ≤ T (no sub-tours) (22) 
+
+t · yivt + tt 
+
+> 0i
+
+≤ tai , ∀i, v, t k ≤ t ≤ T (time feasibility) (23) 
+
+yivt , q ijt ∈ { 0, 1}, ∀i, j ∈ I(2)  
+
+> k
+
+, v ∈ V, t k ≤ t ≤ T (binary definitions) (24) Constraint (16) ensures each order in I(2)  
+
+> k
+
+is assigned to exactly one trip, while constraints (17) – (24) enforce vehicle availability, capacity, and sequence feasibility, eliminating sub-tours. The demand size di in Constraint (19) represents the general case; setting di = 1 for all i recovers the unit-size form. 
+
+Combined Decision Set. The feasible decision set X (Sk) has to satisfy the preparation constraints 
+
+Qprep (S(1)  
+
+> k
+
+), the delivery constraints Qdeliv (S(2)  
+
+> k
+
+), and the synchronization constraints Qsync (Sk),with the latter specified by Constraint (25) . This synchronization constraint ensures that orders are only delivered once the preparation is completed. 
+
+X
+
+> c∈CT
+
+X
+
+> t=1
+
+(t + tpi ) · zict ≤ X
+
+> v∈VT
+
+X
+
+> t=1
+
+t · yivt , ∀i ∈ Ik. (25) 
+
+The Objective. The objective we consider in our example variants is minimizing a combination of penalized total travel time and deviation of each delivery from a target service window. We write the cost in a unified, feature-controlled form, allowing both variants of the DOFP class to be recovered by setting specific parameters. To that end, define the travel time penanlty ρt and consider a target service window [ai, b i] for each order i, with per-time-unit earliness and lateness penalties (ρe, ρ l).The total cost of a given delivery plan (Ψ , t s, Θ, t d) is 
+
+J(Θ , t d) = ρt
+
+X 
+
+> θ∈SΘ
+> |θ|− 1
+
+X
+
+> l=1
+
+ttiθl ,i θl+1 
+
++ X 
+
+> θ∈SΘ
+> |θ|
+
+X
+
+> j=1
+
+h
+
+ρe max  0, a iθj − ˆtaθ,j 
+
+ + ρl max  0, ˆtaθ,j − biθj
+
+i
+
+, (26) 19 where ˆtaθ,j = tdθ + Pj−1 
+
+> l=1
+
+ttiθl ,i θl+1 
+
+denotes the arrival time of the j-th order on trip θ. The first term accounts for total travel time; the bracketed term penalizes earliness and lateness relative to each order’s window. Then, the immediate cost reflects the marginal cost resulting from updating the plan in S(2)  
+
+> k
+
+, (Θ k, t dk), to the new plan according to x(2)  
+
+> k
+
+, (Θ xk , t d,x k ), and can be obtained by: 
+
+C(S(2)  
+
+> k
+
+, x (2)  
+
+> k
+
+) = J(Θ xk , t d,x k ) − J(Θ k, t dk) (27) The sum of immediate costs across all observed states equals the total realized costs over the entire period. We emphasize again that the above framework supports other constraints or objective functions as long as the seven conditions in 3.1 are met. Additional supported example features (e.g., batching, heterogeneous resources, perishability constraints) are presented in Appendix F as extensions to the MILP formulation. 
+
+6.2. The Picking Variant 
+
+This variant follows D’Haen et al. (2024) and models an order picking environment within a warehouse tightly coupled with outbound fleet delivery logistics, where individual vehicle trips serve multiple drop-off destinations sequentially. The primary objective is to minimize total vehicle travel times alongside penalized delivery tardiness. As detailed in the comprehensive literature review of Section 2.1, real-time operating costs in this specific layout are predominantly concentrated in the delivery routing stage, while the picking capacity remains constrained on a rolling workforce schedule (e.g., Neves-Moreira et al., 2019; Rijal et al., 2023). Grounded in these industry structures, and motivated by the myopic, non-anticipatory approaches of Rijal et al. (2023) and D’Haen et al. (2024), we compare our framework directly to an 
+
+Integrated benchmark policy that optimizes both fulfillment stages concurrently but lacks long-term stochastic foresight regarding future order arrivals. The Picking Variant is formally obtained from the unified mathematical formulation presented in Section 6.1 by enforcing the following parameter state: sequence-dependent setups are omitted (sji = 0 for all i, j ), orders possess unit capacity requirements ( di = 1 for all i), and the preparation resources c ∈ C act as a homogeneous picker workforce. The service target simplifies to a one-sided commitment derived from a click-to-door promise interval τ , specializing the objective parameters to 
+
+ai = 0 , bi = toi + τ , ρt = 1 , ρe = 0 , and ρl := ρ > 0.
+
+6.3. The Production Variant 
+
+The second variant models a manufacturing-fulfillment pipeline inspired by the scheduling complexities studied in Wu et al. (2022). Here, heterogeneous items are processed on a set of homogeneous machines and immediately routed to customers under tight, soft time-window bounds. In contrast to the Picking Variant, this environment features highly constrained sequence-dependent setup switchovers and heterogeneous order volumes that fractionally exhaust vehicle capacities. The primary objective is to minimize total soft time-window violations. Following the integrated production-routing paradigms reviewed in Section 2.1 (e.g., Berghman 20 et al., 2023; Kermani et al., 2024), this problem layout represents an operational setting where dynamic delivery penalties dominate final system performance, yet upstream combinatorial constraint matrices heavily dictate near-term execution feasibility. Evaluating our framework on this variant tests the scalability of the policy-level decomposition under continuous real-time order arrivals paired with severe changeover delays—a setup reflecting rapid-turnaround e-commerce fulfillment centers, modern restaurant kitchens, and custom manufacturing cells. The Production Variant is recovered directly from the unified formulation of Section 6.1 without simplifying structural assumptions. It explicitly retains the full sequence-dependent setup matrix sij 
+
+and heterogeneous order demands di. Each order i is bound symmetrically by an earliest and latest delivery target window [tsw i , t ew i ], which specializes the objective function parameters to ai = tsw i ,
+
+bi = tew i , ρt = 0 , and ρe = ρl = 1 , yielding total combined earliness and lateness violations as the underlying cost metric. 
+
+7. Computational Study 
+
+In this section, we present our computational study to test our proposed policy and derive managerial insights. We first give an overview of the instances and benchmark policies in 7.1 and 7.2, respectively. We then analyze the objective values of all policies over the two problem variants in 7.3. Further, we analyze problem-oriented aspects and investigate our design-choices in LNS, TAS, and SPS in 7.4. Additional results, including different instances, are described in Appendix G. 
+
+7.1. Instances 
+
+We test each problem-variant on a different real-world data set to ensure the robustness of our approach across multiple problems and across multiple data sets, see Appendix H. 
+
+Picking. Based on the Meituan (2024) dataset, each instance includes five resources, ten vehicles, and an average of 170.5 daily orders. Orders arrive via a non-stationary Poisson process (with arrival rates changing every two hours) from 8:00 to 24:00, with processing times normally distributed (with a mean of 7 minutes and std of 1 minute). A 60-minute click-to-door delivery promise is applied, with a delay penalty factor of 10 per minute (equating the costs of one minute of delay to ten minutes of travel time). 
+
+Production. Adapted from ORTEC (2022), these instances feature on average 200–300 orders per day, with vehicles that have a capacity of 145 units. Orders, locations, and time windows are sampled from the dataset (of time horizon of about 700 minutes). Each order belongs to one of four classes, with setup times of 5 or 10 minutes between orders from different classes and zero between orders from the same class. 
+
+7.2. Benchmark Policies 
+
+We compared DDF-VFA against the following four benchmark methods: 
+
+(1) FIFO serves as a baseline method, processing orders in the sequence they arrive without reordering or optimization, used in Liu et al. (2022) and as a benchmark in Rijal et al. (2023). This approach reflects what is often done in practice and helps establish a simple reference for evaluating 21 Figure 3: Average relative cost reduction of DDF-VFA across all benchmarks and example problem variants. FIFO Integrated AI DDF-G 
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Relative Cost Reduction (%)
+> Picking Variant
+> Production Variant
+
+more advanced methods. 
+
+(2) The Integrated approach optimizes current operations without accounting for future uncer-tainties, as implemented in Rijal et al. (2023); D’Haen et al. (2024). We implement the benchmark approach developed in Neria et al. (2025), which uses an LNS that searches the entire space of partial decisions without assignment and timing via LNS. Assignment and scheduling to specific resources and vehicles are handled by a separate polynomial algorithm. This method is called “Integrated” because it considers both stages simultaneously. 
+
+(3) The AI method (introduced in Neria et al. (2025)) builds on the Integrated method, and incorporates RL techniques through VFA to evaluate the cost-to-go of decisions, providing a more adaptive and forward-looking approach. The main difference between this method and the DDF-VFA 
+
+is how the decision space is searched. That is, while the DDF-VFA employs a decomposition approach and focuses its optimization efforts on the second stage, the AI optimizes both stages directly and simultaneously. 
+
+(4) DDF-G (with “G” denoting “greedy”) mirrors the structure of our DDF-VFA but excludes evaluation via VFA. Decisions are evaluated solely based on immediate costs, without considering future implications. This method allows us to assess the impact of VFA on solution quality. These benchmarks collectively highlight the trade-offs between simple heuristics, integrated optimization, decomposition, and advanced ML based techniques. 
+
+7.3. Performance of the DDF-VFA 
+
+To evaluate the performance of the DDF-VFA , we compare its objective value to the values obtained by the benchmark policies for the two problem variants. To this end, we run 100 realizations for each problem variant and calculate the respective average objective values. We then calculate the relative percentual cost reduction of the DDF-VFA as follows: 
+
+% Cost Reduction =
+
+ Value of Benchmark Policy − Value of DDF-VFA Value of Benchmark Policy 
+
+
+
+× 100 .
+
+Average improvements. The results are shown in Figure 3. We first observe that DDF-VFA improves upon all benchmarks for both problem variants, and the improvement is in the range of 3% to 87%. 22 The largest average cost reductions are obtained relative to FIFO, followed by Integrated , AI , and finally DDF-G . The magnitude of the improvement is not only due to the improved solution method, but it is also due to the problems’ structure. For example, in warehouse picking operations, travel times are a significant and unavoidable cost factor. Thus, the objective values for all policies are large, and the relative improvement becomes smaller. Another notable observation is that DDF-G 
+
+outperforms AI in the production variant. In this problem, the time windows complicate the search for effective delivery schedules. Thus, the focus of this search on the delivery stage (as done in 
+
+DDF-VFA ) instead of on the entire decision space (as done in AI ) is particularly beneficial. The time windows may also be the reason for the relatively small improvement of DDF-VFA over DDF-G 
+
+as they restrict the decision space, reduce flexibility, and, therefore, the need for explicit anticipation. The diminishing value of anticipation is also supported by the similar performance of Integrated and 
+
+AI .When comparing the two methods that employ anticipation, AI and DDF-VFA , under similar runtime conditions and the same number of LNS search iterations, DDF-VFA consistently yielded higher-quality solutions. The AI approach struggled due to the simultaneous optimization of both stages. These findings highlight the advantage of the decomposition, particularly in real time environments where computational resources are constrained. To evaluate the impact of the VFA within DDF-VFA , we compare its performance against DDF-G .The results reveal that incorporating VFA enhances the solution quality especially in the Picking variant where anticipating future decisions is critical. Quantitatively, in the Picking variant at the highest tested delay penalty ( ρ = 50 , Table 1), DDF-VFA reduces the total objective from 45,392 (under DDF-G ) to 36,024 minutes, a 20.6% improvement, by trading a small increase in travel time for a substantial reduction in delay. The gain is more modest in the Production variant: soft time windows compress the effective decision space and restrict the recourse available to delay-sensitive decisions, leaving less room for anticipation to help. This is consistent with the diminishing gap between Integrated and AI in the same variant, which we already noted above. 
+
+7.4. Analysis of the DDF-VFA Components and its Robustness 
+
+We have presented a novel solution framework, DDF-VFA , comprising several individual components. We have implemented this framework for two problem variants (Picking and Production), which differ in their objectives, constraints, and data characteristics. In this section, we aim to provide a deeper analysis of the framework’s components and its adaptability across these diverse problem settings. Specifically, we analyze the contribution of problem-specific LNS operators in solving the 
+
+MP , and effective SPS algorithms in solving the SP , to the overall performance. Our analysis highlights the importance of ensuring that all of the decomposition components work well together. Additionally, we investigate the framework’s robustness by evaluating its response to changes in important, problem-specific characteristics in objective function parameters, problem constraints, and input data. For this analysis, we select representative experiments that highlight the role of these components. This approach clarifies the interplay between methodological design and problem-specific challenges, 23 offering insights into the scalability and applicability of DDF-VFA to real-world logistics. The 
+
+DDF-VFA is retrained for each configuration tested in this analysis to ensure that the model fully adapts to the specific characteristics of the parameter set. We show that DDF-VFA consistently outperforms all benchmark policies, highlighting its robustness and providing valuable insights. 
+
+7.4.1. The Role of Neighborhood Operator Design in Master Policy Optimization. 
+
+The combinatorial complexity of the master problem ( MP ) policy search space necessitates neigh-borhood operators that directly align with the core dimensions of the underlying objective function. When a problem variant exhibits a heavy spatial-routing cost component, relying solely on temporal or deadline-oriented operators can severely restrict the local neighborhood search from discovering localized travel efficiencies. To isolate and evaluate this dependency within the DDF-VFA framework, we conduct a structural operator-ablation study. We choose an evaluation environment characterized by a strong travel-time emphasis (instantiated here via the Picking Variant framework) and disable our custom travel-minimizing operators, leaving only standard deadline-oriented operators active during the LNS iterations. Our experiments demonstrate that restricting the master policy’s search space topology in this manner results in an immediate 8.1% increase in vehicle travel times. This significant degradation confirms that framework performance is highly sensitive to the presence of objective-targeted operators, which are required to successfully navigate local optima during master policy updates. 
+
+7.4.2. Sensitivity to Objective Function. 
+
+In our primary Picking Variant’s experiments, we assumed a penalty factor of ρ = 10 . To evaluate the structural adaptability of our framework under different operational priorities, we vary this penalty factor across ρ ∈ { 0, 1, 10 , 25 , 50 } for both DDF-VFA and the benchmark policies. Table 1 summarizes the seed-averaged total vehicle travel time (Travel), customer delay (Delay), and the combined objective value (Total). The results demonstrate a clear operational trade-off: scaling the penalty factor forces policies to aggressively suppress customer delay at the expense of increased routing distance. This behavioral adaptation is uniquely visible at the unpenalized boundary ( ρ = 0 ), where the objective collapses exclusively to travel-time minimization. Under this incentive structure, DDF-VFA achieves the absolute lowest travel time (2,010 minutes) by allowing customer delays to drift to 1,538 minutes. Notably, this 2,000-minute threshold represents an unavoidable structural routing floor required to fulfill the physical delivery layout, regardless of priority. In contrast, rule-based policies such as FIFO lack this systemic optimization awareness; FIFO blindly expends high routing overhead (2,279 travel minutes) to maintain a low delay profile (1,317 minutes) that is entirely unpenalized by the underlying objective. This confirms that the learned VFA policy effectively internalizes altered reward architectures rather than relying on invariant heuristics. Conversely, when the penalty escalates to its highest level ( ρ = 50 ), DDF-VFA successfully minimizes exposure to severe delay weights by shifting its policy to prioritize speed over routing economy. It curtails customer delay to 678 minutes while keeping travel time bounded at 2,149 24 Table 1: Results: Total vehicles travel time (in min.), total delay (in min.), and total objective value for the Picking Variant.                                                                                               
+
+> ρDDF-VFA FIFO Integrated AI DDF-G
+> Travel Delay Total Travel Delay Total Travel Delay Total Travel Delay Total Travel Delay Total 02,010 1,538 2,010 2,279 1,317 2,279 2,123 1,338 2,123 2,100 1,361 2,100 2,016 1,646 2,016 12,048 861 2,909 2,279 1,317 3,596 2,104 1,118 3,222 2,065 1,097 3,162 2,097 1,046 3,143 10 2,117 755 9,667 2,279 1,317 15,445 2,115 1,004 12,154 2,119 991 12,034 2,111 908 11,194 25 2,148 684 19,250 2,279 1,317 35,195 2,143 1002 27,196 2,189 853 23,517 2,120 854 23,474 50 2,149 678 36,024 2,279 1,317 68,110 2,147 963 50,287 2,203 858 45,122 2,125 865 45,392
+
+minutes, yielding a total objective of 36,024. This performance heavily outpaces the FIFO and 
+
+Integrated baselines, which yield total values of 68 , 110 and 50 , 287 , respectively. Across all tested parameter settings, the cost reductions achieved by DDF-VFA over the complex AI benchmark range from 20.2% to 47.1%, highlighting the robust scalability of the policy-level decomposition approach under deeply altered operational environments. 
+
+7.4.3. The Importance of the SPS Performance. 
+
+Since the subproblem ( SP ) governs sequence-dependent setup constraints, the fidelity of the Sub-problem Solver (SPS) directly influences the feasible boundaries of the master policy. If the SPS evaluates scheduling spaces myopically without accounting for sequence transitions, it will frequently flag structurally viable delivery combinations as ‘Infeasible‘. This false-negative behavior artificially restricts the Master Problem’s exploration loop. To evaluate this component-level dependency, we compare our proposed anticipatory look-ahead SPS against a simplified, myopic heuristic-based SPS that lacks forward-looking coordination. While both configurations maintain comparable average delay profiles due to the binding nature of the downstream time windows, the structural operational metrics reveal a massive advantage for the anticipatory architecture. By proactively calculating sequence changeovers, the anticipatory SPS significantly improves vehicle consolidation efficiency, increasing the average number of orders packed per trip from 3.06 to 3.19 . Simultaneously, it optimizes the preparation sequence to reduce the average changeover setup time from 2.75 down to 2.54 minutes per order. Crucially, the simplified myopic SPS lacks this sequencing agility, causing it to reject dense delivery clusters and force premature, sub-optimal vehicle dispatches. As a result, the anticipatory SPS reduces average violation from 
+
+11 .22 to 10 .85 minutes, and the violation rate from 34 .39 % to 33 .97 %. This ablation study confirms that high-fidelity subproblem solution is a prerequisite for achieving global master-policy routing efficiency. 
+
+7.4.4. Robustness to Data Changes. 
+
+Setup times play a critical role in determining the complexity of the Production Variant, as they introduce significant constraints on the scheduling process. Unlike the other variants, the variability and heterogeneity in setup times create additional challenges, particularly in optimizing the order preparation sequences. We analyze the performance of all methods under different levels of setup time heterogeneity. In our main experiments, the setup times were 0, 5, or 10 minutes. In the first experiment, we increase the setup times of 0 minutes to 3 minutes and decrease the setup times of 10 minutes to 7 minutes. All other setup times, initially set to 5 minutes, remain unchanged. In a 25 second experiment, all setup times are 5 minutes. Thus, all experiments share the same average setup time but differ in the setup time variability. With a minimal setup time of zero minutes, DDF-VFA and DDF-G optimize the order preparation sequences to fully exploit the minimal setup times, resulting in low average violations of 10.85 and 11.27 minutes, respectively. When the minimum setup time is increased to 3 minutes, the methods faced significantly higher average violations of 16.36 and 16.44 minutes, respectively. Yet, even when the minimal setup time increase, DDF-VFA and DDF-G maintain significantly better performance compared to other approaches, indicating their adaptability and effectiveness in handling changes in problem parameters. In particular, AI struggles significantly under these conditions, with its average violations increasing from 31.03 to 77.97 minutes. The reason may be that with less distinct differences in the setup times, the search for effective decisions becomes more nuanced and therefore challenging without decomposition. A similar trend is observed for the case when all setup times are 5 minutes, i.e., all methods experience even higher violations, but in the DDF-VFA and DDF-G , the increase (to 22.4 and 23.4, respectively) is moderate and maintains better performance compared to the other approaches. This analysis reveals the critical role of the distribution of setup times, and in particular, the minimal setup times. When the minimal setup times are zero, the policies can sometimes bypass the setups and avoid unnecessary delays. Conversely, even a small increase in setup times (to 3 or 5 minutes) results in more constrained operations and higher costs, underscoring the importance of setup-aware optimization. 
+
+8. Conclusion 
+
+In this paper, we introduced the DOFP, a new class of problems consisting of an integration of two interdependent stages in dynamic and stochastic environments. This class encompasses a wide range of fulfillment applications in logistics, healthcare, and food services, where coordinating preparation and delivery stages is critical. Our framework also supports multi-step preparation phases, enhancing its versatility for real-world challenges such as picking followed by packing or machine configuration. Several promising directions emerge from this work. Instantiating and benchmarking additional variants is a natural next step, including, for example, batched preparation, heterogeneous resources and vehicles, multi-stage preparation, emissions restrictions, and perishability constraints. While our structural policy decomposition conceptually opens the door to these more complex environments, fully implementing the framework in those settings may be non-trivial. A separate, structurally distinct direction is to relax the deterministic-MILP assumption and accommodate 
+
+stochastic processing times , where the per-order processing time tpi is itself random: with tpi stochastic, the resource-availability constraint (13) and the synchronization constraint (25) become probabilistic statements, calling for a chance-constrained or sample-average-approximation reformulation that we leave to future work. On the application side, testing additional operational variants, such as batching or multi-stage preparation, could expand the framework’s utility. Future studies could incorporate new constraints such as priority-based processing, vehicle access limits, emissions restrictions, or strict delivery windows, enhancing real-world relevance. Extending the framework to cases where 26 costs are concentrated on the first stage, expanding it to three-stage problems or incorporating stochastic processing times presents compelling opportunities. 
+
+References 
+
+Ahadi, R., Ketter, W., Collins, J., Daina, N., 2023. Cooperative learning for smart charging of shared autonomous vehicle fleets. Transportation Science 57, 613–630. Barto, A.G., Mahadevan, S., 2003. Recent advances in hierarchical reinforcement learning. Discrete Event Dynamic Systems 13, 341–379. Beck, Y., Ljubić, I., Schmidt, M., 2023. A survey on bilevel optimization under uncertainty. European Journal of Operational Research 311, 401–426. Benders, J.F., 1962. Partitioning procedures for solving mixed-variables programming problems. Numerische Mathematik 4, 238–252. Berghman, L., Kergosien, Y., Billaut, J.C., 2023. A review on integrated scheduling and outbound vehicle routing problems. European Journal of Operational Research 311, 1–23. Byers, C., Hug, G., 2023. Long-run optimal pricing in electricity markets with non-convex costs. European Journal of Operational Research 307, 351–363. Chen, M., Hu, M., 2024. Courier dispatch in on-demand delivery. Management Science 70, 3789–3807. Dallasega, P., 2017. A method and IT-framework for on-demand delivery in make-to-order construc-tion supply chains. Fraunhofer Verlag. Dantzig, G.B., Wolfe, P., 1960. Decomposition principle for linear programs. Operations Research 8, 101–111. D’Haen, R., Ramaekers, K., Archetti, C., Braekers, K., 2024. Integrating order picking and vehicle routing decisions in a dynamic e-commerce setting. Computers & Operations Research , 106762. Eisenhandler, O., Tzur, M., 2022. Multi-period collection and distribution problems and their application to humanitarian gleaning operations. IISE Transactions 54, 785–802. Erazo, I., Toriello, A., 2025. Optimizing the trade-off between batching and waiting: Subadditive dispatching. Operations Research . Fleckenstein, D., Klein, R., Steinhardt, C., 2023. Recent advances in integrating demand management and vehicle routing: A methodological review. European Journal of Operational Research 306, 499–518. Fontaine, P., Minner, S., 2023. A branch-and-repair method for three-dimensional bin selection and packing in e-commerce. Operations Research 71, 273–288. 27 Ganji, M., Rabet, R., Sajadi, S.M., 2022. A new coordinating model for green supply chain and batch delivery scheduling with satisfaction customers. Environment, Development and Sustainability , 1–36. Geoffrion, A.M., 1972. Generalized Benders decomposition. Journal of Optimization Theory and Applications 10, 237–260. Godbersen, G., Kolisch, R., Schiffer, M., 2024. Robust charging network planning for metropolitan taxi fleets. Transportation Science 58, 295–314. Guillet, M., Schiffer, M., 2023. Coordinated charging station search in stochastic environments: A multiagent approach. Production and Operations Management 32, 2596–2618. Ho, J.C., Chang, Y.L., 1995. Minimizing the number of tardy jobs for m parallel machines. European Journal of Operational Research 84, 343–355. Jacquillat, A., Li, M.L., Ramé, M., Wang, K., 2025. Branch-and-price for prescriptive contagion analytics. Operations Research 73, 1558–1580. Jamili, N., Van Den Berg, P.L., De Koster, R., 2022. Quantifying the impact of sharing resources in a collaborative warehouse. European Journal of Operational Research 302, 518–529. Kermani, A., Cordeau, J.F., Jans, R., 2024. A progressive hedging-based matheuristic for the stochastic production routing problem with adaptive routing. Computers & Operations Research 169, 106745. Kullman, N.D., Goodson, J.C., Mendoza, J.E., 2021. Electric vehicle routing with public charging stations. Transportation Science 55, 637–659. Li, J., Peng, K., Deng, X., Wang, J., Liu, A., 2024. Model and algorithm for pharmaceutical distribution routing problem considering customer priority and carbon emissions. Data-Centric Engineering 5, e16. Liu, H., Wang, Y., Lee, L.H., Chew, E.P., 2022. An approximate dynamic programming approach for production-delivery scheduling under non-stationary demand. Naval Research Logistics (NRL) 69, 511–528. Liu, S., Luo, Z., 2023. On-demand delivery from stores: Dynamic dispatching and routing with random demand. Manufacturing & Service Operations Management 25, 595–612. Lowe, R., Wu, Y.I., Tamar, A., Harb, J., Abbeel, P., Mordatch, I., 2017. Multi-agent actor-critic for mixed cooperative-competitive environments, in: Advances in Neural Information Processing Systems. Meituan, 2024. TSL-Meituan. INFORMS TSL Data-Driven Research Challenge. 28 Moons, S., Ramaekers, K., Caris, A., Arda, Y., 2018. Integration of order picking and vehicle routing in a B2C e-commerce context. Flexible Services and Manufacturing Journal 30, 813–843. Neria, G., Hildebrandt, F.D., Tzur, M., Ulmer, M.W., 2025. The restaurant meal delivery problem with ghost kitchens. Transportation Science 59, 433–450. Neria, G., Tzur, M., 2024. The dynamic pickup and allocation with fairness problem. Transportation Science 58(4), 821–840. Neves-Moreira, F., Almada-Lobo, B., Cordeau, J.F., Guimarães, L., Jans, R., 2019. Solving a large multi-product production-routing problem with delivery time windows. Omega 86, 154–172. ORTEC, 2022. Euro NEURIPS VRP 2022 quickstart instances. https://github.com/ortec/ euro-neurips-vrp-2022-quickstart . Accessed: July 31, 2024. Pereira, M.T., Nagano, M.S., 2022. Hybrid metaheuristics for the integrated and detailed scheduling of production and delivery operations in no-wait flow shop systems. Computers & Industrial Engineering 170, 108255. Raj, G., Roy, D., De Koster, R., Bansal, V., 2024. Stochastic modeling of integrated order fulfillment processes with delivery time promise: Order picking, batching, and last-mile delivery. European Journal of Operational Research 316, 1114–1128. Rijal, A., Bijvank, M., de Koster, R., 2023. Dynamics between warehouse operations and vehicle routing. Production and Operations Management 32, 3575–3593. Rostami, B., Desaulniers, G., Errico, F., Lodi, A., 2021. Branch-price-and-cut algorithms for the vehicle routing problem with stochastic and correlated travel times. Operations Research 69, 436–455. Rostami, B., Errico, F., Lodi, A., 2023. A convex reformulation and an outer approximation for a large class of binary quadratic programs. Operations Research 71, 471–486. Singh, K.J., Philpott, A.B., Wood, R.K., 2009. Dantzig-Wolfe decomposition for solving multistage stochastic capacity-planning problems. Operations Research 57, 1271–1286. Statista, 2024. Transportation & logistics - worldwide market forecast. URL: https://www.statista. com/outlook/mmo/transportation-logistics/worldwide . accessed: May 2026. Torrado, A., Barbosa-Póvoa, A., 2022. Towards an optimized and sustainable blood supply chain network under uncertainty: a literature review. Cleaner Logistics and Supply Chain 3, 100028. Ullrich, C.A., 2013. Integrated machine scheduling and vehicle routing with time windows. European Journal of Operational Research 227, 152–165. Ulmer, M., 2017. Delivery deadlines in same-day delivery. Logistics Research 10, 1–15. 29 Ulmer, M.W., Goodson, J.C., Mattfeld, D.C., Thomas, B.W., 2020. On modeling stochastic dynamic vehicle routing problems. EURO Journal on Transportation and Logistics 9, 100008. Ulmer, M.W., Thomas, B.W., Campbell, A.M., Woyak, N., 2021. The restaurant meal delivery problem: Dynamic pickup and delivery with deadlines and random ready times. Transportation Science 55, 75–100. Vezhnevets, A.S., Osindero, S., Schaul, T., Heess, N., Jaderberg, M., Silver, D., Kavukcuoglu, K., 2017. Feudal networks for hierarchical reinforcement learning. arXiv preprint arXiv:1703.01161 . Wang, K., Jacquillat, A., 2020. A stochastic integer programming approach to air traffic scheduling and operations. Operations Research 68, 1375–1402. Waßmuth, K., Köhler, C., Agatz, N., Fleischmann, M., 2023. Demand management for attended home delivery—a literature review. European Journal of Operational Research 311, 801–815. Wolsey, L.A., Nemhauser, G.L., 2014. Integer and combinatorial optimization. John Wiley & Sons. Wu, G.H., Cheng, C.Y., Pourhejazy, P., Fang, B.L., 2022. Variable neighborhood-based cuckoo search for production routing with time window and setup times. Applied Soft Computing 125, 109191. Zhang, K., Yang, Z., Başar, T., 2021. Multi-agent reinforcement learning: A selective overview of theories and algorithms. Handbook of reinforcement learning and control , 321–384. Zhang, X., Luo, Q., Qian, X., 2026. Enhancing online food delivery with transfer points: Adata-driven decompose-then-optimize approach. Transportation Science . 30 Appendix A. Summary of Notation 
+
+Tables A.2 and A.3 summarize the main notation used in the paper. 
+
+Table A.2: Summary of Notation: Parameters, Indices, and MDP Framework 
+
+Category Symbol Description 
+
+General Parameters and Sets T c Time horizon for order arrivals 
+
+T Total time horizon for processing and delivery 
+
+I Set of all orders 
+
+C Set of preparation resources (e.g., pickers, machines) 
+
+V Set of delivery vehicles 
+
+li Customer location of order itoi Arrival time of order i to the system 
+
+ttij Travel time between locations i and jκ Capacity of a delivery vehicle 
+
+tpi Processing time for order i
+
+0 Location of the central facility (depot) 
+
+Ik Set of open orders at decision point kik Newly arrived order at decision point kI(1)  
+
+> k
+
+Information on open orders in preparation stage at decision point kI(2)  
+
+> k
+
+Information on open orders in delivery stage at decision point k
+
+Indices k Decision point index 
+
+i, j Orders/customers 
+
+c Preparation resources 
+
+v Vehicles 
+
+t Time index 
+
+θ Trip index MDP Notation Sk State at decision point k, consisting of S(1)  
+
+> k
+
+(preparation) and S(2)  
+
+> k
+
+(delivery) 
+
+S(1)  
+
+> k
+
+Preparation state at decision point kS(2)  
+
+> k
+
+Delivery state at decision point k
+
+S State space 
+
+Sxk Post-decision state at decision point k
+
+Sx Post-decision state space 
+
+K Total number of decision points (a random variable) 
+
+Ψk Preparation plan at decision point ktsk Start times for preparation tasks at decision point ktrk Return time of all vehicles from their last departed trips at decision point k
+
+Θk Delivery plan at decision point k
+
+Θkv Delivery plan for vehicle v at decision point kθkv 1, θ kv 2, . . . Sequence of trips planned for vehicle vtdk Vector of planned departure times at decision point kxk Decision at k, comprising x(1)  
+
+> k
+
+(preparation decision) and x(2)  
+
+> k
+
+(delivery decision) 
+
+x(1)  
+
+> k
+
+Preparation decision: (Ψ xk , t s,x k )
+
+x(2)  
+
+> k
+
+Delivery decision: (Θ xk , t d,x k )
+
+X (Sk ) Action space / set of feasible decisions at state Sk
+
+X (1) (S(1)  
+
+> k
+
+) Set of feasible preparation decisions at state S(1) 
+
+> k
+
+X (2) (S(2)  
+
+> k
+
+) Set of feasible delivery decisions at state S(2) 
+
+> k
+
+Wk+1 Stochastic information arriving between decision points k and k + 1 Ω Sample space of stochastic information 
+
+SM System transition function 
+
+π Combined policy across both stages 
+
+π(1) Policy for preparation decisions in the first stage 
+
+π(2) Policy for delivery decisions in the second stage 
+
+Π Set of all feasible combined policies 
+
+Π(1) Set of feasible preparation policies 
+
+Π(2) Set of feasible delivery policies 
+
+31 Table A.3: Summary of Notation: Decisions, Constraints, and Objectives                                                                          
+
+> Category Symbol Description
+> Preparation Decision Variables zict Indicating if resource cstarts processing order iat time t
+> Delivery Decision Variables yivt Indicating if vehicle vdeparts with order iat time tqijt Indicating if orders i, j are delivered sequentially in the same trip that departs at time ttaiArrival time of order iat the customer location Synchronization Constraints tmki End time of preparation for order ithat started preparation before tk
+> tdθDeparture time of trip θ
+> Qprep (S(1)
+> k)Set of preparation constraints
+> Qdeliv (S(2)
+> k)Set of delivery constraints
+> Qsync (Sk)Set of synchronization constraints Problem-Specific Parameters ρDelay penalty cost per time unit (Picking Variant)
+> τClick-to-door promised delivery time (Picking Variant)
+> sij Setup time between orders iand j(Production Variant)
+> tsw i, t ew iSoft delivery time window for order i(Production Variant)
+> diDemand size of order i(Production Variant) Costs and Objective C(S(2)
+> k, x (2)
+> k)Immediate cost incurred by second-stage decision x(2)
+> kat state Sk= ( S(1)
+> k,(S(2)
+> k)
+> J(Θ , t d)Total cost of a delivery plan (Θ , t d)
+> V(Sk)Value function of state Sk
+> V(Sxk)Value of the post-decision state of state Sk
+
+Appendix B. Pseudocode for DDF-VFA 
+
+The general process of DDF-VFA is outlined in Algorithm 1. The framework begins by initializing decisions using a First-In-First-Out (FIFO) strategy, which assigns incoming orders to available resources and vehicle trips as they arrive. The best found solution, denoted x∗
+
+> k
+
+, is initially set to this solution. Then, the DDF-VFA iteratively explores solutions to the MP and the SP , as detailed next. 
+
+Exploration of solutions to the MP . An LNS process (described in Section 5.1.1) explores potential partial delivery decisions iteratively by modifying the following elements: (1) Bundles of orders that will be grouped into the same trip; (2) The sequence in which orders are delivered within each trip; and (3) The sequence of trip departure times. For each generated partial delivery decision, θ, the TAS (described in Section 5.1.2) checks feasibility. If TAS declared θ is infeasible, then the LNS generates another partial delivery decision. Otherwise, TAS assigns specific departure times to each trip, thereby transforming θ into a complete second-stage decision, x(2)  
+
+> k
+
+, which includes all assigned departure times. This step ensures that all trips have departure schedules. 
+
+Obtaining a solution to the SP . Once departure times are assigned, the SPS finds a complement resource assignments, x(1)  
+
+> k
+
+, aiming to optimize the cost to go, given x(2)  
+
+> k
+
+. That is, together, x(1) 
+
+> k
+
+and x(2)  
+
+> k
+
+form a feasible decision xk, enabling the VFA component to predict the future cost of the associated post decision state, ˆV (Sxk ). The selected xk is then compared with the best decision found so far, x∗
+
+> k
+
+. If the new decision offers a lower sum of immediate cost and predicted future cost, it replaces the current best solution, i.e., x∗ 
+
+> k
+
+← xk. The DDF-VFA then continues to explore new solutions to the MP .This iterative process continues until the stopping condition is met, at which point the framework returns the best decision found. 32 Algorithm 1 DDF-VFA Framework 
+
+Input: State Sk
+
+Output: Decision xk 
+
+> 1:
+
+Initialize decisions via FIFO assignment  
+
+> 2:
+
+Set best decision x∗ 
+
+> k
+
+← current FIFO solution  
+
+> 3:
+
+while stopping criterion not met do  
+
+> 4:
+
+Generate partial delivery decision θ via LNS // Modify trips and order sequence  
+
+> 5:
+
+Complete θ to x(2)  
+
+> k
+
+via TAS  
+
+> 6:
+
+if x(2)  
+
+> k
+
+is feasible then  
+
+> 7:
+
+Obtain x(1)  
+
+> k
+
+via SPS given (Sk, x (2)  
+
+> k
+
+) 
+
+> 8:
+
+xk ← (x(1)  
+
+> k
+
+, x (2)  
+
+> k
+
+) 
+
+> 9:
+
+Predict future cost ˆV (Sxk ) via VFA  
+
+> 10:
+
+if C(Sk, x k) + ˆV (Sxk ) improves best then  
+
+> 11:
+
+x∗ 
+
+> k
+
+← xk 
+
+> 12:
+
+end if  
+
+> 13:
+
+else  
+
+> 14:
+
+Continue to next partial decision  
+
+> 15:
+
+end if  
+
+> 16:
+
+end while  
+
+> 17:
+
+return x∗ 
+
+> k// Best decision found
+
+Appendix C. LNS Operators Adjustments 
+
+The basic LNS operators used in this paper were borrowed from Neria et al. (2025), who addressed a Meal Delivery Variant. In this appendix, we describe a broader set of operators and adjustments designed for the LNS, organized by the feature they target. Each variant instantiates the union of operators relevant to its active features: the Picking Variant uses the operators of Appendix C.1, and the Production Variant uses those of Appendix C.2. We note that for all other examples of optional features from Appendix F there is no need for new operators. However, the feasibility checks might change for: Heterogeneous vehicles, Strict (hard) delivery windows, Vehicle access limits, and Emissions. None of these adjustments introduce a new operator; each adds a one-shot feasibility test inside the operators. The other optional features that were mentioned do not affect the delivery-side decision space (priority weights, batched preparation, perishability, and multi-stage preparation); and hence, they require no LNS operator changes, as they enter through the cost evaluator and/or the SPS only. 
+
+Appendix C.1. Operators for Travel Time Reduction 
+
+The Picking Variant aims to minimize both the total travel times and the total delay. While the latter is addressed by the operators designed by Neria et al. (2025), we implemented here three new operators that focus on reducing travel times: 
+
+• Swap Operator: This operator swaps two random orders between two different trips. The objective is to exploit opportunities for better alignment between order locations and their assigned trips, potentially reducing overall travel distance. 33 • Insertion Operator: This operator removes a random order from one trip and reassigns it to another random trip using an insertion heuristic. The heuristic evaluates all possible positions for inserting the order into the target trip and selects the one that minimizes the incremental travel time of the trip. It aims to instantly obtain a better placement to reduce the overall travel time across trips. 
+
+• Reordering Operator: This operator reorders the sequence of locations within a (random) trip to minimize the total travel time. By solving a traveling salesman problem (TSP) for the trip’s locations, it determines the visit sequence that results in the shortest possible route for the trip. 
+
+Appendix C.2. Operators for Time Windows 
+
+The Production Variant aims to meet customer time windows, which motivated the addition of the following new operators across all methods: 1. Reordering Three Consecutive Trips by Average Earliest Time Windows : Three consecutive trips, θ(l), θ (l+1) , θ (l+2) ∈ θ, are randomly selected based on a uniform distribution. These trips are then reordered within the sequence θ based on the average earliest starting or ending time windows of the orders within these trips (with an equal probability of sorting by starting or ending). The motivation is reducing time window violations. 2. Sorting Customers within a Trip by Earliest Time Windows : For a randomly selected trip, a random subset of customers are reordered based on their earliest starting or ending time windows (with an equal probability of sorting by starting or ending). Here too, the motivation is reducing time window violations. 3. Proximity-Based Customer Sorting with Time Windows : For a random trip θ ∈ θ,three consecutive customers j, j + 1 , j + 2 selected in random are sorted based on their time window constraints and their proximity to other customers within the same trip. Specifically, for each permutation of the three customers, a Slack Time is calculated by Slack Time = min( tew  
+
+> [2]
+
+− tsw  
+
+> [1]
+
+− l[1][2] , t ew  
+
+> [3]
+
+− tsw  
+
+> [2]
+
+− l[2] ,[3] ) (C.1) where [1] , [2] , [3] refer to the first, second and third customers in the permutation, respectively. Then, the selected permutation of these customers is the one maximizing the Slack Time. A higher slack time suggests that there is a sufficient buffer for inserting a new order to the trip, reducing the risk of creating future schedule delays or earliness. Conversely, a lower slack time indicates a tighter schedule, which may cause higher delays or earliness in the future. 4. Time Window and Distance Aware Insertion : This operator starts by selecting a random order i, which is removed from its current position in its trip and is then inserted into a new position in another random trip θl ∈ θ based on the geographical proximity of the sites in θl
+
+and the alignment of the trip’s time windows. That is, for each j ∈ θl we compute a score of inserting order i after it, using the slack time, i.e., Slack Time = min  tew i − tsw j − lji , t ew j+1 − tsw i − li,j +1 
+
+ (C.2) 34 and we select the location in which the slack time is maximized. Two of our benchmark methods, AI and Integrated , utilize a designated algorithm to assign orders to resources along the LNS process. This algorithm, named PDFT ( Partial Decision Feasibility and Timing , see Neria et al. 2025), operates based on the sequence of order preparation in a candidate solution. For these benchmark methods, we adapt the PDFT algorithm to account for setup times. Specifically, in the steps where orders are assigned to the first available resource upon completing its last task, the algorithm is modified to assign orders to the first resource available after considering the required setup time. 
+
+Appendix D. Feature-Specific TAS Extensions 
+
+The TAS of Section 5.1.2 accommodates several optional features as small additions to its initial check, departure-assignment, or vehicle-assignment step. Each extension is listed below; the only substantive one, the soft-delivery-window DP, is detailed in Appendix D.1. 
+
+• Strict (hard) delivery windows: the postponement step terminates as infeasible if the resulting arrival time would exceed the window upper bound bi for any order, instead of refining the departure. 
+
+• Heterogeneous vehicles: the vehicle-assignment step checks the trip’s total demand against the vehicle’s (specific) capacity ( κv). 
+
+• Vehicle access limits: the TAS draws candidate vehicles for each trip only from the permitted set A.
+
+• Emissions: when emissions enter as a hard budget, the TAS rejects a trip-vehicle assignment whose resulting emissions exceed Ev; when they enter as an additive objective term, no TAS change is needed. 
+
+• Perishability : the synchronization-feasibility check (Step 2 of Section 5.1.2) invokes the perishability-aware SPS variant of Appendix E.3, which verifies that the chosen departure time admits a preparation completion within [ˆ tai − Fi, ˆtai ] for every order in the trip. 
+
+Appendix D.1. The TAS Algorithm for Soft Time-Windows 
+
+It is sometimes beneficial to wait between customers’ visits to avoid earliness, in contrast to the other two problems where waiting between two customers is not desired. For this reason, we apply the TAS algorithm in two steps. First, we apply the procedure described in Section 5.1.2 to obtain the earliest possible departure times and assignment of trips to vehicles, ensuring that a compatible decision exists for the first stage. Then, we adapt the departure times of the trips and set waiting times within the trips. This is done by considering the trips assigned to each vehicle independently. Thus, the problem that arises obtains as input a partial delivery decision, an assignment of trips to vehicles, their sequence, and the earliest possible departure times. The problem is to schedule the departures from the facility and from each of the visited customers, along the trips, for each vehicle independently. Then, we formulate it as a dynamic program to obtain an optimal solution, as described next. 35 Parameters: Let Θv denote the sequence of trips θ assigned to a certain vehicle v ∈ V and assign sequential indices to the customers along all the trips in Θv according to the trips’ sequence, regardless of the trip they belong to. In other words, the index i reflects the overall order in which customers are visited across all trips assigned to the vehicle, e.g., i = 1 refers to the first customer of the first trip, and so on. Finally, lb i denotes the earliest possible arrival time at customer i,considering the trip departures’ lower bounds. The objective is to minimize the total penalty for earliness and tardiness. The key idea is to determine the optimal arrival time at each customer along its trip while respecting the sequencing constraints within and between the trips. A DP formulation is given next. 
+
+• State Definition. The state is defined as (i, t ) where i is the current customer and t ∈ Z≥lb i
+
+is the arrival time to this customer (an integer, as travel times and time windows are integers). 
+
+• Decision. At each state (i, t ), the decision is to choose the optimal delivery time ti ∈ Z≥t for the current customer from the feasible range [t, t max  
+
+> i
+
+], where tmax  
+
+> i
+
+= max (tsw i , t ). Note that the delivery time ti may be later than the arrival time, t. We also observe that if t ≤ tsw i it is not optimal to set the delivery time to be larger than tsw i and if t > t sw i it is only optimal to set 
+
+ti = t because there is no earliness at customer i.
+
+• Cost Calculation. At each customer i, the immediate cost (of the DP) C(i, t i) is calculated based on the soft time windows as follows: C(i, t i) = max (0 , t sw i − ti, t i − tew i ). This accounts for the earliness or tardiness penalties associated with the delivery time at customer i.
+
+• Bellman Equation. The Bellman equation finds the optimal cost dp (i, t ) of a state (i, t ),i.e., when starting from customer i ≥ 1 at time t ∈ [0 , T ] and moving forward through the remaining customers: 
+
+dp (i, t ) = 
+
+
+
+min ti∈[t,t max   
+
+> i]
+
+(C(i, t i) + dp (i + 1 , t i + tt i,i +1 )) , i is not the last site of a trip 
+
+min ti∈[t,t max   
+
+> i]
+
+(C(i, t i) + dp (i + 1 , max( lb i+1 , t i + tt i, 0 + tt 0,i +1 ))) , otherwise For convenience, we denote by H(i, t i) the cost-to-go of decision ti at state (i, t ), i.e., 
+
+H(i, t i) = 
+
+
+
+dp (i + 1 , t i + tt i,i +1 ), i is not the last site of a trip 
+
+dp (i + 1 , max( lb i+1 , t i + tt i, 0 + tt 0,i +1 )) , otherwise 
+
+• Ending Condition. dp (i, t ) = C(i, t max  
+
+> i
+
+) for i which is the last customer of the last trip. 
+
+• Starting Condition. The objective is given by dp (1 , lb 1).In the next claim, we introduce a condition that enables us to save computations when solving the DP. To this end, let T C (i, t, t i) denote the sum of the immediate cost and the cost-to-go for selecting the delivery time ti at state (i, t ).
+
+Claim 2 (DP Computation Enhancement) .
+
+If T C (i, t, t i+h1) ≥ T C (i, t, t i), then, T C (i, t, t i+h1+h2) ≥ T C (i, t, t i+h1), ∀i, t, t i ≥ t, h 1 ≥ 1, h 2 ≥ 1.
+
+Proof. If T C (i, t, t i + h1) ≥ T C (i, t, t i), then: 
+
+T C (i, t, t i + h1) − T C (i, t, t i) = C(i, t i + h1) − C(i, t i) + H(i, t i + h1) − H (i, t i) ≥ 0.
+
+36 Note that C(i, t i + h1) − C(i, t i) = −h1, ∀ti ∈ [t, t max i − h1], since any postponement in ti reduces the earliness at customer i. On the other hand, the cost-to-go H(i, t i) is a non-decreasing function of ti.Hence, T C (i, t, t i + h1) ≥ T C (i, t, t i) implies that H(i, t i + h1) − H (i, t i) ≥ h1, which means that at least one future customer is already late. Further postponing ti by some h2 ≥ 1 will increase the delay for the customers that already experience delays, by h2 for each, and possibly incur delays for other customers as well, while only reducing the immediate cost for i by h2 (for ti + h1 + h2 ≤ tmax i ). Thus, at a given DP state, if T C (i, t, t i + h1) ≥ T C (i, t, t i)( ti ∈ [t, t max i − h1]) , the optimal decision is not greater than ti + h1 (h1 ≥ 1). 
+
+Appendix E. Feature-Specific SPS Extensions 
+
+The SPS of Section 5.2.1 accommodates several optional features. One extension is parameter-style, updating the existing scheduling rule without changing its structure; the rest require a full algorithmic substitution of the SPS. In particular, three of the features listed in Appendix F require SPS substitutions which are detailed below; in each case, only the SPS itself changes, and Algorithm 1 is unaffected. We note that these substitutions may be time consuming and their computational time to performance tradeoff is left for future work. 
+
+Appendix E.1. Batched-Preparation SPS 
+
+When a single resource can process up to B orders simultaneously, at each step, instead of assigning the next EDD order to a single resource, we form a batch by greedily appending up to B − 1
+
+additional unassigned orders whose processing fits within the batch finish time max j∈Bt tpj and whose due dates are no later than that finish time. The batch is then assigned as a whole to the resource that minimizes setup time from the resource’s last assigned order (or batch), and the resource’s availability is advanced by the batch finish time. The procedure repeats until all orders are assigned or no resource can accommodate the next batch by its earliest due date, in which case ‘infeasible’ is returned. 
+
+Appendix E.2. Multi-Stage SPS 
+
+With M preparation stages, the SPS is reformulated as a flow-shop scheduler. Orders are processed in EDD order; for each order i, the algorithm sequentially assigns it to a resource at each stage 
+
+m = 1 , . . . , M , subject to the stage-precedence constraint that the start time at stage m for order i
+
+is no earlier than its completion at stage m − 1. The lookahead check of Section 5.2.1 is generalized to verify that at least the next two orders can be feasibly assigned at the bottleneck stage (the stage with the largest aggregate workload across resources) without violating their due dates. Feasibility cuts are issued from the bottleneck stage, since infeasibility at any other stage propagates to the bottleneck. The SPS returns stage-M completion times to the MP/SP loop. 37 Appendix E.3. Perishability-Aware SPS 
+
+Under perishability constraints, the synchronization deadline bi = tdθ(i) −tpi on the start of preparation becomes the upper bound of a two-sided window: 
+
+[a′
+
+> i
+
+, b i] = [ tdθ(i) − Fi − tpi , tdθ(i) − tpi ]. (E.1) The SPS is replaced by a VRPTW-feasibility heuristic acting on these windows, under the cor-respondence: preparation resources play the role of vehicles, orders play the role of customers, sequence-dependent setups tij play the role of travel times, processing times are (possibly zero) ser-vice times, and routes correspond to per-resource sequences of orders. We suggest using off-the-shelf Google-OR-Tools for the resulting VRPTW problem. 
+
+Appendix F. MILP Extensions for Optional Features 
+
+The unified MILP of Section 6.1 is written so that additional features can be switched on by adding a small number of parameters, variables, or constraints. We list some of them below. 
+
+Heterogeneous resources and vehicles. Replace the scalar processing time tpi with a resource-indexed processing time tpic , and the scalar vehicle capacity κ with a vehicle-indexed capacity κv.Constraint (13) becomes P
+
+> j∈I(1)
+> k
+
+(t′ + tpjc + sji )zjct ′ ≤ T + zict (t − T ), and constraint (19) becomes 
+
+P
+
+> i∈I(2)
+> k
+
+di · yivt ≤ κv. No new variables. 
+
+Priority-based processing. Assign each order i a priority weight wi ≥ 0. The objective (26) is augmented to weight the earliness/lateness contribution per order by wi: each bracketed term in (26) is multiplied by wiθj . No new variables or constraints. 
+
+Strict (hard) delivery windows. Add the hard constraint ai ≤ ˆtai ≤ bi for each order i, where 
+
+ˆtai is the arrival time of i defined above. In the unified objective (26) , set the earliness and lateness penalties to zero ( ρe = ρl = 0 ) for orders with hard windows, since infeasibility is now ruled out by the new constraint rather than penalized. 
+
+Vehicle access limits. Let A ⊆ I(2)  
+
+> k
+
+× V denote the set of permitted order-vehicle pairs (e.g., dictated by vehicle size or driver licenses). Add the constraint yivt = 0 for all (i, v ) /∈ A and all t.No new variables. 
+
+Emissions restrictions. Let etij denote the emissions incurred on the leg from i to j, and let Ev denote the per-vehicle emissions budget. Add the constraint P
+
+> t
+
+P  
+
+> i,j ∈I(2)
+> k,i ̸=j
+
+etij · qijt ·
+
+1{trip uses vehicle v} ≤ Ev for each v ∈ V . Implementation uses an auxiliary variable to link qijt to the vehicle index; alternatively, the emissions term can be added as a penalty to the objective. 
+
+Perishability constraints. Let Fi ≥ 0 be the maximum allowed time between completion of preparation for order i and its arrival at the customer. The completion-of-preparation time for order i
+
+is P
+
+> c∈C
+
+P
+
+> t
+
+(t+tpi )zict (the LHS of synchronization constraint (25) ). Add ˆtai −P
+
+> c∈C
+
+P
+
+> t
+
+(t+tpi )zict ≤ Fi
+
+for all i ∈ Ik. No new variables. 
+
+Batched preparation. When a single resource can process up to B orders simultaneously (e.g., an oven processing multiple meals or a batch picker collecting multiple orders in one walk), constraint (12) is relaxed to P
+
+> i∈I(1)
+> k
+
+zict ≤ B, and constraint (13) is generalized so that the resource availability advances by the maximum processing time within the batch rather than the sum: 38 Table G.4: Total earliness, total delay, total violation, and average setup time (in min.) for the Production Variant.                                                                                       
+
+> Instances KPI DDF-VFA FIFO Integrated AI DDF-G
+> ORT-S Avg. Delay (in min.) 6.95 85.35 26.29 26.04 7.36 Avg. Earliness (in min.) 3.89 4.72 4.71 5.00 3.91 Avg. Violation (in min.) 10.85 90.07 30.99 31.03 11.27 Avg. Setup Time (in min.) 2.54 4.88 3.34 3.34 2.56 ORT-L Avg. Delay (in min.) 7.98 81.71 19.96 19.62 8.26 Avg. Earliness (in min.) 3.81 5.02 5.15 5.17 3.87 Avg. Violation (in min.) 11.79 86.74 25.11 24.78 12.12 Avg. Setup Time (in min.) 2.01 4.86 3.51 3.54 2.08 ORT-S (3-5-5-7 Setup) Avg. Delay (in min.) 13.43 85.01 76.01 73.97 13.21 Avg. Earliness (in min.) 2.93 4.99 3.87 4.00 3.22 Avg. Violation (in min.) 16.36 90.00 79.87 77.97 16.44 Avg. Setup Time (in min.) 4.01 4.89 4.13 4.19 4.05 ORT-S (5-5-5-5 Setup) Avg. Delay (in min.) 19.61 83.83 105.17 101.83 20.57 Avg. Earliness (in min.) 2.78 4.69 3.67 3.32 2.83 Avg. Violation (in min.) 22.39 88.52 108.84 105.15 23.40 Avg. Setup Time (in min.) 5.00 5.00 5.00 5.00 5.00
+
+(max j∈Bt tpj ) · 1{Bt̸ = ∅} , where Bt denotes the batch active at time t. Linearization of the max introduces auxiliary continuous variables uct representing the batch finish time on resource c starting at t; details depend on the chosen batching policy (fixed-size vs. time-window-triggered). 
+
+Multi-stage preparation. When orders pass through M preparation stages (e.g., picking followed by packing), introduce a binary variable z(m) 
+
+> ict
+
+for each stage m = 1 , . . . , M , each with its own resource set C(m). Constraints (11) -(15) are replicated per stage. Stage precedence is enforced by P
+
+> c∈C(m)
+
+P
+
+> t
+
+(t + tpi,m )z(m) 
+
+> ict
+
+≤ P
+
+> c∈C(m+1)
+
+P 
+
+> t
+
+t · z(m+1)  
+
+> ict
+
+for all i and m = 1 , . . . , M − 1. The synchronization constraint (25) is applied with the final stage’s completion time. 
+
+Appendix G. Additional Results 
+
+The aggregated cost figures in the main text mask how each method trades off between the underlying KPIs in the Production Variant. Table G.4 therefore decomposes performance into average delay, average earliness, average violation, and average setup time across the four Production-Variant instance sets. The original ORT-S and ORT-L are defined in Appendix H; "ORT-S (3-5-5-7 Setup)" and "ORT-S (5-5-5-5 Setup)" are the modified-setup instances from the setup-time sensitivity analysis above. Two patterns are visible in the table that the aggregate violation numbers above do not show. First, the dominance of DDF-VFA on delay (e.g., 6.95 min on ORT-S vs. 26.04 for AI and 85.35 for 
+
+FIFO ) carries over to the larger ORT-L instance (7.98 vs. 19.62 and 81.71), confirming that the gain is not specific to instance size. Second, average earliness is consistently small (under 5 min) across all methods, so the violation differences reported earlier are driven almost entirely by the delay side rather than by trading delay against earliness. Setup-time efficiency follows the same ordering: DDF-VFA and DDF-G produce average setups close to the minimum achievable (2.0-2.5 min on ORT-S/L), while FIFO , Integrated , and AI sit near the unconditional setup-time mean ( ≈5min), indicating that the decomposition-based methods successfully exploit the sequence dependency rather than ignoring it. 39 Appendix G.1. Results on Independently-Generated Instances 
+
+In addition to the real-data evaluations of Section 7.3, which use the Meituan operational dataset for the Picking Variant and the ORTEC-880 instance for the Production Variant, we report results on a second family of instances generated procedurally. We denote them MTN-Syn (Picking-style synthetic instance) and PRD-Syn-L (Production-style synthetic instances, in the large scale). They serve as an additional stress test of the framework on a synthetic geography and arrival process that differ in distribution from the original field datasets, while preserving the structural features (arrival blocks, demand distribution, fleet sizes, setup matrix) used in Appendix H. 
+
+MTN-Syn construction. The synthetic Picking instance retains the paper’s per-block Poisson arrival means (1 .3, 29 .5, 31 .1, 27 .7, 26 .7, 35 .9, 20 .5, 0.5) , processing time ∼ N (7 , 1) minutes, click-to-door promise τ = 60 minutes, fleet of five pickers and ten vehicles, and the vehicle speed of 37 distance units per minute used in Appendix H. It replaces the real Meituan customer GPS coordinates -which in the original dataset are clustered around dispatch hotspots - with delivery locations drawn uniformly at random in a ±600 -unit Manhattan-metric box around the depot. 
+
+PRD-Syn-L construction. The synthetic Production instances retain the demand distribution 
+
+∼ N (6 .2, 2.7) clipped to integer support {1, . . . , 23 }, the order-count distributions ∼ N (300 , 22) , the corresponding fleet size ( 38 vehicles, and 8 resources), the vehicle capacity of 145 units, and the setup-time matrix of Table H.7. They replace the ORTEC-880 explicit asymmetric distance matrix with uniformly random customer locations in the same ±600 -unit Manhattan box, and replace 
+
+ORTEC’s per-minute sampling from a pool of customer time windows with uniform-random arrival times over a 700-minute horizon together with a fixed [toi + 30 , t oi + 90] window for each order. 
+
+Comparability caveat. The absolute objective magnitudes reported below are not directly comparable to Tables 1 and G.4. The qualitative ordering of the five policies, however, reproduces in every instance: decomposition methods dominate, with DDF-VFA and DDF-G an order of magnitude better than FIFO , Integrated , and AI .
+
+Results. Table G.5 reports the Picking-Variant comparison on MTN-Syn at the same two delay-penalty levels ρl ∈ { 10 , 50 } used in Table 1, and Table G.6 reports the Production-Variant comparison on PRD-Syn-L at ρl = ρe = 1 (matching the setting of the original ORT-L). All numbers are 20-seed averages. DDF-VFA dominates on MTN-Syn at both penalty levels and on PRD-Syn-L instance, with the gain over DDF-G ranging from +4 .29% to +11 .32% .
+
+Appendix H. Instances 
+
+In this appendix, we describe in detail how we generated instances for the numerical experiments, based on two different datasets. 
+
+The Picking Variant . We generated instances based on Meituan data, given by the TSL challenge (Meituan, 2024). We generated an instance with five resources and ten vehicles. We assumed the 40 Table G.5: MTN-Syn: 20-seed averages, mean 169 .4 orders per day, 200 training episodes.                                                                                   
+
+> ρlPolicy Total Routing Lateness DDF-VFA % red.
+> 10
+> FIFO 2,299 ,491 3,883 2,295 ,609 +84 .60%
+> Integrated 1,659 ,415 3,054 1,656 ,361 +78 .65%
+> AI 1,615 ,900 3,048 1,612 ,852 +78 .08%
+> DDF-G 378 ,978 2,712 376 ,267 +6 .53%
+> DDF-VFA 354 ,215 2,736 351 ,479 -
+> 50
+> FIFO 11 ,481 ,927 3,883 11 ,478 ,044 +84 .76%
+> Integrated 8,207 ,858 3,061 8,204 ,798 +78 .68%
+> AI 8,070 ,003 3,066 8,066 ,936 +78 .31%
+> DDF-G 1,828 ,513 2,779 1,825 ,734 +4 .29%
+> DDF-VFA 1,750 ,071 2,716 1,747 ,355 -
+> Table G.6: PRD-Syn-L: 20-seed averages, ρl=ρe= 1 .
+> Instance Policy Total Routing Lateness Earliness DDF-VFA % red. PRD-Syn-L FIFO 1,008 ,486 6,770 1,008 ,482 4+88 .44%
+> Integrated 707 ,229 5,180 707 ,225 4+83 .51%
+> AI 707 ,691 5,187 707 ,687 4+83 .52%
+> DDF-G 131 ,510 4,247 125 ,535 5,974 +11 .32%
+> DDF-VFA 116 ,624 4,330 111 ,897 4,727 -
+
+processing times of orders is drawn from a Normal distribution with an average of seven minutes, and standart deviation of one minute. The distance between customer locations was calculated using Manhatan distance, and the vehicle average speed was assumed to be 37 distance units to minutes. We selected this speed by observing the driving times to orders that were in solo trips and dividing the Manhatan distance to them by the driving times to them in order to obtain an average speed. We assumed the promised delivery time is 60 minutes, which is about the average promised time from the dispatching system in the data plus seven minutes accounted for processing. We assumed Poisson arrival according to the average number of orders that arrive during five days in two hours intervals (8:00-24:00), in particular, these averages are 1.3, 29.5, 31.1, 27.7, 26.7, 35.9, 20.5 and 0.5 orders. 
+
+The Production Variant . We generated instances based on real data from (ORTEC, 2022). The largest available dataset, containing 880 customer orders, was selected. Below, we describe the data used and additional assumptions made to complete the instance generation. The given vehicle capacity is 145 units. The demand distribution has a mean of 6.2 units (median 6) with a standard deviation of 2.7 units. The maximum demand is 23 units, and the minimum is 1 unit. In the experiments conducted for the "EURO Meets NeurIPS 2022 Vehicle Routing Competition" (which also used ORTEC (2022)), dynamic instances were generated by assuming up to 100 orders could arrive at the start of each hour. The actual number of arriving orders followed a uniform distribution between 0 and 100. Customer locations were sampled from the datasets, and for each customer, the time window, demand, and service time were also sampled from the available data. Customers with (strict in their application) time windows that made it infeasible to serve them (e.g., those with windows ending in less than an hour) were excluded. We adapt the same dynamic instance generation but assume orders arrive on a per-minute basis rather than hourly. Additionally, in our adaptation, we append service times to the travel times, ensuring each route reflects both driving and service duration at customer sites. We generated both small (ORT-S) and large (ORT-L) instances by varying the number of orders 41 Table H.7: The setup times (in minutes) between orders of different classes.                     
+
+> From /To Class 1 Class 2 Class 3 Class 4 Class 1 0510 5Class 2 50510 Class 3 10 505Class 4 510 50
+
+and vehicles, with preparation times linked to order size. This section evaluates the ability of the 
+
+DDF-VFA to balance earliness, delay, and setup times, highlighting its adaptability to both small and large-scale operations. For ORT-S instances, we considered an average of 200 orders per day, following a normal distribution with a standard deviation of 15 orders, and utilized 25 vehicles. We assumed the availability of 5 resources for the ORT-S instances. For the ORT-L instances, we considered an average of 300 orders per day following a normal distribution with a standard deviation of 22 orders, utilized 38 vehicles, and assumed the availability of 8 resources (i.e., multiplied all by 1.5). Preparation times, which are not included in the datasets, were determined by the demand size of each order, with the processing time for order i calculated as tpi = di minutes. Each order was associated with one of four possible classes, and the setup times between orders, which depended on their respective classes, are presented in Table H.7. 42
