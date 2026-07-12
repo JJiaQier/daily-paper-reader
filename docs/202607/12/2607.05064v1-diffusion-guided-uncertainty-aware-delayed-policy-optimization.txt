@@ -1,0 +1,716 @@
+Title: Diffusion-Guided Uncertainty-Aware Delayed Policy Optimization
+
+URL Source: https://arxiv.org/pdf/2607.05064v1
+
+Published Time: Tue, 07 Jul 2026 03:31:51 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Diffusion-Guided Uncertainty-Aware Delayed Policy Optimization 
+
+# Junqi Tu 1, Zejiao Liu 2, Fangfei Li 2∗, Yang Tang 1∗
+
+> 1
+
+The Key Laboratory of Smart Manufacturing in Energy Chemical Process, Ministry of Education, East China University of Science and Technology, Shanghai, China 
+
+> 2
+
+The School of Mathematics, East China University of Science and Technology, Shanghai, China {23012389,liuzejiao}@mail.ecust.edu.cn, {lifangfei,yangtang}@ecust.edu.cn 
+
+Abstract 
+
+Reinforcement learning in real world environments often suf-fers from severe performance degradation due to delayed feedback. Existing approaches typically mitigate performance degradation caused by observation delays by constructing aug-mented states or predicting the true states. However, these methods often overlook the inherent discrepancy between de-layed state and true states induced by stochastic MDP. We theoretically prove the existence of such a discrepancy and show that it leads to the degradation of the optimal policy. To address this challenge, we propose Diffusion Guided Un-certainty Aware Delayed Policy Optimization (DUPO). Our method explicitly models the relationship between delayed state message and the current state using a diffusion model, and leverages the resulting discrepancy estimates to weight de-layed policies. Extensive experiments on continuous robotic control tasks with multiple stochastic delays demonstrate that DUPO consistently outperforms existing methods and remains effective even under long and random delay scenarios. 
+
+# Introduction 
+
+Reinforcement learning (RL) has recently achieved remark-able progress in a variety of complex decision-making do-mains, including Go (Silver et al. 2018), competitive multi-player online games (Berner et al. 2019), continuous control and simulated robotics (Haarnoja et al. 2018), as well as au-tonomous driving related tasks (Feng et al. 2023). Despite these successes, an implicit assumption is often made that agent–environment interactions are instantaneous, such that actions take effect immediately and observations faithfully reflect the current state. In real-world systems, however, this assumption frequently breaks down due to communication latency, sensor pipelines, and the computational overhead of model inference. Without properly modeling and compen-sating for delays, RL agents may suffer severe degradation and even safety-critical failures (Paduraru et al. 2021); for instance, substantial performance loss in trading (Hasbrouck and Saar 2013), instability in dynamical systems (Dugard and Verriest 1998; Gu and Niculescu 2003), and reduced training efficiency and reproducibility in real-world robotics (Mah-mood et al. 2018). Therefore, explicitly incorporating action and observation delays into RL algorithm design is a crucial step towards reliable real-world deployment. Existing studies 
+
+> ∗
+
+Corresponding author. 
+
+on delayed RL can be broadly categorized into three main lines. Memoryless methods learn policies that depend only on the most recent observation, thereby ignoring the non-Markovian nature induced by observation delays (Schuitema et al. 2010). While simple to implement, these methods typi-cally incur significant performance drops under large delays. Augmentation-based methods restore the Markov property by constructing an information state that concatenates the last observed state with the sequence of actions executed thereafter, reducing delayed RL to an augmented-state de-layed MDP (Altman and Nain 1992; Katsikopoulos and En-gelbrecht 2003; Bertsekas 2012), on which classical RL algo-rithms can be applied (Nath, Baranwal, and Khadilkar 2021). However, as the delay horizon increases, the augmented state space expands rapidly, resulting in substantially higher sam-ple complexity and pronounced instability in TD-style learn-ing under long delays, reflecting a classic manifestation of the curse of dimensionality. Model-based methods seek to avoid learning directly in the rapidly expanding augmented space by instead computing compact statistics about the un-known current state from history and using them as policy inputs (Walsh et al. 2009; Firoiu, Ju, and Tenenbaum 2018; Agarwal and Aggarwal 2021; Derman, Dalal, and Mannor 2021; Liotet et al. 2021). In addition, some works accelerate learning under long delays by introducing auxiliary short-delay tasks; for example, boosting delayed RL via auxiliary short delays can guide learning in the long-delay task and improve sample efficiency (Wu et al. 2024b). Meanwhile, in real-world systems, delay durations are often stochastic rather than fixed. In random-delay environments, the discrepancy between delayed observations and the true current state generally grows with the delay length, causing the optimal policy to vary across different delay regimes. Ignoring such delay heterogeneity may lead the agent to be-have overly conservatively under short delays or excessively aggressively under long delays, resulting in degraded per-formance and unstable training dynamics. In random MDPs, we theoretically establish the existence of delay-induced state discrepancy and show that it amplifies as the delay length in-creases. We further demonstrate that approaches based on single-point state prediction inevitably suffer performance degradation, as they fail to capture this constantly changing discrepancy. To explicitly account for delay-induced state discrepancy in delayed reinforcement learning, we propose 
+
+> arXiv:2607.05064v1 [cs.AI] 6 Jul 2026
+
+Diffusion-Guided Uncertainty-Aware Delayed Policy Opti-mization (DUPO). The key idea is to model the mismatch between delayed state message and the underlying true state during policy optimization. DUPO leverages a generative diffusion model to characterize the conditional relationship between delayed observations and the current true state, en-abling a principled representation of potentially multi-modal discrepancy structures induced by varying delay lengths. Based on these multi-modal state representations, DUPO estimates the uncertainty of the action–value function condi-tioned on delayed observations and uses this uncertainty to adaptively weight delayed policy updates. This uncertainty-aware weighting yields delay-adaptive policies that adjust their behavior across delay regimes, leading to more stable and sample-efficient learning in random-delay environments. We transform the originally deterministic continuous-control MuJoCo tasks into stochastic MDPs by injecting Gaussian noise into the action execution, and further introduce random observation delays to emulate realistic delayed-feedback set-tings. Across a wide range of delay configurations, DUPO consistently demonstrates superior performance and im-proved training stability compared to other strong baselines designed for stochastic delayed environments. These results indicate that DUPO is not only effective under random de-lays but also robust to the compounded challenges arising from environmental stochasticity and delay variability. Our contributions can be summarized as follows: 
+
+• We theoretically prove the existence of delay-induced state discrepancy and show that it amplifies with increas-ing delay length, and further demonstrate that single-point state prediction methods inevitably suffer from perfor-mance degradation. 
+
+• We model the conditional distribution between delayed state message and the true current state using a generative diffusion model instead of single-point state prediction, capturing multi-modal discrepancy structures induced by random delays. 
+
+• We estimate action-value uncertainty under delayed ob-servations and leverage it to adaptively weight delayed policy updates, enabling delay-adaptive policy learning. 
+
+• DUPO consistently outperforms state-of-the-art baselines across multiple random delay settings. 
+
+# Related Work 
+
+Reinforcement learning with delayed feedback. Existing studies on delayed reinforcement learning can be broadly cat-egorized into three main lines. Memoryless methods learn policies that depend only on the most recent observation, thereby ignoring the non-Markovian nature induced by ob-servation delays (Schuitema et al. 2010). While simple to implement, these methods typically suffer from severe per-formance degradation as the delay length increases. Augmentation-based methods restore the Markov property by constructing an information state that concatenates the last observed state with the sequence of subsequently exe-cuted actions, reducing delayed reinforcement learning to an augmented-state MDP (Altman and Nain 1992; Katsikopou-
+
+Figure 1: The agent faces observation delays and action exe-cution delays. los and Engelbrecht 2003; Bertsekas 2012). This formula-tion enables the direct application of standard RL algorithms (Nath, Baranwal, and Khadilkar 2021). However, the aug-mented state space grows rapidly with the delay horizon, leading to substantially increased sample complexity and pronounced instability in TD-style learning under long de-lays, reflecting a classic manifestation of the curse of dimen-sionality. Model-based and belief-based methods seek to avoid learn-ing directly in the rapidly expanding augmented space by instead estimating compact statistics or distributions of the unknown current state from historical information and us-ing them as policy inputs (Walsh et al. 2009; Firoiu, Ju, and Tenenbaum 2018; Agarwal and Aggarwal 2021; Der-man, Dalal, and Mannor 2021; Liotet et al. 2021). Recent advances further incorporate principled probabilistic mod-eling and variational inference to address delayed decision making; for example, Variational Delayed Policy Optimiza-tion formulates delayed RL from a variational perspective and optimizes policies under delayed information constraints (Wu et al. 2024a), while other works analyze and mitigate signal delays in deep RL through delay-aware architectures and training strategies (Wang et al. 2024). In addition, several approaches accelerate learning under long delays by intro-ducing auxiliary short-delay tasks; leveraging such auxiliary delays has been shown to effectively guide policy learning in long-delay settings and improve sample efficiency (Wu et al. 2024b). 
+
+Diffusion models and uncertainty-aware reinforcement learning. Generative modeling has recently become a pow-erful tool in reinforcement learning, enabling expressive and potentially multi-modal representations of policies, dynam-ics, and latent states (Ding et al. 2024). Diffusion models, in particular, are well suited for learning complex condi-tional distributions and have been used to improve robust-ness against observation perturbations in offline and model-based RL (Yang and Xu 2024). In parallel, uncertainty-aware value estimation and policy optimization, such as ensemble-based critics and uncertainty-weighted updates, have been shown to improve robustness under partial observability and distribution shift (Wu et al. 2021). Building on these ad-vances, we leverage diffusion modeling to explicitly capture the multi-modal state discrepancy induced by random obser-vation delays and incorporate the resulting uncertainty into policy optimization, yielding delay-regime-adaptive behav-ior in delayed RL environments. 
+
+# Preliminaries 
+
+A Partially Observable Markov Decision Process (POMDP) (Kaelbling, Littman, and Cassandra 1998) can be defined by a tuple M = ( S, A, T, r, Ω, O, γ ), where S, A, and Ω de-note the state, action, and observation spaces. The transition dynamics are defined by T (s′ | s, a ),the reward function by 
+
+r(s, a ), and the observation probabilities by O(o | s). At each timestep t, the environment is in a latent state st ∈ S ,the agent receives an observation ot ∼ O(· | st), selects an action at ∈ A according to a policy π, obtains a reward 
+
+rt = r(st, a t), and the environment transitions to the next state according to st+1 ∼ T (· | st, a t). The agent repeats this process to find an optimal policy π∗ that maximizes the expected discounted cumulative reward (i.e., return) over a finite or infinite horizon H, which is given by 
+
+π∗ = arg max  
+
+> π
+
+E
+
+"H−1X
+
+> k=0
+
+γkrk+1 π, d 0
+
+#
+
+. (1) where d0 denotes the initial state distribution. In the fully ob-servable case, ot = st almost surely, and the process reduces to a standard Markov Decision Process (MDP). 
+
+Random Observation Delay POMDP 
+
+We model random observation delay by augmenting the above POMDP with a random delay process. Formally, a random observation delay environment is defined as a pair 
+
+⟨M , D⟩ , where M is a POMDP and D is a probability dis-tribution over non-negative integers, representing random observation delays. At each timestep t, instead of observing the current state st, the agent receives a delayed state ob-servation corresponding to the latent state st−∆T , where the delay ∆T ∼ D . In addition to the delayed state, the agent has access to the sequence of actions at−∆T :t−1 executed since the observation was generated. Together, the delayed state and the history actions form a delayed state message ,denoted by Mt =  st−∆T , a t−∆T :t−1
+
+ which summarizes all information available to the agent at time t and serves as the input for decision making. Throughout this paper, we assume that the delay is finite and bounded by a maximum delay D.
+
+Conditional Diffusion Model 
+
+A conditional diffusion model is a generative model that learns a conditional data distribution pθ (x0 | c), where 
+
+x0 ∈ Rd denotes a target variable and c denotes condi-tional information. It introduces a sequence of latent vari-ables {xk}Kk=1 by gradually perturbing x0 with Gaussian noise according to a fixed variance schedule {βk}Kk=1 :
+
+q(xk | xk−1) = N
+
+p 1 − βk xk−1, β kI
+
+
+
+, k = 1 , . . . , K. 
+
+(2) Let ¯αk = Qki=1 (1 − βi), then the marginal at step k admits the closed form (Ho, Jain, and Abbeel 2020) 
+
+xk = √¯αk x0 + √1 − ¯αk ϵ, ϵ ∼ N (0 , I ). (3) The reverse generative process is parameterized by a con-ditional noise predictor ϵθ (xk, k, c ) and is trained with the standard noise-prediction objective 
+
+min  
+
+> θ
+
+Ex0,k,ϵ 
+
+h
+
+ϵ − ϵθ (xk, k, c ) 22
+
+i
+
+, (4) where k is sampled uniformly from {1, . . . , K }. At inference time, given conditioning c, a sample x0 ∼ pθ (· | c) is ob-tained by starting from xK ∼ N (0 , I ) and iteratively apply-ing the learned reverse denoising transitions. This framework provides a flexible approximation to complex conditional dis-tributions and naturally represents uncertainty through ran-dom sampling. 
+
+# Our Approach 
+
+In this section, we introduce Diffusion-Guided Uncertainty-Aware Delayed Policy Optimization (DUPO). DUPO first learns a conditional diffusion model to represent the posterior over the latent delay-free state from delayed state messages, and then we leverage the posterior distribution to character-ize the state discrepancy induced by observation delays and quantify the resulting uncertainty in action value estimation. We then weight candidate actions according to their value uncertainty to obtain a more stable delayed policy. Finally, by integrating this uncertainty-weighted delayed policy into Soft Actor-Critic, we arrive at our DUPO algorithm. 
+
+Discrepancy under Random Delays 
+
+We study a stochastic delayed MDP with latent dynam-ics st+1 = f (st, a t) + ξt and delayed message Mt =(st−∆T , a t−∆T :t−1). Random delays and system noise in-duce an inherent mismatch between Mt and the current state 
+
+st. The bounds below are stated conditional on a realized delay value ∆T ; averaging over a random delay distribution yields the corresponding bounds with the last terms averaged over ∆T . The detailed proof is provided in the supplementary material. 
+
+Theorem 1 (Irreducible and delay-amplified state discrep-ancy) . Let Σ( Mt) := Cov( st | Mt). Under mild regularity conditions, any measurable estimator g(Mt) satisfies 
+
+E∥st − g(Mt)∥22 ≥ E tr(Σ( Mt)) ≥ ν 
+
+> ∆T−1
+
+X
+
+> i=0
+
+κi ≥ ν∆T. 
+
+(5) 
+
+where ν > 0 is the intrinsic noise level and κ ≥ 1 captures uncertainty amplification. 
+
+A common workaround is to compensate delays by a point prediction ˆst = g(Mt) and act greedily on ˆst. The next result shows that such point-estimate methods suffer a delay-amplified performance loss. 
+
+Theorem 2 (Delay-amplified suboptimality of point-esti-mate methods) . Consider any point estimator ˆst = g(Mt)
+
+and the induced policy at = a⋆(ˆ st), where a⋆(s) =arg max a Q⋆(s, a ). If Q⋆(s, ·) is μ-strongly concave in a
+
+and a⋆(·) is locally inverse-Lipschitz with constant L− > 0,then 
+
+J(π⋆) − J(πg ) ≥ μL 2
+
+> −
+
+ν
+
+2(1 − γ) ∆T. (6) Figure 2: Overview of DUPO. Left: we construct a delayed state message Mt by combining the delayed observation st−∆T with the intervening action history. Middle: a conditional diffusion model learns the posterior pθ (st | Mt) and generates multi-modal samples of the delay-free state. Right: critic uncertainty induced by state discrepancy is estimated from these samples and used to uncertainty-weight policy updates, yielding delay-adaptive weighted action distributions. Together, these theorems motivate modeling the full posterior density p(st | Mt), rather than a single prediction, to properly account for delay-induced uncertainty. 
+
+Diffusion-based State Estimator 
+
+To model the relationship between delayed state message and the delay-free state, we employ a conditional diffusion model with strong expressive capacity. Specifically, the model cap-tures the conditional distribution pθ (st | Mt) and provides a flexible representation of the potentially multi-modal poste-rior distribution induced by random observation delays (Ho, Jain, and Abbeel 2020). The diffusion model introduces a sequence of latent variables 
+
+{snt }Nn=0 with s0 
+
+> t
+
+= st, obtained by progressively corrupting the clean state with Gaussian noise according to a predefined variance schedule. The forward noising process is defined by the Markov transition 
+
+q(snt | sn−1 
+
+> t
+
+) = N  √αn sn−1 
+
+> t
+
+, (1 − αn)I , n = 1 , . . . , N. 
+
+(7) where αn ∈ (0 , 1) , ∀n = 1 , · · · , N controls the noise level at each diffusion step. By composing these transitions, the marginal distribution at step n admits the closed form 
+
+q(snt | st) = N  √¯αn st, (1 − ¯αn)I , ¯αn =
+
+> n
+
+Y
+
+> i=1
+
+αi.
+
+(8) which enables efficient sampling of noisy states at arbitrary diffusion steps. The reverse generative process is parameterized as a condi-tional Markov chain that inverts the noising process given delayed message Mt (Dhariwal and Nichol 2021), 
+
+pθ (sn−1 
+
+> t
+
+| snt , M t) = N  μθ (snt , M t, n ), σ 2
+
+> n
+
+ . (9) where the mean μθ is computed via a neural noise predictor 
+
+ϵθ (snt , M t, n ) using the standard ϵ-parameterization, 
+
+μθ (snt , M t, n ) = 1
+
+√αn
+
+
+
+snt − 1 − αn
+
+√1 − ¯αn
+
+ϵθ (snt , M t, n )
+
+
+
+.
+
+(10) Conditioning on Mt allows the denoising process to adapt to different delay realizations and action histories. Model parameters are learned by minimizing the standard noise-prediction objective. Specifically, a diffusion step n is sampled uniformly from {1, . . . , N }, Gaussian noise ϵ ∼N (0 , I ) is drawn, and a noisy state is constructed via 
+
+snt = √¯αn st + √1 − ¯αn ϵ. (11) The training loss is then given by 
+
+Ldiff = Est,M t,ϵ,n 
+
+h
+
+∥ϵ − ϵθ (snt , M t, n )∥22
+
+i
+
+. (12) After training, the learned reverse process defines an implicit conditional generative model for the delay-free state. Given delayed message Mt, samples from pθ (st | Mt) are obtained by starting from sNt ∼ N (0 , I ) and iteratively applying the reverse transitions in Eq. (9). This corresponds to the condi-tional density 
+
+pθ (st | Mt) = 
+
+Z
+
+pθ (s0: N −1 
+
+> t
+
+| sNt , M t) p(sNt ) d s1: Nt . (13) where p(sNt ) = N (0 , I ). In our framework, multiple samples from this distribution are used to characterize the discrepancy between delayed state message Mt and the delay-free state 
+
+st, which will be exploited by subsequent uncertainty-aware policy optimization. Table 1: Normalized performance on MuJoCo-v4 under random observation delays ∆Tmax ∈ { 5, 10 , 25 }. Each entry reports the final return after training for 1M global environment steps, averaged over random seeds, for four algorithms (DC/AC, DUPO, State-Pred, and State-Aug). For each (∆ Tmax , env ), we normalize by the DC/AC baseline: ˜μ = μ/μ DC/AC and ˜σ = σ/μ DC/AC .Blue indicates the best normalized mean within each ∆Tmax .
+
+Environment Ant-v4 HalfCheetah-v4 Hopper-v4 Walker2d-v4 Swimmer-v4 
+
+∆Tmax Algorithm 5DC/AC 1.00 ± 0.10 1.00 ± 0.09 1.00 ± 0.12 1.00 ± 0.33 1.00 ± 0.43 
+
+DUPO (ours) 2.43 ± 0.11 4.53 ± 0.30 7.24 ± 0.41 1.42 ± 0.04 1.25 ± 0.45 
+
+State Prediction 2.28 ± 0.37 3.93 ± 0.21 3.19 ± 0.75 0.28 ± 0.02 1.65 ± 0.15 
+
+State Augmentation 1.43 ± 0.30 3.78 ± 0.78 6.78 ± 1.40 1.19 ± 0.37 1.07 ± 0.48 
+
+10 DC/AC 1.00 ± 0.05 1.00 ± 0.03 1.00 ± 0.14 1.00 ± 0.64 1.00 ± 0.02 
+
+DUPO (ours) 1.87 ± 0.81 7.53 ± 0.15 30 .46 ± 0.83 1.62 ± 0.64 2.36 ± 0.79 
+
+State Prediction 1.90 ± 0.35 6.42 ± 0.48 6.41 ± 3.06 0.45 ± 0.24 1.75 ± 0.72 
+
+State Augmentation 1.30 ± 0.16 5.96 ± 0.36 23 .71 ± 4.24 1.16 ± 0.30 2.15 ± 0.64 
+
+25 DC/AC 1.00 ± 0.05 1.00 ± 0.60 1.00 ± 0.04 1.00 ± 0.23 1.00 ± 0.02 
+
+DUPO (ours) 2.14 ± 0.92 15 .96 ± 0.51 10 .34 ± 3.44 2.59 ± 0.95 2.98 ± 0.10 
+
+State Prediction 2.11 ± 0.20 13 .19 ± 0.66 4.01 ± 0.89 0.66 ± 0.08 2.30 ± 0.85 
+
+State Augmentation 1.57 ± 0.07 5.10 ± 0.95 7.32 ± 0.63 0.82 ± 0.07 2.75 ± 0.58 
+
+Uncertainty-Weighted Delayed SAC 
+
+To cope with random observation delays, we explicitly treat the current delay-free state as a latent variable conditioned on the delayed message Mt =  st−∆T , a t−∆T :t−1
+
+. Using the trained conditional diffusion model, we draw N plausible delay-free states s(i) 
+
+> t
+
+∼ pθ (· | Mt), which yields a Monte Carlo approximation of the discrepancy induced by delay. This discrepancy is then propagated to action value estima-tion: for any action a, we quantify the delay-induced critic uncertainty by the sample variance 
+
+dVar[ Q(Mt, a )] = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+Qψ (s(i) 
+
+> t
+
+, a )2 − Qψ (st, a )2. (14) We transform this uncertainty into a reliability weight via inverse variance scaling 
+
+ω(Mt, a ) = β
+
+dVar[ Q(Mt, a )] + ε . (15) and weight the base actor πϕ(· | Mt) to obtain an uncertainty-weighted delayed policy (Wu et al. 2021) 
+
+π′
+
+> ϕ
+
+(a | Mt) = ω(Mt, a ) πϕ(a | Mt)
+
+R ω(Mt, ˜a) πϕ(˜ a | Mt) d˜a . (16) Intuitively, actions whose values are highly sensitive to the latent state (hence more risky under delay) receive smaller probability mass under π′
+
+> ϕ
+
+, leading to a more conservative policy when the delayed message is ambiguous. We incorporate π′ 
+
+> ϕ
+
+into SAC while training the critic on delay-free transition tuples, following the standard treatment in delayed RL (Wang et al. 2024). Concretely, 
+
+JQ(ψ) = ED
+
+h Qψ (st, a t) − yt
+
+2i
+
+, (17) 
+
+yt = rt + γ Eat+1 ∼π′(·| st+1 )
+
+h
+
+Qψ (st+1 , a t+1 )
+
+− α log π′(at+1 | st+1 )
+
+i
+
+. (18) Since st+1 is delay-free, weighting is unnecessary and 
+
+π′(· | st+1 ) = π(· | st+1 ).In practice, we optimize the delayed policy by updating the base actor πϕ under an uncertainty-weighted objective that preserves the effect of weighting. Specifically, the actor is trained using a weighted SAC surrogate loss, where the un-certainty weight ω(Mt, a ) modulates the policy update. 
+
+Jπ′ (ϕ) = E(Mt,s t)∼D 
+
+h
+
+Eat∼π′
+
+> ϕ(·| Mt)
+
+h
+
+α log π′
+
+> ϕ
+
+(at | Mt) − Qψ (st, a t)
+
+ii 
+
+(19) 
+
+= E(Mt,s t)∼D 
+
+h
+
+Eat∼πϕ
+
+h
+
+ω(Mt, a )
+
+
+
+α log 
+
+ ω(Mt, a )πϕ(at | Mt)
+
+R 
+
+> a
+
+ω(Mt, a )π(a | Mt) da 
+
+
+
+− Qψ (st, at)
+
+ii 
+
+. (20) This objective preserves the effect of uncertainty-aware weighting while remaining amenable to standard SAC-style optimization. 
+
+# Experimental Results 
+
+Benchmarks and Baseline Algorithms 
+
+We evaluate DUPO on deterministic continuous robotic locomotion control MuJoCo (Todorov, Erez, and Tassa 2012) with random observation delays, including Ant-v4 , HalfCheetah-v4 , Hopper-v4 , Walker2d-v4 , and 
+
+Swimmer-v4 . We focus on stochastic MDPs that better re-flect real-world control systems, in which delays induce state transition discrepancies and amplify uncertainties. We therefore convert deterministic MuJoCo environments into stochastic MDPs by adding Gaussian noise N (0 , 0.1) to the environment-executed actions. After constructing stochastic MuJoCo environments, we further introduce random obser-vation delays. Let ∆T denote the delay at time t, drawn from (a) (b) (c)  
+
+> (d) (e)
+
+Figure 3: Learning curves on MuJoCo-v4 under long random observation delays ( ∆Tmax = 25 ). Across five tasks, DUPO (ours) consistently achieves higher returns and faster convergence than baselines. Solid lines denote the mean over four seeds and shaded regions indicate ± one standard deviation. a uniform distribution where ∆Tmax specifies the maximum delay horizon. Accordingly, the agent does not directly ob-serve the current state st; instead, it receives a delayed mes-sage Mt, which aggregates the delayed observation together with the associated action history. The following algorithms were included as baselines in the experiments: DC/AC (Bouteiller et al. 2020), State Augmen-tation (Wang et al. 2024), and State Prediction (Wang et al. 2024). DC/AC is a SAC variant that integrates off-policy multi-step value estimation with partial trajectory resam-pling, yielding strong sample efficiency under random de-lays. State augmentation concatenates delayed observations with the aligned action history to build a time-calibrated in-put for standard actor–critic learning. State prediction trains an auxiliary model to infer the delay-free state from the delayed message and controls using the predicted state at decision time. Detailed experimental settings and hyperpa-rameter configurations are provided in the supplementary material. 
+
+Results and Discussion 
+
+Table 1 reports the final return after 1M global environment steps, summarized by the mean μ and standard deviation 
+
+σ over four random seeds. Since raw returns have different scales across MuJoCo tasks, we normalize results within each fixed (∆ Tmax , env ) setting using the DC/AC baseline mean return μDC/AC as a scale factor: ˜μ = μ/μ DC/AC , ˜σ =
+
+σ/μ DC/AC . Consequently, DC/AC is always 1.00 in every 
+
+(∆ Tmax , env ) entry, and other numbers can be read as a multiplicative ratio relative to DC/AC, enabling fair compar-ison across tasks and delay budgets. Overall, DUPO achieves the best or near-best normalized mean in most environments, and its advantage becomes more pronounced as the delay budget increases. In particular, un-der severe random delays ( ∆Tmax = 25 ), DUPO attains strong normalized performance on HalfCheetah-v4, Hopper-v4, and Walker2d-v4, consistently outperforming State-Pred and State-Aug, which tend to degrade substantially in the long-delay regime. We also observe that point-estimation baselines can be competitive in short-delay and simpler dy-namics (e.g., Swimmer-v4 at ∆Tmax = 5 ), yet their gains diminish quickly as delays grow, whereas DUPO remains robust. Figure 3 complements the final scores by illustrating learning dynamics under ∆Tmax = 25 . Across five tasks, DUPO typically reaches high-return regimes faster and ex-hibits more stable training trajectories, with reduced vari-ance and fewer late-stage plateaus compared to State-Pred and State-Aug. More learning curves are provided in the supplementary material. A representative case is Walker2d-v4, where long stochastic delays often induce inaccurate delayed-state estimates and value bias for the baselines, lim-iting further improvement; in contrast, DUPO continues to improve and sustains higher returns. These results align with DUPO’s design: modeling the distributional posterior from delayed messages and performing uncertainty-aware weight-ing yields more reliable policy updates under multi-modal and high-uncertainty delay conditions, leading to consistent gains especially in medium-to-long random delays. 
+
+Ablation Study 
+
+Figure 4 (left) studies the impact of the observation de-lay time distribution while keeping the same maximum de-lay budget ∆Tmax = 10 on HalfCheetah-v4. We consider three commonly used delay models: a uniform distribution (Un), a truncated Gaussian distribution (Ga), and a discrete Poisson distribution (Po), all supported on {1, . . . , ∆Tmax }.Figure 4: Ablation studies. Across these settings, DUPO exhibits consistently strong per-formance and stable learning dynamics, indicating that the proposed diffusion-based posterior modeling is not tied to a particular delay prior. Notably, the Gaussian-delay setting yields the fastest improvement and the highest final return, while the uniform and Poisson variants remain competitive but converge more slowly, suggesting that the shape of the delay distribution mainly affects learning speed rather than DUPO’s overall robustness. Figure 4 (right) further ablates the posterior sampling mech-anism used to represent the latent delay-free state. Our full DUPO uses a diffusion model to produce multimodal poste-rior samples, whereas MD-PO replaces diffusion sampling with Monte Carlo dropout sampling, and G-PO replaces it with a unimodal Gaussian sampler. The results show a clear performance gap in favor of DUPO: diffusion-based mul-timodal sampling reaches high-return regimes earlier and plateaus at substantially higher performance than both alter-natives. This highlights the necessity of accurately capturing posterior multimodality under stochastic delays; simplified unimodal (Gaussian) or approximate uncertainty sampling (MC dropout) tends to under-represent ambiguous delayed observations, leading to less reliable value estimation and a weaker delayed policy. Table 2 reports a Hyperparam-eter sensitivity study on Hopper-v4 with ∆Tmax = 10 ,where we normalize returns by the default configuration 
+
+(β=0 .8, N =10) . The coefficient β controls the uncertainty weight ω(Mt, a ) = β/ (dVar[ Q(Mt, a )] + ε), and N denotes the number of posterior samples drawn from the diffusion model to approximate the multimodal latent state distribu-tion. Varying β shows that performance is relatively stable around the default choice, while overly small or large values degrade normalized return, indicating that moderate uncer-tainty scaling yields the most reliable action weighting. In-creasing N consistently improves performance and reduces variability, suggesting that richer posterior sampling provides a more accurate uncertainty estimate and hence a more ef-fective delayed policy; in particular, larger N achieves the best normalized return under the same delay budget. More details of the ablation studies can be found in the supplemen-tary material. 
+
+# Conclusion 
+
+In this paper, we studied reinforcement learning under stochastic observation delays and theoretically analyzed how random delays in stochastic MDPs induce an intrinsic dis-crepancy between delayed observations and the true cur-rent state, which fundamentally limits approaches based on Table 2: Hyperparameter sensitivity study on Hopper-v4 with random observation delays ∆Tmax = 10 .                                        
+
+> Hopper-v4 ∆Tmax = 10
+> βReturn (normalized) NReturn (normalized) 0.4 0.93 ±0.11 50.89 ±0.08
+> 0.8 1.00 ±0.03 10 1.00 ±0.03
+> 1.0 0.96 ±0.05 15 1.02 ±0.02
+> 1.5 1.03 ±0.08 20 1.03 ±0.02
+> 2.0 0.91 ±0.04 25 1.06 ±0.03
+
+single-point state estimation. To address this challenge, we proposed Diffusion-Guided Uncertainty-Aware Delayed Pol-icy Optimization (DUPO), which models the multimodal posterior distribution of the latent delay-free state using a conditional diffusion model and incorporates uncertainty-aware action weighting to stabilize policy updates un-der delayed state information. By explicitly accounting for delay-induced uncertainty and posterior multimodality, DUPO provides a principled solution to delayed decision-making in stochastic environments. Extensive experiments on continuous-control benchmarks with multiple random de-lay settings demonstrate that DUPO consistently outperforms strong baselines, with particularly pronounced advantages under medium-to-long delays, validating both the theoret-ical motivation and practical effectiveness of the proposed approach. To facilitate reproducibility, the code will be pub-licly released upon acceptance. References 
+
+Agarwal, A.; and Aggarwal, A. 2021. Reinforcement Learn-ing with Delayed Observations. In Proceedings of the Inter-national Conference on Automated Planning and Scheduling (ICAPS) . Also available as arXiv:2011.07715. Altman, E.; and Nain, P. 1992. Closed-loop control with delayed information. In Proceedings of the 1992 ACM SIG-METRICS Conference on Measurement and Modeling of Computer Systems , 193–204. Berner, C.; Brockman, G.; Chan, B.; Cheung, V.; Dębiak, P.; Dennison, C.; Farhi, D.; Fischer, Q.; Hashme, S.; Hesse, C.; Józefowicz, R.; Gray, S.; Olsson, C.; Pachocki, J.; Petrov, M.; Pinto, H. P. d. O.; Raiman, J.; Salimans, T.; Schlatter, J.; Schneider, J.; Sidor, S.; Sutskever, I.; Tang, J.; Wolski, F.; and Zhang, S. 2019. Dota 2 with Large Scale Deep Reinforcement Learning. arXiv preprint arXiv:1912.06680 .Bertsekas, D. P. 2012. Dynamic Programming and Optimal Control . Belmont, MA: Athena Scientific, 4 edition. Bouteiller, Y.; Ramstedt, S.; Beltrame, G.; Pal, C.; and Bi-nas, J. 2020. Reinforcement Learning with Random Delays. In International Conference on Learning Representations (ICLR) .Derman, E.; Dalal, G.; and Mannor, S. 2021. Acting in De-layed Environments with Non-Stationary Markov Policies. In International Conference on Learning Representations (ICLR) . ArXiv:2101.11992. Dhariwal, P.; and Nichol, A. Q. 2021. Diffusion Models Beat GANs on Image Synthesis. In Ranzato, M.; Beygelzimer, A.; Dauphin, Y. N.; Liang, P.; and Vaughan, J. W., eds., Advances in Neural Information Processing Systems , 8780–8794. Ding, S.; Hu, K.; Zhang, Z.; Ren, K.; Zhang, W.; Yu, J.; Wang, J.; and Shi, Y. 2024. Diffusion-based Reinforcement Learn-ing via Q-weighted Variational Policy Optimization. In Ad-vances in Neural Information Processing Systems (NeurIPS) .Dugard, L.; and Verriest, E. I. 1998. Stability and Control of Time-Delay Systems . London: Springer. Feng, S.; Sun, H.; Yan, X.; Zhu, H.; Zou, Z.; Shen, S.; and Liu, H. X. 2023. Dense deep reinforcement learning for safety validation of autonomous driving. Nature , 615: 620–627. Firoiu, V.; Ju, T.; and Tenenbaum, J. 2018. At Human Speed: Deep Reinforcement Learning with Action Delay. arXiv preprint arXiv:1810.07286 .Gu, K.; and Niculescu, S.-I., eds. 2003. Advances in Time-Delay Systems . London: Springer. Edited volume (often cited as Gu & Niculescu, 2003 in delay/control literature). Haarnoja, T.; Zhou, A.; Abbeel, P.; and Levine, S. 2018. Soft Actor-Critic: Off-Policy Maximum Entropy Deep Rein-forcement Learning with a Stochastic Actor. In Proceedings of the 35th International Conference on Machine Learning (ICML) , volume 80 of Proceedings of Machine Learning Research , 1861–1870. PMLR. Hasbrouck, J.; and Saar, G. 2013. Low-Latency Trading. 
+
+Journal of Financial Markets , 16(4): 646–679. Ho, J.; Jain, A.; and Abbeel, P. 2020. Denoising Diffusion Probabilistic Models. In Larochelle, H.; Ranzato, M.; Had-sell, R.; Balcan, M.; and Lin, H., eds., Advances in Neural Information Processing Systems .Kaelbling, L. P.; Littman, M. L.; and Cassandra, A. R. 1998. Planning and Acting in Partially Observable Stochastic Do-mains. Artificial Intelligence , 101(1–2): 99–134. Katsikopoulos, K. V.; and Engelbrecht, S. 2003. Markov decision processes with delays and asynchronous cost col-lection. IEEE Transactions on Automatic Control , 48(4): 568–574. Liotet, P.; Maran, D.; Bisi, L.; and Restelli, M. 2021. Learning a Belief Representation for Delayed Reinforcement Learning. In International Joint Conference on Neural Net-works (IJCNN) . IEEE. Mahmood, A. R.; Korenkevych, D.; Komer, B. J.; and Bergstra, J. 2018. Setting up a Reinforcement Learning Task with a Real-World Robot. In 2018 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 4635– 4640. IEEE. Nath, S.; Baranwal, M.; and Khadilkar, H. 2021. Revisiting State Augmentation Methods for Reinforcement Learning with Stochastic Delays. In Proceedings of the 30th ACM In-ternational Conference on Information & Knowledge Man-agement (CIKM) .Paduraru, C.; Mankowitz, D. J.; Dulac-Arnold, G.; Li, J.; Levine, N.; Gowal, S.; and Hester, T. 2021. Challenges of Real-World Reinforcement Learning: Definitions, Bench-marks and Analysis. Machine Learning , 110(9): 2419–2468. Schuitema, E.; Buşoniu, L.; Babuška, R.; and Jonker, P. 2010. Control Delay in Reinforcement Learning for Real-Time Dy-namic Systems: A Memoryless Approach. In 2010 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 3226–3231. IEEE. Silver, D.; Hubert, T.; Schrittwieser, J.; Antonoglou, I.; Lai, M.; Guez, A.; Lanctot, M.; Sifre, L.; Kumaran, D.; Graepel, T.; Lillicrap, T.; Simonyan, K.; and Hassabis, D. 2018. Ageneral reinforcement learning algorithm that masters chess, shogi, and Go through self-play. Science , 362(6419): 1140– 1144. Todorov, E.; Erez, T.; and Tassa, Y. 2012. MuJoCo: A physics engine for model-based control. In 2012 IEEE/RSJ Interna-tional Conference on Intelligent Robots and Systems (IROS) ,5026–5033. IEEE. Walsh, T. J.; Nouri, A.; Li, L.; and Littman, M. L. 2009. Learning and planning in environments with delayed feed-back. Autonomous Agents and Multi-Agent Systems , 18(1): 83–105. Wang, W. W.; Han, D.; Luo, X.; and Li, D. 2024. Addressing Signal Delay in Deep Reinforcement Learning. In ICLR .Wu, Q.; Zhan, S. S.; Wang, Y.; Wang, Y.; Lin, C.-W.; Lv, C.; Zhu, Q.; and Huang, C. 2024a. Variational Delayed Policy Optimization. In Advances in Neural Information Processing Systems (NeurIPS) . Spotlight. Wu, Q.; Zhan, S. S.; Wang, Y.; Wang, Y.; Lin, C.-W.; Lv, C.; Zhu, Q.; Schmidhuber, J.; and Huang, C. 2024b. Boosting Reinforcement Learning with Strongly Delayed Feedback through Auxiliary Short Delays. arXiv preprint arXiv:2402.03141 .Wu, Y.; Zhai, S.; Srivastava, N.; Susskind, J. M.; Zhang, J.; Salakhutdinov, R.; and Goh, H. 2021. Uncertainty Weighted Actor-Critic for Offline Reinforcement Learning. In Pro-ceedings of the 38th International Conference on Machine Learning (ICML) , volume 139 of Proceedings of Machine Learning Research , 11319–11328. PMLR. Yang, Z.; and Xu, Y. 2024. DMBP: Diffusion Model-Based Predictor for Robust Offline Reinforcement Learning against State Observation Perturbations. In International Conference on Learning Representations (ICLR) .Theoretic Analysis 
+
+Notation and regularity assumptions. All statements below are written for a realized delay value d = ∆ T . We treat the realized delay as part of the delayed message; equivalently, if an implementation stores the delay separately, read Mt below as the pair (Mt, d ). This is natural because the action-history length in Mt = ( st−d, a t−d:t−1) identifies d. The sigma-field generated by the delayed message is denoted by 
+
+Ft := σ(Mt, d ) = σ(st−d, a t−d:t−1, d ) .
+
+Thus st−d and the intervening actions are known under Ft. For j = 0 , . . . , d , define 
+
+Sj := st−d+j , Aj := at−d+j , Σj := Cov( Sj | F t), vj := tr(Σ j ).
+
+We use the following standard local conditions for stochastic delayed dynamics: 1. The latent dynamics along the delayed window satisfy Sj+1 = f (Sj , A j ) + ξj .2. The innovation noise is conditionally centered and conditionally orthogonal to the propagated state uncertainty: 
+
+E[ξj | F t] = 0 , tr(Cov( f (Sj , A j ), ξ j | F t)) = 0 .
+
+3. The transition noise has non-vanishing conditional variance and the deterministic part does not contract conditional uncer-tainty below a factor κ ≥ 1:
+
+tr(Cov( ξj | F t)) ≥ ν, tr(Cov( f (Sj , A j ) | F t)) ≥ κ tr(Cov( Sj | F t)) ,
+
+for some ν > 0.These assumptions formalize the setting in which stochastic transitions inject fresh uncertainty at every hidden step, while the delayed message cannot fully recover the intervening latent trajectory. 
+
+Proof of Theorem 1 
+
+Lemma 1 (Bayes risk under a delayed message) . For any measurable estimator g(Mt),
+
+E∥st − g(Mt)∥22 = E tr  Σ( Mt) + E E[st | Mt] − g(Mt) 22 ≥ E tr  Σ( Mt). (21) 
+
+Proof. Let F = σ(Mt), S = st, and μ = E[S | F ]. Since g(Mt) is F-measurable, 
+
+S − g(Mt) = ( S − μ) + ( μ − g(Mt)) .
+
+Expanding the squared norm and conditioning on F yields 
+
+E∥S − g(Mt)∥22 | F  = E∥S − μ∥22 | F  + ∥μ − g(Mt)∥22
+
++ 2 E[S − μ | F ]⊤(μ − g(Mt)) . (22) The cross term is zero because E[S − μ | F ] = 0 . Moreover, 
+
+E∥S − μ∥22 | F  = tr  E[( S − μ)( S − μ)⊤ | F ] = tr(Cov( S | F )) .
+
+Taking expectations gives (21). 
+
+Lemma 2 (Delay-amplified conditional variance) . For a realized delay d = ∆ T ,
+
+tr  Cov( st | Mt, d ) ≥ ν
+
+> d−1
+
+X
+
+> i=0
+
+κi ≥ νd. (23) 
+
+Proof. Because S0 = st−d is contained in the delayed message, it is Ft-measurable; hence v0 = tr(Cov( S0 | F t)) = 0 . For 
+
+j = 0 , . . . , d − 1, let Xj = f (Sj , A j ). Using Sj+1 = Xj + ξj and the conditional covariance identity, 
+
+vj+1 = tr(Cov( Xj + ξj | F t)) = tr(Cov( Xj | F t)) + tr(Cov( ξj | F t)) + 2 tr(Cov( Xj , ξ j | F t)) 
+
+≥ κv j + ν. (24) Unrolling the recursion from v0 = 0 gives 
+
+vd ≥ ν(1 + κ + · · · + κd−1) = ν
+
+> d−1
+
+X
+
+> i=0
+
+κi.
+
+Since κ ≥ 1, the final term is at least νd . Finally, Sd = st, which proves (23). Proof of Theorem 1. Lemma 1 gives the irreducible estimation-risk term: 
+
+E∥st − g(Mt)∥22 ≥ E tr  Σ( Mt). (25) It remains to lower bound the posterior variance. Since d is included in the delayed message notation, Σ( Mt) = Cov( st | Mt, d ).Lemma 2 lower bounds this conditional covariance for every realized delay d. Hence, conditional on ∆T = d,
+
+E tr  Σ( Mt) ≥ ν
+
+> d−1
+
+X
+
+> i=0
+
+κi ≥ νd. 
+
+Replacing d by the realized value ∆T gives (5); averaging over a random delay distribution yields the corresponding unconditional lower bound ν E[P∆T −1 
+
+> i=0
+
+κi] ≥ ν E[∆ T ].
+
+Proof of Theorem 2 
+
+We fix any point estimator ˆst = g(Mt) and the induced greedy policy πg defined by at = a⋆(g(Mt)) , where a⋆(s) := arg max a Q⋆(s, a ) (assumed unique) and V ⋆(s) := max a Q⋆(s, a ). Let the discounted occupancy over (s, M ) under a policy 
+
+π be 
+
+dπ (s, M ) := (1 − γ)
+
+> ∞
+
+X
+
+> t=0
+
+γt Pr  
+
+> π
+
+(st = s, M t = M ).
+
+Lemma 3 (Quadratic growth from μ-strong concavity) . Suppose Q⋆(s, ·) is differentiable and μ-strongly concave in a, and that 
+
+a⋆(s) is an unconstrained or interior maximizer. Then, for any a,
+
+V ⋆(s) − Q⋆(s, a ) ≥ μ
+
+2 ∥a − a⋆(s)∥22. (26) 
+
+Proof. By μ-strong concavity, for any a and a⋆ = a⋆(s),
+
+Q⋆(s, a ) ≤ Q⋆(s, a ⋆) + ⟨∇ aQ⋆(s, a ⋆), a − a⋆⟩ − μ
+
+2 ∥a − a⋆∥22.
+
+Since a⋆ is the unique maximizer, ∇aQ⋆(s, a ⋆) = 0 , yielding (26). 
+
+Lemma 4 (One-step loss under inverse-Lipschitz greedy map) . Assume that the greedy action map is locally inverse-Lipschitz on the relevant state region: 
+
+∥a⋆(s′) − a⋆(s)∥2 ≥ L−∥s′ − s∥2 for all relevant s, s ′.
+
+Then, for any (s, M ) and any point estimator g(M ) in this region, 
+
+V ⋆(s) − Q⋆ s, a ⋆(g(M ))  ≥ μL 2
+
+> −
+
+2 ∥s − g(M )∥22. (27) 
+
+Proof. Apply Lemma 3 with a = a⋆(g(M )) :
+
+V ⋆(s) − Q⋆ s, a ⋆(g(M ))  ≥ μ
+
+2 ∥a⋆(g(M )) − a⋆(s)∥22,
+
+and then use the assumed inverse-Lipschitz property to lower bound the right-hand side by μL 2 
+
+> −
+> 2
+
+∥g(M ) − s∥22.
+
+Lemma 5 (Performance difference with Q⋆). For any policy π (possibly history-dependent) with the same initial distribution as π⋆,
+
+J(π⋆) − J(π) = 11 − γ E(s,M )∼dπ
+
+h
+
+V ⋆(s) − Q⋆(s, a )
+
+i
+
+, (28) 
+
+where a is the action executed by π upon observing M .Proof. For the action at executed by π, the Bellman optimality identity gives 
+
+Q⋆(st, a t) = E[rt + γV ⋆(st+1 ) | st, a t].
+
+Therefore, 
+
+E[V ⋆(st) − Q⋆(st, a t)] = E[V ⋆(st) − rt − γV ⋆(st+1 )] .
+
+Multiplying by γt, summing over t ≥ 0, and using telescoping gives 
+
+> ∞
+
+X
+
+> t=0
+
+γtE[V ⋆(st) − Q⋆(st, a t)] = E[V ⋆(s0)] − J(π).
+
+Because π⋆ is optimal, E[V ⋆(s0)] = J(π⋆). Rewriting the left side through the discounted occupancy measure dπ proves (28). Proof of Theorem 2. Applying Lemma 5 to π = πg and then Lemma 4 gives 
+
+J(π⋆) − J(πg ) ≥ μL 2
+
+> −
+
+2(1 − γ) E(s,M )∼dπg 
+
+∥s − g(M )∥22
+
+. (29) The Bayes-risk decomposition in Lemma 1, applied under the occupancy distribution of πg , implies 
+
+E(s,M )∼dπg 
+
+∥s − g(M )∥22
+
+ ≥ E(s,M )∼dπg 
+
+tr(Σ( M )) .
+
+Under the same delay-variance regularity conditions used in Theorem 1, Lemma 2 gives, for realized delay d = ∆ T ,
+
+E(s,M )∼dπg 
+
+tr(Σ( M ))  ≥ ν
+
+> d−1
+
+X
+
+> i=0
+
+κi ≥ νd. 
+
+Substituting this lower bound into (29) yields 
+
+J(π⋆) − J(πg ) ≥ μL 2 
+
+> −
+
+ν
+
+2(1 − γ) ∆T, 
+
+which proves the claim. 
+
+# Implementation Details 
+
+Benchmark and Baseline Setting 
+
+We evaluate on MuJoCo-v4 continuous-control benchmarks (Ant, HalfCheetah, Hopper, Walker2d, and Swimmer) under random observation delays. To emulate stochastic control systems, we turn each originally deterministic environment into a stochastic MDP by adding Gaussian noise to the environment-executed actions: the simulator applies ˜at = at + ϵt with 
+
+ϵt ∼ N (0 , 0.1) . The observation delay at time t is sampled as an integer-valued random variable ∆Tt ∼ Unif {1, . . . , ∆Tmax },and the agent receives a delayed message Mt that aggregates the delayed observation together with the associated action history, e.g., Mt = ( st−∆Tt , a t−∆Tt:t−1). For each baseline, we implement the method following its original paper and adopt the best-performing hyperparameters recommended by the authors whenever available; when multiple configurations are reported, we select the one that achieves the strongest final performance under the same delay budget. All baselines are trained with the identical environment construction, interaction budget, and evaluation protocol as DUPO. We further conduct ablations by varying only the targeted components while keeping the remaining training pipeline unchanged. 
+
+Ablation Study 
+
+Figure 4 investigates two factors while keeping the remaining training pipeline unchanged. In the left panel, we study the effect of the observation-delay time distribution on HalfCheetah-v4 with a fixed maximum delay budget ∆Tmax = 10 . At each time step, the delay length is an integer random variable ∆Tt ∈ { 1, . . . , ∆Tmax }, and the agent observes a delayed message constructed from the delayed state and the corresponding action history. We consider three commonly used discrete delay models on this support: an integer-valued uniform distribution (Un), a truncated discrete Gaussian distribution (Ga), and a discrete Poisson distribution truncated to {1, . . . , ∆Tmax } (Po). Across all three priors, DUPO achieves consistently strong performance and stable learning dynamics, suggesting that diffusion-based posterior modeling is not tied to a particular delay prior. The Gaussian-delay setting improves fastest and attains the best final return, while the uniform and Poisson variants remain competitive but converge more slowly, indicating that the delay distribution primarily affects learning speed rather than overall robustness. The right panel ablates how we obtain multiple samples of the latent delay-free state for uncertainty estimation. Our full DUPO draws multimodal posterior samples using the diffusion model. In contrast, MD-PO (Monte Carlo Dropout Posterior) replaces diffusion sampling with dropout-based sampling: we keep dropout active at inference time and perform multiple stochastic forward passes to generate a set of predicted states. G-PO (Gaussian Posterior) replaces diffusion sampling with a unimodal Gaussian sampler: we fit (or assume) a single Gaussian distribution over the predicted state and draw multiple state samples from this Gaussian. Both variants keep the downstream uncertainty-aware weighting and policy optimization unchanged, differing only in the state-sampling mechanism. The results show a clear advantage for DUPO: diffusion-based multimodal sampling reaches high-return regimes earlier and plateaus at substantially higher performance than MD-PO and G-PO. This highlights that accurately capturing posterior multimodality under stochastic delays is crucial; unimodal Gaussian sampling or approximate uncertainty sampling via MC dropout tends to under-represent ambiguous delayed observations, leading to less reliable value estimation and weaker delayed policies. 
+
+Hyperparameters setting 
+
+# Learning Curves Table 3: Key hyperparameters. 
+
+Key Value 
+
+burnin_num 0.25 
+
+actor_history_merge_method mlp 
+
+batch_size 32 
+
+batch_seq_len 64 
+
+max_epoch 200 
+
+step_per_epoch 5000 
+
+step_per_collect 1
+
+update_per_step 1
+
+gamma 0.99 
+
+tau 0.005 
+
+buffer_size 1200000 
+
+env_max_step 5000 
+
+DUPO-specific 
+
+Diffusion_num_samples 4
+
+Diffusion_sample_chunk_size 2048 
+
+Diffusion_update_interval 30 
+
+β 0.8 
+
+N (multimodal sampling times) 10 Figure 5: Learning curves under random observation delays with ∆Tmax ∈ { 5, 10 , 25 }. Results are averaged over 4 random seeds; solid lines denote the mean return and shaded regions indicate ±1 standard deviation.

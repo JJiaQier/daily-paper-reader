@@ -1,0 +1,259 @@
+Title: Safe Reinforcement Learning using Ideas from Model Predictive Control
+
+URL Source: https://arxiv.org/pdf/2607.07252v1
+
+Published Time: Thu, 09 Jul 2026 00:45:15 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Safe Reinforcement Learning using Ideas from Model Predictive Control 
+
+Georg Sch¨ afer 1,2, Jakob Rehrl 1, Stefan Huber 1, and Simon Hirlaender 2 
+
+> 1
+
+Josef Ressel Centre for Intelligent and Secure Industrial Automation, Salzburg University of Applied Sciences, Salzburg, Austria  
+
+> 2
+
+Department of Artificial Intelligence and Human Interfaces, Paris Lodron University of Salzburg, Salzburg, Austria 
+
+georg.schaefer@fh-salzburg.ac.at 
+
+Abstract. Reinforcement learning (RL) enables the synthesis of con-trol policies directly from data, making it highly appealing for complex cyber-physical systems (CPSs) and robotics. A persistent challenge, how-ever, is ensuring strict, hard safety constraints during the active learning phase. In real-world physical systems, violating mechanical limits can cause irreversible damage, necessitating that exploration remains strictly within safe operational regions. We propose a generalized framework that combines the adaptive, high-performance nature of deep reinforcement learning (DRL) with the formal safety guarantees of model predictive control (MPC). Using a mathematical model of the system dynamics, of-fline MPC computations define a feasible state-action space, representing all safe combinations of system states and control inputs that guarantee constraint satisfaction. During training and deployment, the RL agent’s instantaneous actions are projected onto this globally verified feasible set via a safety filter. We systematically evaluate our generalized approach on a non-linear 1-degree of freedom (1-DOF) laboratory testbed, demon-strating successful exploration and stable policy convergence on physical hardware. 
+
+Keywords: Safe reinforcement learning · Model predictive control ·
+
+Cyber-physical systems · Control theory. 
+
+## 1 Introduction 
+
+The application of reinforcement learning (RL) to cyber-physical systems (CPSs) and industrial robots holds immense promise. RL algorithms learn optimal con-trol policies through active interaction with an environment, offering high poten-tial to solve complex, non-linear control problems where traditional analytical models or linear approximations may fall short [16,10]. However, standard RL fundamentally relies on extensive, unconstrained exploration of the state-action space to discover these optimal policies. This core requirement creates a critical safety bottleneck: pure RL agents optimize for scalar reward signals but do not inherently respect strict physical arXiv:2607.07252v1 [cs.LG] 8 Jul 2026 2 G. Sch¨ afer et al. 
+
+safety constraints [8]. In the context of real-world physical systems, such un-constrained exploration is unacceptable. Violating mechanical limits, thermal bounds, or actuator constraints can lead to hardware failure, costly downtime, or irreversible system damage. Therefore, an agent must avoid what we define as the unsafe state : any situation where the system either directly violates con-straints or passes a “point of no return” where a future constraint violation becomes physically inevitable due to system dynamics, regardless of any subse-quent control actions. Bridging the gap between the theoretical promise of RL and safe physical deployment requires mechanisms that guarantee absolute constraint satisfaction throughout the entire learning process. We propose a generalized framework combining the data-driven learning capabilities of RL with the formal, forward-looking safety guarantees of offline model predictive control (MPC). Rather than evaluating safety purely online, which is often computationally prohibitive for the high-frequency control loops required in modern CPSs, our approach uses offline MPC as an oracle to pre-define a “feasible state-action space” ( F). During training, a deterministic projection filter maps any potentially unsafe action proposed by the RL agent back into this safe set, avoiding violations during both exploration and deployment. 
+
+## 2 Related Work 
+
+The challenge of safe exploration in RL has garnered significant attention, gen-erally falling into modifications of the optimization objective (soft constraints) or architectural interventions (hard constraints). 
+
+Constrained Markov Decision Processes: A foundational approach to safe RL involves framing the problem as a constrained Markov decision pro-cess (CMDP) [3], where the agent maximizes expected rewards while ensuring that the expected cumulative cost, representing the likelihood of unsafe behav-ior, remains below a predefined threshold. Algorithms such as constrained pol-icy optimization (CPO) [1] and Lagrangian relaxation methods have been widely adopted to solve CMDPs. While effective for soft constraints, these methods opti-mize for expected constraint satisfaction over a temporal horizon. Consequently, they cannot provide the absolute, deterministic, step-by-step safety guarantees required to prevent catastrophic failure on physical hardware during the highly stochastic initial stages of learning [8]. 
+
+Lyapunov-based and Reachability Approaches: To introduce safety constraints, researchers have explored Lyapunov-based safe RL, constructing continuous Lyapunov functions to restrict the policy update step to a safe subset of policies [6]. Alternatively, reachability analysis computes safe back-ward reachable sets. Fisac et al. [7] proposed a general safety framework using Hamilton-Jacobi reachability to override the learning agent when it approaches the boundary of the safe set. While providing strong theoretical guarantees, com-puting exact reachable sets suffers heavily from the curse of dimensionality and is often intractable for complex continuous systems. Safe RL using Ideas from MPC 3
+
+Reactive Shielding and Control barrier functions (CBFs): Architec-tural interventions often utilize a separate mathematical construct to override the RL agent online. Shielding [2] relies on formal verification to construct an automaton that monitors the system and intervenes when a safety property is threatened. Similarly, CBFs [4,5] synthesize a safe control set online by ensuring the derivative of a barrier function remains within acceptable bounds, allowing end-to-end safe RL. However, it is crucial to note that standard deep reinforcement learning (DRL) policies lack a predictive horizon, mapping current state information directly to instantaneous actions. If an online safety mechanism evaluates these proposed actions without simulating the long-term system dynamics, it may in-tervene too late, particularly in systems with high inertia where the system has already entered a trajectory toward an inevitable collision. Our approach con-trasts with online CBFs and reactive shielding by pre-computing the recursive feasibility boundaries offline using MPC. This ensures that the instantaneous action requested by the DRL policy is immediately projected into a globally verified, recursively safe space before any mechanical action is initiated, shifting the heavy computational burden out of the real-time control loop. 
+
+## 3 Theoretical Background 
+
+To formalize the integration of data-driven learning and model-based safety, we first establish the theoretical foundations of both domains. 
+
+3.1 Reinforcement Learning and Markov Decision Processes 
+
+In the standard RL framework, the interaction between an agent and a dynamic environment is modeled as an infinite-horizon, discounted Markov decision pro-cess (MDP) [16]. An MDP is formally defined by the tuple M = ( S, A, P, r, γ, μ ), where: 
+
+– S ⊆ Rn is the continuous state space. 
+
+– A ⊆ Rm is the continuous action space. 
+
+– P : S × A × S → [0 , ∞) is the transition probability density function, gov-erning the environment dynamics such that st+1 ∼ P (·| st, a t). 
+
+– r : S × A → R is the scalar reward function. 
+
+– γ ∈ [0 , 1) is the discount factor, prioritizing immediate rewards over delayed ones. 
+
+– μ is the initial state distribution. The objective of the RL agent is to learn a parameterized, stochastic policy 
+
+πθ (a|s) (or a deterministic policy πθ (s)) that maximizes the expected cumulative discounted return: 
+
+J(πθ ) = Eτ ∼πθ
+
+" ∞X
+
+> t=0
+
+γtr(st, a t)
+
+#
+
+, (1) where the trajectory τ = ( s0, a 0, s 1, a 1, . . . ) is generated by sampling s0 ∼ μ,
+
+at ∼ πθ (·| st), and st+1 ∼ P (·| st, a t) [12]. 4 G. Sch¨ afer et al. 
+
+3.2 Model Predictive Control 
+
+The standard discrete-time MPC optimization problem is formulated as mini-mizing a cost function: min 
+
+> U
+> H−1
+
+X
+
+> i=0
+
+ℓ(xk+i|k, u k+i|k) (2) subject to: xk+i+1 |k = f (xk+i|k, u k+i|k), ∀i ∈ { 0, . . . , H − 1}, (3) 
+
+xk+i|k ∈ X safe , ∀i ∈ { 1, . . . , H }, (4) 
+
+uk+i|k ∈ U safe , ∀i ∈ { 0, . . . , H − 1}, (5) where ℓ(·, ·) is the stage cost and f (·, ·) represents the discrete-time system dy-namics. Eqs. (4) and (5) enforce hard state and input constraints. While classical MPC theory often requires the computation of a control in-variant terminal set to formally guarantee recursive feasibility and stability, de-termining such a set can be highly complex for non-linear systems. In practical applications, evaluating the constraints over a sufficiently large prediction hori-zon H serves as an effective and computationally tractable alternative to ensure system safety. 
+
+## 4 Generalized Problem Formulation 
+
+To bridge the gap between control theory and RL, we must formally define the system dynamics, the constraints, and the learning objective. 
+
+4.1 Continuous System Dynamics 
+
+We consider a generic cyber-physical system whose dynamics are governed by a continuous-time non-linear differential equation: ˙x(t) = fcont (x(t), u (t)) , (6) where x(t) ∈ X ⊂ Rn represents the system state and u(t) ∈ U ⊂ Rm represents the continuous control input vector. 
+
+4.2 Operational Constraints and the Discrete MDP 
+
+Real-world physical systems are subject to strict operational and mechanical constraints. Let Xsafe ⊂ X denote the set of physically allowable states (e.g., position and velocity boundaries) and Usafe ⊂ U denote the hard physical actu-ator limits (e.g., maximum motor voltage or torque). The system must operate strictly within Xsafe × U safe .For the RL framework, these continuous dynamics are discretized over a finite sample time ∆t , yielding a deterministic transition function: 
+
+st+1 = fdisc (st, a t) = st +
+
+Z t+∆t t
+
+fcont (s(τ ), a (τ )) dτ, (7) Safe RL using Ideas from MPC 5
+
+where st = x(k∆t ) and at = u(k∆t ). This maps the continuous control problem to the underlying discrete MDP required for the agent. 
+
+4.3 The Safe Exploration Paradox 
+
+The objective of the DRL agent is to learn a parameterized policy πθ (st) that maximizes the expected discounted return. However, standard policy optimiza-tion fundamentally relies on stochastic exploration mechanisms, such as adding Gaussian noise to the continuous action space, where at ∼ N (πθ (st), Σ ). This creates a safety paradox: stochastic exploration will inevitably propose actions that push the system outside of Xsafe × U safe . Furthermore, satisfying immediate, single-step constraints (i.e., merely ensuring that the next state tran-sition st+1 ∈ X safe ) is wholly insufficient. Due to system inertia, the agent must avoid entering states from which all available control authority in Usafe is math-ematically insufficient to prevent a future violation. This necessitates a mecha-nism that guarantees recursive, forward-looking safety without halting the active exploration process. 
+
+## 5 Safe Exploration via Offline MPC 
+
+To resolve this paradox without impeding the real-time control loop, we define the true feasible state-action space, F, which guarantees recursive, long-term physical safety. Let S+ ⊆ X safe denote the admissible state space, and S− = S \ S + denote the unsafe state space. For any state s ∈ S +, a control action is only truly safe if there exists an infinite sequence of future actions within Usafe that keeps the system out of S−. We denote this set of safe actions for a given state s as 
+
+FA(s) ⊆ U safe .We define the feasible state space ( FS ) as the set of all states where at least one safe action exists: 
+
+s ∈ F S ⇔ F A(s)̸ = ∅. (8) The global feasible state-action space F is the union of all safe state-action pairs: 
+
+F = [
+
+> s∈F S
+
+{s} × F A(s). (9) 
+
+5.1 Model Predictive Control as a Feasibility Oracle 
+
+We employ the constrained MPC optimization formulated in Eqs. (2) to (5) to approximate infinite-horizon safety. For a given state-action pair ( s, a ), the MPC oracle simulates the system dynamics forward over the finite horizon H, forcing the first action in the sequence to be uk|k = a.To circumvent the need for a rigorously computed terminal set, we utilize a conservatively large prediction horizon H. For mechanical systems, if H is chosen such that the prediction window significantly exceeds the maximum time 6 G. Sch¨ afer et al. 
+
+required to bring the system to a complete halt using maximum opposing control effort, surviving for H steps acts as a practical guarantee for long-term safety. Therefore, if the optimizer can find a physically valid sequence of subsequent actions U that respects all constraints over this sufficiently large horizon H, the state-action pair is deemed safe. We define the binary oracle function mathematically as: Oracle( s, a ) = 
+
+(
+
+1, (s, a ) ∈ F ,
+
+0, (s, a ) /∈ F . (10) By executing this oracle strictly offline, we can evaluate complex, non-linear tra-jectories over long horizons H without violating the strict latency requirements of the online RL policy. 
+
+# Safe States Unsafe States   
+
+> Point of No Return ( ∂F)
+> Mechanical Limit
+> CPS
+> Safe Exploration Maximum Control Effort
+> Fig. 1. Abstract visualization of the state space. Actions must be restricted before crossing the “Point of No Return” ( ∂F). Beyond this boundary, even maximum control effort is physically insufficient to prevent a collision with hard constraints.
+
+5.2 Scaling the Offline Mapping via System Convexity 
+
+To construct the offline map of F, we employ a systematic grid search across the discretized state-action space ( S × A ). For a given state space discretization, evaluating every possible continuous action a ∈ A via the expensive MPC oracle is computationally highly inefficient. However, we drastically reduce the computational complexity by exploit-ing the physical properties of many continuous dynamical systems. Specifically, Safe RL using Ideas from MPC 7
+
+for mechanical systems modeled with control-affine (or input-affine) dynamics, where the control input enters the system equations linearly (such as voltage applied to a DC motor), the safety constraints map to linear inequalities with respect to the action space [4,9]. Consequently, the set of feasible actions FA(s) for a given state s strictly forms a continuous, convex interval. It is therefore not necessary to evaluate the entire continuous action space. It is mathematically sufficient to query the oracle to determine only the minimum safe action amin (s) and the maximum safe action amax (s) using a rapid bisection search algorithm. Because the action space is convex with respect to the safety constraints, any action a that satisfies 
+
+amin (s) ≤ a ≤ amax (s) is intrinsically guaranteed to be feasible. Consequently, it is not necessary to evaluate the entire continuous action space. It is mathematically sufficient to query the oracle to determine only the minimum safe action amin (s) and the maximum safe action amax (s) using a rapid bisection search algorithm. Because the action space is convex with respect to the safety constraints, any action a that satisfies amin (s) ≤ a ≤ amax (s) is intrinsically guaranteed to be feasible. 
+
+## 6 Safe RL Architecture with Projection Filters 
+
+6.1 The Safety Filter Mechanism 
+
+During the active RL training phase, the agent is strictly prohibited from ex-ecuting raw actions directly on the hardware or the simulation. We enforce a deterministic projection filter Ps : A → F A(s). If the agent proposes a raw action at = π(st) that lies within the safe action set FA(st) derived from the offline MPC map, it passes unaltered. If the action is unsafe, it is projected to the nearest valid point via Euclidean distance, yielding the guaranteed safe action at:
+
+at = Pst (at) = 
+
+
+
+at, if at ∈ F A(st),
+
+arg min 
+
+> a′∈F A(st)
+
+|| at − a′|| , otherwise . (11) 
+
+6.2 Closed-Loop Evaluation and Reward Shaping 
+
+The interaction between the offline mapped boundaries and the active learning loop is illustrated in Fig. 2. At each time step t, the agent evaluates the current state st and proposes a raw action at. The projection filter intercepts at and queries F to retrieve the instantaneous safety bounds. Only the guaranteed safe action at is transmitted to the CPS environment. In our RL training setup, closed-loop evaluation is critical to accurately rep-resent the physical control loop. During the numerical simulation of the environ-ment, the subsequent state st+1 is computed by integrating the system dynamics using the current safe action at. This newly computed state is then immediately 8 G. Sch¨ afer et al. RL Agent        
+
+> π(s)Projection Filter Ps
+> CPS Environment Offline MPC Map (F)Raw atSafe at
+> FA(s)Next State st+1 , Reward rt+1
+> Fig. 2. Architecture of the Safe RL Framework. Unsafe actions proposed by the RL agent are evaluated instantaneously against the current state and projected to the nearest recursively feasible boundary defined by the offline MPC map.
+
+fed back into the policy to sample the next raw action at+1 , ensuring a con-tinuous, state-reactive feedback loop. To encourage instructional learning, the magnitude of the projection || π(s) − π(s)|| can be penalized in the RL reward function. This incentivizes the agent to organically learn the system boundaries and output feasible actions natively, reducing reliance on the filter over time. Furthermore, to prevent hardware-damaging high-frequency oscillation (“bang-bang” control) common in DRL, an action penalty term may be applied to the base reward, computed via the standard deviation of the normalized applied action over a sliding window [12]. 
+
+## 7 Experimental Validation on a Cyber-Physical Testbed 
+
+To validate the theoretical generalized framework, we deployed the algorithm on a representative non-linear laboratory testbed: the Quanser Aero 2. 
+
+7.1 The Quanser Aero 2 Testbed 
+
+The Aero 2 is a reconfigurable dual-rotor aerospace experiment. For this valida-tion, we configured the system for 1-degree of freedom (1-DOF) pitch control, mechanically locking the yaw axis (see Fig. 3). Equipped with two motors driving horizontal fans, the system’s inputs are simplified to a single voltage u, operating the fans in opposition [13]. From the principle of angular momentum, the non-linear equations of motion for the pitch angle Θ and pitch velocity ω = ˙Θ are derived as: ˙Θ = ω, (12) ˙ω = 1
+
+Jp
+
+(−kdω − dS mg sin Θ) + 2 kuu, (13) Safe RL using Ideas from MPC 9  
+
+> Fig. 3. The Quanser Aero 2 experimental setup. The system is configured for 1-DOF pitch control via horizontally mounted motors, with mechanical pitch limits of ±60 ◦.
+
+where dS is the distance from the pivot to the beam’s center of gravity, m is the mass, and g is gravity. The friction coefficient kd, moment of inertia Jp, and voltage gain ku are identified from empirical data [13]. The system is subject to strict mechanical pitch constraints of ±60 ◦ (≈ ± 1.05 rad), defining Xsafe .
+
+7.2 Offline Mapping and System Integration 
+
+Using the offline MPC approach and our bisection grid search strategy (exploit-ing the monotonic relationship between rotor voltage and thrust), we sampled the safe operational envelope. Fig. 4 illustrates the resulting feasible state space based on the minimum and maximum action boundaries. The graphical results vividly demonstrate the abstract concept shown previously in Fig. 1: at high absolute velocities approaching the physical limit, the set of feasible voltages shrinks dramatically to only those capable of maximum reverse thrust. To bridge the gap between the mathematical synthesis and the Python-based DRL training (e.g., Stable Baselines3), we rely on a systematic software archi-tecture detailed in our previous work [14]. The Simulink mathematical model is translated into a compiled dynamic link library (DLL) and wrapped in a Farama Gymnasium interface, enabling high-frequency, zero-shot deployment to the physical hardware via the Quanser Python API. 10 G. Sch¨ afer et al. 2
+
+> 1
+> 0
+> 1
+> 2
+> Velocity (rad/s)
+
+Minimum Actions (Success Only)         
+
+> 1.00 0.75 0.50 0.25 0.00 0.25 0.50 0.75 1.00
+
+Pitch (rad) 
+
+> 2
+> 1
+> 0
+> 1
+> 2
+> Velocity (rad/s)
+
+Maximum Actions (Success Only)     
+
+> 20 10 010 20
+
+Action Value (V) 
+
+Fig. 4. Determined Feasible State Space for the Quanser Aero 2. The top plot shows the minimum required actions for safety, while the bottom plot shows the maximum actions. Due to system convexity, any control input falling between these two boundary surfaces is formally feasible. Safe RL using Ideas from MPC 11 
+
+7.3 Empirical Results 
+
+Integration of the safety filter allowed the proximal policy optimization (PPO) [15] agent to train directly on the simulated and physical testbed. Empirical observations indicate that the agent successfully explores the extreme boundaries of the state space, achieving high control performance while remaining within the defined feasible bounds for the vast majority of the training process. While the theoretical mathematical framework guarantees recursive feasibil-ity and strict constraint satisfaction, empirical deployment on physical hard-ware revealed rare, intermittent mechanical constraint violations. These edge-case violations are primarily attributed to unavoidable model inaccuracies, the classic “Sim-to-Real” gap, where the true physical system dynamics deviate slightly from the nominal mathematical model used by the oracle. Additional contributing factors include practical implementation artifacts, such as discrete-time sampling errors (where continuous dynamics violate bounds between evalu-ation steps), minor unmodeled hardware communication latencies, and numerical solver tolerances during the real-time Euclidean projection. Despite the physical realities of the “Sim-to-Real” gap, the projection filter operates efficiently at high frequencies. It successfully prevents the catastrophic, high-velocity exploration failures inherent to unconstrained DRL, drastically re-ducing the violation rate compared to baseline methods and stabilizing the hard-ware training phase. 
+
+## 8 Discussion and Future Work 
+
+The proposed methodology robustly combines the safety guarantees of MPC with the high-frequency adaptable nature of RL. By mapping the feasible state-action space offline, and executing the policy via an efficient projection filter, we eliminate the real-time computational bottleneck of MPC while strictly pre-venting catastrophic exploration failures. However, the methodology presents notable limitations. First, the absolute safety guarantee is strictly dependent on the accuracy of the system dynamics model, i.e., the classic “Sim-to-Real” gap, as well as the numerical robustness and latency of the real-time hardware execution loop. Second, while the systematic grid search is effective for the 1-DOF evaluation, it ultimately suffers from the curse of dimensionality. For a state-action space of dimension d, the number of required grid evaluations scales exponentially, rendering it intractable for highly complex systems. Future work will focus on addressing these scalability challenges by replac-ing the grid search with Gaussian processs (GPs) [11] for active sampling of the oracle near the isolating boundary ∂F. Furthermore, we intend to inte-grate robust MPC formulations during the offline phase to systematically ac-count for model discrepancies, and explore multi-objective reinforcement learn-ing (MORL) frameworks to natively balance the trade-offs between aggressive task performance and the distance to the pre-computed safety boundaries. 12 G. Sch¨ afer et al. 
+
+## Acknowledgment 
+
+Financial support for this study was provided by the Christian Doppler Research Association (CDG) through the Josef Ressel Centre for Intelligent and Secure Industrial Automation, the corresponding WISS Co-project of Land Salzburg, and by the European Interreg project BA0100172 AI4GREEN. 
+
+## References 
+
+1. Achiam, J., Held, D., Tamar, A., Abbeel, P.: Constrained policy optimization. In: International conference on machine learning. pp. 22–31. Pmlr (2017) 2. Alshiekh, M., Bloem, R., Ehlers, R., K¨ onighofer, B., Niekum, S., Topcu, U.: Safe reinforcement learning via shielding. In: Proceedings of the AAAI conference on artificial intelligence. vol. 32 (2018) 3. Altman, E.: Constrained Markov decision processes. Routledge (2021) 4. Ames, A.D., Coogan, S., Egerstedt, M., Notomista, G., Sreenath, K., Tabuada, P.: Control barrier functions: Theory and applications. In: 2019 18th European control conference (ECC). pp. 3420–3431. IEEE (2019) 5. Cheng, R., Orosz, G., Murray, R.M., Burdick, J.W.: End-to-end safe reinforcement learning through barrier functions for safety-critical continuous control tasks. In: Proceedings of the AAAI conference on artificial intelligence. vol. 33, pp. 3387–3395 (2019) 6. Chow, Y., Nachum, O., Duenez-Guzman, E., Ghavamzadeh, M.: A lyapunov-based approach to safe reinforcement learning. Advances in neural information processing systems 31 (2018) 7. Fisac, J.F., Akametalu, A.K., Zeilinger, M.N., Kaynama, S., Gillula, J., Tomlin, C.J.: A general safety framework for learning-based control in uncertain robotic systems. IEEE Transactions on Automatic Control 64 (7), 2737–2752 (2018) 8. Garcıa, J., Fern´ andez, F.: A comprehensive survey on safe reinforcement learning. Journal of Machine Learning Research 16 (1), 1437–1480 (2015) 9. Khalil, H.K., Grizzle, J.W.: Nonlinear systems, vol. 3. Prentice hall Upper Saddle River, NJ (2002) 10. Kober, J., Bagnell, J.A., Peters, J.: Reinforcement learning in robotics: A survey. The International Journal of Robotics Research 32 (11), 1238–1274 (2013) 11. Rasmussen, C.E.: Gaussian processes in machine learning. In: Summer school on machine learning, pp. 63–71. Springer (2003) 12. Sch¨ afer, G., Krau, T., Rehrl, J., Huber, S., Hirlaender, S.: The Crucial Role of Problem Formulation in Real-World Reinforcement Learning. In: 2025 IEEE 8th International Conference on Industrial Cyber-Physical Systems (ICPS). IEEE, Em-den, Germany (05 2025). https://doi.org/10.1109/ICPS65515.2025.11087883 
+
+13. Sch¨ afer, G., Rehrl, J., Huber, S., Hirlaender, S.: Comparison of Model Predictive Control and Proximal Policy Optimization for a 1-DOF Helicopter System. In: 2024 IEEE 22nd (INDIN’24). IEEE, Beijing, China (08 2024). https://doi.org/ 10.1109/INDIN58382.2024.10774357 , best presentation award 14. Sch¨ afer, G., Schirl, M., Rehrl, J., Huber, S., Hirlaender, S.: Python-Based Rein-forcement Learning on Simulink Models. In: 11th International Conference on Soft Methods in Probability and Statistics (SMPS 2024). Salzburg, Austria (09 2024). 
+
+https://doi.org/10.1007/978-3-031-65993-5_55 Safe RL using Ideas from MPC 13 15. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O.: Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 (2017) 16. Sutton, R.S.: Reinforcement learning: An introduction. A Bradford Book (2018)
