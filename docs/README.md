@@ -6,32 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-13
-- 运行时间：2026-07-13 20:30:29 UTC
+- 最新运行日期：2026-07-14
+- 运行时间：2026-07-14 21:36:02 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：1
-- 速读区：3
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读1篇关于最优传输Q学习加速流策略的论文，速读3篇涉及安全强化学习、离线RL轨迹规划及后训练Actor-Critic方法。最优传输Q学习在策略引导与加速方面表现突出（9.0分），安全RL与离线规划方向值得关注。建议优先精读Optimal Transport Q-Learning论文以理解其核心创新，再结合速读文献比较不同方法的适用场景。
-- 详情：[/202607/13/README](/202607/13/README)
+今日速读2篇强化学习论文，重点聚焦最优传输Q学习与数学方法。最值得关注：《Optimal Transport Q-Learning》提出的流策略加速方法（7.0分）及强化学习的数学基础（6.0分）。建议普通读者优先精读《Optimal Transport Q-Learning》，理解其控制优化与加速逻辑。
+- 详情：[/202607/14/README](/202607/14/README)
 
 ### 精读区论文标签
-1. [Optimal Transport Q-Learning for Flow Policy Steering and Acceleration](/202607/13/2607.06262v1-optimal-transport-q-learning-for-flow-policy-steering-and-acceleration)  
-   标签：评分：9.0/10、query:rl-path-opt
-   evidence：使用最优传输Q学习对机器人轨迹策略进行强化学习微调
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Safe Reinforcement Learning using Ideas from Model Predictive Control](/202607/13/2607.07252v1-safe-reinforcement-learning-using-ideas-from-model-predictive-control)  
+1. [Optimal Transport Q-Learning for Flow Policy Steering and Acceleration](/202607/14/2607.06262v1-optimal-transport-q-learning-for-flow-policy-steering-and-acceleration)  
    标签：评分：7.0/10、query:rl-path-opt
-   evidence：安全强化学习与模型预测控制结合，可应用于机器人路径规划
-2. [Shortcut Trajectory Planning for Efficient Offline Reinforcement Learning](/202607/13/2607.09336v1-shortcut-trajectory-planning-for-efficient-offline-reinforcement-learning)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：离线RL捷径轨迹规划可用于VRP求解
-3. [PAC-ACT: Post-training Actor-Critic for Action Chunking Transformers](/202607/13/2607.09590v1-pac-act-post-training-actor-critic-for-action-chunking-transformers)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：强化学习后训练用于机器人动作分块，与机器人末端路径优化相关
+   evidence：强化学习后训练用于机器人流策略
+2. [Mathematical methods of reinforcement learning](/202607/14/2607.06935v1-mathematical-methods-of-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：强化学习数学基础综述
 
 
 <div class="dpr-home-promo-card">
