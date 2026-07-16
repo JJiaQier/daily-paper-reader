@@ -6,31 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-15
-- 运行时间：2026-07-15 20:54:51 UTC
+- 最新运行日期：2026-07-16
+- 运行时间：2026-07-16 21:23:10 UTC
 - 运行状态：成功
 - 本次总论文数：3
 - 精读区：1
 - 速读区：2
 
 ### 今日简报（AI）
-今日精读一篇最优传输Q学习论文，速读参数化动作MDP与多智能体自博弈两篇，整体聚焦强化学习加速与鲁棒性。  
-最值得关注的是最优传输Q学习在流策略引导与加速上的创新方法，其将最优传输理论融入Q学习实现高效策略学习。  
-建议优先精读该论文，理解其理论框架与算法设计，再延伸至参数化动作MDP等扩展场景。
-- 详情：[/202607/15/README](/202607/15/README)
+今日精读1篇，速读2篇，聚焦强化学习在智能交互与参数化动作决策中的应用。最值得关注的是《Structured Reinforcement Learning for Bayesian Persuasion》中结构化贝叶斯说服与智能驾驶的结合，以及《Knowledge- and Gradient-Guided RL》对参数化动作空间的优化。建议优先阅读精读文章，理解结构化RL在说服博弈中的建模思路。
+- 详情：[/202607/16/README](/202607/16/README)
 
 ### 精读区论文标签
-1. [Optimal Transport Q-Learning for Flow Policy Steering and Acceleration](/202607/15/2607.06262v1-optimal-transport-q-learning-for-flow-policy-steering-and-acceleration)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：使用Q学习微调流策略以实现机器人轨迹优化
+1. [Structured Reinforcement Learning for Bayesian Persuasion : Application to Intelligent Interactive Driving](/202607/16/2607.13576v1-structured-reinforcement-learning-for-bayesian-persuasion--application-to-intelligent-interactive-driving)  
+   标签：评分：8.0/10、query:rl-last-mile
+   evidence：结构化强化学习用于交互驾驶中的路线协调，使用RL解决车辆路径问题
 
 ### 速读区论文标签
-1. [Knowledge- and Gradient-Guided Reinforcement Learning for Parametrized Action Markov Decision Processes](/202607/15/2607.12924v1-knowledge--and-gradient-guided-reinforcement-learning-for-parametrized-action-markov-decision-processes)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：知识梯度引导强化学习用于参数化动作MDP
-2. [World Models as Adversaries: Multi-Agent Self-Play Fine-Tuning for Robust Motion Planning](/202607/15/2607.10630v1-world-models-as-adversaries-multi-agent-self-play-fine-tuning-for-robust-motion-planning)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：基于世界模型的多智能体自博弈微调用于鲁棒运动规划
+1. [Knowledge- and Gradient-Guided Reinforcement Learning for Parametrized Action Markov Decision Processes](/202607/16/2607.12924v1-knowledge--and-gradient-guided-reinforcement-learning-for-parametrized-action-markov-decision-processes)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：知识和梯度引导的参数化动作强化学习，可迁移至车辆路径问题
+2. [Knowledge- and Gradient-Guided Reinforcement Learning for Parametrized Action Markov Decision Processes](/202607/16/2607.12924v2-knowledge--and-gradient-guided-reinforcement-learning-for-parametrized-action-markov-decision-processes)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：神经符号强化学习算法提高样本效率，可应用于车辆路由问题
 
 
 <div class="dpr-home-promo-card">

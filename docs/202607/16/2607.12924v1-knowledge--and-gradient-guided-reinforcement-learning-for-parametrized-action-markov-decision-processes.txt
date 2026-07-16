@@ -1,0 +1,656 @@
+Title: Knowledge- and Gradient-Guided Reinforcement Learning for Parametrized Action Markov Decision Processes
+
+URL Source: https://arxiv.org/pdf/2607.12924v1
+
+Published Time: Wed, 15 Jul 2026 11:58:07 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Knowledge- and Gradient-Guided Reinforcement Learning for Parametrized Action Markov Decision Processes 
+
+## Jonas Ehrhardt 1,2 , Ren´ e Heesch 1,2 , Oliver Niggemann 1,21HSU-AI Institute for Artificial Intelligence 
+
+> 2
+
+## Institute of Automation Technology Helmut-Schmidt-University, Hamburg, Germany 
+
+## {firstname.lastname }@hsu.hamburg 
+
+Abstract 
+
+In this paper, we study Reinforcement Learning in Parametrized Action Markov Decision Processes (PAMDP), where each decision consists of a symbolic action and nu-merical parameters. In such settings Reinforcement Learn-ing algorithms typically determine parameters with one-shot estimators, which makes their training sample inefficient. Though in most PAMDP environments explicit but incom-plete knowledge (e.g., rules, safety constraints, or expert heuristics) is available, it is rarely directly used to increase the sample-efficiency of training Reinforcement Learning agents. We step into this gap and propose our novel Neuro-Symbolic Knowledge- and Gradient-Guided Reinforcement Learning (KGRL) algorithm. KGRL uses domain knowledge in a Dat-alog knowledge base to derive the set of applicable actions and feasible parameters for a given state. This allows it to prune non-applicable actions from the decision-space and constrain the parameter spaces of the remaining actions. We then use a gradient-based parameter refinement loop to esti-mate the optimal parameters during training and deployment of the agent. By recording activated rules along the trajectory, KGRL additionally provides local procedural explanations on the pruning of actions and constraining of parameters. Over-all, KGRL guides the agent’s exploration and deployment to-ward feasible and constraint-aware decisions, while increas-ing sample efficiency during training. KGRL outperforms state-of-the-art RL baselines for PAMDPs in both, sample ef-ficiency and episodic return. 
+
+## 1 Introduction 
+
+Reinforcement Learning (RL) is an alternative to sym-bolic decision-making algorithms for planning and con-trol, when accurate symbolic models are unavailable or too costly to craft, e.g., due to continuous, stochastic, or high-dimensional dynamics (Sutton and Barto 2018; Moerland et al. 2023). However, training RL agents requires an im-mense amount of experiences in the form of recorded train-ing data or direct domain interactions (Yu 2018; Duan and Wainwright 2024), while collecting such experience through exploration typically is costly or unsafe (Levine et al. 2020; Dulac-Arnold et al. 2021). Yet, even in complex real-world domains, there is often explicit but incomplete domain knowledge (e.g., rules, safety constraints, or expert heuris-tics) available, which rules out unsafe or infeasible decisions without fully determining the optimal behavior (Achiam et al. 2017; Ghanadbashi and Golpayegani 2022). Hence, the central question we want to answer in this paper is: Can explicit, yet incomplete, domain knowledge shape the training and deployment of an RL agent in order to (i) letting symbolic reasoning enforce known constraints, while (ii) leaving the learning to optimize what cannot be symbolically specified? 
+
+We study this question in parametrized action spaces, where a decision involves not only choosing a symbolic ac-tion but also choosing numerical parameters that influence the action’s effect (Masson, Ranchod, and Konidaris 2016). The hybrid structure is interesting, as it is common in many real-world decision-making problems, e.g., industrial con-trol and planning (Zhu, Wu, and Zhao 2021; Heesch et al. 2024), where high-level actions are naturally symbolic (e.g., 
+
+open valve , start pump , fill tank ), but can ac-commodate numeric parameters (e.g., valve opening ,
+
+pump speed , fill height ). The underlying problem of such scenarios is that the decision space is a union of disjoint continuous spaces, often of different dimensional-ity. Approximations, like flattening all disjoint continuous spaces into a single continuous control space or discretizing all disjoint continuous spaces, can miss feasible or optimal parameter values or admit actions or parameters that violate constraints. This calls for algorithms that are specifically tailored for such problems. Related work on RL in parametrized action spaces relies on one-shot estimators at decision time to estimate the pa-rameters for actions (Masson, Ranchod, and Konidaris 2016; Hausknecht and Stone 2016; Xiong et al. 2018; Bester, James, and Konidaris 2019). However, these approaches re-quire numerous training episodes and do not directly address the risk of incurring out-of-distribution scenarios when de-ploying the RL agent. Related work on integrating knowl-edge into RL agents typically focusses on crafting domain models (Silver et al. 2017; Silver et al. 2018; Moerland et al. 2023), specifying goals in out-of-distribution scenar-ios (Ghanadbashi and Golpayegani 2022), or constraining the agent for safe exploration and deployment (Achiam et al. 2017; Alshiekh et al. 2018; K¨ onighofer et al. 2020; K¨ onighofer et al. 2025). Only very recently, few approaches started considering a Neuro-Symbolic perspective on RL that integrates symbolic decision-making as guardrail or augmentation of an RL policy (Mazzi et al. 2023; Meli, arXiv:2607.12924v1 [cs.AI] 14 Jul 2026 Castellini, and Farinelli 2024; Veronese, Farinelli, and Meli 2026). Yet, these approaches are typically only evaluated on discrete toy domains. To our knowledge, there is no work that integrates a structured, queryable knowledge base di-rectly into the training and parameter estimation of an RL agent in a parametrized action space, to guide exploration and deployment toward feasible decisions and to improve training data efficiency. To address this gap, we propose our novel, neuro-symbolic Knowledge- and Gradient-Guided Reinforcement Learning (KGRL) algorithm. KGRL introduces two cou-pled extensions to the DQN algorithm (Mnih et al. 2015): A 
+
+knowledge base which contains state-dependent rules that are evaluated before every action and parameter selection, and a gradient-guided parameter refinement loop that uses the gradient of the agent’s action-value function to find the optimal parameters. We ask the following research ques-tions (RQs), 
+
+RQ1: Does integrating explicit domain knowledge from a symbolic knowledge base into the training of an RL agent increase sample efficiency and performance? 
+
+Assuming that there is already a knowledge base of sym-bolic rules about the domain, we propose to use this knowl-edge in order to restrict the agent’s exploration and deploy-ment only to regions of the domain that are known to be not harmful. Concretely, every step of the agent, we evalu-ate a Datalog knowledge base together with a symbolic state representation to derive the set of applicable actions and pa-rameter constraints for the given state. This allows us to streamline the exploration and deployment to only applica-ble actions and feasible parameters. 
+
+RQ2: Can a gradient-guided parameter refinement increase the sample efficiency and performance of an RL agent, com-pared to one-shot estimators? 
+
+In parametrized action spaces, the decision problem in each step consists of picking an action and a continuous pa-rameter. Existing algorithms typically use one-shot estima-tors, which predict in one forward pass a parameter value for a given state and action combination. However, in or-der to tune them into selecting optimal parameter picks and not violating domain constraints, their training becomes less sample efficient. We hence propose a gradient-guided pa-rameter refinement, which operates with the gradient of the action-value function and iteratively adapts the parameter values until they converge to an optimum. By using pro-jected gradient ascent (Levitin and Polyak 1966), we can integrate known parameter constraints from the knowledge base to exclude unrealistic parameter regions (e.g., temper-atures below 0K) or parameters that violate known domain constraints. 
+
+RQ3: Can integrating explicit domain knowledge from a symbolic knowledge base into the deployment of an RL agent produce explanations of action and parameter choices? 
+
+When evaluating a symbolic knowledge base and state representation on each step of an RL agent (cf. RQ1), KGRL can log the grounded rule instances and symbolic state facts that support the derivation of excluded actions and active parameter constraints from the decision space, as an explanation. Such loggings pose local and procedu-ral explanations (Krarup et al. 2019) along the trajectory of the agent. This is particularly relevant for safety-critical, real-world applications and connects to work on explain-able and safe RL (Alshiekh et al. 2018; Milani et al. 2024; K¨ onighofer et al. 2025). We evaluate our KGRL algorithm against baselines from literature (Masson, Ranchod, and Konidaris 2016; Hausknecht and Stone 2016; Xiong et al. 2018; Li et al. 2022; Bester, James, and Konidaris 2019). KGRL outper-forms all baselines, starting with higher returns and converg-ing quicker to optimal results. Our main contributions are: • A formalization of knowledge-constrained Parametrized Action Markov Decision Processes that allows RL agents to include symbolic domain knowledge into their decision-making. • Our novel KGRL algorithm, that integrates reasoning over a symbolic knowledge base and a gradient-guided parameter refinement into its decision-making, leading to higher sample efficiency and performance. • An empirical evaluation of KGRL against state-of-the-art baselines. • A demonstration on how local and procedural explanation traces can be logged from the stepwise evaluation of the knowledge base during the deployment of KGRL. 
+
+## 2 Related Work 
+
+RL in Parametrized Action Spaces was introduced in (Masson, Ranchod, and Konidaris 2016), where the au-thors defined Parametrized Action Markov Decision Pro-cesses (PAMDPs) as the underlying formalism of the decision-making problems that incorporate numerical pa-rameters. In a PAMDP the decision space is a union of dis-joint continuous action subspaces, where each action sub-space is defined by a symbolic action and a numerical pa-rameter set (Masson, Ranchod, and Konidaris 2016). Early approaches treat this problem as two coupled decisions. In (Masson, Ranchod, and Konidaris 2016) a policy for se-lecting symbolic actions and a policy for selecting param-eters are alternatingly updated during training. (Fan et al. 2019) picked up on this idea and suggested an actor-critic approach, where separate policy heads for symbolic actions and numerical parameters operate on a joint state encod-ing in parallel. Other approaches model the decision prob-lem as a joint policy. For example, (Hausknecht and Stone 2016) proposed an actor-critic approach, where one policy network outputs a symbolic action and an according param-eter. Contrary, (Xiong et al. 2018) decouples the param-eter estimation in a separate parameter estimator network that suggests parameter values which are then jointly evalu-ated with the state by a Deep Q-Network (Mnih et al. 2015). (Bester, James, and Konidaris 2019) improved this approach by using batch-processing of individual parameter elements. This mitigates confounding effects between parameters and yields a more robust training. Lastly, (Li et al. 2022) pro-pose to leverage on a joint latent decision-space in which the decision-problem is solved, and from which symbolic actions and numerical parameters are decoded. Across these approaches, action applicability and parameter feasibility are learnt implicitly, which yields sample-intensive explo-ration and can lead to infeasible parameters, if not prevented by the environment. 
+
+Injecting Model- and Constraint-Knowledge into RL 
+
+A fundamental way of exploiting and injecting knowledge about a domain into an RL algorithm lies in integrating it into a domain model or dynamics assumptions, as done in model-based RL (Moerland et al. 2023). For example, (Sil-ver et al. 2017; Silver et al. 2018) demonstrated that a rule-based dynamics model of board games can help RL agents to surpass human performance in solving decision-making problems in such domains. Additionally, there is a line of work that incorporates constraints into RL, mainly for safe exploration and feasible exploitation. (Achiam et al. 2017) proposed Constrained Policy Optimization (CPO), a policy-gradient approach that is regularized by an expected cost constraint and is designed to keep policy updates close to feasibility throughout the training, instead of only satisfying them at convergence. Also, (Mazumder et al. 2022) regular-ize the exploration of RL agents by checking the permissibil-ity of actions and constraining the action selection by this. However, these constraints are not derived from structured domain knowledge, but rely on learned functions before, or during training (Mazumder et al. 2022). 
+
+Integrating Symbolic Reasoning into RL Most ap-proaches that integrate symbolic reasoning for evaluating action applicability into the training of RL agents gath-ers in the domain of safe RL (K¨ onighofer et al. 2020; K¨ onighofer et al. 2025). (Alshiekh et al. 2018) use temporal logic in a safety automaton to evaluate state-action pairs and acts as a shield to filter out unsafe actions. However, their algorithm only operates on discrete state- and action-spaces. (Fulton and Platzer 2018) use verified model constraints of a hybrid system model to create a monitor for maintaining safe system behavior. (Anderson et al. 2020) use projection into a predefined verifiable symbolic policy class, to allow for safe exploration. Inarguably the closest to our work is (Veronese, Farinelli, and Meli 2026) and (Han, Dastani, and Wang 2026). (Veronese, Farinelli, and Meli 2026) propose to augment a DQN agent with a soft symbolic policy that is obtained from evaluating Answer Set Programming rules with a symbolic state abstraction, while (Han, Dastani, and Wang 2026) use Probabilistic Sentential Decision Diagrams to mask unsuitable actions. However, their approaches re-main bound to discrete domains (Veronese, Farinelli, and Meli 2026; Han, Dastani, and Wang 2026). While overall there is work that combines symbolic knowledge with RL, to our knowledge there is no work fo-cussing on the combination of incomplete symbolic knowl-edge and RL in parametrized action spaces. 
+
+## 3 Problem Formalization 
+
+In this section, we formalize how RL in parametrized action spaces can be connected to symbolic reasoning. Therefore, we build on Parametrized Action Markov Decision Pro-cesses (PAMDPs) (Masson, Ranchod, and Konidaris 2016) and enrich them with a Datalog knowledge base and an abstraction function. This allows us to abstract numeric PAMDP states into symbolic representation and evaluate them together with the knowledge base to derive applicable actions and parameter constraints. 
+
+3.1 Parametrized Action Markov Decision Processes 
+
+A PAMDP is a tuple 
+
+⟨S, A, {Ψa}a∈A, T, r, γ ⟩ (1) where S ⊆ Rn is the continuous state space, A is a finite set of symbolic actions. Each action a ∈ A is associated with a continuous parameter space Ψa ⊆ Rma . Hence, the hybrid parametrized action space is the set 
+
+A = {(a, ψ )|a ∈ A, ψ ∈ Ψa}. (2) 
+
+T is the transition function T = P (s′|s, a, ψ ) that describes the probability of transitioning into state s′ ∈ S given state 
+
+s ∈ S, action a ∈ A and a parameter ψ ∈ Ψa. r is the reward function r : S×A × S → R that returns the scalar reward when transitioning from s to s′. γ ∈ [0 , 1) is a dis-count factor. A policy is a function π : S → A . Executing π leads to a trajectory (s, (a, ψ ), r, d, s ′, (a′, ψ ′), r ′, d ′... ), where π(s) = (a, ψ ), s′ ∼ T (·| s, a, ψ ), r = r(s, a, ψ ), and d ∈ { 0, 1}
+
+indicates whether an episode is done, d = 1 , or not d = 0 .The performance of a policy is measured by its expected discounted return 
+
+J(π) = Eπ
+
+" ∞X
+
+> t=0
+
+γtr(st, a t, ψ t)
+
+#
+
+. (3) 
+
+3.2 Symbolic Abstraction and Knowledge Base 
+
+In real-world domains, there is often explicit, yet incomplete domain knowledge in the form of rules, safety constraints, and expert heuristics available. This knowledge typically excludes unsafe or infeasible decisions, but does not spec-ify optimal behavior. One way of representing such domain knowledge is in the form of a Datalog knowledge base K.
+
+Symbolic Abstraction To connect the numeric PAMDP states s ∈ S with the symbolic knowledge base K, we need an abstraction from numeric to symbolic state representa-tions. Therefore, we assume a fixed finite set F of proposi-tional atoms that allow for describing the features of S. We assume that there is a given abstraction function α which maps numeric PAMDP states into a symbolic representation. 
+
+α : S → 2F . (4) For example, α can be defined by numeric threshold tests over s, or learned (Ciatto et al. 2024). This allows us to obtain the symbolic state representation α(s) as the set of propositional feature atoms that hold true in s.For example, consider s to contain a feature tank level 
+
+level (s) ∈ [0 , 42] . α may be defined by threshold tests, like tank near full ∈ α(s) ⇐⇒ level (s) ≥ 41 or 
+
+tank near empty ∈ α(s) ⇐⇒ level (s) ≤ 1, where 
+
+tank near full , tank near empty ∈ F. Given a state s, we could obtain the symbolic state representation by applying α to s. E.g., level (s) = 41 .25 would yield 
+
+α(s) = {tank near full }, while level (s) = 0 .25 
+
+yields α(s) = {tank near empty }.
+
+Knowledge Base and Evaluation We assume that K is a Datalog knowledge base and consists of a finite set of rules with negation-as-failure in the form of 
+
+h ← b1, . . . , b x, not bx+1 , . . . , not bz , (5) where h and all bi are atoms over a fixed predicate vocabu-lary, and not denotes negation-as-failure. In addition to the rules in K and the symbolic state rep-resentation from α(s), we work with static declarations of actions and constraints. When A is the finite set of symbolic actions from the PAMDP and C is the finite set of parameter constraint identifiers, we can denote the static declarations 
+
+Act := {action (a)|a ∈ A}
+
+Con := {constr (c)|c ∈ C}.
+
+As K is stratified, K ∪ α(s) ∪ Act ∪ Con has a unique intended model for every state s. We write 
+
+K ∪ α(s) ∪ Act ∪ Con |= q, (6) to denote that the atom q is entailed in state s.
+
+Applicable Actions Evaluating the program above allows us to obtain the set of actions that are applicable in state s.Therefore, we use the predicates app (a) to mark applica-bility of actions and napp (a) to mark non-applicability of actions. The set of applicable actions can be defined as 
+
+¯A(s) = {a ∈ A|K ∪ α(s) ∪ Act ∪ Con |= app (a)}. (7) As we assume that the encoded knowledge in K is incom-plete, we adopt a default applicability scheme 1. An action a
+
+is considered applicable unless the predicate napp (a) (non-applicable) can be derived. We define the default action ap-plicability by the rule 
+
+app (a) ← action (a), not napp (a). (8) 
+
+Feasible Parameters Evaluating the program additionally determines which parameter constraints are active for an ac-tion a in state s. We use the predicate active (a, c ) to de-note that the constraint identifier c ∈ C is active for a ∈ A,and define 
+
+CK(s, a ) = {c ∈ C |K ∪ α(s) ∪ Act ∪ Con (9) 
+
+|= active (a, c )}.
+
+> 1This resembles reasoning with closed-world assumption. Yet, as we restrict this only to the applicability of actions and activeness constraints (and not on predicates and unknown facts), we consider it a default policy rather than a strict closed-world assumption.
+
+Each constraint identifier c is grounded by a numeric feasi-bility condition for a in s, inducing the feasible subset 
+
+Ψa,c (s) ⊆ Ψa. (10) The feasible parameter region for a in s is then 
+
+¯Ψa(s) = \
+
+> c∈CK(s,a )
+
+Ψa,c (s), (11) where \
+
+> c∈∅
+
+Ψa,c (s) = Ψ a.
+
+Together, ¯A(s) and { ¯Ψa(s)}a∈A characterize the decision space that remains feasible for the RL agent after incorpo-rating the symbolic domain knowledge. 
+
+3.3 Knowledge-Constrained PAMDP 
+
+As we can obtain the set of feasible parametrized actions in a state s as 
+
+¯AK(s) = {(a, ψ )|a ∈ ¯A(s), ψ ∈ ¯Ψa(s)},
+
+we can now construct a knowledge-constrained PAMDP as a tuple 
+
+⟨S, A, {Ψa}a∈A, T, r, γ, α, K⟩ . (12) A policy π is K-feasible if it only selects decisions that are admissible by the knowledge base 
+
+∀s ∈ S : π(s) ∈ ¯AK(s). (13) When ΠK describes the set of all K-feasible policies, then a knowledge-constrained RL problem induced by a knowledge-constrained PAMDP lies in finding a policy π⋆ ∈
+
+ΠK that maximizes the return 
+
+π⋆ ∈ arg max 
+
+> π∈ΠK
+
+J(π). (14) 
+
+## 4 Solution 
+
+In this section, we present our novel, Neuro-Symbolic Knowledge- and Gradient-Guided Reinforcement Learn-ing (KGRL) algorithm (cf. Figure 1); our solution to a knowledge-constrained PAMDP. KGRL is based on the Deep Q-Network (DQN) algorithm by (Mnih et al. 2015), which approximates the action-value function of a domain in a deep Neural Network Qθ . The key idea of KGRL is to use symbolic domain knowledge from a Datalog knowledge base to prune non-applicable actions and restrict parameters to feasible regions. Therefore, we extend DQN with two ad-ditional mechanisms: (i) A Datalog knowledge base K that can derive the set of applicable actions and feasible param-eters regions for every state, (ii) P ARAM OPT , a gradient-guided parameter refinement loop that uses the gradient of 
+
+Qθ to estimate optimal parameters within the feasible pa-rameter regions. In each step, KGRL evaluates K and the symbolic repre-sentation of the current state α(s) to derive the set of appli-cable actions ¯A(s) and feasible parameters {Ψa}a∈ ¯A(s)(s).This allows KGRL to prune non-applicable actions and in-feasible parameters from the decision space. After pruning the action space, P ARAM OPT uses the gradient information of Qθ to perform a gradient-guided parameter refinement as environment  agent  
+
+> state
+> action, parameter*
+> knowledge
+> base
+> reward
+> gradient-guided parameter
+> refinement
+> feasible
+> parameters
+> state,
+> action
+> parameter*
+> Knowledge- and Gradient-Guided Reinforcement Learning (KGRL)
+> applicable
+> actions
+
+Figure 1: We propose the novel Neuro-Symbolic Knowledge-and Gradient-Guided Reinforcement Learning (KGRL) algorithm. KGRL uses a knowledge base K at each decision to exclude non-applicable actions and derive the feasible parameter space for each applicable action. Using gradient-based parameter optimization, KGRL can refine an initial suboptimal parameter guess at decision time into an optimal parameter estimate. 
+
+an optimization over the feasible parameter spaces of the available actions. At the end of each step, KGRL greedily selects the action-parameter tuple with the highest action-value. 
+
+4.1 Knowledge- and Gradient-Guided Q-Learning 
+
+Algorithm 1 summarizes the training loop of our KGRL al-gorithm. To stabilize training, we use a double DQN setup, where two DQNs, an online DQN and a target DQN, are synchronized periodically (Mnih et al. 2015). KGRL starts with initializing the weights of the online and target DQN 
+
+θ and θ−, as well as the replay buffer D, and the environ-ment E (Alg. 1, lines 1-3). Until the maximum budget of training steps Tmax is reached, it derives the set of appli-cable actions ¯A(s) and feasible parameters {Ψa}a∈ ¯A(s)(s)
+
+for the current state s (Alg. 1, line 5). Based on ¯A(s) and 
+
+{Ψa}a∈ ¯A(s)(s) KGRL either performs exploration (Alg. 1, line 6-8) or exploits the existing policy (Alg. 1, line 9-12), using the P ARAM OPT algorithm (cf. Alg. 2). The DQNs are updated with mini-batches B that are sampled from D
+
+(Alg. 1, line 15). The targets are computed as 
+
+y = r + γ(1 − d′)arg max  
+
+> a′∈¯A(s′)
+
+max  
+
+> ψ′∈¯Ψa(s′)
+
+Qθ− (s′, a ′, ψ ′). (15) (Alg. 1, lines 18-21). The weights of the online DQN are updated via gradient descent on the squared Bellman Error (Alg. 1, lines 22-23). Periodically, the weights of the target DQN are synchronized with the weights of the online DQN (Alg. 1, line 25). 
+
+4.2 Gradient-Guided Parameter Refinement 
+
+As we assume a numerical parameter space ¯Ψa(s), calcu-lating the optimal parameter ψ⋆ ∈ ¯Ψa(s) over the highly non-convex action-value function Qθ is intractable. Be-cause search can be computationally expensive, we pro-pose to leverage on the differentiability of Qθ for estimat-ing ψ⋆ (Ehrhardt et al. 2025). Precisely, we suggest our 
+
+Algorithm 1: KGRL 
+
+Require: E // environment 
+
+D // replay buffer 
+
+Qθ , Q θ− // online & target DQN 
+
+K // knowledge base 
+
+α // abstraction function 
+
+ϵ // exploration rate 
+
+β // learning rate 
+
+γ // discount factor  
+
+> 1
+
+θ, θ − ← init ()  
+
+> 2
+
+D ← D .init ()  
+
+> 3
+
+s ← E .init ()  
+
+> 4
+
+for t ← 1 to Tmax do  
+
+> 5
+
+¯A(s), { ¯Ψa}a∈ ¯A(s)(s) ← EVALUATE (K, α (s)) 
+
+// exploration  
+
+> 6
+
+if random () < ϵ then  
+
+> 7
+
+a ← ¯A(s).sample ()  
+
+> 8
+
+ψ ← ¯Ψa(s).sample () 
+
+// exploitation  
+
+> 9
+
+else  
+
+> 10
+
+foreach a ∈ ¯A(s) do  
+
+> 11
+
+˜ψ⋆a ← PARAM OPT (Qθ , s, a, ¯Ψa(s))  
+
+> 12
+
+(a, ˜ψ⋆a) ← arg max  
+
+> a∈¯A(s)
+
+Qθ (s, a, ˜ψ⋆a) 
+
+> 13
+
+r, s ′, d ′ ← E (s, a, ˜ψ⋆a)
+
+D ← D .append (( s, a, ˜ψ⋆a, r, d ′, s ′)) 
+
+// update DQNs  
+
+> 14
+
+if update condition holds then 
+
+// sample mini-batch  
+
+> 15
+
+B ← D .sample ()  
+
+> 16
+
+foreach (si, a i, ψ i, r i, d ′
+
+> i
+
+, s ′
+
+> i
+
+) ∈ B do  
+
+> 17
+
+¯A(s′
+
+> i
+
+), { ¯Ψa′ }a′∈ ¯A(s′
+
+> i)
+
+(s′
+
+> i
+
+) ←
+
+> EVALUATE
+
+(K, α (s))  
+
+> 18
+
+foreach a′ ∈ ¯A(s′
+
+> i
+
+) do  
+
+> 19
+
+˜ψ′⋆i,a ′ ←
+
+PARAM OPT (Qθ , s ′
+
+> i
+
+, a ′, ¯Ψa′ (s′
+
+> i
+
+))  
+
+> 20
+
+a′ 
+
+> i
+
+← arg max  
+
+> a′∈¯A(s′
+> i)
+
+Qθ (s′
+
+> i
+
+, a ′, ˜ψ′⋆i,a ′ ) 
+
+> 21
+
+yi ← ri + γ(1 − d′
+
+> i
+
+)Qθ− (s′
+
+> i
+
+, a ′
+
+> i
+
+, ˜ψ′⋆i,a ′
+
+> i
+
+) 
+
+> 22
+
+L ← 1
+
+> |B|
+
+P
+
+> i
+
+(yi − Qθ (si, a i, ψ i)) 2 
+
+> 23
+
+θ ← θ − β∇θ L 
+
+> 24
+
+if sync condition then 
+
+// sync online and target DQN  
+
+> 25
+
+θ− ← θ
+
+PARAM OPT algorithm, which performs projected gradient ascent (Levitin and Polyak 1966) along the gradient of Qθ
+
+with respect to ψ (cf. Algorithm 2). This allows us to refine an initial parameter guess ˆψ until it converges to an opti-mal parameter value. As we are using a projection function Proj ¯Ψa(s)(·) we can remain within the bounds of the feasible parameter space. However, due to the non-convexity of Qθ ,we cannot guarantee to reach ψ⋆. Hence, we denote the re-sult of P ARAM OPT as ˜ψ⋆. P ARAM OPT starts with an initial parameter guess ˆψ, which can either be zeros, random val-ues, or expert heuristics (Alg. 2, line 1). It then calculates the gradient of the DQN with respect to ψ (Alg. 2, line 3) and performs projected gradient ascent until the gradient norm falls below a stopping threshold ξ (Alg. 2, line 5) or until the maximum number of optimization steps Umax (Alg. 2, line 2) is reached. 
+
+Algorithm 2: PARAM OPT 
+
+Require: s // state 
+
+a ∈ ¯A(s) // action 
+
+¯Ψa(s) // feasible parameters 
+
+Qθ // DQN 
+
+ζ // learning rate 
+
+ξ // stopping threshold  
+
+> 1
+
+ˆψ ← init () // initial parameter guess  
+
+> 2
+
+for u ← 1 to Umax do 
+
+// backprop wrt. parameters  
+
+> 3
+
+g ˆψ ← ∇ ˆψ Qθ (s, a, ˆψ)
+
+// projected gradient ascent  
+
+> 4
+
+ˆψ ← Proj ¯Ψa(s)( ˆψ + ζ g ˆψ ) 
+
+> 5
+
+if || g ˆψ || < ξ then  
+
+> 6
+
+break  
+
+> 7
+
+return ˜ψ∗ ← ˆψ
+
+4.3 Explanation Traces 
+
+Since KGRL evaluates K together with α(s) at every de-cision step, it can record the supporting derivations as an explanation trace along the trajectory. At each time step, the trace contains the symbolic facts from α(s) and the rules in 
+
+K that derive app (a), napp (a), and active (a, c ). This makes explicit why actions were pruned or admitted and why the parameter search was restricted to a particular feasi-ble region. The resulting trace constitutes a local procedural explanation (Krarup et al. 2019), as it explains parts of the concrete decision process at each state rather than the policy as a whole. 
+
+## 5 Evaluation 
+
+In this section, we present the empirical evaluation of our KGRL algorithm. We aim to answer our research questions with two experiments. First, we compare KGRL and its ab-lations against baseline RL algorithms for PAMDPs. Sec-ond, we evaluate KGRL’s knowledge base utilization dur-ing application in order to derive and evaluate explanation traces. 
+
+5.1 Experimental Setup 
+
+We evaluate our KGRL algorithm against five baseline RL algorithms for PAMDPs from literature: QPAMDP (Mas-son, Ranchod, and Konidaris 2016), PA-DDPG (Hausknecht and Stone 2016), P-DQN (Xiong et al. 2018), MP-DQN (Bester, James, and Konidaris 2019), and HyAR (Li et al. 2022). As evaluation domains we use the HardMoveX , Catch-Point , HardGoal domains from (Li et al. 2022), as well as the Platform domain from (Masson, Ranchod, and Konidaris 2016) (cf. Figure 2). All domains have parametrized action spaces that consist of a finite set of symbolic actions and as-sociated numerical parameters. For each domain we crafted a set of simple rules to utilize in KGRL. agent   
+
+> current action: move
+> target
+> valid catch
+> distance agent
+> target
+> area
+> Xactuators
+> to choose from
+> agent
+> goalie
+> ball agent opponent
+
+Figure 2: The Figure shows our evaluation PAMDP domains. We evaluated our algorithm on the HardMoveX (upper left), Catch-Point (upper right), Platform (lower left), and HardGoal (lower right) domains. 
+
+HardMoveX describes a 2D navigational domain in which the agent must reach a target. The agent has n = 2 X sym-bolic actions moveX (ψ) it can choose from. Each symbolic action is pointing in one specific direction and is parametriz-able by a magnitude of ψ ∈ [0 , 1] . Rules in K prune ac-tions that point away from the goal in a larger angle than 90°, and cap parameters based on the distance to the goal. 
+
+HardMoveX is especially suitable to evaluate the capability to handle large action spaces. We tested our algorithm on 
+
+HardMove4 , HardMove8 , and HardMove10 .The CatchPoint domain is a 2D reach-and-catch task. The agent can move (ψ), ψ ∈ [−1, 1] and catch (ψ), ψ ∈ [0 , 1] ,both parameters are mapped to an angle. Rules in K prune the moving action when the agent is already in target reach, and prune the catch action when catching is impossible. The HardGoal domain is a simplified soccer benchmark, where the agent aims to shoot a goal against a goalkeeper. Therefore, it can choose from ten shooting actions a0 (ψ) to 
+
+a9 (ψ), ψ ∈ [−1, 1] . The goalkeeper is continuously mov-ing. Rules in K prune the lower half actions, when the goal-keeper is in the left goal corner and upper-half actions, when the goalkeeper is in the right corner, as well as any action that is blocked by the keeper. The Platform domain describes a platform traversal task Table 1: The table compares the AULC (the higher, the better) of our KGRL algorithm and its ablations against the baseline algorithms on different evaluation domains. We compare ablations of KGRL using no gradient-based parameter refinement (nogg), no knowledge-guidance (nokb), or neither (nogg nokb) during training (train) or deployment (eval). As evaluation metric, we report average episodic return on 16 evaluation problems ± one standard deviation across eight different seeds. 
+
+Algorithm HardMove4 HardMove8 HardMove10 CatchPoint HardGoal Platform QPAMDP -13.63 ± 0.30 -13.49 ± 0.14 -13.56 ± 0.23 -9.67 ± 0.29 39.20 ± 2.34 0.03 ± 0.05 PA-DDPG -14.12 ± 2.49 -14.63 ± 3.14 -16.09 ± 6.98 -7.40 ± 2.48 32.86 ± 8.86 0.09 ± 0.09 P-DQN -12.84 ± 1.24 -10.37 ± 2.79 -9.74 ± 2.95 -9.79 ± 0.34 48.17 ± 0.48 0.13 ± 0.07 HyAR -7.49 ± 5.66 -5.15 ± 0.40 -5.08 ± 0.40 -8.19 ± 1.77 42.04 ± 5.30 0.08 ± 0.04 MP-DQN -3.48 ± 0.48 -3.47 ± 0.30 -3.28 ± 0.36 -5.23 ± 0.31 47.62 ± 0.64 0.19 ± 0.06 KGRL -1.64 ± 0.21 -1.44 ± 0.13 -1.36 ± 0.06 -1.70 ± 0.00 49.76 ± 0.07 0.22 ± 0.02 
+
+KGRL (train nogg) -1.43 ± 0.13 -1.34 ± 0.10 -1.49 ± 0.18 -1.69 ± 0.00 49.74 ± 0.08 0.21 ± 0.02 KGRL (train nokb) -1.84 ± 0.17 -1.56 ± 0.09 -1.62 ± 0.14 -1.75 ± 0.02 49.87 ± 0.06 0.21 ± 0.02 KGRL (train nogg nokb) -1.68 ± 0.19 -1.81 ± 0.21 -1.74 ± 0.14 -1.74 ± 0.02 49.86 ± 0.05 0.23 ± 0.02 
+
+KGRL (eval nogg) -1.68 ± 0.17 -1.53 ± 0.15 -1.50 ± 0.13 -1.66 ± 0.00 49.72 ± 0.06 0.21 ± 0.03 KGRL (eval nokb) -4.33 ± 0.43 -4.17 ± 0.35 -4.41 ± 0.55 -6.28 ± 0.42 34.00 ± 1.22 0.19 ± 0.02 KGRL (eval nogg nokb) -4.81 ± 0.36 -4.99 ± 0.46 -5.02 ± 0.28 -6.34 ± 0.44 34.68 ± 1.85 0.20 ± 0.03 KGRL (train eval nogg) -1.74 ± 0.22 -1.53 ± 0.12 -1.60 ± 0.15 -1.66 ± 0.00 49.66 ± 0.05 0.22 ± 0.03 KGRL (train eval nokb) -4.19 ± 0.40 -4.50 ± 0.31 -4.64 ± 0.44 -5.49 ± 0.35 43.23 ± 0.86 0.22 ± 0.03 KGRL (train eval nogg nokb) -5.21 ± 0.43 -5.33 ± 0.41 -4.69 ± 0.29 -6.22 ± 0.40 42.55 ± 1.50 0.23 ± 0.02 0 100 200 300 400 500                
+
+> k steps
+> 25
+> 20
+> 15
+> 10
+> 5
+> 0
+> 5
+> mean_return
+> HardMove4
+> HyAR
+> KGRL (ours)
+> MP-DQN
+> PA-DDPG
+> P-DQN
+> QPAMDP 0100 200 300 400 500
+> k steps
+> 10
+> 8
+> 6
+> 4
+> 2
+> mean_return
+> CatchPoint
+> HyAR
+> KGRL (ours)
+> MP-DQN
+> PA-DDPG
+> P-DQN
+> QPAMDP 0100 200 300 400 500
+> k steps
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> 55
+> mean_return
+> HardGoal
+> HyAR
+> KGRL (ours)
+> MP-DQN
+> PA-DDPG
+> P-DQN
+> QPAMDP 0100 200 300 400 500
+> k steps
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> mean_return
+> Platform
+> HyAR
+> KGRL (ours)
+> MP-DQN
+> PA-DDPG
+> P-DQN
+> QPAMDP
+
+Figure 3: The Figure shows the learning curves of KGRL and the baselines on the HardMove4, CatchPoint, HardGoal , and Platform 
+
+evaluation domains. The x-axis shows training progress in environment steps, and the y-axis shows the mean episodic return ± one standard deviation across eight different seeds on the evaluation tasks (shaded area). Steeper slopes indicate faster learning and higher values indicate better learned policies. 
+
+with gaps and opponents. The agent can run (ψ), ψ ∈
+
+[0 , 30] , hop (ψ), ψ ∈ [0 , 720] , and leap (ψ), ψ ∈ [0 , 430] .Rules in K prune actions that endanger the agent by mov-ing too close to a gap or the opponent, as well as constrain parameters, based on features like enemy closeness, high ve-locity, or near gaps. For creating our experimental setup, we followed the ex-perimental design guidelines for empirical Machine Learn-ing research by (Vranjeˇ s et al. 2024). Therefore, we com-pared the performance of our KGRL algorithm against the baseline algorithms on the evaluation domains. We trained all algorithms with a fixed budget of 500,000 training steps and a maximum computation wall time of 12 hours. To rule out lucky initialization, we repeated the trainings on eight different seeds. Every 1,000 steps, we performed an evalu-ation run on 16 differently instantiated evaluation problems. The code for reproducing the results, including the spe-cific rules sets, can be found under https://github.com/ j-ehrhardt/kgrl. 
+
+5.2 KGRL vs. Baselines 
+
+In the first experiment, we evaluated the Area Under the Learning Curve (AULC) of our KGRL algortihm against the baseline algorithms. We chose the AULC as it combines al-gorithmic performance and convergence speed in a single metric. The results are reported in the upper part of Ta-ble 1 and Figure 3. We could show that across all evalua-tion domains, KGRL consistently achieves the highest aver-age AULC across the eight different seeds. Additionally, we could show that KGRL already starts with higher episodic returns and converges quicker to higher return values, with lower variance across the seeds than the baseline algorithms (cf. Figure 3). Both findings support our RQ1 that integrat-ing explicit but incomplete knowledge into the training and application of an RL agent improves learning efficiency and performance. Additionally, we evaluated ablations of KGRL, to esti-mate the influence of the knowledge and gradient guidance. Therefore, we removed the knowledge base (nokb) or re-placed P ARAM OPT algorithm with a mean estimate of the parameter range (nogg). We ablated the knowledge base or PARAM OPT only during training (train), during evaluation (eval), or during both (train eval). The results are reported in the lower part of Table 1. Ablating knowledge- and gradient-guidance showed mixed influence on the AULC and a strong dependence on the evaluation. While ablating the knowl-edge base during evaluation showed a consistently worse AULC, ablating the gradient-guidance during training led to better results in the HardMoveX domains and compara-ble results to the full version of KGRL in the other domains. Also in the CatchPoint domain ablating the gradient guid-ance during evaluation or training and evaluation lead to bet-ter AULC than the full version of KGRL. However, remov-ing knowledge- and gradient-guidance during training and evaluation from KGRL, rendered consistently worse results than keeping them, except for the Platform domain, which generally showed little variance across the ablations. 
+
+5.3 Knowledge Base Utilization and Explanation Traces 
+
+In addition to the algorithm performance, we also quantified how strongly KGRL utilizes the knowledge base during ap-plication, and whether its use is substantial enough to sup-port rule-grounded explanations. Therefore, we evaluated the knowledge base utilization K-utilization, and the mean action pruning rate A-pruning as metrics. The knowledge base utilization describes evaluations of the knowledge base that resulted either in activations of pruning rules or in con-straints being derived. Therefore, it provides a measure for the utility of the encoded rules in K. The action pruning rate describes the ratio of actions that were pruned due to rules firing in the knowledge base. Therefore, it provides a measure for the direct influence of the encoded rules on the training and application of the KGRL algorithm. Table 2 shows K-utilization and A-pruning for our KGRL algorithm over all evaluation domains. In general, the K-utilization is not trivial, indicating that K contributes fre-quently to the decision-making of KGRL. We could show that, especially for the HardMoveX domains, K caused prun-ing almost half of the actions, which leads to a large simplifi-cation of the decision space. While A-pruning at CatchPoint 
+
+and HardGoal ranged around a third, we could show that in the Platform domain mainly parameter constraints were de-duced from K.As we can record individual rule activations in K, e.g., 
+
+napp (a) or active (a), we can construct step-wise expla-nation traces which explain why certain actions were ex-cluded and how feasible parameter regions were shaped. This directly supports our RQ3 by showing that the infor-mation which is required for rule-grounded explanations is constructed at decision-time. Figure 4 shows an exemplary excerpt from the explanation trace of the HardGoal domain. 
+
+Table 2: The table shows the mean K-utilization ± one standard deviation and the mean A-pruning ± one standard deviation across eight seeds, for our KGRL algorithm on all evaluation domains. 
+
+domain n rules K-utilization A-pruning HardMove4 48 1.00 ± 0.000 0.49 ± 0.001 HardMove8 96 1.00 ± 0.000 0.48 ± 0.003 HardMove10 120 1.00 ± 0.000 0.49 ± 0.002 CatchPoint 4 0.64 ± 0.078 0.32 ± 0.039 HardGoal 70 1.00 ± 0.000 0.34 ± 0.000 Platform 15 0.49 ± 0.004 0.00 ± 0.000 0 4 8 13 17 22 26 31 35 40 44 49 
+
+> step
+> a5_napp_keeper_blocks_segment
+> a5_keeper_overlap_clip
+> a6_napp_keeper_blocks_segment
+> a6_keeper_overlap_clip
+> a7_napp_keeper_blocks_segment
+> a7_keeper_overlap_clip
+> a8_napp_keeper_blocks_segment
+> a8_keeper_overlap_clip
+> a9_napp_keeper_blocks_segment
+> a9_keeper_overlap_clip
+> HardGoal
+
+Figure 4: The Figure shows an exemplary excerpt from the Hard-Goal domain’s explanation trace. During different phases of the rollout, different napp (a) rules fired due to the goalkeeper block-ing them for the agent. 
+
+## 6 Discussion 
+
+Knowledge Base While our evaluation is consistent with the underlying hypothesis of RQ1, that pruning non-applicable actions simplifies the decision space during exploration and deployment, leading to a more sample-efficient training, our ablation study showed that it is im-portant when the knowledge base is integrated. While re-moving the knowledge base during evaluation, the perfor-mance of KGRL strongly degraded across all domains. Re-moving the knowledge base during training showed a slight negative effect across all domains, except for the HardGoal 
+
+domain. This shows that the knowledge base mainly af-fects the deployment of the RL agent, whereas its regular-ization effect on the agent during training is negligible or even leads to increase in performance. Through the hard in-tegration in the form of action pruning and hard parameter constraints, our KGRL algorithm additionally is more sen-sitive to incorrect knowledge and rules. Wrong rules can harm the performance of the agent by pruning optimal ac-tions or parameter ranges. A way of mitigating this risk lies either in using self repairing adaptive mechanisms as sug-gested in (Feng et al. 2025) or by integrating the knowledge regularization softly in the form of a symbolic policy aug-mentation as in (Veronese, Farinelli, and Meli 2026). PARAM OPT Our evaluation also underlines the underly-ing hypothesis of RQ2 that integrating a gradient-guided pa-rameter refinement can increase the sample efficiency and performance of an RL agent compared to one shot estima-tors. This supports our idea that a DQN contains useful gradient information and that a local optimization at deci-sion time outperforms one-shot estimators. However, anal-ogously to integrating the knowledge-base, it is also impor-tant when the gradient-guidance is integrated. Our ablations clearly showed that integrating the gradient-guidance during training has a negative effect on the performance of our al-gorithm. This can be explained by additional noise that is in-troduced by the gradient-guided refinement during training, when the DQN is not already well-fitted on the underlying PAMDP. One way of mitigating the risk of negative influ-ence of P ARAM OPT during training is by using curriculum learning for scheduling its application in training only when sufficient information has been already learnt by the DQN. This additionally reduces computational cost when training a KGRL agent. As P ARAM OPT performs projected gradient ascent over a non-convex DQN, there is no guarantee that ˆψ will refine into a global optimum. A way of mitigating this risk, are strategies like ensemble approaches with differently seeded optimizers, multi-start optimization with different initial guesses, or a combination of both. 
+
+Explanation Traces Our results show that the explanation traces produced by KGRL are not only an auxiliary logging artifact, but a direct consequence of the decision mechanism of the RL agent. As KGRL evaluates the knowledge base and a symbolic state abstraction in every state, it provides an explanation why actions were excluded and why parameters were constrained. As the knowledge base utilization is non-trivial across all domains, and leads to substantial pruning in some domains, the reasoning is an integral aspect of KGRL and the recorded explanation traces a non-trivial benefit to its explainability. However, in their current form, the expla-nation traces are limited to local and procedural explanations of individual decisions (Krarup et al. 2019). An extension to an aggregation of global explanations, e.g. identifying recur-ring rule activations and decision patterns as post-processing step, is left for future work. 
+
+Learning Knowledge Bases and Abstraction Functions 
+
+Although we worked with handcrafted knowledge bases and abstraction functions, KGRL is not limited to them and can also operate with learned knowledge bases and abstraction functions, as long as they operate with the same symbolic vocabulary. Approaches for learning the knowledge base can be de-rived, e.g., from (Law, Russo, and Broda 2020; Mazzi et al. 2023; Meli, Castellini, and Farinelli 2024) which cre-ates answer set programs (that are closely related to Dat-alog) from examples and background knowledge or by parsing learned preconditions from action model learning (Arora et al. 2018) into a knowledge base. Approaches for learning the abstraction function can comprise algo-rithms described in (Ciatto et al. 2024; Mao et al. 2019; Han, Dastani, and Wang 2026) or in the most basic vari-ant, any classification algorithm that can map numeric states to symbolic state representations. Whether handcrafted or learned, it is worth mentioning that a wrongly learned or crafted abstraction functions carry the risk of incorrectly deriving non-applicable actions and constraints, which can ultimately lead to incorrect pruning of the decision space. For our threshold-based abstraction functions, this risk increases near the thresholds, especially in noisy environments. 
+
+## 7 Conclusion 
+
+In this paper, we studied Reinforcement Learning in PAMDPs with access to explicit but incomplete domain knowledge. We proposed our novel KGRL algorithm, a Neuro-Symbolic extension to DQN that evaluates a Dat-alog knowledge base and a symbolic state representation at each decision step to prune non-applicable actions and uses projected gradient ascent for a gradient-guided pa-rameter refinement. Compared to other Neuro-Symbolic RL approaches, KGRL is the first to extend to domains with parametrized action spaces that can be modeled by PAMDPs. KGRL outperforms all baseline algorithms on classical PAMDP benchmarks. We could show that, especially dur-ing deployment, the combination of knowledge-guided ac-tion pruning and gradient-guided parameter refinement leads to faster convergence on higher episodic returns with lower variance, while additionally providing local, procedural ex-planation traces via logged rule activations. This lets us an-swer the central question of the paper, whether symbolic do-main knowledge can shape the training of RL to be more sample-efficient, positively. However, we also found that is important when to inject what knowledge. Future work will include algorithmic solutions for learning the abstrac-tion function and knowledge base, as well as algorithmic so-lutions for aggregating and evaluating the explanation traces into global explanations. 
+
+## Acknowledgements 
+
+This research as part of the project LaiLa and EKI is funded by dtec.bw – Digitalization and Technology Research Cen-ter of the Bundeswehr, which we gratefully acknowledge. Computational resources (HPC cluster HSUper) have been provided by the project hpc.bw. dtec.bw is funded by the European Union – NextGenerationEU. 
+
+## References 
+
+Achiam, J.; Held, D.; Tamar, A.; and Abbeel, P. 2017. Con-strained policy optimization. In Precup, D., and Teh, Y. W., eds., Proceedings of the 34th International Conference on Machine Learning , volume 70 of Proceedings of Machine Learning Research , 22–31. PMLR. Alshiekh, M.; Bloem, R.; Ehlers, R.; K¨ onighofer, B.; Niekum, S.; and Topcu, U. 2018. Safe reinforcement learn-ing via shielding. Proceedings of the AAAI Conference on Artificial Intelligence 32(1). Anderson, G.; Verma, A.; Dillig, I.; and Chaudhuri, S. 2020. Neurosymbolic reinforcement learning with formally veri-fied exploration. In Larochelle, H.; Ranzato, M.; Hadsell, R.; Balcan, M.; and Lin, H., eds., Advances in Neural Infor-mation Processing Systems , volume 33, 6172–6183. Curran Associates, Inc. Arora, A.; Fiorino, H.; Pellier, D.; M´ etivier, M.; and Pesty, S. 2018. A review of learning planning action models. The Knowledge Engineering Review 33. Bester, C. J.; James, S. D.; and Konidaris, G. D. 2019. Multi-pass q-networks for deep reinforcement learn-ing with parameterised action spaces. arXiv preprint arXiv:1905.04388 .Ciatto, G.; Sabbatini, F.; Agiollo, A.; Magnini, M.; and Omicini, A. 2024. Symbolic knowledge extraction and injection with sub-symbolic predictors: A systematic liter-ature review. ACM Computing Surveys 56(6):1–35. Duan, Y., and Wainwright, M. J. 2024. Taming ”data-hungry” reinforcement learning? stability in continuous state-action spaces. In Globerson, A.; Mackey, L.; Belgrave, D.; Fan, A.; Paquet, U.; Tomczak, J.; and Zhang, C., eds., 
+
+Advances in Neural Information Processing Systems , vol-ume 37, 71352–71380. Curran Associates, Inc. Dulac-Arnold, G.; Levine, N.; Mankowitz, D. J.; Li, J.; Paduraru, C.; Gowal, S.; and Hester, T. 2021. Challenges of real-world reinforcement learning: definitions, benchmarks and analysis. Machine Learning 110(9):2419–2468. Ehrhardt, J.; Schmidt, J.; Heesch, R.; and Niggemann, O. 2025. Using gradient-based optimization for planning with deep q-networks in parametrized action spaces. In Proceed-ings of the ECAI Workshop on AI-based Planning for Com-plex Real-World Applications (CAIPI 2025) , volume 4103. CEUR-Workshop Proceedings. Fan, Z.; Su, R.; Zhang, W.; and Yu, Y. 2019. Hybrid actor-critic reinforcement learning in parameterized action space. In Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence, IJCAI-19 , 2279– 2285. International Joint Conferences on Artificial Intelli-gence Organization. Feng, Y.; Zhu, J.; Platzer, A.; and Laurent, J. 2025. Adaptive shielding via parametric safety proofs. Proceedings of the ACM on Programming Languages 9:816–843. Fulton, N., and Platzer, A. 2018. Safe reinforcement learn-ing via formal methods: Toward safe control through proof and learning. Proceedings of the AAAI Conference on Arti-ficial Intelligence 32(1). Ghanadbashi, S., and Golpayegani, F. 2022. Using ontology to guide reinforcement learning agents in unseen situations: A traffic signal control system case study. Applied Intelli-gence 52(2):1808–1824. Han, S.; Dastani, M.; and Wang, S. 2026. Neuro-symbolic action masking for deep reinforcement learning. In Proceed-ings of the 25th International Conference on Autonomous Agents and Multiagent Systems , AAMAS. International Foundation for Autonomous Agents and Multiagent Sys-tems. Hausknecht, M. J., and Stone, P. 2016. Deep reinforcement learning in parameterized action space. In Bengio, Y., and LeCun, Y., eds., 4th International Conference on Learning Representations, ICLR 2016, San Juan, Puerto Rico, May 2-4, 2016, Conference Track Proceedings .Heesch, R.; Cimatti, A.; Ehrhardt, J.; Diedrich, A.; and Niggemann, O. 2024. A lazy approach to neural numeri-cal planning with control parameters. In Proceedings of the 27th European Conference on Artificial Intelligence (ECAI 2024) . IOS Press. K¨ onighofer, B.; Lorber, F.; Jansen, N.; and Bloem, R. 2020. 
+
+Shield Synthesis for Reinforcement Learning . Springer In-ternational Publishing. 290–306. K¨ onighofer, B.; Bloem, R.; Jansen, N.; Junges, S.; and Pranger, S. 2025. Shields for safe reinforcement learning. 
+
+Communications of the ACM 68(11):80–90. Krarup, B.; Cashmore, M.; Magazzeni, D.; and Miller, T. 2019. Towards model-based contrastive explanations for ex-plainable planning. In ICAPS Workshop on Explainable AI Planning (XAIP) .Law, M.; Russo, A.; and Broda, K. 2020. The ilasp sys-tem for inductive learning of answer set programs. arXiv preprint arXiv:2005.00904 .Levine, S.; Kumar, A.; Tucker, G.; and Fu, J. 2020. Offline reinforcement learning: Tutorial, review, and perspectives on open problems. arXiv preprint arXiv:2005.01643 .Levitin, E., and Polyak, B. 1966. Constrained minimization methods. USSR Computational Mathematics and Mathe-matical Physics 6(5):1–50. Li, B.; Tang, H.; Zheng, Y.; Hao, J.; Li, P.; Wang, Z.; Meng, Z.; and Wang, L. 2022. Hyar: Addressing discrete-continuous action reinforcement learning via hybrid action representation. In International Conference on Learning Representations .Mao, J.; Gan, C.; Kohli, P.; Tenenbaum, J. B.; and Wu, J. 2019. The neuro-symbolic concept learner: Interpret-ing scenes, words, and sentences from natural supervision. In International Conference on Learning Representations .Masson, W.; Ranchod, P.; and Konidaris, G. 2016. Rein-forcement learning with parameterized actions. Proceedings of the AAAI Conference on Artificial Intelligence 30(1). Mazumder, S.; Liu, B.; Wang, S.; Zhu, Y.; Yin, X.; Liu, L.; and Li, J. 2022. Knowledge-guided exploration in deep reinforcement learning. arXiv preprint arXiv:2210.15670 .Mazzi, G.; Meli, D.; Castellini, A.; and Farinelli, A. 2023. Learning logic specifications for soft policy guidance in POMCP. In Proceedings of the 2023 International Confer-ence on Autonomous Agents and Multiagent Systems , 373– 381. Meli, D.; Castellini, A.; and Farinelli, A. 2024. Learning logic specifications for policy guidance in pomdps: an in-ductive logic programming approach. Journal of Artificial Intelligence Research 79:725–776. Milani, S.; Topin, N.; Veloso, M.; and Fang, F. 2024. Ex-plainable reinforcement learning: A survey and comparative review. ACM Computing Surveys 56(7):1–36. Mnih, V.; Kavukcuoglu, K.; Silver, D.; Rusu, A. A.; Veness, J.; Bellemare, M. G.; Graves, A.; Riedmiller, M.; Fidjeland, A. K.; Ostrovski, G.; Petersen, S.; Beattie, C.; Sadik, A.; Antonoglou, I.; King, H.; Kumaran, D.; Wierstra, D.; Legg, S.; and Hassabis, D. 2015. Human-level control through deep reinforcement learning. Nature 518(7540):529–533. Moerland, T. M.; Broekens, J.; Plaat, A.; and Jonker, C. M. 2023. Model-based reinforcement learning: A survey. Foun-dations and Trends in Machine Learning 16(1):1–118. Silver, D.; Schrittwieser, J.; Simonyan, K.; Antonoglou, I.; Huang, A.; Guez, A.; Hubert, T.; Baker, L.; Lai, M.; Bolton, A.; Chen, Y.; Lillicrap, T.; Hui, F.; Sifre, L.; van den Driessche, G.; Graepel, T.; and Hassabis, D. 2017. Mas-tering the game of go without human knowledge. Nature 
+
+550(7676):354–359. Silver, D.; Hubert, T.; Schrittwieser, J.; Antonoglou, I.; Lai, M.; Guez, A.; Lanctot, M.; Sifre, L.; Kumaran, D.; Graepel, T.; Lillicrap, T.; Simonyan, K.; and Hassabis, D. 2018. A general reinforcement learning algorithm that masters chess, shogi, and go through self-play. Science 
+
+362(6419):1140–1144. Sutton, R. S., and Barto, A. G. 2018. Reinforcement learn-ing: An introduction . Cambridge, Massachusetts: MIT Press. Veronese, C.; Farinelli, A.; and Meli, D. 2026. Sample-efficient neurosymbolic deep reinforcement learning. Vranjeˇ s, D.; Ehrhardt, J.; Heesch, R.; Moddemann, L.; Steude, H. S.; and Niggemann, O. 2024. Design Prin-ciples for Falsifiable, Replicable and Reproducible Empir-ical Machine Learning Research. In Pill, I.; Natan, A.; and Wotawa, F., eds., 35th International Conference on Prin-ciples of Diagnosis and Resilient Systems (DX 2024) , vol-ume 125 of Open Access Series in Informatics (OASIcs) ,7:1–7:13. Dagstuhl, Germany: Schloss Dagstuhl – Leibniz-Zentrum f¨ ur Informatik. Xiong, J.; Wang, Q.; Yang, Z.; Sun, P.; Han, L.; Zheng, Y.; Fu, H.; Zhang, T.; Liu, J.; and Liu, H. 2018. Parametrized deep q-networks learning: Reinforcement learning with discrete-continuous hybrid action space. Yu, Y. 2018. Towards sample efficient reinforcement learning. In Proceedings of the Twenty-Seventh Interna-tional Joint Conference on Artificial Intelligence , IJCAI-2018, 5739–5743. International Joint Conferences on Ar-tificial Intelligence Organization. Zhu, J.; Wu, F.; and Zhao, J. 2021. An overview of the action space for deep reinforcement learning. In 2021 4th Interna-tional Conference on Algorithms, Computing and Artificial Intelligence , ACAI’21. ACM.

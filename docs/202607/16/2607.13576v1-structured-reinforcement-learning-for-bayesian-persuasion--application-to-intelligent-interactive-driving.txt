@@ -1,0 +1,1586 @@
+Title: Structured Reinforcement Learning for Bayesian Persuasion : Application to Intelligent Interactive Driving
+
+URL Source: https://arxiv.org/pdf/2607.13576v1
+
+Published Time: Thu, 16 Jul 2026 00:44:52 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+> 1
+
+# Structured Reinforcement Learning for Bayesian Persuasion : Application to Intelligent Interactive Driving 
+
+Merlin Paul, Student Member, IEEE and Anup Aprem, Member, IEEE 
+
+Abstract —Interactive driving, wherein an intelligent lead ve-hicle equipped with real-time traffic data coordinates route choices of connected vehicles, offers a promising approach to dynamic traffic management. To address the challenge of harmonising decisions — the lead vehicle prioritizes global traffic flow, while the connected vehicle seeks the shortest path, this paper considers the strategic information revealing framework of Bayesian persuasion. Here, the principal (lead vehicle) aims to guide the agent’s (connected vehicle) partially observable sequential decision making towards its own objectives by selectively revealing information, such as real-time traffic ahead, using signals. However, the agent’s farsighted response to maximize its long-term reward, accounting for future state transitions and signal disclosures, renders the principal’s sig-naling strategy design computationally challenging. Moreover, in real-world settings, both the principal and agent may not have complete knowledge of their reward and transition dynamics. We propose an online structured reinforcement learning framework to synthesize computationally efficient signaling strategy which is persuasive for a far-sighted agent. In this context, the main contributions of the paper are as follows: (i) For a monotonic agent with approximate best response, we propose MAPL, a structured policy learning algorithm which utilizes the monotonic structure of the agent’s policy for faster online learning in large state spaces, (ii) Identification of sufficient conditions on the Bayesian persuasion model for the supermodular structure of the Q (action value) function of the principal for a monotonic agent, (iii) Identification of sufficient conditions to ensure the per-suasiveness of the principal’s signaling strategy for a monotonic agent, (iv) Supermodular Q learning for Principal (SQP), which leverages the supermodular structure of principal’s action value to synthesize computationally efficient signaling strategy that is persuasive for a monotonic learning agent, (v) Numerical analysis considering a real-time application of Bayesian persuasive driving for lane selection demonstrates that the proposed method is 30% cost efficient for optimising travelling rewards of both the lead and connected vehicle compared to the existing methodologies for signaling strategy design. Moreover, online structured learning of connected vehicle’s lane choices under Bayesian persuasion outperforms existing approaches for lane selection. 
+
+Index Terms —Bayesian Persuasion, Sequential decision-making, Structural results, Monotone policies, Supermodularity, Autonomous driving 
+
+I. I NTRODUCTION 
+
+Intelligent traffic routing, which integrates real-time data into vehicle routing recommendations, has emerged as apromising approach to enhance adaptability and responsive-ness to dynamic traffic challenges. Connected vehicles using an intelligent leader-based architecture offer a state-of-the-art solution for traffic optimization - refer to Fig. 4 for an example. Here, the lead vehicle equipped with real-time traffic data can coordinate connected vehicles through speed modulation, route guidance, and platoon formation for efficient traffic manage-ment [1]. This facilitates intelligent transportation networks, where the lead vehicle and the connected vehicle continuously collaborate through real-time interaction and learning. Con-ventional approaches for interactive driving face the critical challenge of harmonising decisions: — the connected vehicle seeks the shortest path, while the lead vehicle prioritizes global traffic flow and congestion avoidance, requiring coordination in real-time routing. To address this challenge, this paper adopts the selective information disclosure framework of Bayesian persuasion to provide route guidance to individual vehicles while ensur-ing efficient traffic flow. Bayesian persuasion is a strategic framework in which a principal influences an agent’s ac-tions by selectively revealing information through signals. This framework has found applications in several domains involving information asymmetry, including traffic routing [2], recommendation systems [3], grading systems in educational settings [4], queuing [5], etc. In the sequential decision-making framework of Bayesian persuasion for intelligent interactive driving, illustrated in Fig. 1, both principal and agent observe the environmental state, while an additional hidden external state is known only to the principal. In the context of persuasive driving, this hidden state may represent real-time traffic conditions ahead. The principal strategically reveals information about the hidden state through signals—alerts about the traffic ahead or possible route selections—to influence the agent’s actions. A signaling strategy is a probabilistic mapping from the hidden external state and the agent’s state to a distribution over sig-nals. A simple example is a direct revelation signaling strategy; however, directly revealing real-time traffic information may prompt many vehicles to choose the same route, ultimately causing congestion [8]. This underscores the need for carefully designed signaling strategies that guide routing decisions while maintaining efficient traffic flow. Accordingly, the principal controls the flow of information by selectively disclosing these external states, aiming to align the agent’s action with its objectives. The agent, on the other hand, faces a sequential decision-making problem and chooses actions based on its preferences. A short-sighted agent maximizes the expected immediate reward, while a far-sighted agent takes into account the future state transitions and signal disclosures. As a result, the principal must effectively solve a nested planning problem — choosing signaling strategy while arXiv:2607.13576v1 [cs.LG] 15 Jul 2026 2Principal        
+
+> (Intelligent lead vehicle)
+> State of agent
+> (Connected vehicle)
+> External state
+> (Real time traffic)
+> Signals,
+> Actions (Route Choices)
+> Timeline Principal
+> (Intelligent lead vehicle)
+> State of agent
+> (Connected vehicle)
+> External state
+> (Real time traffic)
+> Signals,
+> Actions (Route Choices)
+> Timeline
+> Fig. 1. The schematic representation of intelligent interactive driving based on Bayesian persuasion is illustrated in Section III. Here, both the principal (intelligent lead vehicle) and the agent (connected vehicle) are aware of the vehicle’s state, s. An external state, θ(real-time traffic), known to the principal but unknown to the agent, influences the decision outcome. The principal uses this information to persuade the agent through a signal g, guiding actions toward its objectives. Given the signaling strategy, the agent acts on its posterior belief about θ, incurring an immediate reward and inducing a stochastic transition to the next state.
+
+anticipating how the agent will respond to it. In general, the design of signaling strategy while considering a far-sighted agent is NP-Hard [2]. Additionally, in real-world settings, both the principal and agent may not have complete knowledge of their reward and transition dynamics. Hence, we propose an online learning framework in which we model a reinforcement learning agent that approximately best responds. This paper considers a monotonic agent - an agent that responds to ‘higher’ signals by choosing ‘higher’ actions, inducing an ordered and predictable response to signal disclo-sures. Such behaviour is natural in many practical settings— e.g., transmission control, sensor scheduling, traffic routing — where stronger signals lead agents to better actions [6], [7]. Many real-world applications—such as credit rating, queuing, traffic routing — where Bayesian persuasion is widely used, often exhibit monotonic threshold policies, such as assigning higher ranks to higher-quality firms [8] or increasing travelling speed as the road traffic improves [7]. We propose an online structured reinforcement learning framework to synthesize computationally efficient signaling strategy that is persuasive for a far-sighted agent. The main contributions of the paper are: 1) Monotonic Agent Policy Learning (MAPL) : We as-sume an agent with monotonic policy that approximately best responds and propose a structured reinforcement learning algorithm that utilizes the monotonic structure of the agent policy. Algorithm 1 (MAPL) enables faster online learning of agent policy in large state spaces while achieving higher average reward. 2) Characterisation of principal’s Q factors: Theorem 1 gives sufficient conditions on the Bayesian persuasion model to ensure supermodular Q value function of the principal, considering a monotonic agent. 3) Structural results for persuasive signaling strategy: 
+
+We present sufficient conditions that ensure the persua-siveness of the signaling strategy for a monotonic agent. Specifically, Theorem 2 characterizes the principal’s sig-naling strategy, while Theorem 3 derives sufficient condi-tions on the agent’s reward function which ensure that the designed signaling strategy is persuasive for a monotonic agent. 4) Supermodular Q learning for Principal (SQP) : We propose Algorithm 2 (SQP), which leverages the super-modular structure of the principal’s Q-value to synthesize computationally efficient signaling strategy which is per-suasive for a monotonic agent. Furthermore, Algorithm 3 presents the online reinforcement learning framework for the repeated interaction of the principal with ap-proximately best responding agent in dynamic Bayesian persuasion. 5) Case study of Bayesian persuasive driving : We illustrate (i) the computational efficiency of the online learning of the connected vehicle’s policy using MAPL compared to conventional dynamic vehicle routing rec-ommendations, (ii) cost effectiveness as well as computa-tional efficiency of the proposed structured reinforcement learning framework in the design of signaling strategy for the lead vehicle’s intelligent interactive driving against existing methodologies [9], [2], [10]. 
+
+To the best of our knowledge, this is the first work that explores the structural results for online reinforcement learning in dynamic Bayesian persuasion framework, with applications in intelligent traffic routing, transmission control, credit rating, sensor scheduling, and queuing. 
+
+II. R ELATED WORK 
+
+Interactive driving approaches that anticipate and adapt to surrounding vehicle’s lane-change behaviours have gained increasing attention in intelligent traffic management [11]. In this work, we focus on lane-based routing , where decisions are made at the granularity of individual lanes, enabled by advances in vehicle-to-vehicle (V2V) communication, real-time traffic sensing, and precize localization. This fine-grained control facilitates coordinated lane assignment and platoon formation, allowing a well-informed lead vehicle with a global view of traffic conditions to guide connected vehicles into high-speed formations. Such coordination improves traffic throughput, enhances energy efficiency through reduced aero-dynamic drag, and promotes road safety via synchronized vehicle behavior [1]. 
+
+a) Existing lane-changing approaches: Classical lane change approaches for autonomous vehicles rely primarily on rule-based decisions that evaluate current traffic conditions against predefined safety constraints, such as minimum gap distance and time-to-collision thresholds [12]. However, these methods depend on the instantaneous traffic state rather than anticipating future traffic evolution. Model Predictive Control (MPC) addresses this limitation by optimising vehicle tra-jectories over a finite prediction horizon while satisfying the dynamic and safety constraints [13]. However, its performance is highly sensitive to model accuracy and becomes computa-tionally demanding in complex traffic environments, limiting its practicality for real-time deployment. 3
+
+b) Online reinforcement learning approaches: Deep neu-ral networks have been used to model complex lane-changing behaviour [14], [13]. However, these methods typically require large-scale training data and substantial computational re-sources [13]. Furthermore, recent advances have shifted toward online reinforcement learning methods that learn lane choices through repeated environmental interactions [15]. However, in multi-vehicle settings, fully shared information can paradox-ically lead to traffic congestion [16]. This has motivated the exploration of strategic information revealing framework, with Bayesian persuasion emerging as a promising approach for intelligent traffic management [11]. 
+
+c) Bayesian persuasive driving: Bayesian persuasion provides a strategic framework in which a lead vehicle (the principal) selectively reveals real-time traffic information to influence the lane selections of a connected vehicle (the agent). In the context of Bayesian persuasive driving, it is typically assumed that the principal has complete prior knowledge of the environment, allowing signaling strategies to be precomputed [2]. Moreover, the signaling strategy of the lead vehicle as well as the posterior belief of the connected vehicle are assumed to be Gaussian distributed for computational tractability. In addi-tion, a simpler agent model is assumed without stochastic state transitions. In this paper, we consider the online reinforcement learning setting, in which the principal as well as the agent are unaware of the reward, the state transition dynamics, and the prior belief over external states, which makes the design of signaling strategy challenging. 
+
+d) Myopic agent assumption: Furthermore, for compu-tational tractability of design of signaling strategy, numerous works restrict attention to myopic agent, which optimizes its immediate rewards without considering future transitions and signaling disclosures. For instance, [2] designs signaling strategies under a fully known model with a myopic agent assumption. More recently, [9] extends this line of work to an online reinforcement setting, where the principal must simultaneously learn the prior distribution, reward function, and transition dynamics. However, there is growing interest toward dynamic Bayesian persuasion, in which the principal and agent interact repeatedly over time [2], [16], [17], which we consider in this paper. 
+
+e) Dynamic Bayesian Persuasion: Determining the opti-mal signaling strategy for dynamic persuasion, assuming the optimum policy of the agent is generally NP-Hard [2], [9]. To address farsightedness, under the assumption of model dynam-ics, [18] employs history-dependent strategies like promise form schemes, which ensure future reward promises. [19] explores online learning framework in which the principal, without any knowledge of the prior belief of the agent about the hidden external state, repeatedly interacts with the far-sighted agent and gradually learns the persuasive signaling strategy. Moreover, it assumes that all other underlying model parameters are known and the agent possesses perfect recall of memory. This paper considers a far-sighted agent and devel-ops computationally and memory-efficient signaling strategy design as compared to [19]. 
+
+f) Online Bayesian persuasion for large state spaces: 
+
+Online learning of signaling strategy in large state, external state, action, and signal spaces is often computationally in-tractable due to the vast exploration domain. Existing liter-ature on dynamic Bayesian persuasion in continuous spaces considers a simplified model with myopic agent [11], linear reward, and transition dynamics [9] assumptions. However, we consider a far-sighted agent under general reward and transi-tion dynamics. In the context of dynamic Bayesian persuasion, we explore structural results for faster online learning of both agent’s and principal’s strategies in large state spaces. 
+
+g) Structural results: Many real world applications nat-urally satisfy sufficient conditions that guarantee the opti-mality of monotonic policies [20], [21], [22]. In the context of Bayesian persuasion, monotonic signaling—where higher actions are recommended under higher external states—has found applications in diverse areas such as credit rating and traffic routing. In such settings, agents often exhibit threshold policies, such as assigning higher ranks [8] to higher-quality firms or increasing speed as the road traffic improves [23]. Similarly, [24] utilizes supermodularity as a linear constraint on Q factors to improve learning. Additionally, [25] charac-terizes signaling strategy when the principal’s utility function is supermodular. However, these works restrict the interaction between the principal and agent in one-shot settings. 
+
+h) Novelty of our work: This paper utilizes structural results for online reinforcement learning in dynamic Bayesian persuasion. Our approach provides a joint characterisation of both the agent’s policy and the principal’s value function. Ad-ditionally, structured learning ensures faster convergence [26] in high-dimensional or model-free dynamic environments. In particular, the monotonic characterisation of the agent’s policy substantially reduces computational complexity and memory requirements by restricting the search space to policies that satisfy the monotone structure. This enables faster online algorithms for computing the agent’s optimal policy. Further-more, by exploiting the supermodularity of the principal’s Q-value function, we develop a structured online reinforcement learning framework that synthesizes computationally efficient signaling strategy while ensuring persuasiveness for a mono-tonic agent. 
+
+Outline 
+
+Section III presents the Bayesian persuasion framework and formulates the Bellman dynamic programming equation to compute the optimal policy of the agent and principal’s signaling strategy. Section IV presents the main result, The-orem 1, which gives the sufficient conditions for the super-modular structure of the Q value function of the principal for a farsighted monotonic agent. Additionally, Theorem 2 characterizes the structural results on the principal’s signaling strategy, while Theorem 3 derives the sufficient conditions on the agent’s reward function that ensure that the designed signaling strategy is persuasive for a monotonic agent. Sec-tion V presents a structured reinforcement learning frame-work with computationally efficient algorithms, MAPL for structured learning of the agent’s monotonic policy, and SQP for supermodular Q learning for the principal’s action value, respectively. Section VI illustrates the practical applicability of 4
+
+the proposed model assumptions for Bayesian persuasive driv-ing. The numerical results highlight the usefulness of structural results in enhancing computational efficiency in learning the optimal policy of the connected vehicle as well as the signaling strategy of the intelligent lead vehicle. Concluding remarks are offered in Section VII. The Appendix at the end contains supporting lemmas, assumptions, proofs of algorithms, and theorems. III. P ROBLEM FORMULATION External state updates     
+
+> Signalling strategy
+> PRINCIPAL
+> Reward of principal
+> Agent policy Actions
+> Next State
+> Reward of agent
+> AGENT
+> Signals Agent
+> updates
+> Fig. 2. Dynamic framework of Bayesian persuasion in which the principal guides the sequential decision making of the agent by revealing the unknown external states through strategic signaling.
+
+Fig. 2 illustrates the dynamic framework of Bayesian per-suasion in which the principal guides the sequential decision making of the agent by revealing the unknown external states using a signaling strategy. At each time step, the principal observes the external state of the environment and samples a signal according to the committed signaling strategy. Upon receiving the signal, the agent updates its posterior belief about the unknown state and selects an action by maximizing its expected reward. This accounts for both immediate payoff and state transitions, which are observed by the principal and agent. Subsequently, a new external state of the environment evolves, which is known only to the principal. This dynamic repeated interaction between the principal and agent continues over time. The goal of the agent is to learn to choose actions that maximize its expected average reward under the committed signaling strategy of the principal. On the other hand, the objective of the principal is to design signaling strategy to maximize its average reward while ensuring that the persuaded learning agent also benefits from the signal disclosures. 
+
+A. System Model 
+
+The model can be represented by the tuple 
+
+M = ⟨ S , Θ, G, A, P, (μs), (πs,θ ), R A, R P ⟩ 
+
+> •
+
+State ( s ∈ S = {0, 1, 2..S }): State refers to the known environment of the agent. The state of the agent is also observable by the principal. In the context of traffic rout-ing, it represents measurable factors such as vehicle’s lo-cation, velocity, acceleration, or energy consumption [27].  
+
+> •
+
+External State (θ ∈ Θ = {0, 1, 2..O }): It denotes hidden factors which are not directly known to the agent but observed by the principal, such as road accidents, construction works, which have a significant impact on the agent’s decision outcomes.  
+
+> •
+
+Signal (g ∈ G = {1, 2, . . . , G }): The signal space denotes the set of signals, which the principal sends to the agent based on the observed state and external state. In the context of traffic routing, signaling may be binary, discrete, or continuous—for example, indicating whether to switch lanes, alerting about upcoming congestion, rec-ommending an appropriate driving speed, or specifying the current traffic condition [11].  
+
+> •
+
+Action ( a ∈ A = {1, 2, . . . , A }): Action space refers to the set of possible actions that the agent can choose based on the signal received. For example, in traffic routing, accelerating, decelerating, selection of different lanes, etc., are taken as actions [27].  
+
+> •
+
+Prior belief ( μ(s, θ ) = P (θ | s)): It is the conditional probability density of the external state θ given the state s. It serves as the prior belief distribution of the external state θ in state s, known to the agent before any interaction with the principal, and captures the correlation between state and external state.  
+
+> •
+
+Signaling strategy ( πs,θ (g) = P (g | s, θ )): It defines the conditional probability distribution of signals used by the principal, based on the joint realization of s and θ. In our model, the signaling strategy is assumed to be Markovian [2] in which the principal samples a signal g based on the current state s and external state θ. 
+
+> •
+
+Reward (RA(s, θ, a ), R P (s, θ, a )): It denotes the im-mediate reward to the agent and principal, respectively, determined by the agent’s action as well as state and external state.  
+
+> •
+
+State transition ( P (s′ | s, a )): It specifies the stationary probability distribution over the next state s′, given the current state s and the action a taken by the agent. Classical MDP settings involve an agent that either knows or learns the environment through direct interaction, whereas in Bayesian persuasion, the agent’s action is influenced by the principal’s signaling strategy. 
+
+B. Agent’s average reward policy under Bayesian persuasion Agent’s belief over the external state, θ: The agent does not have direct knowledge of the external state θ. Upon observing a signal g, while being in state s, the agent updates its belief about θ using Bayes’ rule, resulting in the posterior belief, bs,g (θ), given by 
+
+bs,g (θ) = P (θ | s, g ) = πs,θ (g) · μs(θ)
+
+P 
+
+> θ∈Θ
+
+πs,θ (g) · μs(θ) (1) At each instant t, based on the signaling strategy, the principal samples signal gt, depending on the current state st, and external state θt. Since the external state is unobserved by 5
+
+the agent, the expected immediate reward, ˜rA, obtained on taking action, at, can be computed by taking the expectation with respect to the posterior belief, bst,g t (θt), which is given by 
+
+˜rA(st, g t, a t) = X
+
+> θ∈Θ
+
+bst,g t (θt) · RA(st, θ t, a t) (2) A policy, ρ : S × G → A , is the decision rule that determines the action a to be taken at a particular state s on receiving a signal g. In this paper, the objective of the agent is to maximize expected average reward from the starting state s with signal 
+
+g expressed as 
+
+˜RA = lim 
+
+> t
+
+−→∞
+
+1
+
+t E
+
+ ∞X
+
+> t=0
+
+˜rA(st, g t, a t)|s0 = s, g 0 = g
+
+
+
+(3) Under the ergodic Markov chain assumption of the agent’s policy, this limit exists and is independent of the initial state 
+
+(s, g ) [28]. Here, the expectation is taken with respect to state transition dynamics, signaling strategy, and prior belief distribution. Agent’s action a in state s results in an expected immediate reward as well as a stochastic transition to a new state s′. The new external state is given by θ′ ∼ μs′ (.). The principal who is aware of the realisation of θ′, samples signal 
+
+g′ ∼ πs′,θ ′ (.) and transmits it to the agent. This transition, 
+
+(s, g ) to (s′, g ′), happens with probability 
+
+P (( s, g ), (s′, g ′), a ) = P (s, s ′, a ) · X
+
+> θ′∈Θ
+
+μs′ (θ′) · πs′,θ ′ (g′)
+
+VA(s, g ) is the differential or relative value function of the agent at state s with signal g. It denotes the reward obtained relative to the average reward while following policy ρ starting from the state–signal pair (s, g ). The corresponding action value function QA(s, g, a ), represents the expected relative reward of taking action a in (s, g ) under policy ρ, and can be considered as the sum of the expected immediate reward in state s and the expected value of the subsequent state–signal pair (s′, g ′). The Bellman equation for the agent’s policy is given by 
+
+˜RA + QA(s, g, a ) = ˜ rA(s, a )+ (4) 
+
+X
+
+> s′∈S
+
+P (s′ | s, a ) X
+
+> g′∈G
+
+X
+
+> θ′∈Θ
+
+μs′ (θ′) · πs′,θ ′ (g′) · VA(s′, g ′)
+
+Let Q∗
+
+> A
+
+, V ∗ 
+
+> A
+
+, ρ ∗, R ∗ 
+
+> A
+
+be the optimal action value, value func-tion, policy, and average reward of the agent. The Bellman optimality equation can be written as 
+
+R∗ 
+
+> A
+
++ Q∗
+
+> A
+
+(s, g, a ) = ˜ rA(s, a )+ (5) 
+
+X
+
+> s′∈S
+
+P (s′ | s, a ) X
+
+> g′∈G
+
+X
+
+> θ′∈Θ
+
+μs′ (θ′) · πs′,θ ′ (g′) · max  
+
+> a∈A
+
+Q∗
+
+> A
+
+(s′, g ′, a )
+
+ρ∗(s, g ) = arg max  
+
+> a∈A
+
+Q∗
+
+> A
+
+(s, g, a ) (6) 
+
+V ∗ 
+
+> A
+
+(s, g ) = max  
+
+> a∈A
+
+Q∗
+
+> A
+
+(s, g, a )
+
+In the next section, we demonstrate how this agent’s policy is taken into account in the principal’s signaling strategy design. 
+
+C. Signaling strategy of the principal for Bayesian persuasion 
+
+Bayesian persuasion differs from the classical MDP in the fact that the actions are not taken directly by the principal, but by the agent under the influence of the information shared. The goal of the principal is to strategically reveal the unknown external state to guide the agent’s action to align with its objectives. In this paper, we consider a Markovian signaling strategy that maps the external hidden state for each of the agent’s state to a probability distribution of signals, i.e., 
+
+π : S × Θ → ∆G. Moreover, in the context of reinforcement learning, where both the principal and agent learn together, probabilistic recommendations reduce the risk that signals are completely ignored by the agent [29]. At each step, given the state s and external state θ, the principal samples asignal, g ∼ πs,θ (.). The objective of the principal is to select a signaling strategy which maximizes its long run average reward from a starting state ( s, θ) while taking into account the agent’s action given by (6) expressed as 
+
+˜RP = lim 
+
+> t
+
+−→∞
+
+1
+
+t Eπ
+
+ ∞X
+
+> t=0
+
+RP (st, θ t, a t)|s0 = s, θ 0 = θ
+
+
+
+(7) Here, the expectation is taken with respect to the agent’s policy, state transition dynamics, signaling strategy, and prior belief distribution. Let VP (s, θ ) be the differential value function of the principal in state s associated with θ, which gives the reward obtained relative to the average reward ˜RP ,under signaling strategy π starting from (s, θ ). The transition probability from (s, θ ) to (s′, θ ′) is given by: 
+
+P (( s, θ ), (s′, θ ′), a ′) = P (s, s ′, a ′) · μs′ (θ′)
+
+QP (s, θ, g ) is the signal value of the principal in (s, θ ) on sending a signal g under the signaling strategy π. It can be expressed as the sum of the principal’s immediate reward based on the agent’s action prompted by the signal g in (s, θ )
+
+and the expected value on the transition to the future state 
+
+(s′, θ ′).We consider a learning agent that approximately best re-sponds [30], selecting stochastic actions that are near-optimal with high probability during learning. Let ˜ρ(a|s, g ) be the probability that the learning agent takes an action a, on receiving a signal g. The Q value function of the principal with an average reward ˜RP can be formulated as 
+
+˜RP + QP (s, θ, g ) = X
+
+> a′∈A
+
+˜ρ(a′|s, g ) · RP (s, θ, a ′)+ (8) 
+
+X
+
+> a′∈A
+
+˜ρ(a′|s, g ) · X
+
+> s′∈S
+
+P (s, s ′, a ′) X
+
+> θ′∈Θ
+
+μs′ (θ′) · VP (s′, θ ′)
+
+VP (s, θ ) = X
+
+> g∈G
+
+QP (s, θ, g ) · πs,θ (g)
+
+D. Persuasive signaling : Incentive compatibility of the agent 
+
+The principal sends a signal that selectively discloses the privately observed external state, anticipating that the agent will take the signal into account and act in a way beneficial to the principal. A simple signaling strategy is to reveal the true external state. However, the direct revelation of external state, for example, real-time traffic, may prompt connected vehicles 6
+
+to choose the same route and may finally lead to traffic congestion [16]. Moreover, a key challenge in information design is that such communication can be effective only if the agent finds it profitable to follow the signal. Hence, the signal cannot serve the principal’s interest solely; it must also improve the agent’s expected outcome so that adhering to it is rational from the agent’s perspective. 
+
+Signaling strategy as action recommendation: Without loss of generality, a signaling strategy can restrict the number of signals equal to the receiver’s action set [2], i.e., GA = {ga :
+
+a ∈ A} . Let QA(s, θ, g a) be the action value of the agent in 
+
+(s, θ ) while recommended by a signal ga, for taking an action 
+
+a, under the signaling strategy π. Thus, for the persuaded agent to benefit from strategic signaling of the principal, its expected average reward for the recommended action has to be greater as compared to other actions, i.e., 
+
+QA(s, g a, a ) ≥ QA(s, g a, a ′), ∀a, a ′ ∈ A (9) Hence, in order to ensure a persuasive signaling strategy, the incentive compatibility of the agent is taken into account while maximizing the principal’s expected average reward. Let β(s, θ ) be the probability distribution of the initial state being (s, θ ). The objective of the principal is to maximize the average reward given by (7) subject to the constraints in (8) and (9). Thus, the optimization of the principal can be formulated [31] as 
+
+min 
+
+> VP
+
+X
+
+> s∈S
+
+X
+
+> θ∈Θ
+
+β(s, θ ) · VP (s, θ ) (10) subject to 
+
+˜RP + QP (s, θ, g a) ≥ X
+
+> a′∈A
+
+˜ρ(a′|s, g a) · RP (s, θ, a ′)+ 
+
+X
+
+> a′∈A
+
+˜ρ(a′|s, g a) · X
+
+> s′∈S
+
+P (s, s ′, a ′) X
+
+> θ′∈Θ
+
+μs′ (θ′) · VP (s′, θ ′)
+
+QA(s, g a, a ) ≥ QA(s, g a, a ′), ∀a, a ′ ∈ A 
+
+When the agent is far-sighted, its optimal action does not only depend on the expected immediate reward but also on future state transitions and signal disclosures. Consequently, the principal’s value function depends on the signaling strategy as well as the induced agent policy, which is the solution of a dynamic optimisation as illustrated in (5). This nested dependence makes the principal’s optimization nonlinear, and the design of signaling strategy NP-Hard [2]. Hence, in the next section, we explore the structural results to compute efficiently the optimal agent policy as well as the signaling strategy. IV. S TRUCTURAL RESULTS 
+
+Here, we investigate how structural results on the principal can be leveraged for the design of a persuasive signaling strategy for a far-sighted agent. We restrict attention to a monotone agent, which enables us to use the Monotone Likelihood Ratio (MLR) ordered signaling strategy, which is 
+
+persuasive , as illustrated in the following subsection. 
+
+A. Monotonic agent policy 
+
+The optimal policy of the agent in a Bayesian persuasion environment often exhibits monotone behaviour with respect to the state and signal space. This is widely observed in various real-world applications, including traffic routing [7], sensor scheduling [31], inventory management [28], trans-mission scheduling [22], etc. The monotonic policy can be characterized as 
+
+ρ(s, g ) ≤ ρ(s′, g ), s ≤ s′, ∀s, s ′ ∈ S , g ∈ G , (11) 
+
+ρ(s, g ) ≤ ρ(s, g ′), g ≤ g′, ∀s ∈ S , g, g ′ ∈ G .
+
+Subsequently, in the context of Bayesian persuasion, assuming monotonic agent policy, we characterize the structure of the principal’s Q value function for a persuasive signaling strategy as detailed below. 
+
+B. Supermodularity of Q function and Incentive compatible signaling strategy design: 
+
+In this section, we explore structural properties of principal’s Q-functions to ensure that the induced signaling strategy is incentive compatible for a monotonic agent. The main result is Theorem 1, which gives sufficient conditions for supermod-ularity of the Q value of the principal with respect to the state and external state. Consider the following assumptions on the Bayesian persuasion model: (A1) RP (s, θ, a ) is increasing in the state of agent s, external state θ, action a taken by the agent. (A2) RP (s, θ, a ) is supermodular in (s, a ) for fixed θ and 
+
+RP (s, θ, a ) is supermodular in (θ, a ) for fixed s.(A3) μsi (θ) ≤r μsj (θ), ∀i < j, i.e., prior belief of the external states of higher states MLR dominates the lower. (A4) P (si, ., a ) ≤s P (sj , ., a ), ∀s ∈ S , a ∈ A , i ≤ j, i.e., each state of the transition probability stochastically dominates the previous state. (A5) P (s, s ′, a +1) is tail sum supermodular in s, a in the sense PS 
+
+> ¯s
+
+(P (s, s ′, a +1) −P (s, s ′, a )) is increasing in s, ∀ ¯s ∈S.(A6) The learning agent’s policy, ˜ρ(a|s, g ) stochastically dom-inates the previous state and signal spaces and is tail sum supermodular in s, g .
+
+Theorem 1. Assuming that the Bayesian persuasion model satisfies (A1) to (A6), then there exists an optimal principal’s action value function which is supermodular in state and external space with respect to signals. 
+
+The discussion of the assumptions is given in the Ap-pendix VII-E. In the following section, we investigate how the signaling strategy of the principal can be made incentive compatible for a monotonic agent and state it as follows: 
+
+Theorem 2. When the principal commits to an MLR-ordered signaling strategy, it ensures monotone, incentive-compatible agent behaviour. 
+
+MLR signaling results in the agent’s monotone belief about external states. Since the agent updates posterior belief of unknown external state, based on the signal transmitted by 7
+
+the principal using Bayes’ rule—and MLR is preserved under Bayesian updating—the principal must commit to an MLR-ordered signaling strategy to guarantee monotone, incentive-compatible agent behaviour. This is proved in detail in the Appendix VII-C. Next, we illustrate how the supermodular structure of the principal’s Q value guarantees monotone, incentive-compatible agent behaviour in the following lemma. 
+
+Lemma 1. Softmax strategy over the supermodular Q values of the principal ensures MLR ordered signaling strategy. 
+
+We compute the signaling strategy as the softmax policy considered for the average reward setting as 
+
+π(g|s, θ ) = exp ( Q(s, θ, g )/τ )
+
+P 
+
+> g′∈G
+
+exp ( Q(s, θ, g ′)/τ ) (12) where τ is the temperature parameter controlling exploration. It is proved in the Appendix VII-F that the softmax strategy preserves MLR. 
+
+C. Structural results for agent’s policy learning 
+
+In addition to MLR ordered signaling strategies committed by the principal, (A3) and (A4) satisfied by the Bayesian persuasion model, the following assumptions on the reward structure of the agent are required to ensure a monotone best response of the agent. (B1) RA(s, θ, a ) is increasing in state of agent s, external state θ.(B2) RA(s, θ, a ) is supermodular in (s, a ) for fixed θ and 
+
+RA(s, θ, a ) is supermodular in (θ, a ) for fixed s.Now, we state the existence of a monotone best response of the agent in the following theorem. 
+
+Theorem 3. In a Bayesian persuasion model with an MLR sig-naling strategy, there exists a sufficient set of conditions (B1), (B2), (A3), (A4) by which the following hold simultaneously: 1) The agent’s action value function, QA, is supermodular: 
+
+QA(s, g, a ) has increasing differences in (s, a ) and (g, a )
+
+2) There exists a monotone agent policy: 
+
+a∗ : S × G → A such that a∗(s′, g ′) ≥ a∗(s, g )
+
+∀s′ ≥ s, g ′ ≥ g
+
+3) The agent’s best response is monotone, and the signaling strategy is incentive compatible. For every s, g and every deviation from monotone action, 
+
+a′ ∈ A ,
+
+QA(s, g, a ∗(s, g )) ≥ QA(s, g, a ′).
+
+Subsequently, in the following section, we utilize the struc-tural results for a computationally efficient learning of amonotonic agent policy as well as a signaling strategy in dynamic Bayesian persuasion. V. S TRUCTURED LEARNING 
+
+In this section, we present Algorithm 1 (MAPL), which exploits the monotonic structure for faster learning of the agent policy. Then, Algorithm 2, Supermodular Q learning of Principal (SQP) utilizes the supermodular structure of the principal’s Q-value to enable computationally efficient design of the signaling strategy. Furthermore, Algorithm 3 presents an online reinforcement learning framework for signaling strategy that remains persuasive for a monotonic learning agent. 
+
+A. Structured policy learning of the monotone agent under Bayesian persuasion 
+
+Structure-based learning leverages the threshold character-istics of the optimal agent policy [32], focusing solely on the set of monotonic policies to approximate the optimal solution. It specifically learns the threshold where the optimal action shifts. The threshold is updated based on the gradient of the expected reward received by the agent. The average reward defined in (3) can be rewritten based on the evaluation of different policies parameterized by σ, as follows: 
+
+˜RA = lim 
+
+> t→∞
+
+1
+
+t Eσ [
+
+> t
+
+X
+
+> i=0
+
+˜rA(si; σ)] (13) Here, si denotes the state at a particular time, ˜rA(si; σ) is the expected immediate reward based on the state, posterior belief of external state and agent’s actions under ρσ and the expectation is computed with respect to transition probability, signaling strategy and prior belief distribution. 
+
+Lemma 2. The gradient of the average reward of the mono-tone agent following a policy parameterized by σ is given by 
+
+∇σ ˜RA = X
+
+> s∈S
+
+d(s; σ) · ∇ σ ˜rA(s) + (14) 
+
+X
+
+> s∈S
+
+X
+
+> s′∈S
+
+d(s; σ)∇σ P (s′ | s; σ) · ˜VA(s′)
+
+where d(s) is the stationary state distribution, 
+
+˜VA(s′) = P
+
+> g′∈G
+
+P 
+
+> θ′∈Θ
+
+μs′ (θ′) · πs′,θ ′ (g′) · VA(s′, g ′)
+
+The proof of the lemma is given in the Appendix. The above expression shows that the gradient of the long-term average reward depends on expected immediate reward, how the transition dynamics shift under σ (i.e., ∇σ P ), and how the states being transitioned are (i.e., ˜VA(s′)), weighed by the stationary distribution d(s). This is used in the following section for policy gradient methods for learning agent’s policy under Bayesian persuasion. 
+
+B. Online learning of an agent’s monotonic policy under Bayesian persuasion 
+
+In this section, we introduce an algorithm that updates the parameterized agent policy at each time step. This approach enables us to decompose the process into a series of incremen-tal updates performed at every time step [32]. In the context of Bayesian persuasion, we consider the expected reward of the agent’s action based on the transmitted signal, under the principal’s committed signaling strategy. Here, we substitute the gradient with a biased estimate derived from simulating a single sample path. It is known that this bias diminishes asymptotically, resulting in convergence [32]. We impose the 8
+
+following assumption regarding the transition probabilities, i.e. for every parameter σ and state i, j , there exists a bounded function Lij such that, ∇Pij (σ) = Pij (σ)·Lij (σ) The gradient in (14) can be written as : 
+
+∇ ˜RA(σ) =  
+
+> T−1
+
+X
+
+> n=0
+
+∇˜rA(sn; σ) +  
+
+> T−1
+
+X
+
+> n=1
+
+( ˜VAsn (σ, ˜RA)Lsn−1sn (σ)) 
+
+∇ ˜RA(σ) = ∇˜rA(s0; σ) +  
+
+> T−1
+
+X
+
+> k=1
+
+∇˜rA(sk; σ) + (˜ rA(sk; σ) − ˜RA)zk
+
+where , z k =
+
+> k
+
+X
+
+> n=1
+
+Lsn−1sn (σ) = 
+
+> k
+
+X
+
+> n=1
+
+∇Psn−1sn (σ)
+
+Psn−1sn(σ)
+
+The parameters can be updated at each step, t, recursively as, 
+
+z0 =0 (15) 
+
+zt+1 =zt + Lstst+1 (σ)=zt + ∇Pstst+1 (σ)
+
+Pstst+1 
+
+σt+1 =σt + ( ∇˜rA(st; σt) + (˜ rA(st; σt) − ˜RA,t )zt)˜RA,t +1 = ˜RA,t + η(˜ rA(st; σt) − ˜RA,t )
+
+When the horizon is substantial, zt will also grow large before being reset to zero, leading to increased variance in the updates. This is a common challenge encountered with likelihood ratio methods. Therefore, it may be advantageous to incorporate a forgetting factor [32]. In order to reduce the variance, we introduce a discount factor of β for zt, and it becomes, zt+1 = β ∗ zt + Lstst+1 (σ)
+
+C. Parameterization of agent’s monotonic policy 
+
+In this section, we consider the approximation of the optimal agent policy, which is monotonically increasing in the state and signal spaces, using parametric curves. When there are two actions, the optimal monotonic policy in continuous state and signal spaces can be approximated by a threshold curve characterized by a set of parameters, σ, which partitions the region spanned by the state and signal space into two. The optimal policy, which increases with state and signal space, can be characterized by a monotonic threshold curve. The parametric representation of monotonic policy can utilize step, piecewise linear, or sigmoidal approximations. The continuity and differentiability of the sigmoid at all points make it an ideal choice to represent a monotonic curve. The sigmoidal approximation of an optimal monotonic policy in state and signal spaces can be given by 
+
+˜s(σ, g ) = ϕ2 − ϕ1
+
+1 + e−ϕ3+g·ϕ4 + ϕ1 (16) where each sigmoid is characterized by a set of parameters given by σ = {ϕ1, ϕ 2, ϕ 3, ϕ 4} [33]. ϕ1, ϕ2 represent the floor and ceiling of the sigmoid, respectively. The choice of ϕ4
+
+determines the direction and spread of the sigmoid. The curve is decreasing in the state-signal space if ϕ4 > 0, constant if 
+
+ϕ4 = 0 , and increasing if ϕ4 < 0. The change in curvature of the sigmoid occurs at [ ϕ1+ϕ2 
+
+> 2
+
+, ϕ3 
+
+> ϕ4
+
+]. The optimal threshold policy approximation is the solution of 
+
+σ∗ = arg max 
+
+> σ
+
+˜RA(ρ(σ)) (17) where ˜RA is the expected average reward given in (3). 
+
+Algorithm 1 Monotonic Agent Policy Learning (MAPL) 
+
+Require: Horizon length N 
+
+> 1:
+
+Signaling strategy ← π 
+
+> 2:
+
+for steps t = 1 , 2, 3....N do  
+
+> 3:
+
+Observe the external parameter θt ← μst (.) 
+
+> 4:
+
+Obtain the signal gt ← πst,θ t (.) 
+
+> 5:
+
+Obtain the action at based on ρσ (st, g t) 
+
+> 6:
+
+Compute expected immediate reward ˜rA(st; σt) 
+
+> 7:
+
+Update the agent’s threshold policy parameter 
+
+zt+1 = zt + ∇Pstst+1 (σ)
+
+Pstst+1 
+
+σt+1 = σt + ( ∇˜rA(st; σt) + (˜ rA(st, σ t) − ˜RA,t )zt)˜RA,t +1 = ˜RA,t + η(˜ rA(st; σt) − ˜RA,t ) 
+
+> 8:
+
+Get the next state s′ given by P (st, ., a t) 
+
+> 9:
+
+st+1 ← s′ 
+
+> 10:
+
+end for 
+
+Algorithm 1 (MAPL) describes the structured online learn-ing of the agent policy. Given an initial state, depending on the prior belief, an external state is sampled. Based on the signaling strategy, a signal is then sampled for the realised state and external state. The principal transmits the signal and this updates the agent’s posterior belief of external state. Based on the expected immediate reward, the agent updates the threshold policy and chooses an action. This process is repeated until the agent’s policy converges for the committed signaling strategy of the principal. In the next subsection, we investigate how the Q structure of the principal can be leveraged for the design of a computationally efficient signaling strategy for a monotonic agent. 
+
+D. Supermodular Q learning of principal (SQP) 
+
+Here we discuss how standard relative Q learning [34] is modified to handle constraints so that it can adaptively learn a signaling strategy persuasive for a monotonic agent. We can approximate the Bellman equation for the principal given by (8) for relative Q learning as : 
+
+QP (s, θ, g ) = QP (s, θ, g ) + α′[rP (s, θ, g )+ max  
+
+> g′
+
+QP (s′, θ ′, g ′) − QP (s, θ, g ) − max  
+
+> g′
+
+QP (s0, θ 0, g ′)] 
+
+where α′ is the learning rate and (s0, θ 0) is the reference state. The optimal solution can be computed as 
+
+E
+
+
+
+rP (s, θ, g ) + max  
+
+> g′
+
+Q∗ 
+
+> P
+
+(s′, θ ′, g ′)) − Q∗ 
+
+> P
+
+(s, θ, g )
+
+
+
+= 0 
+
+(18) According to Theorem 3, principal’s Q-values exhibit super-modularity. Imposing this supermodular structure enables effi-cient learning while bypassing non-optimal strategies [31]. The 9
+
+convergence of supermodular Q-learning is well-understood [24] and extends naturally to our context. The supermodularity as a linear inequality constraint on QP is : 
+
+QP (s, θ, g + 1) − QP (s, θ, g ) ≤ QP (s′, θ, g + 1) − QP (s′, θ, g )
+
+Qp(s, θ, g + 1) − QP (s, θ, g ) ≤ QP (s, θ ′, g + 1) − QP (s, θ ′, g )
+
+∀s ≤ s′, θ ≤ θ′. The constraint on the supermodularity of Q factors can be given as: 
+
+QP I ≤ 0 (19) where ≤ is elementwise. Let f (QP (s, θ, g )) be taken as 
+
+f (QP (s, θ, g )) = ( rP (s, θ, g ) + max  
+
+> g′
+
+QP (s′, θ ′, g ′)) − QP (s, θ, g )
+
+Also let f (QP ) = ∇QP h(QP )
+
+Then, by (18), we have E(f (Q∗ 
+
+> P
+
+)) = ∇QE(h(Q∗ 
+
+> P
+
+)) = 0 .Hence, we consider Q learning as stochastic gradient algorithm [31] that maximizes an objective h(Q) subject to (19), i.e. 
+
+Q∗ 
+
+> P
+
+= arg max 
+
+> QP
+
+E(h(QP )) (20) Now, we use primal-dual stochastic algorithm [31] to approx-imate Q∗ 
+
+> P
+
+with λ ≥ 0 as Lagrange multipliers given by: 
+
+QP,t +1 =QP,t + α′[f (QP,t ) − max  
+
+> g′
+
+QP,t (s0, θ 0, g ′) − λtI]
+
+(21) 
+
+λt+1 =max [λt + α′QP,t I, 0] 
+
+Algorithm 2 (SQP) describes the online learning of the 
+
+Algorithm 2 Supermodular Q learning of Principal (SQP) 
+
+Require: Learning agent’s best response policy {˜ρk}, Princi-pal’s Q value QP,k  
+
+> 1:
+
+Initial state s0 
+
+> 2:
+
+for t = 0 , 1, 2, . . . T do  
+
+> 3:
+
+θt ← μ(· | st) 
+
+> 4:
+
+π(.|s, θ ) = exp( QP (s,θ,g )/τ )P    
+
+> g′exp( QP(s,θ,g ′)/τ )
+> 5:
+
+gt ← π(· | st, θ t) 
+
+> 6:
+
+Choose action at ∼ ˜ρk(· | st, g t) 
+
+> 7:
+
+Observe next state st+1 ← P (· | st, a t) 
+
+> 8:
+
+Observe RP (st, θ t, a t), R A(st, θ t, a t) 
+
+> 9:
+
+Update QP,t +1 and ensure supermodularity using (21)  
+
+> 10:
+
+end for 
+
+principal’s Q value for the agent’s best response policy ˜ρ. At each time step, for the given (st, θ t), a signal gt is sampled by taking the soft max of the principal’s Q values. On receiving the signal, the agent takes an action based on ˜ρ and the rewards of both the principal and agent are observed. The Q values of the principal are then updated using (21). This is continued till the end of the episode. 
+
+E. Repeated principal agent interaction 
+
+In this paper, we consider the dynamic Bayesian persuasion as illustrated in Fig 3, wherein the principal repeatedly in-teracts with an approximately best responding learning agent. Let ˜RP (π, ρ ) and ˜RA(π, ρ ) denote the principal’s and agent’s long-run expected average rewards, respectively, under the signaling strategy π and agent’s policy ρ. For any fixed Execute   
+
+> Learning Agent
+> Environment
+> Update Continue for N episodes
+> Data
+> Fig. 3. The figure illustrates an online learning framework in which the principal and the agent iteratively adapt their strategies through repeated interactions. At each episode, given the signaling strategy announced by the principal, the agent learns its optimal policy. The principal then observes the agent’s best response and updates the signaling strategy accordingly for the subsequent episode.
+
+signaling strategy πk, the agent selects a best response at kth 
+
+episode by choosing 
+
+ρk = arg max 
+
+> ˜ρ
+
+˜RA(πk, ˜ρ)
+
+Given the induced agent response, the principal updates the signaling strategy accordingly as 
+
+πk+1 = arg max 
+
+> ˜π
+
+˜RP (˜ π, ρ k)
+
+Initially, given the principal’s signaling strategy πk, the agent learn’s over an episode and finds its best response, ρk. Ob-serving the agent’s best response, the principal modifies its signaling strategy for the next round, πk+1 , and the repeated iteration continues. π∗ is said to be dynamically stable if 
+
+∇π ˜RP (π, ρ ) = 0 as πk → π∗.
+
+Algorithm 3 Online learning of signaling strategy and agent’s policy  
+
+> 1:
+
+Initialize: Signaling strategy π0, agent policy ˜ρ0, step sizes {α′} 
+
+> 2:
+
+for k = 0 , 1, 2, . . . N do  
+
+> 3:
+
+Principal commits to signaling strategy πk 
+
+> 4:
+
+for t = 0 , 1, 2, . . . T do  
+
+> 5:
+
+Agent policy update using MAPL 
+
+σt+1 = σt + ( ∇˜rst (σt) + (˜ rst (σt) − ˜RAt )) zt 
+
+> 6:
+
+end for  
+
+> 7:
+
+for t′ = 0 , 1, 2, . . . T do  
+
+> 8:
+
+Update principal’s Q value under agent’s best response using SQP 
+
+QP,t ′+1 = QP,t ′ + α′[f (QP,t ′ ) − λt′ I] 
+
+> 9:
+
+end for  
+
+> 10:
+
+Output signaling strategy π using (12)  
+
+> 11:
+
+end for 
+
+F. Structured learning for repeated principal agent interac-tions 
+
+Algorithm 3 describes the online learning of the signaling strategy and agent’s policy. At the start of each round, the 10 
+
+sender publicly commits to an incentive-compatible signaling strategy π for a monotonic agent. Knowing the signaling strategy, agent learn to select an optimal policy that maximizes expected reward using MAPL which updates the threshold at each step based on the expected reward. After observing the agent’s action for an episode, the principal computes the average reward and updates its Q value under agent’s best response using SQP. Thus, using structured learning, Algorithm 3 learns the agent’s monotonic policy and leverage the supermodular structure of the value function to ensure that the sender’s signaling strategy remains persuasive throughout the repeated interaction. VI. N UMERICAL RESULTS : B AYESIAN PERSUASIVE 
+
+DRIVING Lead Vehicle   
+
+> Connected Vehicle
+> Real time traffic,
+> Signals Chooses lane 1
+> Connected veicle's reward
+> Lead vehicle's reward
+> State of Vehicle
+> Next state of vehicle
+> Fig. 4. The figure gives an illustration of Bayesian persuasive driving. Here, the red coloured vehicle symbolises the lead vehicle and blue represents the connected vehicle. Road side Units(RSU) transmit traffic data to the lead vehicle. The lead vehicle who is aware of the real-time traffic updates guides the connected vehicle through the dark line ensuring congestion-free traffic.
+
+In this work, we consider lane-based routing—where de-cisions are made not just at the road level but at the gran-ularity of individual lanes— which is becoming increasingly viable due to advancements in vehicle-to-vehicle (V2V) com-munication, real-time traffic sensing and precise localization technologies. 
+
+A. Real-time traffic routing via Bayesian persuasion 
+
+We model a dynamic Bayesian persuasion framework for intelligent, lane-based traffic routing involving an intelligent lead vehicle (the principal) and connected vehicle (agent), as depicted in Fig. 4. The framework includes: 1) Intelligent lead vehicle : The lead vehicle has access to real-time traffic conditions—including accidents and road closures—through GPS, RSUs, and other external sources [35]. Based on this information, it strategically selects signaling strategies to guide vehicles into specific lanes, aiming to optimize overall traffic flow. 2) Autonomous Connected Vehicle : Vehicle use onboard sensors to monitor their speed and location, while receiv-ing external updates from the lead vehicle. Based on the observed signal and knowledge of the signaling strategy, it updates the belief about congestion ahead and makes lane-selection locally and in real-time. 3) Continuous feedback : The routing process is adaptive and continuous, with connected vehicles being updated regularly based on real-time traffic conditions. The dy-namic change in the state of the connected vehicle is also continuously monitored by the lead vehicle to provide further updates, improving overall efficiency and service quality. We consider the following model for Bayesian persuasion [11], [35].  
+
+> •
+
+State Space : The vehicle state represents the speed levels of the connected vehicle. Here s ∈ S = {0, 1, 2., 10 } 
+
+> •
+
+External State Space : Under typical traffic conditions, vehicles move at free-flow speed, which is the speed attainable when traffic density is low and movement is not affected by surrounding vehicles. However, if many vehicles choose the same route at the same time, their collective demand can surpass the lane’s capacity, causing congestion. In our model, the external state represents the extent of this congestion. The external state quantifies traffic congestion based on the traffic flow model in [36], where: 
+
+θ = vd
+
+vf
+
+=
+
+
+
+1 −
+
+ ddjam 
+
+pq
+
+(22) Here, d is traffic density, djam the jam density, vd the effective speed at density d, and vf the free-flow speed. Here, increasing levels of congestion-free traffic is repre-sented as θ ∈ Θ = {0, 1, 2.. 10 } 
+
+> •
+
+Action Space : In our traffic routing framework, we ana-lyze a single-link setup that may contain several parallel lanes, each characterized by distinct speed profiles or congestion levels. The available actions correspond to choosing among these lanes. Specifically, in the two-lane case, we define action 1 as selecting the low-speed lane and action 2 as selecting the high-speed lane.  
+
+> •
+
+Agent’s travel reward function : The reward function for choosing lane 1 and lane 2 are assumed as RA1 (s, θ, 1) 
+
+as 175+ s2 +θ2 and RA2 (s, θ, 2) as 155+1 .5·s2 +1 .5·θ2.The reward structure ensures that the first lane is better for lower speed and lower traffic-free flow. In addition, the second lane becomes preferable at higher speeds and congestion-free traffic due to its greater rate of reward in comparison with the first.  
+
+> •
+
+Principal’s reward function : The reward function for choosing lane 1 and lane 2 are assumed as RP1 (s, θ, 1) 
+
+to be RA1 (s, θ, 1) and RP2 (s, θ, 2) as 500 + RA2 (s, θ, 1) .This accounts for the extra reward the lead vehicle receives when the connected vehicle chooses the high-speed lane. It satisfies (A1) and (A2).  
+
+> •
+
+Vehicle dynamics : The transition probability density re-flects the likelihood of transitioning to different speeds based on the chosen lane. Low and high-speed ranges are referred to as speed which is less than 50% of the maximum level possible and the rest respectively. High-speed lane offers higher chances of transitioning to higher speeds than low-speed lanes. The transition probability 11 Low speed High speed    
+
+> LANE 1
+> 0.9 0.2 0.1 0.8 Low speed High speed
+> LANE 2
+> 0.3 0.8 0.7 0.2
+> Fig. 5. State transition diagram for the two-lane system.
+
+density captures how likely a vehicle is to shift between different speeds depending on the selected lane, as illus-trated in Fig. 5. It reflects the assumption that vehicles traveling at higher speeds tend to maintain those speeds, and similarly for lower speeds. Compared to low-speed lanes, high-speed lanes provide a greater probability of transitioning into and staying within higher speed ranges. The speed transition dynamics of the connected vehicle are consistent with (A4) and (A5).  
+
+> •
+
+Connected vehicle’s objective : In the proposed frame-work, the objective of the principal (lead vehicle) is to monitor the speed levels of connected vehicles across different lanes and provide routing signals based on real-time congestion [37]. Its signaling strategy is designed to guide vehicles predominantly toward high-speed lanes, thereby enhancing overall traffic efficiency while also maximizing the travel reward for the connected vehicle. The agent (connected vehicle) on the other hand aims to determine a policy that selects the optimal lane to maximize its expected average reward favouring higher speeds and minimal congestion. We consider a Bayesian persuasion model with a completely unknown reward and transition dynamics, which fit the model assumed for monotonic agent policies, and consider the agent’s prior belief as uniform, which satisfies (A3). The assumed Bayesian persuasive driving context satisfies assumptions for a monotonic agent policy and the principal’s supermodular Q function. Hence, we utilize the structural results and demon-strate its advantage in the efficient online learning of the connected vehicle policy as well as signaling strategy of the lead vehicle with the existing methods in the following. 
+
+B. Comparison with existing dynamic vehicle routing algo-rithms 
+
+Here, we compare the travelling reward of the connected vehicle, which uses the Bayesian persuasion framework for lane selection, employing the MAPL with the existing vehicle routing methodologies. The dynamic vehicle routing algo-rithms considered are: 1) Model Predictive Control (MPC): Here we use the tran-sition model described in Fig. 5. The model is iteratively learned during the learning to simulate the future tra-jectory over a horizon of 5 [38], [39], [40]. At each decision point, MPC computes the cumulative travel reward over the prediction horizon and chooses the action that minimizes it [41], [36]. This is continued till the end of the episode. 2) Stochastic Shortest Path (SSP): This approach utilizes the prior assumption of the agent regarding the congestion of the lane ahead. The transition probabilities capture stochastic speed variations, and then one-step prediction is employed to choose a lane which maximizes the reward of travel [42]. 3) Tree-based learning: Tree-based learning approximates the value function in dynamic vehicle routing by using trees to estimate the future reward of different routing decisions based on current states. The tree is trained on samples collected through simulation [43].              
+
+> TABLE I COMPARISON OF THE TRAVELLING REWARD OF CONNECTED VEHICLE FOR VARIOUS VEHICLE ROUTING ALGORITHMS
+> Number Vehicle routing Algorithm Travelling reward 3Model Predictive Control 230 3Stochastic Shortest Path 220 4Tree based learning 230 5Q learning 240 6MAPL 257
+> Fig. 6. Average reward accumulated by the connected vehicle
+
+Here, the proposed structured learning method yields better average rewards considering the farsightedness of the agent, as illustrated in Table 1. SSP, MPC and Tree based learning obtain lower rewards due to their reliance on prior traffic assumptions without real-time updates. This shows the benefit of utilising the threshold policy of the connected vehicle navigating using the Bayesian persuasion framework for lane selection over the existing dynamic vehicle routing recommen-dations. 
+
+1) Comparison with existing methodology for the design of signaling strategy: In the structured learning, we utilize the monotonic structure of the agent optimal policy and super-modular Q learning of principal for computationally efficient 12  
+
+> Fig. 7. Average reward accumulated by the lead vehicle
+
+learning of signaling strategy persuasive for connected vehicle. For comparison with existing reinforcement learning frame-work, the signaling strategy is evaluated over 100 episodes of 100 steps. We compare with existing signaling strategies used in the context of Bayesian persuasion which include 1) Optimism-Pessimism Principle for Persuasion Pro-cess(OP4) [9]: The principal designs signals to optimize agent’s expected immediate reward, without accounting for future state transitions. Here, pessimism tackles the uncertainty in the prior estimation by selecting a sig-naling policy that is persuasive for a myopic agent with respect to all the priors in the confidence region, while optimism in principal’s Q-function estimation encourages exploration [9]. It perform poorly with far-sighted drivers who anticipate future congestion and signal disclosures. 2) History based online persuasion: In traffic routing, the lead vehicle learns a decision tree mapping histories to signals, anticipating drivers’ future reactions. The IC constraint requires that at every node in this tree, the agent with full recall — knowing exactly which path led to the current node — still finds it rational to follow the history based signaling recommendation rather than deviate [10]. This approach assumes that model assumptions except the agent’s prior belief of the external state are known, and the agent needs to retain the history of past interaction, making it slow to learn, adapt, and plan ahead. 3) Uniform signaling: Here the principal sends signals that are independent of the realized state of nature. As a result, every signal induces the same posterior belief for the agent, equal to the prior. This means the principal does not exploit informational asymmetries and exerts no in-fluence on the agent’s action through belief manipulation. Uniform signaling is often used as a baseline [44]. 4) Q learning: In Bayesian persuasion, the principal and the agent can use Q-learning independently to maximize their own long-term rewards under repeated interactions 5) Full Revelation: Full-revelation signaling discloses com-plete traffic state information (e.g., exact congestion lev-els on all routes) [44]. Here, the proposed structured learning yields better average rewards considering the farsightedness of the agent and prin-                     
+
+> TABLE II COMPARISON OF THE TRAVELLING REWARD OF CONNECTED VEHICLE FOR EXISTING SIGNALING STRATEGIES
+> Item signaling Strategies Connected vehicle’s average reward Lead vehicle’s aver-age reward 1OP4 230 420 2History based online persuasion 218 618 2Uniform signaling 251 538 3Q learning 242 294 4Fully revealed signaling 247 527 5Structured learning 257 756
+
+cipal, as illustrated in the Table 2. The faster and enhanced learning of the proposed method, which takes into account the structure of the agent’s policy and principal’s value function, compared with the existing online reinforcement learning for signaling strategy, is shown in Fig 6 and 7. 
+
+C. Computational efficiency as compared to existing method-ology 
+
+Fig. 8 illustrates the computational efficiency of the pro-posed approach with the existing methodology in terms of the computational time. The existing methodology scales with an increase in the dimension of state and external state space, whereas for the proposed methodology, the agent’s policy learning remains independent of the increase in dimensionality of state space. By incorporating prior knowledge of the thresh-old structure of the agent’s policy and the principal’s Q-values, it improves learning efficiency while reducing computational complexity. 
+
+> Fig. 8. Comparison of computational time of existing and structured learning methods
+
+VII. C ONCLUSION 
+
+Motivated by the efficiency of Bayesian persuasion for intelligent interactive driving, this paper proposes an online structured reinforcement learning framework for design of computationally efficient signaling strategy, which is per-suasive for a far-sighted agent. The main contributions are: (i) MAPL- online structured policy learning algorithm which utilizes the monotonic structure of agent policy for faster learning in large state and signal spaces, (ii) Identification of sufficient condition on the Bayesian persuasion model to ensure the supermodular structure of the Q function of the 13 
+
+principal for a monotonic agent, (iii) Identification of sufficient conditions for a persuasive signaling strategy for a far-sighted agent (iv) Supermodular Q learning of Principal (SQP) for the design of a persuasive signaling strategy considering a mono-tonic agent, (v) Case study of Bayesian persuasive driving, which illustrates the practicality of the structural results in addressing Bayesian persuasion for dynamic vehicle routing. By incorporating prior knowledge of the threshold structure of the agent’s policy and the principal’s Q-values, it improves learning efficiency while reducing computational complexity. This approach is especially effective in highly dynamic real-world applications such as traffic routing, sensor scheduling, inventory management, and transmission scheduling, where the proposed model fits naturally. The current work consid-ers the homogeneous and monotonic driving behaviour of connected vehicles. However, incorporating the risk-sensitive nature of connected vehicles remains a promising direction for future research. APPENDIX :
+
+A. Basic definitions 
+
+The following definitions are required for the proof of the main results. 
+
+Definition 1. (Supermodularity): The function r(s, a ) is said to be supermodular if 
+
+r(s, ¯a) − r(s, a ) ≤ r(¯ s, ¯a) − r(¯ s, a ) (23) where ¯s ≥ s and ¯a ≥ a, ∀s, ¯s ∈ S , a, ¯a ∈ A . In other words, 
+
+r(s, ¯a) − r(s, a ) is increasing with respect to s.
+
+Definition 2. (Tail sum supermodularity): The probability mass function, pmf, P (s, s ′, a ), is tail sum supermodular in 
+
+(s, a ) if 
+
+> S
+
+X
+
+> ¯s
+
+(( P (s, s ′, a + 1) − P (s, s ′, a )) is increasing in s (24) for ∀s, ¯s ∈ S , a ∈ { 0, A }
+
+Definition 3. (Stochastic dominance): Let p1 and p2 be two probability mass functions, then p1 is said to first-order stochastically dominate p2, denoted as p1 ≥s p2 if 
+
+> S
+
+X
+
+> ¯s
+
+p1(s) ≥
+
+> S
+
+X
+
+> ¯s
+
+p2(s) (25) 
+
+Definition 4. (Monotone Likelihood Ratio (MLR) ordering): Let p1 and p2 be two probability mass functions, then p1 is said to dominate p2 with respect to the MLR order, denoted as p1 ≥r p2 if 
+
+p1(g1) · p2(g2) ≤ p2(g1) · p1(g2), g 1 ≤ g2, ∀g1, g 2 ∈ G 
+
+(26) 
+
+Theorem 4. For any increasing function of f (.). p1 ≥s p2 iff P 
+
+> s∈S
+
+f (s) · p1(s)ds ≥ P 
+
+> s∈S
+
+f (s) · p2(s)ds [31] .
+
+Theorem 5. For any increasing function f (.), the P (s, s ′, a )
+
+is tail sum supermodular iff P 
+
+> s′∈S
+
+P (s, s ′, a ) · f (s′) is super-modular in (s, a ) [31] .
+
+Lemma 3. Consider γk be an increasing sequence of discount factors {γk} such that γk → 1, and let {ργk } be the corresponding stationary discounted optimal policies. Then there exists a subsequence {ζk} of γk and a stationary policy ρ∗ which is a limit point of {ρζk }. That is, for every (s, g ), there exists an integer N (s, g ) such that for all 
+
+n ≥ N (s, g ), ρ ζk (s, g ) = ρ∗(s, g ).
+
+For the Bayesian persuasion model we assume : (C1) Markov chain induced by agent’s policy is ergodic. (C2) For every s ∈ S, g ∈ G and discount factor γ , discounted value function, V γρ (s, g ) < ∞
+
+(C3) Assuming a reference state (s0, g 0), there exists a non-negative L such that 
+
+−L ≤ hγ (s, g ) △
+
+= V γA (s, g ) − V γA (s0, g 0) ∀(s, g ), γ .(C4) There exists a M (s, g ) such that hγ (s, g ) ≤ M (s, g )
+
+for every (s, g ) and γ and an action a0 such that P 
+
+> s′∈S
+
+P (s, s ′, a 0) · M (s′, . ) < ∞.Also P 
+
+> s′∈S
+
+P (s, s ′, a ) · M (s′, . ) < ∞ for all (s, g ), a .Under (C1), (C2), (C3), (C4), any policy identified as a limit point in Lemma 3, qualifies as an average reward optimal policy [45]. This is established in the following as : 
+
+Lemma 4. Any stationary deterministic policy ρ∗ identified through Lemma 3 is average reward optimal. More precisely, there exists a constant R∗ 
+
+> A
+
+= lim γ→1(1 −γ)V γA (s, g ) for every 
+
+(s, g ) and VA(s, g ) with −L ≤ VA(s, g ) ≤ M (s, g ), such that the Bellman optimality equation              
+
+> R∗
+> A+VA(s, g ) = max
+> a∈A
+> 
+> ˜rA(s, a )+ (27)
+> X
+> s′∈S
+> P(s′|s, a )X
+> g∈G
+> X
+> θ∈Θ
+> μs′(θ′)·πs′,θ ′(g′)·VA(s′, g ′)
+> 
+
+is satisfied where the average reward under the optimal policy 
+
+ρ∗ is R∗
+
+> A
+
+.B. Discussion 
+
+(C1) ensures a unique stationary distribution and hence the average payoff does not depend on the initial state. (C2) requires that the optimal discounted reward is finite for every state and discount factor. (C3) assumes a reference state (e.g., (s0, g 0)) and a nonnegative function VA(s, g ) uniformly bounding the expected reward to reach it. (C4) states that for each state, there is an action keeping the expected next-stage value within a nonnegative bound M (s, g ). It also ensures that one-step transitions are uniformly bounded across all states and actions. These are largely observed in transmission scheduling, traffic routing and queuing models [46]. 
+
+C. Monotone best responses and incentive compatibility 
+
+We need to prove that under sufficient set of conditions, for MLR signaling strategy π, the monotone policy a∗(·, ·) from Theorem 3 is incentive compatible: for every s, g and every deviation from monotone action, a′ ∈ A ,
+
+QA(s, g, a ∗(s, g )) ≥ QA(s, g, a ′).
+
+The proof proceeds with the following steps: 14 
+
+1) Step 1: Posterior belief ordering from MLR: 
+
+Lemma 5. If π satisfies MLR ordering w.r.t g then 
+
+bs,g i (θ) <r bs,g j (θ), ∀gi ≤ gj
+
+Proof. MLR ordering of signal distributions implies that posterior belief of external states are ordered in the MLR sense as the signal increases. 
+
+πs,θ (gi) ≤r πs,θ (gj )
+
+πs,θ m (gi) · πs,θ n (gj ) ≥ πs,θ n (gi) · πs,θ m (gj )
+
+i.e.       
+
+> πs,θm (gi)·μs(θm)
+> P
+> θ∈Θπs,θ (gi)·μs(θ)
+> πs,θn (gi)·μs(θn)
+> P
+> θ∈Θπs,θ (gi)·μs(θ)
+
+≥          
+
+> πs,θm (gj)·μs(θm)
+> P
+> θ∈Θπs,θ (gj)·μs(θ)
+> πs,θn (gj)·μs(θn)
+> P
+> θ∈Θπs,θ (gj)·μs(θ)
+
+bs,g i (θm)
+
+bs,g i (θn) ≥ bs,g j (θm)
+
+bs,g j (θn) ,i.e. , b s,g i (θ) <r bs,g j (θ), ∀gi ≤ gj
+
+2) Step 2: Ordering of agent’s value function: 
+
+Lemma 6. When π satisfies MLR ordering with respect to 
+
+g then the normalized measure of Bayesian update, σ′(s) is first-order stochastically increasing in s, i.e., 
+
+σ′(si) ≤s σ′(sj ), ∀si ≤ sj .
+
+Proof. Fix any threshold ¯g ∈ G ,
+
+> G
+
+X
+
+> ¯g
+
+σ′
+
+> s
+
+(g) =
+
+> G
+
+X
+
+> ¯g
+
+X
+
+> θ∈Θ
+
+πs,θ (g) μs(θ)
+
+We have πs,θ (gi) ≤r πs,θ (gj ). Since μs is first-order stochastically increasing in s, it follows that 
+
+> G
+
+X
+
+> ¯g
+
+σ′ 
+
+> si
+
+(g) ≤
+
+> G
+
+X
+
+> ¯g
+
+σ′ 
+
+> sj
+
+(g) ∀si ≤ sj .
+
+Since the inequality holds for all ¯g, we conclude that 
+
+σ′(si) ≤s σ′(sj ). This result can be used to order the agent’s value function as illustrated below: 
+
+Lemma 7. Let VA(s, g ) be a increasing function w.r.t s and g,then ˜VA(si) ≤ ˜VA(sj ) where 
+
+˜VA(s) = X
+
+> g∈G
+
+X
+
+> θ∈Θ
+
+μs(θ) · πs,θ (g) · ˜VA(s, g )
+
+σ′(si) ≤s σ′(sj ), ∀si ≤ sj
+
+Since ˜VA(s, g ) is increasing in g then 
+
+X
+
+> g∈G
+
+σ′(si, g )· VA(si, g ) ≤ X
+
+> g∈G
+
+σ′(sj ,g )·VA(si, g ) (28) 
+
+X
+
+> g∈G
+
+σ′(si, g ) · VA(sj , g ) ≤ X
+
+> g∈G
+
+σ′(sj , g ) · VA(sj , g ) (29) 
+
+Assume VA(s, g ) is increasing in s and σ′(si, g ) > 0
+
+X
+
+> g∈G
+
+σ′(si, g )· VA(si, g ) ≤ X
+
+> g∈G
+
+σ′(si, g )·VA(sj , g ) (30) 
+
+Thus combining (28), (29) and (30) we have 
+
+X
+
+> g∈G
+
+σ′(si, g ) · VA(si, g ) ≤ X
+
+> g∈G
+
+σ′(sj , g ) · VA(sj , g )
+
+i.e. , ˜VA(si) ≤ ˜VA(sj )
+
+3) Step 3: Supermodularity of agent’s Q value function: 
+
+Under (B1) and (B2), (A3) and (A4), we have QA(s, g, a ) is supermodular in both (s, a ) and (g, a ). The proof is direct from [7] with the corresponding change while considering supermodularity in reward structures. 
+
+4) Step 4: Existence of monotonic policy of agent: Accord-ing to Theorem 3, since QA(s, g, a ) is supermodular in (s, a )
+
+and (g, a ), there exists an optimal policy that is monotonically increasing in the state and signal space. 
+
+5) Step 5: IC compatibility of MLR signaling strategy: The agent’s best response : a∗(s, g ) = arg max a∈A QA(s, g, a )
+
+can be chosen to be monotone in both s and g. Thus, given the MLR signaling strategy π, following the princi-pal’s recommendation is optimal and action deviation cannot yield a higher expected reward. Thus QA(s, g, a ∗(s, g )) ≥
+
+QA(s, g, a ′) for all action deviations from monotone responses 
+
+a′. This yields dynamic incentive compatibility : for every time 
+
+t and every realized (st, g t), a∗(st, g t) is the best response. Hence, the MLR signaling scheme with the corresponding monotone policy is incentive compatible for the agent. 
+
+D. Proof of Theorem 1 
+
+Let VP0 (s, g ) be the arbitrary initial value function. Then updated QP for the k + 1 th iteration is given as: 
+
+QPk+1 (s, θ, g ) = X
+
+> a∈A
+
+˜ρ(a|s, g ) · RP (s, θ, a )+ 
+
+X
+
+> a∈A
+
+˜ρ(a|s, g ) · X
+
+> s′∈S
+
+P (s, s ′, a ) X
+
+> θ′∈Θ
+
+μs′ (θ′) · VPk (s′, θ ′)
+
+In order to prove that QP (s, θ, g ) is supermodular in (s, g )
+
+for fixed θ and also supermodular in (θ, g ) for fixed s, using mathematical induction we proceed in two steps: 
+
+1) To prove value function is monotonically increasing in s
+
+and θ:Proof. Let us assume that VPk (s, θ ) is increasing in s and 
+
+θ. By Theorem 4, P 
+
+> θ′∈Θ
+
+μs′ (θ′) · VPk (s′, θ ′) is increasing in s′. By (A4), P (si, ., a ) ≤s P (sj , ., a ), ∀i ≤ j. Hence, P 
+
+> s′∈S
+
+P (s, s ′, a ) P 
+
+> θ′∈Θ
+
+μs′ (θ′)VPk (s′, θ ′) is increasing in s. Also RP (s, θ, a ) is increasing in s, θ and a. By (A6), 
+
+˜ρ(a|si, g ) ≤s ˜ρ(a|sj , g ), ∀i < j, P 
+
+> a∈A
+
+˜ρ(a|s, g ) · RP (s, θ, a )
+
+is increasing with s.Similarly P 
+
+> a∈A
+
+˜ρ(a|s, g ) · RP (s, θ, a ) is increasing with θ.Hence their sum, QPk (s, θ, g ) is also increasing in s and θ.
+
+VPk+1 (s, θ ) = P 
+
+> g∈G
+
+QPk (s, θ, g ) · πk(g|s, θ )
+
+Assuming πk(g|s, θ )is MLR with respect to s and θ,
+
+VPk+1 (s, θ ) is also increasing in s and θ. 
+
+Thus, the mathematical induction is complete.The optimal value function is the fixed point solution of the value iteration algorithm, and hence the optimal value function is monotone and increasing in s and θ is proved. 
+
+2) To prove that QP (s, θ, g ) is supermodular in (s, g ) and 
+
+(θ, g ):Proof. We have μsi (θ) ≤r μsj (θ), ∀i < j and VPk (s, θ, g ) is increasing in (s, θ ). Hence by Theorem 4, 
+
+˜VPk (s′) = P 
+
+> θ′∈Θ
+
+μs′ (θ′) · VPk (s′, θ ′) is increasing in s′.
+
+P (s, ., a ) is tail sum supermodular in s and a. Hence by Theorem 5, P 
+
+> s′∈S
+
+P (s, s ′, a ) · ˜VPk (s′) is supermodular in 
+
+(s, a ).Using (A6) and Theorem 5, we have 15 
+
+P 
+
+> a
+
+˜ρ(a|s, g ) · P 
+
+> s′∈S
+
+P (s, s ′, a ) P 
+
+> θ′∈Θ
+
+μs′ (θ′) · VPk (s′, θ ′) is supermodular in s and g.By (A2), RP (s, θ, a ) is supermodular in (s, a ) and (θ, a ).Again, we have P 
+
+> a
+
+˜ρ(a|s, g ) · RP (s, θ, a ) is supermodular in 
+
+s and g. Similarly, we have P 
+
+> a∈A
+
+˜ρ(a|s, g ) · RP (s, θ, a ) is supermodular in θ and g.Since the sum of supermodular function is supermodular we have, QPk+1 (s, θ, g ) = P 
+
+> a∈A
+
+˜ρ(a|s, g ) · RP (s, θ, a ) + P 
+
+> a∈A
+
+˜ρ(a|s, g ) · P 
+
+> s′∈S
+
+P (s, s ′, a ) P 
+
+> θ′∈Θ
+
+μs′ (θ′) · VPk (s′, θ ′)
+
+is supermodular in (s, θ ) and g. Hence, by mathematical induction, the Q function of the principal is supermodular in 
+
+(s, g ) and (θ, g ).
+
+E. Discussion of assumptions for supermodular Q function 
+
+These assumptions are widely observed in transmission control, sensor scheduling, and traffic routing applications, such as prioritizing transmission in good channels, activating sensors when uncertainty is high [46], [7]. To illustrate when these assumptions are applicable, we present a representative example of lane-based Bayesian persuasive driving detailed in Section VI. This involves a principal, i.e., lead vehicle, and an agent, i.e., vehicle connected for selection of low speed and high speed lane. The state refers to the speed of the vehicle, and the external state indicates the extent of congestion-free traffic.  
+
+> •
+
+(A1) ensures that there is an increase in reward of the principal at higher speeds, higher congestion-free traffic, and selection of high-speed lanes. It formalizes the intuition that travel rewards increase with higher vehicle speed (state), congestion free traffic (external state), and lane selection (action). Related works [47] and [48] also exploit monotonic reward structures to rank paths in dynamic traffic routing.  
+
+> •
+
+(A2) assures the supermodular reward for the principal, which indicates the increased reward for higher speeds and higher congestion-free traffic at higher actions. It ensures the marginal benefit of taking higher action at higher states and external states. It plays a key role in numerous applications, including traffic routing and resource allocation problems such as joint replenishment and inventory routing [47], determining optimal loca-tions for mobile recharging stations in unmanned vehicle networks [49], and tasks like coverage maximization, adaptive ranking, and routing [50].  
+
+> •
+
+(A3) indicates the monotonic correlation between state and external state, which captures the correlation between speed and congestion-free traffic.  
+
+> •
+
+The higher probability of transitioning to more favourable states from higher states and actions are captured in (A4) and (A5). This tendency to remain at higher speeds as current speed increases— under stochastic dominance over states—is commonly modelled in predictive control frameworks [51], [52]. Moreover transition model in [39] similarly reflects the higher likelihood of reaching greater speeds associated with different speed lanes.  
+
+> •
+
+(A6) ensures that the agent’s policy is monotonically increasing with respect to state and signal spaces [7]. In other words, higher states and signal more effectively favour higher action, which also helps in faster conver-gence while considering a monotonic agent. 
+
+F. Proof of Lemma 1: Softmax policy is MLR under supermodularity 
+
+Proof. We have π(g | s, θ ) = exp 
+
+ QP (s,θ,g )/τ 
+
+ 
+
+> Z(s,θ )
+
+, where Z(s, θ )
+
+is P 
+
+> g′∈G
+
+exp  QP (s, θ, g ′)/τ . By supermodularity, 
+
+QP (s, ¯g) − QP (s, g ) ≤ QP (¯ s, ¯g) − QP (¯ s, g ), and similarly with 
+
+θ replacing s. We need to prove that π is MLR in (s, g ) and in (θ, g ). , i.e. for any ¯s ≥ s and any g1 ≤ g2,
+
+π(g1 | ¯s, θ ) π(g2 | s, θ ) ≤ π(g1 | s, θ ) π(g2 | ¯s, θ ), and likewise with ¯θ ≥ θ.Fix θ and let ¯s ≥ s. For any g1 ≤ g2, write the two products using the softmax form: 
+
+π(g1 | ¯s, θ )π(g2 | s, θ ) = e(Q(¯ s,θ,g 1)+ Q(s,θ,g 2)) /τ 
+
+Z(¯ s, θ )Z(s, θ ) ,π(g1 | s, θ )π(g2 | ¯s, θ ) = e(Q(s,θ,g 1)+ Q(¯ s,θ,g 2)) /τ 
+
+Z(s, θ )Z(¯ s, θ ) .
+
+The normalizers cancel, so the desired inequality is equivalent to Q(s, θ, g 2)−Q(s, θ, g 1) ≤ Q(¯ s, θ, g 2)−Q(¯ s, θ, g 1), which is exactly the assumed supermodularity with ¯g = g2 and g = g1.Similarly, with s fixed and ¯θ ≥ θ proves MLR in (θ, g ).
+
+G. Proof of Lemma 2 
+
+Proof. The stationary distribution satisfies the balance equa-tion: d(s′; σ) = P 
+
+> s∈S
+
+d(s; σ)P (s′ | s; σ). Taking the gradient with respect to σ, and then multiplying both sides with ˜VA(s′)
+
+and taking the sum we get 
+
+X
+
+> s∈S
+
+∇σ d(s′; σ) · ˜VA(s′) = X
+
+> s∈S
+
+X
+
+> s′∈S
+
+∇σ d(s; σ)P (s′ | s; σ) · ˜VA(s′)+ 
+
+X
+
+> s∈S
+
+X
+
+> s′∈S
+
+d(s; σ)∇σ P (s′ | s; σ) · ˜VA(s′)
+
+where ˜VA(s′) = P
+
+> g′∈G
+
+P 
+
+> θ′∈Θ
+
+μs′ (θ′) · πs′,θ ′ (g′) · VA(s′, g ′)
+
+We have, ˜rA(s) − ˜RA = ˜VA(s) − P 
+
+> s′∈S
+
+P (s′ | s) ˜VA(s′)
+
+Therefore, X
+
+> s∈S
+
+∇d(s) · ˜rA(s) − X
+
+> s∈S
+
+∇d(s) · ˜RA =
+
+X
+
+> s∈S
+
+∇d(s) · ˜VA(s) − X
+
+> s∈S
+
+∇d(s) · X P (s′ | s) ˜VA(s′)
+
+Also, ˜RA(σ) = X
+
+> s∈S
+
+d(s; σ)˜ rA(s), and hence 
+
+∇σ ˜RA = X
+
+> s∈S
+
+d(s; σ) · ∇ σ ˜rA(s) + X
+
+> s∈S
+
+X
+
+> s′∈S
+
+d(s; σ)∇σ P (s′ | s; σ) · ˜VA(s′)
+
+REFERENCES [1] Yan-Tao Zhang, Mao-Bin Hu, Yu-Zhang Chen, and Cong-Ling Shi. Co-operative platoon forming strategy for connected autonomous vehicles in mixed traffic flow. Physica A: Statistical Mechanics and its Applications ,623:128828, 2023. [2] Jiarui Gan, Rupak Majumdar, Goran Radanovic, and Adish Singla. Bayesian persuasion in sequential decision-making. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 36, 2022. [3] Yishay Mansour, Aleksandrs Slivkins, Vasilis Syrgkanis, and Zhi-wei Steven Wu. Bayesian exploration: Incentivizing exploration in Bayesian games. Operations Research , 70(2):1105–1127, 2022. [4] Raphael Boleslavsky and Christopher Cotton. Grading standards and education quality. American Economic Journal: Microeconomics ,7(2):248–279, 2015. [5] David Lingenbrink and Krishnamurthy Iyer. Optimal signaling mecha-nisms in unobservable queues. Operations research , 67(5):1397–1416, 2019. 16 
+
+[6] Aibai Ma and Li Xiao. When the line says more: Optimal signaling in queues with congestion-driven expectations. International Applied Mathematics, Modelling and Simulation Conference , 2025. [7] Merlin Paul and Anup Aprem. Monotonic agent policies in dynamic bayesian persuasion: Application to intelligent traffic routing. TechRxiv ,2024. [8] Itay Goldstein and Yaron Leitner. Stress tests and information disclosure. 
+
+Journal of Economic Theory , 177:34–69, 2018. [9] Jibang Wu, Zixuan Zhang, Zhe Feng, Zhaoran Wang, Zhuoran Yang, Michael I Jordan, and Haifeng Xu. Sequential information design: Markov persuasion process and its efficient reinforcement learning. 
+
+arXiv:2202.10678 , 2022. [10] Martino Bernasconi, Matteo Castiglioni, Alberto Marchesi, Nicola Gatti, and Francesco Trov` o. Sequential information design: Learning to persuade in the dark. Advances in Neural Information Processing Systems , 35:15917–15928, 2022. [11] Cheng Peng and Masayoshi Tomizuka. Bayesian persuasive driving. In 
+
+2019 American Control Conference (ACC) . IEEE, 2019. [12] Minming Yang, Xuesong Wang, and Mohammed Quddus. Examining lane change gap acceptance, duration and impact using naturalistic driving data. Transportation research part C: emerging technologies ,104:317–331, 2019. [13] Jingyuan Zhao, Yuyan Wu, Rui Deng, Susu Xu, Jinpeng Gao, and Andrew Burke. A survey of autonomous driving from a deep learning perspective. ACM Computing Surveys , 57(10):1–60, 2025. [14] Cheng Wei, Fei Hui, and Asad J Khattak. Driver lane-changing behavior prediction based on deep learning. Journal of advanced transportation ,(1):6676092, 2021. [15] Ali Alizadeh, Majid Moghadam, Yunus Bicer, Nazim Kemal Ure, Ugur Yavas, and Can Kurtulus. Automated lane change decision making using deep reinforcement learning in dynamic and uncertain highway environment. In Proc. Intelligent Transportation Systems Conference (ITSC), 1399–1404 . IEEE, 2019. [16] Yixuan Liu and Andrew B Whinston. Efficient real-time routing for autonomous vehicles through Bayes correlated equilibrium: An information design framework. Information Economics and Policy ,47:14–26, 2019. [17] Jeffrey C Ely. Beeps. American Economic Review , 107(1):31–53, 2017. [18] Martino Bernasconi, Matteo Castiglioni, Alberto Marchesi, and Mirco Mutti. Persuading farsighted receivers in MDPs: the power of honesty. 
+
+Advances in Neural Information Processing Systems , 36:14987–15014, 2023. [19] Martino Bernasconi, Matteo Castiglioni, Alberto Marchesi, Nicola Gatti, and Francesco Trov` o. Online learning in sequential bayesian persuasion: Handling unknown priors. Artificial Intelligence , 338:104245, 2025. [20] Vikram Krishnamurthy, Anup Aprem, and Sujay Bhatt. Multiple stopping time POMDPs: Structural results & application in interactive advertising on social media. Automatica , 95:385–398, 2018. [21] Shuang Wu, Kemi Ding, Peng Cheng, and Ling Shi. Optimal scheduling of multiple sensors over lossy and bandwidth limited channels. IEEE Transactions on Control of Network Systems , 7(3):1188–1200, 2020. [22] Anup Aprem, Chandra R Murthy, and Neelesh B Mehta. Transmit power control policies for energy harvesting sensors with retransmissions. IEEE Journal of Selected Topics in Signal Processing , 7(5):895–906, 2013. [23] Minh Hanh Ngo and Vikram Krishnamurthy. Optimality of threshold policies for transmission scheduling in correlated fading channels. IEEE Transactions on Communications , 57(8):2474–2483, 2009. [24] Dejan V Djonin and Vikram Krishnamurthy. Q-learning algorithms for constrained Markov decision processes with randomized monotone policies: Application to MIMO transmission control. IEEE Transactions on Signal Processing , 55(5):2170–2181, 2007. [25] Shaddin Dughmi and Haifeng Xu. Algorithmic Bayesian persuasion. In 
+
+Proceedings of the Forty-Eighth Annual ACM Symposium on Theory of Computing, 412–425 , 2016. [26] Steven J Brams and Mehmet Ismail. Farsightedness in games: Stabilizing cooperation in international conflict. Available at SSRN 3313025 , 2019. [27] Mohsen Kamrani, Aravinda Ramakrishnan Srinivasan, Subhadeep Chakraborty, and Asad J Khattak. Applying Markov decision process to understand driving decisions using basic safety messages data. Trans-portation Research Part C: Emerging Technologies , 115:102642, 2020. [28] Martin L Puterman. Markov Decision Processes. Handbooks in operations research and management science , 2:331–434, 1990. [29] Yue Lin, Wenhao Li, Hongyuan Zha, and Baoxiang Wang. Information design in multi-agent reinforcement learning. Advances in Neural Information Processing Systems , 36:25584–25597, 2023. [30] Yiling Chen and Tao Lin. Persuading a behavioral agent: Approximately best responding and learning. arXiv preprint , 2023. [31] Vikram Krishnamurthy. Partially observed Markov decision processes .Cambridge university press, 2016. [32] Peter Marbach and John N Tsitsiklis. Simulation-based optimization of Markov reward processes. IEEE Transactions on Automatic Control ,46(2):191–209, 2001. [33] Antoine Saur´ e, Jonathan Patrick, and Martin L Puterman. Simulation-based approximate policy iteration with generalized logistic functions. 
+
+INFORMS Journal on Computing , 27(3):579–595, 2015. [34] Xiangyu Yang, Jiaqiao Hu, and Jian-Qiang Hu. Relative Q-learning for average-reward Markov decision processes with continuous states. IEEE Transactions on Automatic Control , 2024. [35] Sanmay Das, Emir Kamenica, and Renee Mirka. Reducing congestion through information design. In Proc. 55th Annual Allerton Conference on Communication, Control and Computing (Allerton), 1279–1284 .IEEE, 2017. [36] Hongguang Pan, Xinyu Yu, Lei Gao, Yongfu Li, and Wei Hua. Model predictive control-based multivariable controller for traffic flows in automated freeway systems. IEEE Intelligent Transportation Systems Magazine , 15(2):149–161, 2022. [37] Kun He, Zhongzhi Xu, Pu Wang, Lianbo Deng, and Lai Tu. Congestion avoidance routing based on large-scale social signals. IEEE Transactions on Intelligent Transportation Systems , 17(9):2613–2626, 2015. [38] Mohsen Ramezani and Nikolas Geroliminis. On the estimation of arterial route travel time distribution with Markov chains. Transportation Research Part B: Methodological , 46(10):1576–1590, 2012. [39] Avinash Prabu, Niranjan Ravi, and Lingxi Li. A novel method for lane-change maneuver in urban driving using predictive Markov decision process. arXiv preprint , 2022. [40] Lukas Hewing, Kim P Wabersich, Marcel Menner, and Melanie N Zeilinger. Learning-based model predictive control: Toward safe learning in control. Annual Review of Control, Robotics, and Autonomous Systems , 3(1):269–296, 2020. [41] Yihuan Zhang, Qin Lin, Jun Wang, Sicco Verwer, and John MDolan. Lane-change intention estimation for car-following control in autonomous driving. IEEE Transactions on Intelligent Vehicles ,3(3):276–286, 2018. [42] Nikki Levering, Marko Boon, Michel Mandjes, and Rudesindo N´ u˜ nez-Queija. A framework for efficient dynamic routing under stochastically varying conditions. Transportation research part B: methodological ,160:97–124, 2022. [43] Marlin W. Ulmer, Dirk C. Mattfeld, and Felix K¨ oster. Budgeting time for dynamic vehicle routing with stochastic customer requests. 
+
+Transportation Science , 52(1):20–37, 2018. [44] David Lingenbrink and Krishnamurthy Iyer. Optimal signaling mecha-nisms in unobservable queues. Available at SSRN 2964093 , 2018. [45] Linn I Sennott. Average cost optimal stationary policies in infinite state Markov decision processes with unbounded costs. Operations Research ,37(4):626–633, 1989. [46] Minh Hanh Ngo and Vikram Krishnamurthy. Monotonicity of con-strained optimal transmission policies in correlated fading channels with ARQ. IEEE Transactions on Signal Processing , 58(1):438–451, 2009. [47] Viswanath Nagarajan and Cong Shi. Approximation algorithms for inventory problems with submodular or routing costs. Mathematical Programming , 160:225–244, 2016. [48] Ronald Prescott Loui. Optimal paths in graphs with stochastic or multidimensional weights. Communications of the ACM , 26(9):670– 676, 1983. [49] Guangyao Shi and Pratap Tokekar. Decision-oriented learning with differentiable submodular maximization for vehicle routing problem. In 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2023. [50] Fatemeh Navidi, Prabhanjan Kambadur, and Viswanath Nagarajan. Adaptive submodular ranking and routing. Operations Research ,68(3):856–877, 2020. [51] Chenjuan Guo, Ronghui Xu, Bin Yang, Ye Yuan, Tung Kieu, Yan Zhao, and Christian S Jensen. Efficient stochastic routing in path-centric uncertain road networks. Proceedings of the VLDB Endowment ,17(11):2893–2905, 2024. [52] Kuan Liu, Zachary Asher, Xun Gong, Mike Huang, and Ilya Kol-manovsky. Vehicle velocity prediction and energy management strategy part 1: Deterministic and stochastic vehicle velocity prediction using machine learning. Technical report, SAE Technical Paper, 2019.
