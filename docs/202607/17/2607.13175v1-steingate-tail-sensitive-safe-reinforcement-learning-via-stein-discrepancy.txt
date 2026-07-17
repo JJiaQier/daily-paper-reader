@@ -1,0 +1,1959 @@
+Title: SteinGate: Tail-Sensitive Safe Reinforcement Learning via Stein Discrepancy
+
+URL Source: https://arxiv.org/pdf/2607.13175v1
+
+Published Time: Thu, 16 Jul 2026 00:32:22 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# SteinGate: Tail-Sensitive Safe Reinforcement Learning via Stein Discrepancy 
+
+Yassine Chemingui *1 Chenhua Fan ∗1 Honghao Wei 1 Janardhan Rao Doppa 11School of Electrical Engineering and Computer Science, Washington State University, Pullman, Washington, USA 
+
+## Abstract 
+
+Safe reinforcement learning typically enforces safety by bounding expected cumulative costs, a criterion that often fails to detect rare but catas-trophic tail events. To overcome these limitations, this paper introduces SteinGate , a boundary-aware distributional safety certificate that replaces fragile tail fitting with a robust consistency check using Kernelized Stein Discrepancy while accounting for boundary atoms induced by clipped costs. Stein-Gate evaluates whether observed policy rollout costs remain consistent with a safe reference dis-tribution, providing a non-parametric safety certifi-cate. This certificate is used to dynamically adapt the learning regime: favoring reward-improving policy updates when rollouts remain consistent with the safe reference and switching to recov-ery behavior when the cost tail deviates. Experi-ments on continuous-control benchmarks demon-strate that SteinGate significantly reduces both the frequency and severity of constraint violations dur-ing training while maintaining competitive returns relative to state-of-the-art baselines. 
+
+## 1 INTRODUCTION 
+
+Safe reinforcement learning (RL) aims to deploy au-tonomous agents in unknown environments where explo-ration must be restricted due to critical physical or opera-tional constraints. In high-stakes applications such as au-tonomous robots, medical systems, and industrial control, the inherent trial-and-error nature of an RL agent becomes a significant liability. In these domains, the cost of a single catastrophic failure can outweigh the benefits of thousands of successful runs [Zhang et al., 2020a, Yu et al., 2021]. Consequently, the objective of Safe RL must move beyond 
+
+> *Equal contribution
+
+simple reward maximization to ensure that safety violations are not merely penalized, but rigorously prevented. Safe RL problems are formulated as Constrained Markov Decision Processes [Altman, 1999] and safety is typically enforced in an average manner: the expected cumulative cost is required to be controlled below a given threshold [Altman, 1999, Achiam et al., 2017]. While computation-ally convenient, these methods suffer from a fundamental “expectation myopia”. Regulating only the average of the cost distribution allows a policy to satisfy safety limits by balancing rare, catastrophic failures against a high volume of safe episodes. This risk-masking behavior is a critical flaw; a policy may appear safe on paper while remaining dangerously prone to extreme tail events that standard safety mechanisms ignore. This “expectation myopia” has moti-vated a growing interest in risk-sensitive formulations of Safe RL, including chance constraints and coherent risk measures such as Value-at-Risk (VaR) and conditional VaR [Sarykalin et al., 2008, Chow et al., 2018]. More recently, extreme value theory has been applied to model the behavior of heavy-tailed distributions directly [Gao et al., 2025, NS et al., 2024]. Despite their theoretical appeal, enforcing these constraints in practice is challenging because rare-event estimation is intrinsically unstable in online RL. Policy updates continu-ously shift the rollout distribution, while trajectory correla-tions reduce the effective sample size [Corrado and Hanna, 2026]. Moreover, episodic training, termination rules, and cost clipping often induce structural artifacts, such as mass accumulation near zero cost or at violation thresholds, that complicate classical tail modeling assumptions. As a result, direct tail estimation can exhibit high variance and brittle-ness, leading to oscillations between over-conservatism and catastrophic failure during training. This paper proposes a novel and fundamentally different perspective for tail-sensitive safe RL: rather than explicitly modeling the tail of the cost distribution, we certify tail risk via distributional comparison . Our key idea is to upper-arXiv:2607.13175v1 [cs.LG] 14 Jul 2026 bound a tail-sensitive risk functional [Rockafellar et al., 2000] under the current policy by comparing its rollout cost distribution to a designated safe reference distribution [Bellemare et al., 2017]. The reference distribution specifies acceptable cost behavior under the desired safety budget and serves as the target of distributional certification. Intuitively, if the current policy’s distribution remains close to a certified safe reference, then its tail risk is provably bounded. This converts safety monitoring into a problem of measuring distributional deviation under non-stationary, sample-based conditions. To theoretically apply this idea to Safe RL, we leverage Stein’s method, a functional-analytic tool for bounding the difference between expectations under an unknown distri-bution and a target reference [Stein, 1972, Gorham and Mackey, 2015]. Specifically, we utilize the Kernelized Stein Discrepancy (KSD) [Liu et al., 2016] to quantify the diver-gence between the agent’s current rollout distribution qπ
+
+for policy π and a pre-certified safe baseline. KSD uniquely fits our needs for safe RL because it avoids the need for ex-plicit density estimation. While RL policy rollouts provide an abundance of cost samples, the underlying rollout distri-bution is generally implicit and intractable. KSD bypasses this bottleneck by comparing empirical samples from qπ
+
+against the score function ( ∇ log p) of a chosen reference distribution p.By combining Stein’s method with a tail-sensitive test func-tion, we are able to derive a computable upper bound on the probability of constraint violations. This bound can serve as a rigorous distributional safety certificate, allowing for real-time monitoring of the policy’s tail risk. Unlike stan-dard expected costs, this certificate provides the agent with a formal guarantee that its behavior remains aligned with the safe reference, preventing hazardous distributional shifts before catastrophic failure occurs. We integrate this distributional certificate into the policy optimization loop via a mechanism we call SteinGate . Stan-dard Lagrangian methods incorporate safety as a “soft” penalty, often leading to training instabilities [Stooke et al., 2020, Spoor et al., 2025] or situations in which the reward objective can effectively overpower the constraint when cost penalties are not sufficiently enforced (i.e., constraint trade-offs governed by the Lagrange multiplier) [Spoor et al., 2025]. In contrast, SteinGate eliminates this risk by using the certified upper bound as a bang-bang controller: 1. Reward-Maximization Mode: Optimization proceeds only when the certificate verifies that the tail risk re-mains within the prescribed budget. 2. Safety-Recovery Mode: If the bound is violated, the algorithm immediately switches to prioritize cost re-duction, ignoring reward gradients entirely. Our approach ensures that the agent never sacrifices safety for high rewards; it avoids the instability of traditional meth-ods that rely on tuning safety penalties by balancing the trade-off between reward and cost. We further prove that, under a trust-region condition on the margined policy up-date, each improvement step preserves the prescribed tail-risk budget with high probability. Our contributions are summarized as follows: • Boundary-Aware Hybrid Stein Certificate: We derive a tail-risk upper bound for normalized clipped cost distri-butions in Safe RL. Our framework introduces a hybrid discrete-continuous reference model and split discrep-ancy that explicitly accounts for boundary atoms in-duced by cost clipping, enabling rigorous distributional certification without parametric tail fitting. • SteinGate Mechanism and Safety Guarantees: We in-tegrate this certificate into a lexicographic switching controller that enforces hard safety priority. We provide concentration results for the empirical certificate and establish a trust-region condition under which policy updates preserve the prescribed risk budget with high probability. • Empirical Stability and Performance: On continuous-control benchmarks, SteinGate significantly reduces vi-olation rates and improves training stability compared to expectation-based and tail-modeling baselines, while maintaining competitive reward performance. Abla-tions further show stable behavior across cost thresh-olds, sample sizes, and reasonable reference choices. 
+
+## 2 PROBLEM SETUP 
+
+Safe RL problems are typically formulated as a finite-horizon Constrained Markov Decision Process (CMDP). A CMDP is defined by the tuple M = ( S, A, P, r, c, H, μ 0),where S and A represent the state and action spaces, 
+
+P (·| s, a ) denotes the stochastic transition kernel, r(s, a )
+
+is the reward function, c(s, a ) ≥ 0 is the cost function, H
+
+is the horizon, and μ0 is the initial state distribution. For a stochastic policy π(· | s), we consider the induced tra-jectory τ = ( s0, a 0, . . . , s H−1, a H−1, s H ), where s0 ∼ μ0,
+
+at ∼ π(·| st), and st+1 ∼ P (· | st, a t). The expected cumu-lative reward, or reward value function, is defined as: 
+
+V πR (s) = Eπ
+
+"H−1X
+
+> t=0
+
+r(st, a t)|s0 = s
+
+#
+
+. (1) The cumulative episode cost for a specific trajectory τ is: 
+
+C(τ ) := 
+
+> H−1
+
+X
+
+> t=0
+
+c(st, a t). (2) Given a predefined cost limit d > 0, the standard CMDP objective is to maximize the expected cumulative reward subject to an expectation-based safety/cost constraint: 
+
+max  
+
+> π∈Π
+
+Es∼μ0 [V πR (s)] s.t. Eτ ∼π [C(τ )] ≤ d, (3) where Π denotes the set of feasible policies. 
+
+Beyond Expected Costs: Tail-Sensitive Constraints. In many safety-critical applications, the common constraint on expected cost is insufficient. This is because expectation for-mulation allows a policy to meet safety limits on average by balancing rare, catastrophic failures against a large number of safe runs. To prevent these unacceptable risks, we define the policy risk Cπh (μ0) of a policy π as the expected value of a smooth surrogate function h:
+
+Cπh (μ0) := Eτ ∼π [h(C(τ ))] = Eπ
+
+"
+
+h
+
+> H−1
+
+X
+
+> t=0
+
+c(st, a t)
+
+!# 
+
+.
+
+(4) We denote Cπh (μ0) as Cπh and Eτ ∼π [h(C(τ ))] as 
+
+EC∼qπ [h(C)] , where qπ is the distribution of cumulative costs of trajectories induced by a policy π to simplify the notation. In the following sections, for a given policy, we also use C to denote C(τ ), which is a random variable with-out ambiguity. The surrogate function h here serves as a risk-shaping operator that transforms the cumulative costs into a specific safety metric and provides the flexibility to define different safety objectives. Specifically, h can be im-plemented as a soft threshold to serve as a smooth proxy for violation probability [Cao and Zavala, 2020], or as a barrier penalty (e.g., an exponential or power function) to heavily discourage trajectories that approach high-cost regions [Mi-hatsch and Neuneier, 2002]. It can also be modeled as a survival function to map cost accumulation to a bounded risk of failure [Wang et al., 2023]. Ultimately, this flexibility allows the risk functional Cπh to target specific portions of the cost distribution, providing a more precise safety signal than the standard expected cost safety. Therefore, in this paper, we consider a more general con-strained RL objective: 
+
+max  
+
+> π∈Π
+
+Es∼μ0 [V πR (s)] s.t. Cπh (μ0) ≤ ε. (5) 
+
+## 3 STEIN-BASED DISTRIBUTIONAL CERTIFICATION 
+
+When solving the optimization problem in Equation (5), directly estimating the risk function Cπh through Monte Carlo rollouts is often unreliable, particularly in rare-event regimes. When safety violations are infrequent, the empir-ical estimate of EC∼qπ [h(C)] suffers from high variance. This instability is further aggravated by the non-stationary distributional shifts that occur during online policy updating, making the estimate too brittle for reliable safety guarantees. Below, we provide the necessary background on Stein’s method and describe how to apply it to address this chal-lenge. 
+
+Stein’s Method and Stein Discrepancies. Quantifying the discrepancy between a policy’s rollout distribution qπ and a reference p is inherently difficult, as both distributions are typically implicit and lack a closed-form density. Stein’s method [Stein, 1972] provides a principled way to compare a (generally implicit) rollout distribution qπ to a reference distribution p by characterizing p through a linear opera-tor. Let p be a target distribution on an open set C ⊆ Rd
+
+with continuously differentiable density and score function 
+
+sp(x) := ∇c log p(x). A Stein operator Ap is any linear operator satisfying the Stein identity EC∼p[( Apf )( C)] = 0 
+
+for all functions f in a suitable class where C is a random variable. A canonical choice for absolutely continuous tar-gets is the Langevin–Stein operator [Gorham and Mackey, 2015] 
+
+(Apf )( c) := ⟨sp(c), f (c)⟩ + ∇· f (c), (6) where f : Rd → Rd is vector-valued and ∇· f denotes the divergence [Barbour, 1990]. For any given test function h
+
+in an exceedance function class H, the Stein equation seeks a solution fh such that: 
+
+(Apfh)( C) = h(C) − EC∼p[h(C)] . (7) Thus, we are able to obtain a Stein-type upper bound in the following lemma, which establishes a core safety certificate. 
+
+It allows us to bound the unknown risk by measuring how much the current policy drifts from a given baseline without 
+
+knowing the rollout distribution qπ .
+
+Lemma 1. Let p be a target distribution and q be a pro-posal distribution on C. Let h : C → R be a test func-tion of interest. Suppose there exists a solution fh to the Stein Equation Apfh(C) = h(C) − EC∼p[h(C)] such that 
+
+fh ∈ F and its norm is bounded by a constant B(h, p ), i.e., 
+
+∥fh∥F ≤ B(h, p ). Then, the expectation of h under qπ is bounded by: 
+
+EC∼qπ [h(C)] ≤ EC∼p[h(C)] + B(h, p ) · SD (qπ ∥p),
+
+(8) 
+
+where SD (qπ ∥p) := sup  
+
+> fh∈F ,∥fh∥F≤1
+
+EC∼qπ
+
+(Apfh)( C) .
+
+We can observe that this certificate is one-sided and mono-tone: as the policy drifts further from the safe reference (increasing the discrepancy), the upper bound on risk grows accordingly. The proof is in Section B.1 in the Appendix. 
+
+Applying Stein Certificate in Safe RL. The Stein certifi-cate in Equation (8) provides a rigorous approach for apply-ing Stein’s method to solve Safe RL problems, specifically for controlling hazardous distributional shifts, a severe is-sue where an evolving online policy drifts into unsafe cost regimes [Achiam et al., 2017]. In complex environments, standard monitoring tools are often impractical because the rollout distribution qπ induced by the current policy π is implicit. While we can generate cost samples via simulation, we lack an explicit formula for its density. Consequently, traditional metrics such as the Kullback-Leibler (KL) di-vergence become computationally expensive or unstable, as they typically require density ratios or auxiliary density estimation. Stein’s method bypasses these bottlenecks. It only requires the score function ( ∇ log p) of the designated safe reference p and empirical samples from the current policy. By leveraging this property, we establish a differ-entiable and sample-efficient mechanism for constraining policy behavior. This approach ensures that the agent’s cost distribution remains aligned with safety requirements with-out ever requiring the calculation of normalizing constants or explicit probability densities. 
+
+Practical Instantiation via Kernelized Stein Discrep-ancy. While the Stein certificate is theoretically sound, the supremum in Lemma 1 is generally intractable. To ob-tain a computable metric, we restrict F to the unit ball of a Reproducing Kernel Hilbert Space (RKHS) with base kernel k(·, ·). This yields the Kernelized Stein Discrep-ancy (KSD), defined in its squared population form as: 
+
+KSD 2(qπ ∥p) = EC,C ′∼qπ
+
+up(C, C ′), where up(·, ·) is the induced Stein kernel determined by p and k. In prac-tice, given m rollout samples {ci} ∼ qπ , we employ the consistent V-statistic estimator [Chwialkowski et al., 2016]: 
+
+[KSD 2 
+
+> V
+
+:= 1
+
+> m2
+
+Pmi=1 
+
+Pmj=1 up(ci, c j ). By monitoring this discrepancy from a safe reference p, we can upper-bound tail-sensitive risk without requiring parametric modeling or explicit density estimation. It is useful to distinguish the role of Stein discrepancy from the source of tail sensitivity in our framework. The Stein dis-crepancy is a general distributional discrepancy: it measures how far the rollout-induced cost distribution deviates from a designated reference distribution through samples from ( qπ )and the score function of ( p). Its main computational advan-tage in online RL is that it avoids both density estimation for the implicit rollout distribution and parametric fitting of rare exceedance events, which are unstable under non-stationary policy updates. Tail sensitivity enters through the certificate in Lemma 1 by choosing a risk-shaping test function (h) that emphasizes high-cost events and by comparing rollouts to a reference distribution that encodes admissible safe behavior. Thus, KSD provides a tractable mechanism for detecting distributional drift, while the safety semantics of the cer-tificate are determined by the choice of (h), the reference distribution, and the boundary-aware treatment of clipped costs described in the next section. 
+
+## 4 STEINGATE FRAMEWORK 
+
+While the Stein certificate provides a principled upper bound on tail risk, its application to RL must account for the com-
+
+Figure 1: Hybrid cost distribution over normalized clipped cumulative cost C ∈ [0 , 1] : a safe atom at C = 0 , a violation atom at C = 1 , and a continuous interior density on (0 , 1) .pact support of cost distributions. In Safe RL problems, cumulative costs are typically bounded, often exhibiting sig-nificant probability mass at the boundaries, such as clusters of zero-cost “perfect” episodes. More importantly, safety specifications are almost always defined relative to a fixed threshold d. This creates a saturation of risk: once the bud-get is exceeded, the exact magnitude of the cost becomes secondary to the fact of the violation itself. To align our mathematical framework with this reality, we utilize a threshold-normalized cost representation. By clip-ping and scaling costs to the interval [0 , 1] , we ensure that all budget exceedances are treated as uniformly catastrophic events. This mapping ensures that the distributional certifi-cate remains practically relevant by focusing the “sensitiv-ity” of the Stein operator on the region where the budget is consumed, while maintaining the mathematical consistency required for a bounded function class. 
+
+4.1 BOUNDARY ATOMS 
+
+To encode budget exceedances, we define the normalized clipped cumulative cost ˜C(τ ) = min {C(τ )/d, 1}, then 
+
+˜C(τ ) ∈ [0 , 1] normalized and the boundary value ˜C(τ ) = 1 
+
+aggregates all budget violations into a single event. While this representation is ideal for defining a stable reference on 
+
+[0 , 1] , it creates a structural mismatch with standard Stein machinery. Specifically, the rollout distribution of ˜C(τ ) is often a mixed distribution. It frequently contains discrete probability mass (atoms) at the boundaries, a “safe” atom at 
+
+˜C(τ ) = 0 and a “violation” atom at ˜C(τ ) = 1 with a contin-uous component on the interior (0 , 1) as shown in Figure 1. This structure conflicts with the standard Langevin-Stein op-erator, which assumes a smooth density on an open domain. The threshold-normalized setting presents two challenges. 
+
+1) Boundary Atoms: Stein identities rely on integration by parts, which requires boundary terms to vanish. However, clipping induces discrete probability mass (atoms) at {0, 1},which standard continuous operators fail to capture with spikes at the boundaries. 2) Endpoint Singularity: Score functions for common interior references (e.g., Beta distribu-tions) often become singular near the boundaries. This can amplify variance and cause numerical instability in KSD estimators. To resolve these issues, we propose a hybrid Stein operator that explicitly accounts for boundary mass while maintaining the stability of the interior reference. 
+
+4.2 HYBRID REFERENCE AND DISCREPANCY Safe reference. To align with the mixed structure of threshold-normalized and clipped costs, we model admis-sible behavior using a hybrid reference distribution that explicitly accounts for boundary atoms: 
+
+pref = a⋆ 
+
+> 0
+
+δ0 + a⋆ 
+
+> 1
+
+δ1 +  1 − a⋆ 
+
+> 0
+
+− a⋆
+
+> 1
+
+ pint , (9) where δ0, δ 1 denote point masses at the boundaries, a⋆
+
+> 0
+
+, a ⋆ 
+
+> 1
+
+∈
+
+[0 , 1] are the reference boundary masses, and pint is a smooth interior reference density on (0 , 1) (e.g., a Beta distribution). The reference distribution pref should be inter-preted as a safety specification rather than as an estimate of the unknown cost distribution induced by an optimal safe policy. The optimal safe rollout distribution depends on the environment dynamics and the learned policy, and is gen-erally not available a priori. The role of pref is instead to encode admissible behavior in the normalized cost space. The boundary masses a⋆ 
+
+> 0
+
+and a⋆ 
+
+> 1
+
+specify acceptable mass at zero cost and at the violation boundary, while the interior density pint specifies the desired shape of costs that remain below the threshold. For any distribution q on [0 , 1] , we define the empirical boundary masses and the total interior weight as: 
+
+a0(q) := Pr( C = 0 |C ∼ q), a 1(q) := Pr( C = 1 |C ∼ q),
+
+Let qint denote the conditional distribution of q on the inte-rior (0 , 1) . Furthermore, let w(q) := 1 −a0(q)−a1(q). This decomposition allows us to analyze the safety of a policy by separately evaluating its performance at the boundaries and its behavior within the threshold. The reference need not be exactly realizable by every MDP. If the specifica-tion is overly restrictive or structurally misaligned with the achievable cost distributions, this appears as a persistent discrepancy between q and pref . From the perspective of the certificate, such mismatch is indistinguishable from un-safe distributional behavior: both indicate that the observed rollout distribution does not satisfy the prescribed safety specification. This is intentional, since the certificate is de-fined relative to the user-provided reference rather than to an unknown optimal distribution. In practice, the choice of 
+
+pref controls conservatism: stricter references induce larger discrepancies for the same rollout distribution, while more relaxed references admit a wider range of interior cost. 
+
+Discrepancy with split penalties. To address the mixed structure of cost distributions, we define a hybrid discrep-ancy that separately manages boundary mass shifts and interior distribution mismatches: 
+
+SD tot (q∥pref ) := λdisc SD disc (q∥pref )+ λint w(q) SD int (qint ∥pint )
+
+≤ λ
+
+
+
+SD disc (q∥pref ) + w(q) · SD int (qint ∥pint )
+
+
+
+,
+
+(10) where λ := max {λdisc , λ int } > 0. The discrete term 
+
+SD disc (q∥pref ) can be written as SD disc (q∥pref ) :=  a⋆ 
+
+> 0
+
+−
+
+a0(q) 
+
+> +
+
++  a1(q) − a⋆
+
+> 1
+
+
+
+> +
+
+, where (x)+ = max( x, 0) .This term is one-sided: it penalizes excess violation mass (a1(q) > a ⋆
+
+> 1
+
+) and loss of safe mass ( a0(q) < a ⋆
+
+> 0
+
+), while shifts in the harmless direction, fewer violations or more zero-cost episodes than the reference, incur no penalty. The interior term SD int is a standard Stein discrepancy relative to pint and can be computed on the interior conditional 
+
+qint using an appropriate Stein operator for pint (e.g., the Langevin–Stein operator on a clipped interior). Together with the Stein certificate of Lemma 1, the hybrid discrepancy in (10) yields a certificate that is sensitive to safety-critical violation mass at the boundary while still controlling continuous interior mismatch. 
+
+4.3 STEINGATE: A BANG-BANG CONTROLLER 
+
+We are now ready to introduce our empirical hybrid certifi-cate to govern policy optimization. For a given reference 
+
+pref and a parametrized policy πθ , we define the empirical Stein certificate as: 
+
+U (θ) = EC∼pref [h(C)] + λ cSD tot (qπθ ∥pref ), (11) where the total discrepancy is estimated from the most recent rollout samples. Instead of treating safety as a soft penalty, we implement this certificate as a bang-bang controller compared against a safety threshold ε. The agent’s behavior is determined by a strict switching rule: Mode (θ) = 
+
+(
+
+reward-maximization , if U (θ) ≤ ε, 
+
+safety-recovery , if U (θ) > ε. (12) The scalar λ in U (θ) does not play the same role as a La-grange multiplier in constrained policy optimization. In Lagrangian methods, the multiplier weights the cost term inside the optimization objective, so reward and safety gradi-ents are combined in a single update direction. In SteinGate, by contrast, λ only scales the distributional certificate used by the gate. Once the mode is selected, the policy update is either reward-driven or recovery-driven; the two gradients are not linearly combined. Thus, λ controls the conservative-ness of the safety test, and hence the point at which switch-ing occurs, rather than mediating a continuous trade-off between reward maximization and constraint satisfaction. The same gating interpretation also determines how ref-erence misspecification is handled algorithmically. If the certificate remains above the threshold across successive iterations, this may indicate either genuinely unsafe rollout behavior or a reference specification that is too restrictive for the environment. The controller treats both cases con-servatively, since both correspond to failure to satisfy the prescribed distributional safety certificate. Persistent selec-tion of the recovery mode can therefore serve as a practical diagnostic for reference misspecification, suggesting that boundary masses or the interior reference require relaxation. This framework, summarized in Algorithm 1, is what we refer to as “SteinGate.” This design provides two critical technical advantages over standard Lagrangian penalty ap-proaches. First, Lagrangian approaches optimize a linear combination of objectives. In this setting, the relative weight-ing between reward and cost is governed by a learned mul-tiplier, and poorly tuned or unstable updates can cause the agent to prioritize reward performance while violating safety constraints, since the cost term is only enforced in expec-tation. SteinGate establishes strict lexicographic priority: when the rollout distribution drifts into the unsafe tail region, the reward gradient is ignored entirely, forcing the agent to prioritize recovery. Second, it circumvents the well-known instability of dual-variable tuning, replacing oscillatory dual ascent updates with a robust, boundary-aware distributional check. This design effectively stabilizes the learning process, as evidenced by the empirical evaluations in Section 5.2. Although the controller uses a discontinuous switching rule, SteinGate does not switch on instantaneous costs. The gate is evaluated using a batch-level distributional certificate computed from recent rollouts, so isolated high-cost trajec-tories are averaged through the empirical discrepancy rather than immediately changing the update mode. Moreover, the trust-region update used by the backbone optimizer limits the per-iteration change in the policy, which in turn lim-its abrupt changes in the induced cost distribution. The two modes are also asymmetric: reward updates are allowed only while the certificate remains below the prescribed budget, whereas recovery updates explicitly act to reduce the cost vi-olation once the budget is exceeded. Together, these features restrict switching signal evolution to the distributional scale of policy updates rather than individual trajectory noise. 
+
+4.4 SAFETY GUARANTEE FOR STEINGATE 
+
+Before presenting our main results, we first make the fol-lowing assumption on the empirical certificate error. 
+
+Assumption 4.1 (Bounded Stein kernel on the clipped interior) . After interior clipping, the induced Stein ker-nel upint (x, y ) used by the KSD estimator satisfies 
+
+|upint (x, y )| ≤ Mu for all clipped x, y .
+
+Proposition 4.2 (Concentration of the empirical certificate) .Algorithm 1 The SteinGate Framework 
+
+Require: Policy πθ ; backbone optimizer OPTIMIZER STEP (·); cost samples {ci}ni=1 ∼ πθ ;risk function h(·); safe reference pref ; risk budget ε;weight λ ≥ 0
+
+Ensure: Updated policy θnew 
+
+Phase 1: Certification (The Gate)  
+
+> 1:
+
+Reference risk: Rp ← Epref [h(C)]  
+
+> 2:
+
+Estimate discrepancy: D ← cSD( {ci} | pref ) 
+
+> 3:
+
+Compute certificate: U ← Rp + λ D  
+
+> 4:
+
+ISSAFE ← (U ≤ ε)
+
+Phase 2: Policy Optimization (Control)  
+
+> 5:
+
+if ISSAFE then  
+
+> 6:
+
+Set mode ← REWARD OPT {Certificate holds}  
+
+> 7:
+
+else  
+
+> 8:
+
+Set mode ← COST OPT {Safety recovery}  
+
+> 9:
+
+end if  
+
+> 10:
+
+θ ← OPTIMIZER STEP (θ; mode )
+
+Assume Assumption 4.1 holds. For any given parametrized policy πθ and a reference distribution pref , denote the Stein certificate as: Ustein (θ) = Epref [h(C)]+ λ SD( qθ ∥pref ), and the empirical Stein certificate is defined in Equation (11) .Given n rollout samples {ci} ∼ qθ , and m interior samples, for any δ ∈ (0 , 1) , with probability at least 1 − δ,
+
+U (θ) − Ustein (θ) ≤ O 
+
+r 1
+
+m + (1 + SD int )
+
+r 1
+
+n
+
+!
+
+We are now ready to present the main results. The following theorem provides a sufficient condition for ensuring a safe policy after each policy improvement step. The detailed proof can be found in Appendix B.4. 
+
+Theorem 4.3 (SteinGate Safety Bound) . Let πk be the cur-rent policy and let πk+1 satisfy the trust-region constraint 
+
+(42) in Appendix B.4. If the Stein factor at kth iteration λk
+
+satisfies 
+
+λk ≥
+
+2H ϵ πk+1 
+
+> hH−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπk
+
+DTV 
+
+ πk+1 (· | s), π k(· | s) 
+
+SD +tot (qπk ∥pref ) .
+
+where SD +tot (qπk ∥pref ) takes the form in (34) , ϵπk+1  
+
+> h
+
+takes the form in (44) . Then with high probability at least 1 − 2δ,the tail-risk for any given test function h ∈ H satisfies 
+
+Cπk+1  
+
+> h
+
+(μ0) ≤ ε. (13) Theorem 4.3 gives a sufficient condition under which a policy update preserves the prescribed risk budget. The lower bound on λk specifies how conservative the certificate must be relative to the size of the policy change, as measured by the trust-region distance. Since the certificate is one-sided, increasing λk tightens the gate by assigning greater weight to distributional deviation from the safe reference. This differs from a Lagrangian trade-off parameter: λk does not determine the relative magnitude of reward and cost gradients in a shared objective, but only the conservativeness of the safety test used before selecting the update mode. Under the stated trust-region condition, any value above the bound is sufficient to keep the post-update risk within the budget with high probability. 
+
+## 5 EXPERIMENTS AND RESULTS 
+
+This section empirically evaluates SteinGate on a suite of continuous-control safety tasks. Our experiments are de-signed to examine whether SteinGate can alleviate the trade-off between task performance and safety violations that arises in constrained RL. We further study the robustness of SteinGate under varying cost thresholds for the safety constraint and analyze its sensitivity to the choice of the interior reference distribution used in the safety updates. 
+
+5.1 EXPERIMENTAL SETUP Benchmarks. We employ the Safety Gymnasium and Safety MuJoCo suites [Ray et al., 2019, Zhang et al., 2020b]. Safety Gymnasium tasks (PointGoal, PointCircle, CarGoal, Car-Circle) simulate autonomous navigation where agents must reach targets while avoiding hazards or constraining move-ment patterns. Safety MuJoCo tasks (Ant, HalfCheetah, Humanoid, Swimmer) focus on locomotion control with ve-locity limits, testing the agent’s ability to maintain stability under state-dependent constraints. 
+
+Baselines. We compare SteinGate against multiple safe RL methods. 1) CPO [Achiam et al., 2017] represents the stan-dard for expectation-based constraints, enforcing safety on the average cost. Notably, we utilize CPO as the base opti-mization engine for SteinGate. 2) EVO [Gao et al., 2025] utilizes extreme value theory to model the cost distribu-tion tail, explicitly targeting rare, high-impact violations. 3) S AUTE [Sootla et al., 2022a] and 4) S IMMER [Sootla et al., 2022b] employ state augmentation to strictly enforce constraints, with Simmer additionally inducing a curriculum on the safety budget. 
+
+Evaluation Protocol. All methods are trained with identical interaction budgets (10M steps) and environmental config-urations. We report performance over six random seeds, visualizing the mean and standard deviation of episodic return and cost. We introduce two quantitative metrics to assess convergence: 1) Tail Feasibility measures the fraction of episodes satisfying the cost constraint during the final 20% of training, and 2) Feasible Return reports the aver-age episodic return conditioned on constraint satisfaction, isolating the performance of valid policies. 
+
+Implementation Details. To guarantee a fair comparison, all algorithms utilize identical policy and value network architectures and share core hyperparameters; this ensures that observed performance differences stem solely from the safety mechanisms. The practical estimation procedure of Stein certificate U (θ) is detailed in Appendix C. We employ the OmniSafe implementations for standard baselines and the official public codebase for EVO. Detailed hyperparam-eter configurations are provided in the Appendix E.3. 
+
+5.2 RESULTS AND DISCUSSION SteinGate vs. Baselines. Figure 2 illustrates the training dynamics across the Safety Gymnasium suite. SteinGate exhibits a robust ability to converge to the feasible set, driving episodic costs below the threshold while sustain-ing continuous reward improvement. In contrast, CPO pri-oritizes reward maximization at the expense of safety, re-sulting in frequent and sustained violations (particularly in CarGoal1). Conversely, EVO demonstrates strict safety adherence but suffers from significant conservatism, often plateauing at suboptimal return levels. This confirms that relying solely on tail modeling (EVO) or expectation con-straints (CPO) leads to suboptimal trade-offs, whereas Stein-Gate effectively identifies policies that satisfy the constraint while achieving strong task performance. Table 1 quantifies this advantage over the final training phase. On the Point-Goal1 and CarGoal1 tasks, SteinGate matches the near-perfect tail feasibility of EVO ( > 0.98 ) while delivering substantially higher feasible returns (e.g., nearly 3× higher on PointGoal1 and 4× on CarGoal1). This indicates that SteinGate resolves the over-conservatism inherent in EVO’s extreme-value approach. On PointCircle1, SteinGate out-performs CPO by achieving equivalent returns with strictly higher feasibility ( 0.99 vs. 0.77 ), eliminating the safety vio-lations common in primal-dual methods. Finally, compared to state-augmentation baselines (Saute and Simmer), Stein-Gate consistently achieves superior feasible returns, demon-strating that direct policy regulation is more efficient than curriculum-based or augmented-state approaches. We ob-serve similar trends on the velocity benchmarks and against additional baselines; results are reported in Appendix D. 
+
+Sensitivity to Cost Thresholds. Figure 3 illustrates SteinGate’s behavior under varying cost limits (κ ∈{10 , 25 , 40 }). As the constraint is tightened, SteinGate adap-tively regulates its policy to maintain episodic cost near the prescribed threshold while modulating the achievable return. For moderate thresholds ( κ = 25, 40), the learned policies consistently stabilize strictly below the cost limits. Under the highly restrictive setting ( κ = 10), the episodic cost fluc-tuates tightly around the threshold, indicating operation at the boundary of the feasible set with only marginal viola-tions. Concurrently, episodic return increases monotonically 0                             
+
+> 5
+> 10
+> 15
+> 20
+> SafetyPointGoal1-v0
+> 0
+> 10
+> 20
+> 30
+> 40
+> SafetyPointCircle1-v0
+> 0
+> 10
+> 20
+> SafetyCarGoal1-v0
+> 0
+> 5
+> 10
+> 15
+> SafetyCarCircle1-v0
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 25
+> 50
+> 75
+> 100
+> 125
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Return Cost
+> CPO EVO SteinGate Saute Simmer Cost limit
+
+Figure 2: Results comparing SteinGate and baselines on Safety Gym tasks. The x-axis denotes the total training steps, and the y-axis reports either the average return or the average constraint value. Solid curves indicate the mean across runs, with shaded regions representing one standard deviation. The dashed horizontal line denotes the constraint threshold of 25. Table 1: Tail feasibility and feasible return across Safety Gymnasium tasks. Tail feasibility is computed over the final 20% of training; feasible return is the episodic return condi-tioned on satisfying the cost limit. 
+
+Environment Algorithm Tail Feasibility ↑ Feasible Return ↑
+
+PointGoal1 CPO 0.258 19.21 EVO 0.988 3.68 Saute 0.563 14.26 Simmer 0.858 12.33 
+
+SteinGate 0.987 9.77 
+
+PointCircle1 CPO 0.775 47.16 EVO 0.990 44.27 Saute 0.992 41.25 Simmer 0.915 40.80 
+
+SteinGate 0.992 46.15 
+
+CarGoal1 CPO 0.257 22.86 EVO 0.997 3.23 Saute 0.575 17.54 Simmer 0.698 15.62 
+
+SteinGate 0.998 12.65 
+
+CarCircle1 CPO 0.578 18.24 EVO 0.995 15.64 Saute 0.998 14.31 Simmer 0.977 14.51 
+
+SteinGate 0.997 16.77 
+
+as the cost limit is relaxed, demonstrating that SteinGate effectively capitalizes on the expanded safety budget to max-imize task performance. Collectively, these results demon-strate that SteinGate scales smoothly with stringency of cost constraint, maintaining a stable balance between reward maximization and safety. 
+
+Sensitivity to Reference Distribution. Figure 4 examines the impact of the interior reference distribution on P OINT -GOAL 1, comparing the default Beta(2 , 5) against a conser-vative Beta(1 , 10) and a logit-normal alternative. Across all 
+
+Figure 3: Cost-limit sensitivity of SteinGate on SafetyPointGoal1-v0. The plots show episodic re-turn (left) and episodic cost (right) during training under different cost limits ( κ =10, 25, 40). Dashed lines indicate the corresponding cost thresholds. three specifications, the costs remain relatively consistent, suggesting that the mechanism for constraint enforcement is not highly sensitive to the specific choice of reference family on this task. The primary difference lies in the effi-ciency of reward acquisition: the conservative Beta(1 , 10) 
+
+induces a more cautious utilization of the safety budget, resulting in lower task performance. Conversely, both the default Beta(2 , 5) and the logit-normal references converge to higher final returns. These results indicate that while the reference distribution modulates the degree of conser-vatism, SteinGate can maintain effective constraint satis-faction across different reasonable parametric choices. The observed robustness across different reference families sug-gests that SteinGate depends primarily on the specification of an admissible safety profile rather than on a particular parametric form. More conservative references induce cor-respondingly conservative policies, while comparable safety behavior across multiple reference families indicates that the framework is not tied to a specific distributional assumption. 
+
+Sensitivity to Sample Size. Finally, we investigate the robustness of SteinGate to the number of cost samples available for estimating the certificate, in Figure 5. Un-0.0 0.2 0.4 0.6 0.8 1.0          
+
+> Steps 1e7
+> 2
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> Episode Return
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Episode Cost
+> Beta(1, 10) Beta(2, 5) (default) Logit-Normal
+
+Figure 4: SteinGate safe reference ablation on SafetyPointGoal1-v0. Episodic return (left) and episodic cost (right) during training for three interior reference distributions: Beta(1,10), Beta(2,5), and logit-normal. like tail-modeling approaches (e.g., EVO) that often re-quire off-policy data augmentation to accurately fit distri-butions, SteinGate operates strictly on-policy. We evalu-ated SteinGate on CarGoal1 with effective batch sizes of 
+
+N ∈ { 8, 16 , 32 } samples per epoch. Despite the scarcity of data in the low-sample regime, SteinGate consistently enforced safety across all settings. We observed a natu-ral trade-off: larger batches ( N =32) resulted in slightly more conservative policies, while smaller batches ( N =8) exhibited higher variance but remained safe. These results demonstrate that the SteinGate mechanism is highly sample-efficient and effective even within the limited interaction budgets of standard on-policy training loops. This behavior is consistent with the role of KSD as a sample-based distributional certificate rather than a parametric tail estimator: the method does not require fitting a rare-event model from a large buffer of exceedances, but instead mon-itors whether the observed rollout costs remain consistent with the prescribed reference. 0.0 0.2 0.4 0.6 0.8 1.0          
+
+> Steps 1e7
+> 2.5
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> Episode Return
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> Episode Cost
+> 8 samples 16 samples (default) 32 samples
+
+Figure 5: SteinGate sample size ablation on SafetyCarGoal1-v0. Episodic return (left) and episodic cost (right) during training for three sizes: 8, 16, and 32. 
+
+## 6 RELATED WORK 
+
+Expectation-Based Safety. Safe RL is commonly formu-lated as a CMDP problem, where safety is enforced by con-straining the expected cumulative cost. Representative meth-ods include trust-region methods like constrained policy optimization (CPO) [Achiam et al., 2017], FISOR [Zheng et al., 2024], SEVPO [Zhu et al., 2026], projection-based ap-proaches such as PCPO [Yang et al., 2020] and CUP [Yang et al., 2022], first-order constrained optimization in policy space (FOCOPS) [Zhang et al., 2020b], multi-timescale Lagrangian methods such as RCPO [Tessler et al., 2019] and PID-Lagrangian [Stooke et al., 2020], and reductions to unconstrained RL[Chemingui et al., 2025a,b]. While these approaches provide control over expected cost, they do not directly regulate the distribution of outcomes; policies with identical means may exhibit severe tail violations. 
+
+Risk-Sensitive and Distributional Safety. To address this limitation, several works impose constraints on distribu-tional functionals of cost. Common choices include Value-at-Risk (VaR) and Conditional Value-at-Risk (CVaR) [Rock-afellar and Uryasev, 2002]. In RL, CVaR constraints have been implemented via state augmentation and Lagrangian optimization [Chow et al., 2015, 2018], while actor–critic variants such as WCSAC [Yang et al., 2021] and QCPO [Jung et al., 2022] estimate quantiles or parametric cost distributions. Extreme value theory has also been applied to model high-cost exceedances using generalized Pareto distributions, as in extreme value policy optimization (EVO) [Gao et al., 2025] and related approaches [NS et al., 2024]. These methods explicitly target tail behavior but rely on esti-mating rare-event statistics. Alternatively, Sauté RL [Sootla et al., 2022a] and Simmer [Sootla et al., 2022b] enforce safety almost surely via budget state augmentation. 
+
+Stein Discrepancies in RL. Kernelized Stein discrepancy (KSD) [Liu et al., 2016] offers a nonparametric measure of distributional deviation, previously applied in RL for detecting transition shifts [Chakraborty et al., 2023] or in-ducing pessimism in offline settings [Koppel et al., 2024]. In contrast, we employ KSD to certify tail-sensitive safety in online RL via a boundary-aware formulation that monitors the cost distribution during optimization. 
+
+## 7 CONCLUSION 
+
+This paper introduced and studied SteinGate, a distribu-tional safety framework for tail-sensitive constrained re-inforcement learning. By leveraging kernelized Stein dis-crepancy, SteinGate certifies safety through deviation from a designated hybrid reference distribution, avoiding direct estimation of rare-event statistics. The boundary-aware for-mulation accounts for probability mass induced by cost clip-ping and episodic termination, enabling theoretically-sound safety monitoring under non-stationary policy updates. Em-pirical results across multiple benchmarks demonstrate that SteinGate reduces violation frequency and severity during training while maintaining strong task performance. These findings suggest that distributional certification provides a principled and practical approach to mitigating extreme violations in safe reinforcement learning. 8 ACKNOWLEDGMENTS 
+
+The authors gratefully acknowledge the in part support by USDA-NIFA funded AgAID Institute award 2021-67021-35344 and NSF ECCS-2534263 grant. The views expressed are those of the authors and do not reflect the official policy or position of the USDA-NIFA and the NSF. 
+
+References 
+
+Joshua Achiam, David Held, Aviv Tamar, and Pieter Abbeel. Constrained policy optimization. In International Confer-ence on Machine Learning , pages 22–31. PMLR, 2017. Eitan Altman. Constrained Markov Decision Processes .Routledge, 1999. doi: 10.1201/9781315140223. URL 
+
+https://doi.org/10.1201/9781315140223 .Reprinted in 2021. Andrew D Barbour. Stein’s method for diffusion approxi-mations. Probability Theory and Related Fields , 84(3): 297–322, 1990. Marc G Bellemare, Will Dabney, and Rémi Munos. Adistributional perspective on reinforcement learning. In 
+
+International Conference on Machine Learning , pages 449–458. PMLR, 2017. Yankai Cao and Victor M Zavala. A sigmoidal approxima-tion for chance-constrained nonlinear programs. arXiv preprint arXiv:2004.02402 , 2020. Souradip Chakraborty, Amrit Singh Bedi, Pratap Tokekar, Alec Koppel, Brian Sadler, Furong Huang, and Dinesh Manocha. Posterior coreset construction with kernelized stein discrepancy for model-based reinforcement learn-ing. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 6980–6988, 2023. Yassine Chemingui, Aryan Deshwal, Alan Fern, Thanh Nguyen-Tang, and Janardhan Rao Doppa. Online op-timization for offline safe reinforcement learning. In 
+
+Annual Conference on Neural Information Processing Systems (NeurIPS) , 2025a. Yassine Chemingui, Aryan Deshwal, Honghao Wei, Alan Fern, and Janardhan Rao Doppa. Constraint-adaptive pol-icy switching for offline safe reinforcement learning. In 
+
+Proceedings of AAAI Conference on Artificial Intelligence (AAAI) , pages 15722–15730, 2025b. Yinlam Chow, Aviv Tamar, Shie Mannor, and Marco Pavone. Risk-sensitive and robust decision-making: a cvar op-timization approach. Advances in Neural Information Processing Systems , 28, 2015. Yinlam Chow, Mohammad Ghavamzadeh, Lucas Janson, and Marco Pavone. Risk-constrained reinforcement learn-ing with percentile risk criteria. Journal of Machine Learning Research , 18(167):1–51, 2018. Kacper Chwialkowski, Heiko Strathmann, and Arthur Gret-ton. A kernel test of goodness of fit. In International Con-ference on Machine Learning , pages 2606–2615. PMLR, 2016. Nicholas E. Corrado and Josiah P. Hanna. On-policy pol-icy gradient reinforcement learning without on-policy sampling. Transactions on Machine Learning Re-search , 2026. ISSN 2835-8856. URL https:// openreview.net/forum?id=nCoyFp8uO1 .Shiqing Gao, Yihang Zhou, Shuai Shao, Haoyu Luo, Yiheng Bing, Jiaxin Ding, Luoyi Fu, and Xinbing Wang. Extreme value policy optimization for safe reinforcement learning. In Proceedings of the 42nd International Conference on Machine Learning (ICML) , pages 18772–18793, 2025. Jackson Gorham and Lester Mackey. Measuring sample quality with stein’s method. Advances in Neural Informa-tion Processing Systems , 28, 2015. Jiaming Ji, Jiayi Zhou, Borong Zhang, Juntao Dai, Xuehai Pan, Ruiyang Sun, Weidong Huang, Yiran Geng, Mickel Liu, and Yaodong Yang. Omnisafe: An infrastructure for accelerating safe reinforcement learning research. Jour-nal of Machine Learning Research , 25(285):1–6, 2024. Whiyoung Jung, Myungsik Cho, Jongeui Park, and Youngchul Sung. Quantile constrained reinforcement learning: A reinforcement learning framework constrain-ing outage probability. Advances in Neural Information Processing Systems , 35:6437–6449, 2022. Alec Koppel, Sujay Bhatt, Jiacheng Guo, Joe Eappen, Mengdi Wang, and Sumitra Ganesh. Information-directed pessimism for offline reinforcement learning. In Forty-first International Conference on Machine Learning ,2024. Qiang Liu, Jason Lee, and Michael Jordan. A kernelized stein discrepancy for goodness-of-fit tests. In Interna-tional Conference on Machine Learning , pages 276–284. PMLR, 2016. Oliver Mihatsch and Ralph Neuneier. Risk-sensitive rein-forcement learning. Machine learning , 49(2):267–290, 2002. Karthik Somayaji NS, Yu Wang, Malachi Schram, Jan Drg-ona, Mahantesh M Halappanavar, Frank Liu, and Peng Li. Extreme risk mitigation in reinforcement learning using extreme value theory. Transactions on Machine Learn-ing Research , 2024. ISSN 2835-8856. URL https: //openreview.net/forum?id=098mb06uhA .Alex Ray, Joshua Achiam, and Dario Amodei. Benchmark-ing safe exploration in deep reinforcement learning. arXiv preprint arXiv:1910.01708 , 2019. R Tyrrell Rockafellar and Stanislav Uryasev. Conditional value-at-risk for general loss distributions. Journal of banking & finance , 26(7):1443–1471, 2002. R Tyrrell Rockafellar, Stanislav Uryasev, et al. Optimization of conditional value-at-risk. Journal of risk , 2:21–42, 2000. Sergey Sarykalin, Gaia Serraino, and Stan Uryasev. Value-at-risk vs. conditional value-at-risk in risk management and optimization. In State-of-the-art decision-making tools in the information-intensive age , pages 270–294. Informs, 2008. John Schulman, Sergey Levine, Pieter Abbeel, Michael Jor-dan, and Philipp Moritz. Trust region policy optimization. In International Conference on Machine Learning , pages 1889–1897. PMLR, 2015. John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Rad-ford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. Aivar Sootla, Alexander I Cowen-Rivers, Taher Jafferjee, Ziyan Wang, David H Mguni, Jun Wang, and Haitham Ammar. Sauté rl: Almost surely safe reinforcement learn-ing using state augmentation. In International Confer-ence on Machine Learning , pages 20423–20443. PMLR, 2022a. Aivar Sootla, Alexander Imani Cowen-Rivers, Jun Wang, and Haitham Bou Ammar. Enhancing safe exploration using safety state augmentation. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho, edi-tors, Advances in Neural Information Processing Systems ,2022b. URL https://openreview.net/forum? id=GH4q4WmGAsl .Lindsay Spoor, Álvaro Serra-Gómez, Aske Plaat, and Thomas M. Moerland. An empirical study of lagrangian methods in safe reinforcement learning. In NeurIPS 2025 Workshop on Differentiable Systems (DiffSys) ,2025. URL https://openreview.net/forum? id=gWNOq2Pe5W .Charles Stein. A bound for the error in the normal approxi-mation to the distribution of a sum of dependent random variables. In Proceedings of the sixth Berkeley sympo-sium on mathematical statistics and probability, volume 2: Probability theory , volume 6, pages 583–603. University of California Press, 1972. Adam Stooke, Joshua Achiam, and Pieter Abbeel. Respon-sive safety in reinforcement learning by pid lagrangian methods. In International Conference on Machine Learn-ing , pages 9133–9143. PMLR, 2020. Chen Tessler, Daniel J. Mankowitz, and Shie Man-nor. Reward constrained policy optimization. In In-ternational Conference on Learning Representations ,2019. URL https://openreview.net/forum? id=SkfrvsA9FX .Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control. In 2012 IEEE/RSJ international conference on intelligent robots and systems , pages 5026–5033. IEEE, 2012. Yixuan Wang, Simon Sinong Zhan, Ruochen Jiao, Zhilu Wang, Wanxin Jin, Zhuoran Yang, Zhaoran Wang, Chao Huang, and Qi Zhu. Enforcing hard constraints with soft barriers: Safe reinforcement learning in unknown stochastic environments. In International Conference on Machine Learning , pages 36593–36604. PMLR, 2023. Long Yang, Jiaming Ji, Juntao Dai, Linrui Zhang, Binbin Zhou, Pengfei Li, Yaodong Yang, and Gang Pan. Con-strained update projection approach to safe policy opti-mization. Advances in Neural Information Processing Systems , 35:9111–9124, 2022. Qisong Yang, Thiago D Simão, Simon H Tindemans, and Matthijs TJ Spaan. Wcsac: Worst-case soft actor critic for safety-constrained reinforcement learning. In Proceed-ings of the AAAI Conference on Artificial Intelligence ,volume 35, pages 10639–10646, 2021. Tsung-Yen Yang, Justinian Rosca, Karthik Narasimhan, and Peter J. Ramadge. Projection-based constrained policy optimization. In International Conference on Learning Representations , 2020. URL https://openreview. net/forum?id=rke3TJrtPS .Chao Yu, Jiming Liu, Shamim Nemati, and Guosheng Yin. Reinforcement learning in healthcare: A survey. ACM Computing Surveys (CSUR) , 55(1):1–36, 2021. Jesse Zhang, Brian Cheung, Chelsea Finn, Sergey Levine, and Dinesh Jayaraman. Cautious adaptation for reinforce-ment learning in safety-critical settings. In International Conference on Machine Learning , pages 11055–11065. PMLR, 2020a. Yiming Zhang, Quan Vuong, and Keith Ross. First or-der constrained optimization in policy space. Advances in Neural Information Processing Systems , 33:15338– 15349, 2020b. Yinan Zheng, Jianxiong Li, Dongjie Yu, Yujie Yang, Shengbo Eben Li, Xianyuan Zhan, and Jingjing Liu. Safe offline reinforcement learning with feasibility-guided dif-fusion model. arXiv preprint arXiv:2401.10700 , 2024. Jiahui Zhu, Lei Ying, and Honghao Wei. Divide and con-quer: Selective value learning and policy optimization for offline safe reinforcement learning. Transactions on Machine Learning Research , 2026. SteinGate: Tail-Sensitive Safe Reinforcement Learning via Stein Discrepancy (Supplementary Material) 
+
+Yassine Chemingui *1 Chenhua Fan ∗1 Honghao Wei 1 Janardhan Rao Doppa 11School of Electrical Engineering and Computer Science, Washington State University, Pullman, Washington, USA 
+
+## A BACKGROUND OF STEIN’S METHOD AND KERNELIZED STEIN DISCREPANCY 
+
+Stein’s method yields identities and discrepancy measures between distributions. 
+
+Definition A.1. Assume that X is a subset of Rd and p(x) a smooth density whose support is X . The (Stein) score function of p is defined as 
+
+sp = ∇x log p(x) = ∇xp(x)
+
+p(x) . (14) 
+
+Definition A.2. We say that a function f : X → R is in the Stein class of p, denoted as f ∈ S (p), if f is smooth and satisfies Z
+
+> x∈X
+
+∇x
+
+ f (x) p(x) dx = 0 . (15) 
+
+Definition A.3. The Stein operator of p is a linear operator acting on the Stein class of p, defined as 
+
+Apf (x) = sp(x) f (x)⊤ + ∇xf (x). (16) 
+
+Lemma 2 (Stein’s Identity) . Assume p(x) is a smooth density supported on X , then 
+
+Ep[Apf (x)] = Ep
+
+sp(x) f (x)⊤ + ∇f (x) = 0 , (17) 
+
+for any f that is in the Stein class of p.
+
+Let k(x, x ′) be a positive definite kernel. The spectral decomposition of k(x, x ′), as implied by Mercer’s theorem, is defined as 
+
+k(x, x ′) = X
+
+> j
+
+λj ej (x)ej (x′), (18) where {ej } and {λj } are the orthonormal eigenfunctions and positive eigenvalues of k(x, x ′), respectively, satisfying 
+
+Z
+
+ei(x)ej (x) dx = I[i = j], ∀ i, j. 
+
+For a positive definite kernel k(x, x ′), its related RKHS H comprises linear combinations of its eigenfunctions, i.e., 
+
+f (x) = X
+
+> j
+
+fj ej (x) with X
+
+> j
+
+f 2
+
+> j
+
+λj
+
+< ∞,
+
+> *
+
+Equal contribution 
+
+> *
+
+Equal contribution endowed with an inner product 
+
+⟨f, g ⟩H = X
+
+> j
+
+fj gj
+
+λj
+
+between f (x) = X
+
+> j
+
+fj ej (x), g(x) = X
+
+> j
+
+gj ej (x).
+
+Thus this Hilbert space is equipped with a norm ∥f ∥H where 
+
+∥f ∥2 
+
+> H
+
+= ⟨f, f ⟩H = X
+
+> j
+
+f 2
+
+> j
+
+λj
+
+.
+
+One can verify that k(x, ·) ∈ H and satisfies the important reproducing property, 
+
+f (x) = ⟨f, k (·, x )⟩H, k(x, x ′) = ⟨k(·, x ), k (·, x ′)⟩H.
+
+Every positive definite kernel k defines a unique RKHS for which k is a reproducing kernel. 
+
+Definition A.4. A kernel k(x, x ′) is said to be integrally strictly positive definite , if for any function g that satisfies 
+
+0 < ∥g∥22 < ∞, Z
+
+> X
+
+g(x) k(x, x ′) g(x′) dx dx ′ > 0. (19) 
+
+Definition A.5. The kernelized Stein discrepancy (KSD) S(p, q ) between distribution p and q is defined as 
+
+S(p, q ) = Ex,x ′∼p
+
+δq,p (x)⊤ k(x, x ′) δq,p (x′) , (20) where δq,p (x) = sq (x) − sp(x) is the score difference between p and q, and x, x ′ are i.i.d. draws from p(x).
+
+Proposition A.6. Define gp,q (x) = p(x) sq (x) − sp(x). Assume k(x, x ′) is integrally strictly positive definite, and p, q 
+
+are continuous densities with ∥gp,q ∥22 < ∞. Then S(p, q ) ≥ 0 and S(p, q ) = 0 if and only if p = q.
+
+Definition A.7. A kernel k(x, x ′) is said to be in the Stein class of p if k(x, x ′) has continuous second-order partial derivatives, and both k(x, ·) and k(·, x ) are in the Stein class of p for any fixed x.It is easy to check that the RBF kernel 
+
+k(x, x ′) = exp 
+
+
+
+− 12h2 ∥x − x′∥22
+
+
+
+is in the Stein class for smooth densities supported on X = Rd.
+
+Proposition A.8. If k(x, x ′) is in the Stein class of p, so is any f ∈ H .
+
+Theorem A.9. Assume p and q are smooth densities and k(x, x ′) is in the Stein class of p. Define 
+
+uq (x, x ′) = sq (x)⊤k(x, x ′)sq (x′) + sq (x)⊤∇x′ k(x, x ′) + ∇xk(x, x ′)⊤sq (x′) + trace  ∇x,x ′ k(x, x ′). (21) 
+
+Then 
+
+S(p, q ) = Ex,x ′∼p[uq (x, x ′)] . (22) 
+
+## B THEORETICAL PROOFS 
+
+B.1 PROOF OF LEMMA 1 
+
+First, we show that B(h, p ) has an upper bound for specific test-function class H.
+
+Lemma 3. Let p be a density distribution such that p ∈ C1((0 , 1)) and p(c) > 0 for all c ∈ (0 , 1) . Let F (c) := R c 
+
+> 0
+
+p(t) dt 
+
+and sp(c) := ∂c log p(c). Let Ap be the (one-dimensional) Langevin–Stein operator 
+
+(Apf )( c) := f ′(c) + sp(c)f (c).Let H be any test-function class satisfying H ⊆ H 0 where 
+
+H0 := {h : [0 , 1] → [0 , 1] , nondecreasing }
+
+Assume the following two quantities are finite: 
+
+Kp := sup 
+
+> c∈(0 ,1)
+
+min {F (c), 1 − F (c)}
+
+p(c) < ∞,Mp := sup 
+
+> c∈(0 ,1)
+
+|w(c) sp(c)| < ∞.
+
+(23) 
+
+Denote 
+
+Pint (H, F) := {p | fh ∈ F ∩ S (p), ∀ h ∈ H} (24) 
+
+Then p ∈ P int (H, Fint ). More precisely, for any h ∈ H and g(c) := h(c) − EC∼p[h(C)] , the Stein equation Apfh = g
+
+admits a solution fh ∈ F int given by 
+
+fh(c) = 1
+
+p(c)
+
+Z c
+
+> 0
+
+g(t)p(t) dt = − 1
+
+p(c)
+
+Z 1
+
+> c
+
+g(t)p(t) dt, (25) 
+
+and its Stein factor satisfies 
+
+Bint (h, p ) := ∥fh∥Fint ≤
+
+
+
+Kp + 14 + MpKp
+
+
+
+∥g∥∞
+
+≤ 2
+
+
+
+Kp + 14 + MpKp
+
+
+
+.
+
+(26) 
+
+Proof. Fix any h ∈ H and define g(c) = h(c) − Ep[h(C)] . Since ∥h∥∞ ≤ 1, we have ∥g∥∞ ≤ 2.We solve the ODE f ′(c) + sp(c)f (c) = g(c). Multiplying by p(c) and using p′(c) = sp(c)p(c) yields 
+
+(p(c)f (c)) ′ = g(c)p(c).
+
+Integrating from 0 to c and choosing the integration constant to be 0 gives 
+
+p(c)fh(c) = 
+
+Z c
+
+> 0
+
+g(t)p(t) dt, fh(c) = 1
+
+p(c)
+
+Z c
+
+> 0
+
+g(t)p(t) dt. 
+
+Since R 10 g(t)p(t) dt = 0 by centering, we also have the equivalent form 
+
+fh(c) = − 1
+
+p(c)
+
+Z 1
+
+> c
+
+g(t)p(t) dt, 
+
+which proves (25). We have 
+
+p(c)fh(c) = 
+
+Z c
+
+> 0
+
+g(t)p(t) dt → 0 as c ↓ 0,
+
+and 
+
+p(c)fh(c) = −
+
+Z 1
+
+> c
+
+g(t)p(t) dt → 0 as c ↑ 1.
+
+Moreover, Ep[|f ′
+
+> h
+
+| + |spfh|] < ∞ follows from below. Hence fh ∈ S (p).We first bound ∥fh∥∞ using both representations and |g| ≤ ∥ g∥∞:
+
+|fh(c)| ≤ ∥g∥∞
+
+p(c) min 
+
+n Z c
+
+> 0
+
+p(t) dt, 
+
+Z 1
+
+> c
+
+p(t) dt 
+
+o
+
+= ∥g∥∞
+
+min {F (c), 1 − F (c)}
+
+p(c) .
+
+Thus ∥fh∥∞ ≤ Kp∥g∥∞.Next, from the Stein equation, f ′
+
+> h
+
+(c) = g(c) − sp(c)fh(c), so 
+
+|w(c)f ′
+
+> h
+
+(c)| ≤ | w(c)g(c)| + |w(c)sp(c)| | fh(c)|.Since sup c∈(0 ,1) w(c) = 1 /4, we have ∥wg ∥∞ ≤ 14 ∥g∥∞. Also ∥ws p∥∞ ≤ Mp and ∥fh∥∞ ≤ Kp∥g∥∞. Therefore, 
+
+∥wf ′
+
+> h
+
+∥∞ ≤ 14 ∥g∥∞ + MpKp∥g∥∞.
+
+Combining the two bounds yields (26), and in particular ∥fh∥Fint < ∞, so fh ∈ F int .For every h ∈ H there exists fh ∈ F int such that Apfh = h − Ep[h] and ∥fh∥Fint < ∞. Also, fh ∈ S (p), hence 
+
+Fint ⊆ S (p) holds for this choice of solutions. This matches Definition (24) and completes the proof. Then we start the proof of lemma 1. 
+
+Lemma 4. Let p be a target distribution and qπ be a proposal distribution on C. Let h : C → R be a test function of interest. Suppose there exists a solution fh to the Stein Equation Apfh(C) = h(C) − EC∼p[h(C)] such that fh ∈ F and its norm is bounded by a constant B(h, p ), i.e., ∥fh∥F ≤ B(h, p ). Then, the expectation of h under qπ is bounded by: 
+
+EC∼qπ [h(C)] ≤ EC∼p[h(C)] + B(h, p ) · SD (qπ ∥p), (27) 
+
+where SD (qπ ∥p) := sup fh∈F ,∥fh∥F ≤1 EC∼qπ
+
+(Apfh)( C) .
+
+Proof. By the definition of the solution fh to the Stein equation, for any C ∈ C , we have: 
+
+h(C) − EC∼p[h(C)] = Apfh(C)
+
+Taking the expectation of both sides with respect to the distribution qπ :
+
+EC∼qπ [h(C) − EC∼p[h(C)]] = EC∼qπ [Apfh(C)] 
+
+Since EC∼p[h(C)] is a constant with respect to qπ , we can separate the terms on the left side: 
+
+EC∼qπ [h(C)] − EC∼p[h(C)] = EC∼qπ [Apfh(C)] 
+
+We seek to bound the term EC∼qπ [Apfh(C)] . Recall the definition of the Stein Discrepancy: 
+
+SD (qπ ∥p) ≜ sup    
+
+> f∈F ,∥f∥F≤1
+
+EC∼qπ [Apf (C)] 
+
+This implies that for any function g ∈ F with ∥g∥F ≤ 1, the expectation EC∼qπ [Apg(C)] is at most SD (qπ ∥p). The specific solution fh has norm ∥fh∥F ≤ B(h, p ). We can construct a normalized function g as: 
+
+g(C) = fh(C)
+
+B(h, p )
+
+Then the norm of this new function can be written as: 
+
+∥g∥F = fh
+
+B(h, p ) F
+
+= 1
+
+B(h, p ) ∥fh∥F ≤ B(h, p )
+
+B(h, p ) = 1 
+
+Since ∥g∥F ≤ 1, g is a valid candidate for the supremum in the definition of SD (qπ ∥p). Therefore: 
+
+EC∼qπ [Apg(C)] ≤ SD (qπ ∥p)
+
+Then substituting g(C) back in terms of fh(C) and using the linearity of the Stein operator Ap, and taking the expectation implies E:
+
+EC∼qπ
+
+
+
+Ap
+
+ fh(C)
+
+B(h, p )
+
+ 
+
+≤ SD (qπ ∥p)1
+
+B(h, p ) EC∼qπ [Apfh(C)] ≤ SD (qπ ∥p)Multiplying both sides by the positive constant B(h, p ):
+
+EC∼qπ [Apfh(C)] ≤ B(h, p ) · SD (qπ ∥p)
+
+Finally, substitute this inequality back we can easily obtain 
+
+EC∼qπ [h(C)] − EC∼p[h(C)] ≤ B(h, p ) · SD (qπ ∥p)
+
+Rearranging terms yields the final certificate: 
+
+EC∼qπ [h(C)] ≤ EC∼p[h(C)] + B(h, p ) · SD (qπ ∥p)
+
+B.2 STEIN INEQUALITY Proposition B.1 (Hybrid Stein certificate with boundary atoms) . Suppose h ∈ H 0. Let q denote qπ as the rollout distribution under policy π. Assume Lemma 1 holds on (0 , 1) for the pair (h, p int ). If λ ≥ max {1, B int }, then 
+
+EC∼q [h(C)] ≤ U. (28) 
+
+Proof. By the atom and interior decomposition, 
+
+EC∼q [h(C)] = a0(q)h0 + a1(q)h1 + w(q) EC∼qint [h(C)] ,
+
+and 
+
+EC∼pref [h(C)] = a⋆
+
+> 0
+
+h0 + a⋆
+
+> 1
+
+h1 + w⋆ EC∼pint [h(C)] .
+
+Applying Lemma 1 to qint yields 
+
+EC∼q [h(C)] ≤ a0(q)h0 + a1(q)h1 + w(q) EC∼pint [h(C)] + w(q) Bint · SD int 
+
+= EC∼pref [h(C)] + h0(a0(q) − a⋆
+
+> 0
+
+) + h1(a1(q) − a⋆
+
+> 1
+
+)
+
+− EC∼pint [h(C)]  (a0(q) − a⋆
+
+> 0
+
+) + ( a1(q) − a⋆
+
+> 1
+
+) + w(q) Bint SD int 
+
+= EC∼pref [h(C)] + ( h0 − EC∼pint [h(C)])( a0(q) − a⋆
+
+> 0
+
+) + ( h1 − EC∼pint [h(C)])( a1(q) − a⋆
+
+> 1
+
+)+ w(q) · Bint · SD int 
+
+≤ EC∼pref [h(C)] + ( a⋆ 
+
+> 0
+
+− a0(q)) + + ( a1(q) − a⋆
+
+> 1
+
+)+ + w(q) · Bint · SD int .
+
+The last inequality uses monotonicity of h, i.e. h0 ≤ EC∼pint [h(C)] ≤ h1, which makes the term multiplying (a0(q) − a⋆
+
+> 0
+
+)
+
+nonpositive (yielding the one-sided (a⋆ 
+
+> 0
+
+− a0(q)) +) and bounds the remaining centering factors by 1 since h ∈ [0 , 1] . Finally, using the fact that SD tot = ( a0(q) − a⋆
+
+> 0
+
+)+ + ( a1(q) − a⋆
+
+> 1
+
+)+ + w(q) · SD int and the condition for λ gives 
+
+(a0(q) − a⋆
+
+> 0
+
+)+ + ( a1(q) − a⋆
+
+> 1
+
+)+ + w(q) · Bint · SD int ≤ λ · SD tot ,
+
+which yields (28). 
+
+B.3 BOUND FOR EMPIRICAL ERROR OF STEIN CERTIFICATE 
+
+Given n i.i.d. rollouts (or approximately independent mini-batch samples) producing {ci}ni=1 ∼ q, define empirical atom masses 
+
+ˆa0 := 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+1{ci ≤ τ0}, ˆa1 := 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+1{ci ≥ 1 − τ1}, ˆw := 1 − ˆa0 − ˆa1. (29) Let {cint  
+
+> i
+
+}mi=1 ⊂ { ci}ni=1 be the interior samples with m = nint . Let dSD int be the KSD estimator on interior samples with V-statistic of the Stein kernel after clipping away from the boundary. Define the empirical discrepancy 
+
+dSD disc := ( a⋆ 
+
+> 0
+
+− ˆa0)+ + (ˆ a1 − a⋆
+
+> 1
+
+)+, dSD tot := dSD disc + ˆ w · dSD int , (30) where 
+
+dSD int := [KSD 2 
+
+> V
+
+:= 1
+
+m2
+
+> m
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+upint (Cint  
+
+> i
+
+, C int  
+
+> j
+
+).
+
+and the empirical certificate 
+
+U := Epref [h(C)] + λ dSD tot . (31) Here we precompute Epref [h(C)] by Monte-Carlo Sampling is a fixed constant independent of q.
+
+Assumption B.2 (Bounded Stein kernel on the clipped interior) . After interior clipping, the induced Stein kernel upint (x, y )
+
+used by the KSD estimator satisfies |upint (x, y )| ≤ Mu for all clipped x, y .
+
+Proposition B.3 (Concentration of the empirical certificate) . Assume Assumption B.2 holds. Then for any δ ∈ (0 , 1) , with probability at least 1 − δ,
+
+U − Ustein ≤ λ
+
+
+
+ϵint (m, δ ) + ϵw(n, δ ) · (1 + SD int )
+
+
+
+, (32) 
+
+where 
+
+ϵw(n, δ ) := 2 
+
+r log(6 /δ )2n , ϵint (m, δ ) := 2 √2 Mu
+
+r log(6 /δ )
+
+m . (33) 
+
+Proof. Each indicator in (29) is Bernoulli, hence by Hoeffding’s inequality, with probability at least 1 − δ/ 3,
+
+|ˆa0 − a0(q)| ≤ 
+
+r log(6 /δ )2n , |ˆa1 − a1(q)| ≤ 
+
+r log(6 /δ )2n .
+
+By the 1-Lipschitz property of (·)+,
+
+(a⋆ 
+
+> 0
+
+− ˆa0)+ − (a⋆ 
+
+> 0
+
+− a0(q)) + ≤ | ˆa0 − a0(q)|, (ˆ a1 − a⋆
+
+> 1
+
+)+ − (a1(q) − a⋆
+
+> 1
+
+)+ ≤ | ˆa1 − a1(q)|.
+
+Thus, 
+
+|dSD disc − SD disc (q∥pref )| ≤ | ˆa0 − a0(q)| + |ˆa1 − a1(q)| ≤ 2
+
+r log(6 /δ )2n .
+
+Moreover, ˆw − w(q) = −(ˆ a0 − a0(q)) − (ˆ a1 − a1(q)) implies | ˆw − w(q)| ≤ 2
+
+q log(6 /δ )2n , yielding the first relation in (33) .Consider the V-statistic estimator dSD int = 1
+
+> m2
+
+Pmi,j =1 upint (cint  
+
+> i
+
+, c int  
+
+> j
+
+). Changing one sample cint  
+
+> i
+
+affects at most (2 m − 1) 
+
+summands. Since |upint | ≤ Mu, each affected summand changes by at most 2Mu, hence the bounded-differences constant satisfies 
+
+ci ≤ (2 m − 1) · 2Mu
+
+m2 ≤ 4Mu
+
+m .
+
+By McDiarmid’s inequality, with probability at least 1 − δ/ 3,
+
+dSD int − E[dSD int ] ≤
+
+r P mi=1 c2
+
+> i
+
+2 log 6
+
+δ ≤
+
+r m · (16 M 2 
+
+> u
+
+/m 2)2 log 6
+
+δ = 2 √2 Mu
+
+r log(6 /δ )
+
+m ,
+
+which yields the second relation in (33). Using (30), triangle inequality and the fact that ˆw ≤ 1,
+
+|dSD tot − SD tot | ≤ | dSD disc − SD disc | + | ˆw − w| · SD int + |dSD int − SD int |.
+
+Multiplying by λ gives (32). A union bound over the three events completes the proof. 
+
+Lemma 5. Assume the concentration results in Proposition B.3 hold. Define the computable lower confidence bound 
+
+SD tot := dSD tot − ϵint (m, δ ) − ϵw(n, δ )
+
+
+
+1 + dSD int + ϵint (m, δ )
+
+
+
+, SD +tot := max {SD tot , 0}. (34) 
+
+Then with probability at least 1 − δ,
+
+SD tot ≥ SD +tot . (35) Proof. By Proposition B.3, with probability at least 1 − δ,
+
+dSD tot − SD tot ≤ ϵint (m, δ ) + ϵw(n, δ ) 1 + SD int 
+
+, (36) 
+
+dSD int − SD int ≤ ϵint (m, δ ). (37) Let E be the event on which both (36) and (37) hold. Then Pr( E) ≥ 1 − 2δ.On E, inequality (36) implies 
+
+SD tot ≥ dSD tot − ϵint (m, δ ) − ϵw(n, δ ) 1 + SD int 
+
+. (38) Moreover, from (37) we have on E that 
+
+SD int ≤ dSD int + ϵint (m, δ ). (39) Substituting (39) into (38) yields 
+
+SD tot ≥ dSD tot − ϵint (m, δ ) − ϵw(n, δ )
+
+
+
+1 + dSD int + ϵint (m, δ )
+
+
+
+= SD tot . (40) Since SD tot ≥ 0 by definition, we further obtain SD tot ≥ max {SD tot , 0} = SD +tot . This proves (35). 
+
+B.4 PROOF OF THEOREM 4.3 
+
+Consider an episodic CMDP M with horizon H, state space S, action space A, transition kernel P (· | s, a ), and per-step cost c : S × A → [0 , 1] . For a trajectory τ = ( s0, a 0, . . . , s H−1, a H−1) generated by policy π, define the (unnormalized) cumulative cost 
+
+C(τ ) := 
+
+> H−1
+
+X
+
+> t=0
+
+c(st, a t).
+
+Let h : R → R be a measurable test function (e.g., sigmoid). Our target functional is 
+
+Cπh (μ0) := Eτ ∼π
+
+h(C(τ )) .
+
+This is not additive in (st, a t) in general, hence performance difference lemma does not apply directly. 
+
+Augmented CMDP. We define an augmented CMDP ¯M whose state includes the running cumulative cost. Let the augmented state space be ¯S := S × R, ¯st := ( st, z t), ¯μ0 := ( μ0, z 0)
+
+where the auxiliary coordinate zt evolves deterministically as 
+
+z0 := 0 , zt+1 := zt + c(st, a t), t = 0 , . . . , H − 1.
+
+The augmented transition kernel is therefore 
+
+¯P  (s′, z ′) | (s, z ), a  = P (s′ | s, a ) · 1{z′ = z + c(s, a )}.
+
+Define a terminal cost on the augmented state at time H:
+
+¯cH (¯ sH ) := h(zH ),
+
+and define per-step costs for t = 0 , . . . , H − 1 as identically zero: 
+
+¯ct(¯ st, a t) := 0 , t = 0 , . . . , H − 1.
+
+Let ¯V πc (¯ μ0) denote the expected total cost under current policy π in ¯M:
+
+¯V πc (¯ μ0) := Eτ ∼π
+
+h H−1X
+
+> t=0
+
+¯ct(¯ st, a t) + ¯ cH (¯ sH )
+
+i
+
+.
+
+By construction, ¯V πc (¯ μ0) = Eτ ∼π [h(zH )] = Eτ ∼π [h(C(τ ))] = Cπh (μ0). (41) Applying Performance Difference Lemma on the augmented CMDP. Now we can apply standard trust-region performance-difference bounds on ¯M, because ¯J(π) is an expected return in the augmented CMDP. Let π, π ′ be two policies on S (equivalently on ¯S by ignoring z in the action selection). Define the value and Q functions for the augmented MDP with respect to policy π:
+
+Cπh (¯ st) := Eπ
+
+h
+
+¯cH (¯ sH ) ¯st
+
+i
+
+, Qπh (¯ st, a ) := Eπ
+
+h
+
+¯cH (¯ sH ) ¯st, a t = a
+
+i
+
+,
+
+and the corresponding advantage 
+
+Aπh (¯ st, a ) := Qπh (¯ st, a ) − Cπh (¯ st).
+
+Let ¯dπt denote the state distribution of ¯st under π in the augmented CMDP and ¯dπ := 1
+
+> H
+
+PH−1 
+
+> t=0
+
+¯dπt .By augmentation, we can apply trust-region performance-difference bounds on ¯M . We therefore consider the conservative surrogate program whose constraint can be rewritten as: 
+
+Cπk 
+
+> h
+
+(¯ μ0) + 
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπk ,a ∼π
+
+Aπk 
+
+> h
+
+(¯ s, a )| {z }
+
+> CPO
+
++ mk
+
+|{z} 
+
+> Stein margin
+
+≤ ε, ¯DKL (π∥πk) ≤ δ, (42) where the Stein margin is 
+
+mk ≜ λk · SD +tot (qπk ∥pref ) ≥ 0.
+
+Lemma 6. [Achiam et al., 2017] For any π, π ′,
+
+Cπ′ 
+
+> h
+
+(¯ μ0)−Cπh (¯ μ0) = ¯V π′ 
+
+> c
+
+(¯ μ0)− ¯V πc (¯ μ0) ≤
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπt , a ∼π′(·| s)
+
+Aπh (¯ s, a )+2 H ϵ π′ 
+
+> h
+
+·
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπt
+
+h
+
+DTV 
+
+ π′(· | s), π (· | s)i
+
+(43) 
+
+where the trust-region error term can be upper bounded by a total-variation penalty, e.g., 
+
+DTV 
+
+ π′(· | s), π (· | s) = 12
+
+X
+
+> a
+
+π′(a | s) − π(a | s) , ϵπ′ 
+
+> h
+
+:= max  
+
+> ¯s
+
+Ea∼π′(·| s)[Aπh (¯ s, a )] . (44) Fix the current policy πk and let πk+1 satisfy a trust-region constraint. Applying (43) – (44) with (π, π ′) = ( πk, π k+1 ) yields 
+
+Cπk+1  
+
+> h
+
+(¯ μ0) ≤ Cπk 
+
+> h
+
+(¯ μ0) + 
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπkt , a ∼πk+1 (·| s)
+
+Aπk 
+
+> h
+
+(¯ s, a ) + 2 H ϵ πk+1  
+
+> h
+
+·
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπk
+
+h
+
+DTV 
+
+ πk+1 (· | s), π k(· | s)i
+
+.
+
+(45) Define the usual surrogate objective on the augmented MDP: 
+
+Lh(πk+1 ; πk) := Cπk 
+
+> h
+
+(¯ μ0) + 
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπt , a ∼πk+1 (·| s)
+
+Aπk 
+
+> h
+
+(¯ s, a ).
+
+Then (45) becomes 
+
+Cπk+1  
+
+> h
+
+(¯ μ0) ≤ Lh(πk+1 ; πk) + 2 H ϵ πk+1  
+
+> h
+
+·
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπk
+
+h
+
+DTV 
+
+ πk+1 (· | s), π k(· | s)i
+
+. (46) By (42), our update enforces a marginalized surrogate safety constraint 
+
+Lh(πk+1 ; πk) ≤ ε − mk.
+
+Plugging this into (46) yields the one-step bound 
+
+Cπk+1  
+
+> h
+
+(¯ μ0) ≤ d − mk + 2 H ϵ πk+1  
+
+> h
+
+·
+
+> H−1
+
+X
+
+> t=0
+
+E¯s∼ ¯dπk
+
+h
+
+DTV 
+
+ πk+1 (· | s), π k(· | s)i
+
+. (47) Therefore, if the Stein margin satisfies 
+
+λk ≥
+
+2H ϵ πk+1  
+
+> h
+
+· PH−1 
+
+> t=0
+
+E¯s∼ ¯dπk
+
+h
+
+DTV 
+
+ πk+1 (· | s), π k(· | s)i
+
+SD +tot (qπk ∥pref )
+
+then the following relation holds with probability at least 1 − 2δ,
+
+Cπk+1  
+
+> h
+
+(¯ μ0) ≤ ε. 
+
+## C PRACTICAL STEINGATE 
+
+In subsection 4.2, we provided a decomposition of the tail-risk functional into three components: (i) the reference risk under the hybrid safe distribution, (ii) a boundary mass discrepancy term, and (iii) an interior Stein discrepancy term weighted by the interior mass. This structure naturally suggests a plug-in estimator in which each quantity appearing on (11) is approximated from finite rollout samples. First, the reference risk Epref [h(C)] depends only on the chosen safe reference and can therefore be computed offline or by Monte Carlo sampling from the interior reference density pint . This term establishes a baseline level of admissible tail risk. Second, the discrete discrepancy SD disc (q ∥ pref ) depends only on the boundary masses a0(q) and a1(q). In the bounded-cost setting, these quantities correspond to the probability that trajectories accumulate negligible cost or saturate at the maximal violation level. Estimating these probabilities reduces to counting the fraction of rollout samples falling within small neighborhoods of the endpoints. Importantly, this step preserves the asymmetry of the theoretical bound: only loss of safe mass and excess violation mass contribute to the certificate, while harmless shifts in the opposite direction are ignored. Third, the interior discrepancy SD int (qint ∥ pint ) is approximated using a kernelized Stein discrepancy relative to the interior reference density. This requires only a Stein operator for pint and a function class over the interior. Restricting the discrepancy computation to the interior samples implements the conditional distribution qint , while the empirical interior mass w(q) provides the corresponding weight. Combining these three empirical components yields a certificate of equation 11, which is a direct numerical instantiation of the theoretical upper bound in Lemma 1. The only approximation introduced is the replacement of population expectations and discrepancies by their sample analogues. As the number of rollout samples increases and the boundary neighborhoods shrink, these estimates converge to their population counterparts and the empirical certificate approaches the theoretical bound, up to the vanishing boundary approximation term εbdry .This construction ensures that the practical estimator remains structurally aligned with the theory: boundary mass shifts and interior distributional mismatch are controlled by separate terms with distinct gains, and both contribute additively to the final certificate. No additional modeling assumptions are introduced beyond those required by the hybrid Stein bound itself. Finally, we incorporate a lightweight empirical guard that replaces the Stein bound with the empirical risk estimate in regimes where the boundary discrepancy vanishes and the empirical risk is already below the reference level. This step does not alter the form of the certificate in the unsafe regime; it merely reduces variance when the distribution is clearly safe and the bound is nearly tight. The resulting procedure preserves the conservativeness of the Stein certificate while improving numerical stability in benign regimes. The implementation can be found at https://github.com/yassineCh/SteinGate. 
+
+## D ADDITIONAL RESULTS 
+
+D.1 ADDITIONAL BENCHMARKS 
+
+Figure 6 extends our evaluation to the Safety MuJoCo suite, which tasks agents with locomotion control under velocity-based constraints. Consistent with the navigation results, SteinGate demonstrates superior constraint adherence, rapidly converging to feasible policies while maintaining competitive forward velocities. In contrast, CPO suffers from significant instability, characterized by large cost oscillations and frequent safety violations, particularly in the complex dynamics of Ant and 
+
+HalfCheetah . While EVO succeeds in maintaining safety, it again exhibits excessive conservatism, resulting in slower convergence and lower asymptotic returns, most notably on Humanoid . Although state-augmentation methods (S AUTE ,SIMMER ) improve upon CPO’s safety profile, they frequently operate precariously close to the boundary with intermittent violations. These results confirm SteinGate’s robustness, demonstrating that its safety mechanism generalizes effectively from spatial navigation to velocity-constrained locomotion without sacrificing task performance. Algorithm 2 Hybrid Stein Certificate Estimator 
+
+Require: Costs C; Limit L; Reference params α, β, a ∗; Weights λdisc , λ stein ; Risk budget ε
+
+Ensure: Certificate Bound U , Decision d ∈ { SAFE , UNSAFE }
+
+1: 1. Normalization 
+
+2: Map costs to x ∈ [0 , 1] : xi ← clamp (ci/L, 0, 1) 
+
+3: Partition into sets: X0 (zeros), X1 (ones), Xint (interior) 
+
+4: Compute masses: ˆa0 ← | X0|/n, ˆa1 ← | X1|/n 
+
+5: 2. Reference Risk 
+
+6: href ← Ez∼Beta (α,β )[σ(z)] {Precomputed baseline} 
+
+7: 3. Compute Stein Penalties 
+
+8: Ddisc ← max(0 , ˆa1 − a∗
+
+1) + max(0 , a ∗
+
+0 − ˆa0) {Mass mismatch} 
+
+9: if |Xint | > 1 then 
+
+10: Compute KSD Dksd on Xint using score ∇ log Beta (·; α, β )
+
+11: else 
+
+12: Dksd ← 0
+
+13: end if 
+
+14: 4. Upper Bound Construction 
+
+15: Ustein ← href + λdisc Ddisc + λstein Dksd 
+
+16: 5. Empirical Guard (Heuristic Override) 
+
+17: ˆhemp ← 1
+
+n
+
+P σ(xi)
+
+18: if ˆa1 ≈ 0 and ˆhemp ≤ href then 
+
+19: U ← ˆhemp {Trust empirical if trivially safe} 
+
+20: else 
+
+21: U ← Ustein {Trust Stein bound otherwise} 
+
+22: end if 0                             
+
+> 50
+> 100
+> 150
+> SafetySwimmerVelocity-v1
+> 0
+> 1000
+> 2000
+> 3000
+> SafetyAntVelocity-v1
+> 0
+> 1000
+> 2000
+> 3000
+> SafetyHalfCheetahVelocity-v1
+> 1000
+> 2000
+> 3000
+> 4000
+> 5000
+> 6000
+> SafetyHumanoidVelocity-v1
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Return Cost
+> CPO EVO SteinGate Saute Simmer Cost limit
+
+Figure 6: Performance on velocity benchmarks. The top row shows episodic return and the bottom row shows episodic cost during training. The dashed lines indicate the cost limit. 
+
+D.2 ADDITIONAL BASELINES 
+
+Figure 7 expands our comparative analysis to include Lagrangian methods (PPO-Lag, TRPO-Lag) [Schulman et al., 2017, 2015] and PPO-based implementations of state augmentation techniques (Saute-PPO, Simmer-PPO) [Sootla et al., 2022a,b]. While the main text utilizes TRPO-based baselines to align with the backbones of CPO, EVO, and SteinGate, these additional comparisons isolate the impact of the underlying optimizer from the safety mechanism itself. The Lagrangian baselines prioritize reward maximization but fail to strictly enforce constraints, resulting in sustained operation above the cost limit. Although switching the backbone of Saute and Simmer to PPO reduces the magnitude of these violations compared to Lagrangian approaches, they still exhibit frequent excursions beyond the safety boundary. In contrast, SteinGate demonstrates superior constraint adherence without requiring the hyperparameter sensitivity often associated with Lagrangian multipliers, maintaining cost trajectories that tightly track the prescribed limit while delivering competitive task performance. 
+
+Comparison with CPO Variants. Figure 8 compares SteinGate with standard CPO and two of its variants, RCPO [Tessler 0                             
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> SafetyPointGoal1-v0
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> SafetyPointCircle1-v0
+> 0
+> 10
+> 20
+> 30
+> SafetyCarGoal1-v0
+> 0
+> 5
+> 10
+> 15
+> SafetyCarCircle1-v0
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 20
+> 40
+> 60
+> 80
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 50
+> 100
+> 150
+> Return Cost
+> PPOLag TRPOLag SteinGate Saute Simmer Cost limit
+
+Figure 7: Comparison of SteinGate with additional baselines. The top row shows episodic return, and the bottom row shows episodic cost during training. The dashed lines indicate the cost limit. 0                            
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> SafetyPointGoal1-v0
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> SafetyPointCircle1-v0
+> 0
+> 10
+> 20
+> 30
+> SafetyCarGoal1-v0
+> 0
+> 5
+> 10
+> 15
+> SafetyCarCircle1-v0
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 20
+> 40
+> 60
+> 80
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Environment steps 1e7
+> 0
+> 50
+> 100
+> 150
+> Return Cost
+> CPO RCPO SteinGate PCPO Cost limit
+
+Figure 8: Comparison of SteinGate with CPO variants. The top row shows episodic return and the bottom row shows episodic cost during training. The dashed lines indicates the cost limit. et al., 2019] and PCPO [Yang et al., 2020], across four Safety Gymnasium tasks. Although all methods share the same trust-region constrained optimization backbone, their behaviors differ substantially. Standard CPO and RCPO achieve relatively high returns but exhibit sustained cost levels close to or above the constraint, indicating frequent violations during training. PCPO also fails to consistently satisfy the constraint and shows noticeable excursions above the cost limit across environments. In contrast, SteinGate maintains systematically lower episodic cost while achieving competitive return. These results indicate that the improvement provided by SteinGate is not simply due to the choice of backbone optimizer, but arises from the proposed Stein-based gating mechanism, which offers more reliable control of constraint satisfaction than alternative variants of CPO. 
+
+## E EXPERIMENTAL DETAILS 
+
+E.1 SAMPLE SIZE AND TRAINING DYNAMICS 
+
+Our experimental framework is grounded in the OmniSafe library [Ji et al., 2024]. We implement SteinGate by extending the OmniSafe version of CPO. Similarly, we utilize standard OmniSafe implementations for baselines such as Saute and Simmer. For EVO, we adopt the official standalone implementation; however, we note that it is also constructed upon the omnisafe CPO. To ensure a strictly fair comparison, we maintained the default architectural hyperparameters and interaction budgets used for the baselines. In on-policy algorithms, the number of cost samples available for a safety update is determined by the steps_per_epoch (interaction budget per update) and the environment’s episode_length .To accelerate training on our hardware, we used vector_env_nums=8 (eight parallel environments). Given the task parameters, this resulted in an effective sample size of N = 16 cost episodes per epoch for Goal tasks (episode length 1000) and N = 40 for Circle tasks (episode length 500). A core advantage of SteinGate is its ability to operate without the extensive replay buffers or importance resampling required by EVT-based methods such as EVO. To verify that the safety guarantees of SteinGate hold independently of the specific OmniSafe configuration, we conducted an ablation on CarGoal1 by modulating the steps_per_epoch parameters to obtain batch sizes of N ∈ { 8, 16 , 32 }.It is important to note that varying N in this framework implicitly changes the number of policy updates per total environment steps (e.g., larger batches imply fewer total updates for a fixed interaction budget). Despite this confounding factor, the results in paragraph 5.2 show SteinGate effectiveness. This ablation confirms that SteinGate is not brittle with respect to sample size and can be integrated into standard on-policy implementations (e.g., CPO) without requiring the collection of off-policy data to stabilize the safety estimator. 
+
+E.2 ENVIRONMENT DESCRIPTIONS 
+
+We evaluate SteinGate on a collection of continuous-control environments drawn from the Safety-Gymnasium bench-mark suite, which is built on the MuJoCo simulator [Ray et al., 2019, Todorov et al., 2012]. These environments are designed to study reinforcement learning under explicit safety constraints by associating penalties with hazardous states or behaviors. 
+
+Point and Car Tasks. The Point and Car agents are evaluated on both G OAL and C IRCLE variants. In the G OAL tasks, the agent must navigate toward a sequence of target locations while avoiding hazardous regions in the environment. After each successful reach, a new goal position is sampled, requiring continual navigation under safety constraints. In the C IRCLE 
+
+tasks, the agent is encouraged to follow a predefined circular trajectory. Deviations outside the designated safe region incur costs, creating a trade-off between tracking accuracy and constraint satisfaction. The Car variants introduce additional control complexity through nonholonomic dynamics, making safe navigation more challenging than for the Point agent. 
+
+Velocity-Constrained Locomotion Tasks. We additionally consider velocity-limited locomotion tasks for articulated agents, including A NT , H ALF CHEETAH , S WIMMER , and H UMANOID . In these environments, the agent is rewarded for forward progress while being penalized for exceeding a specified velocity threshold. The safety constraint therefore requires the agent to coordinate its movement to achieve steady locomotion without violating speed limits. These tasks capture a different class of safety considerations, where constraints apply to the dynamics of motion rather than spatial regions. 
+
+E.3 HYPERPARAMETERS 
+
+All experiments were conducted using the default hyperparameter configurations provided by the OmniSafe library for the corresponding baseline algorithms. We did not perform task-specific tuning or additional hyperparameter searches. This choice ensures a fair and reproducible comparison and isolates the effect of the proposed SteinGate mechanism from confounding optimization or architectural choices. Unless otherwise specified, network architectures, learning rates, batch sizes, and interaction budgets follow the standard OmniSafe settings. For SteinGate, the practical implementation introduces a number of parameters related to the construction of the Stein certificate. These parameters are shared across all tasks and are reported in Table 2. For EVO, the official implementation does not fully specify several hyperparameters related to buffer us-age and percentile thresholds. In particular, the following parameters were not documented in the released code: use_cost_buffer , use_reward_buffer , cost_buffer_size , reward_buffer_size ,
+
+initial_distribution_percentile , initial_distribution_reward_percentile ,
+
+cost_buffer_percentile , reward_buffer_percentile , and oversample_factor . We initialized a subset of these parameters based on the descriptions provided in the EVO paper and performed limited sweeps over the remaining unspecified values. From these runs, we selected the configuration that achieved the best trade-off between reward performance and constraint satisfaction. The final values used in our experiments are summarized in Table 3. Table 3: EVO hyperparameters not specified in the official implementation and selected in this work.           
+
+> Hyperparameter Value
+> use_cost_buffer True
+> use_reward_buffer True
+> cost_buffer_size 50
+> reward_buffer_size 100
+> initial_distribution_percentile 0.5
+> initial_distribution_reward_percentile 0.5
+> cost_buffer_percentile 95
+> reward_buffer_percentile 90
+> oversample_factor 4
+
+Table 2: Hyperparameters of the Hybrid Stein Certificate Estimator 
+
+Category Hyperparameter Symbol Default Value 
+
+Reference Distribution 
+
+alpha α 2.0 
+
+beta β 5.0 
+
+Risk Mapping σ(·)
+
+u_norm – 0.5 
+
+eta – 0.02 
+
+Risk Budget 
+
+eps_target ε 0.10 
+
+Stein Penalty Weights 
+
+discrete_weight λdisc 1.0 
+
+stein_factor λstein 0.10 
+
+KSD Stability 
+
+min_bandwidth – 0.05 
+
+interior_clip – 1 × 10 −5
