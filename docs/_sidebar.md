@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-07-18 <!--dpr-date:20260718-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/18/2607.14643v1-navcmpo-critic-guided-meanflow-policy-optimization-for-adaptive-navigation" data-sidebar-item="{&quot;title&quot;: &quot;NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.14643v1-navcmpo-critic-guided-meanflow-policy-optimization-for-adaptive-navigation&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;rl-path-opt&quot;}], &quot;evidence&quot;: &quot;使用强化学习微调自适应导航，可应用于机器人路径优化&quot;}">NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation</a>
   * 2026-07-17 <!--dpr-date:20260717-->
     * 速读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/17/2607.11964v1-lidar-ad-a-decoder-free-latent-interaction-dreamer-with-action-residual-chains-for-autonomous-driving" data-sidebar-item="{&quot;title&quot;: &quot;LIDAR-AD: A Decoder-Free Latent-Interaction Dreamer with Action-Residual Chains for Autonomous Driving&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.11964v1-lidar-ad-a-decoder-free-latent-interaction-dreamer-with-action-residual-chains-for-autonomous-driving&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;rl-path-opt&quot;}], &quot;evidence&quot;: &quot;基于模型的强化学习在自动驾驶路径规划中的应用，可迁移至机器人路径优化&quot;}">LIDAR-AD: A Decoder-Free Latent-Interaction Dreamer with Action-Residual Chains for Autonomous Driving</a>
