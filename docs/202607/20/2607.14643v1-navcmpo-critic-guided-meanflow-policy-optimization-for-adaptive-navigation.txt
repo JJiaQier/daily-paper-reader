@@ -1,0 +1,400 @@
+Title: NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation
+
+URL Source: https://arxiv.org/pdf/2607.14643v1
+
+Published Time: Fri, 17 Jul 2026 01:04:39 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation 
+
+Junjie An 1, Yi Wu 1, Xiao Liu 1, Yiqun Zhou 1, Yuechen Wu 2, Xiaoqing Guan 1, You Wang 1,3, Guang Li 1
+
+Abstract — End-to-end diffusion-based policies have demon-strated strong performance in mapless visual navigation, but their iterative denoising process introduces substantial inference latency, while behavior cloning limits performance to the quality of expert demonstrations. We present NavCMPO, a two-stage adaptive navigation framework that combines few-step MeanFlow trajectory generation, critic-guided refinement, and reinforcement learning fine-tuning. During pre-training, an obstacle proximity prediction task encourages the visual representation to capture obstacle-aware spatial information. To compensate for the degradation in obstacle avoidance caused by few-step generation, Critic-Guided Trajectory Refinement (CGTR) uses gradients from a critic trained with obstacle-point-cloud supervision to refine intermediate trajectories. Dur-ing adaptation, the MeanFlow policy is fine-tuned using Prox-imal Policy Optimization with behavior-cloning regularization, while the critic is updated to accommodate embodiment-specific observation changes. Under a matched training budget on the InternVLA-N1 benchmark, NavCMPO achieves an average success rate of 74.7%, exceeding the retrained NavDP baseline by 6.4 percentage points, while reducing inference latency from 85 ms to 60 ms. Experiments on a Unitree Go2 further demonstrate effective sim-to-real transfer. 
+
+I. I NTRODUCTION 
+
+Autonomous visual navigation in cluttered, unstructured environments is a fundamental capability for mobile robots. Classical navigation systems typically rely on modular pipelines consisting of mapping, localization, and path plan-ning, which require significant engineering effort and often fail to adapt to diverse environments and robot platforms [1]. End-to-end learning-based approaches offer an attrac-tive alternative by directly mapping sensor observations to navigation actions or trajectories, thereby bypassing explicit map construction and reducing the sim-to-real gap [2], [3]. Current end-to-end visual navigation approaches fall into two paradigms. Reinforcement learning methods [4]–[6] learn navigation policies through trial-and-error interaction, but vision-to-action RL suffers from low sample efficiency, as the network must jointly learn visual perception and motion planning. Behavior cloning offers a more practical alternative, with diffusion-based policies achieving state-of-the-art results. Diffusion Policy [7] introduced DDPMs for visuomotor control, and NavDP [8] further adapted this framework for mapless visual navigation with sim-to-real transfer. However, diffusion-based navigation policies face three key limitations. First, multi-step denoising incurs high in-   
+
+> 1Zhejiang University, Hangzhou, China. (e-mail: 12332047, 12332084, spanda, 12321119, xiaoqing guan, king wy, guangli@zju.edu.cn).
+> 2Shandong University. (e-mail: wuyuechen@mail.sdu.edu.cn).
+> 3Corresponding author: You Wang.
+
+ference latency. NavDP requires 10 iterative denoising steps per planning cycle, each involving a full Transformer decoder forward pass. This accumulated latency hinders real-time deployment, especially on resource-constrained platforms. While recent advances in flow matching and MeanFlow [9], [10] enable generation with one step, we observe that reduc-ing the number of denoising steps significantly degrades tra-jectory quality in navigation tasks—the generated trajectories tend to go straight toward the goal direction while ignoring obstacles, as fewer steps provide insufficient opportunities for the model to reason about spatial structure through cross-attention. Second, behavior cloning imposes a performance ceiling. Policies trained purely from expert demonstrations cannot surpass the demonstration quality and are brittle to distributional shifts at deployment. Recent works on RL fine-tuning of generative policies [11]–[13] have demonstrated that policy gradient methods such as PPO can push diffusion and flow-based policies beyond the imitation learning ceiling, making RL fine-tuning an increasingly prominent paradigm for closing the sim-to-real gap. In this paper, we present NavCMPO (Critic-Guided Mean-Flow Policy Optimization), a two-stage framework for low-latency and adaptive visual navigation. Our focus is not to introduce a new flow-matching or reinforcement-learning algorithm, but to adapt these techniques to visual navigation, where aggressive reduction of generation steps can sub-stantially degrade obstacle avoidance. During pre-training, we combine few-step MeanFlow trajectory generation [9] with obstacle-aware representation learning and critic-guided trajectory refinement. During adaptation, we fine-tune the policy using PPO following prior generative-policy fine-tuning methods [11], [12], while updating the critic to ac-commodate embodiment-specific observation changes. This integration improves the quality-latency tradeoff and enables efficient specialization to a target robot without training a visual navigation policy from scratch. The main contributions of our proposed framework are threefold: (1) We adapt MeanFlow-based few-step generation to mapless visual navigation and analyze its quality-latency tradeoff. The resulting five-step policy reduces inference latency from 85 ms to 60 ms relative to the retrained NavDP baseline. (2) We introduce navigation-specific obstacle-aware learn-ing and refinement mechanisms. Obstacle Proximity Pre-diction improves the spatial representation learned by the visual encoder, while Critic-Guided Trajectory Refinement uses gradients from a learned critic to correct unsafe interme-arXiv:2607.14643v1 [cs.RO] 16 Jul 2026 Stage2: Fine -Tuning 
+
+Stage1: Pre -Training 
+
+> RGB
+> Depth
+> rgbd
+> goal
+> r
+> τ
+> traj
+
+MeanFlow Policy  
+
+> actor head
+> critic head
+> meanflow policy
+
+ℒ
+
+> MeanFlow
+> Policy
+
+𝑨 0 𝑨 t 𝑨 t+1 𝑨 𝜏  𝑨 1               
+
+> 𝑝 𝐴 𝑘 +1𝐴 𝑘 =𝒩 𝐴 𝑘 +1,𝜎 2𝐼
+> Flow -Noise
+> 𝐴 𝜏 ←𝐴 𝜏 +𝜂 ⋅Clip ∇𝐴 𝐶 ,𝛿 CGTR
+> noise
+> Transformer
+> 𝑂 PP
+> DIN Ov2
+> goal
+> DINO v2
+> trajectory
+
+Visual Encoder  Embedding 
+
+> Navigation
+> Target
+> MLP
+> OPP
+> noise
+> CGTR
+> denoise
+> MDP Formulation
+> ESDF Map
+> Simulation
+> Real World
+
+Environment              
+
+> actor head
+> critic head trajectory
+> RGB -D
+> Observation
+> Critic Update
+> PPO Update
+> critic
+> 𝑢 𝐴 𝑡 ,𝑟 ,𝑡 ≜1
+> 𝑡 −𝑟 න
+> 𝑟
+> 𝑡
+> 𝑣 𝑧 𝜏 ,𝜏 𝑑𝜏
+> reward
+> critic ranking
+
+Fig. 1. Overview of the two-stage NavCMPO framework. In Stage 1, RGB-D observations and the navigation goal are encoded into a conditional representation. The MeanFlow actor generates candidate trajectories, the critic ranks them according to predicted safety and goal progress, and CGTR uses the critic gradient to refine the intermediate flow state. The OPP auxiliary task encourages obstacle-aware visual representations and is removed during inference. In Stage 2, the MeanFlow actor is fine-tuned using PPO with environment rewards and behavior-cloning regularization, while the critic is adapted using geometric supervision from the simulation environment. 
+
+diate trajectories without requiring explicit online trajectory optimization. (3) We develop a two-stage adaptation scheme that combines PPO fine-tuning, critic adaptation, and behavior-cloning regularization. Under matched training resources, the complete system improves the average benchmark success rate by 6.4 percentage points over NavDP and demonstrates effective transfer to a Unitree Go2. II. R ELATED WORKS 
+
+A. Generative Motion Planning 
+
+Diffusion-based planners model multimodal trajectories but require iterative denoising [7], [14]–[16]. Diffuser also shows that gradient-guided sampling supports flexible trajec-tory planning [14]. Flow matching constructs straighter gen-eration paths [17], [18], while Rectified Flow and MeanFlow reduce the required integration steps [9], [19]. For visual navigation, FlowNav [20] combines flow matching with depth priors, while NaviDiffusor [21] uses explicit TSDF-based cost guidance. In contrast, CGTR refines intermediate trajectories using gradients from a learned critic without constructing an explicit geometric cost at inference. 
+
+B. End-to-End Visual Navigation 
+
+iPlanner and ViPlanner integrate differentiable trajectory optimization into learned navigation systems [22], [23]. No-MaD uses goal-masked diffusion for general navigation [24], while NavDP employs privileged-information guidance for sim-to-real visual navigation [8]. Our work follows the NavDP evaluation setting but focuses on reducing generation latency and adapting the policy to a target embodiment. 
+
+C. RL Fine-tuning for Generative Policies 
+
+DPPO applies PPO to diffusion policies [11], and subse-quent methods extend online RL fine-tuning to flow-based policies [13], [25], [26]. DMPO combines MeanFlow with reinforcement learning for efficient manipulation [12]. In contrast, we study few-step MeanFlow fine-tuning for RGB-D navigation, together with critic-guided refinement, critic adaptation, and behavior-cloning regularization. III. M ETHOD 
+
+In this section, we propose an efficient and generalizable adaptive navigation framework serving as a local planner for robot navigation. Our method utilizes RGB and depth cameras as inputs and navigation trajectory as output. The overall framework consists of three components: (1) a mul-timodal Transformer architecture for state encoding; (2) a pre-training phase using MeanFlow Policy for stable few-step generation; (3) an online fine-tuning phase using PPO with behavior cloning regularization. The overall framework is shown in the Fig. 1. 
+
+A. Problem Formulation 
+
+We formulate the visual navigation task as a Partially Observable Markov Decision Process (POMDP), defined by the tuple M = ( S, O, A, T , R, γ ). At each time step t, the robot receives an observation ot ∈ O , which comprises a sequence of historical RGB images It−N :t, the current depth image Dt, and the navigation goal gt. The policy πθ (at|ot)
+
+generates an action at ∈ A , representing a sequence of future waypoints (trajectory) τt. Upon executing the action, the robot transitions to a new state governed by the dynamics 
+
+T and receives a reward rt from the environment. As we aim to enable real-time visual local planning, our objective is to learn an optimal policy π∗ 
+
+> θ
+
+that maximizes the expected cumulative reward while maintaining ultra-low inference latency. 
+
+B. Meanflow Policy Navigation Pre-Training 
+
+To address the aforementioned challenges, visual nav-igation involves an extremely large state space (high-dimensional images) and a continuous action space [27], [28]. Training reinforcement learning (RL) agents from scratch requires millions of random exploration steps within the environment to acquire basic behaviors such as obstacle avoidance or target approaching. This process is compu-tationally expensive and time-consuming. Conversely, imi-tating expert trajectory planning policies offers significant advantages; by learning from large-scale datasets, robots can acquire implicit expert preferences, such as generating smooth trajectories and avoiding obstacles. In the pre-training phase, we utilize a meanflow policy as the local trajectory planning strategy. We adopt a unified transformer [8] architecture as the policy backbone to process high-dimensional visual inputs. 
+
+Multi-Modal Encoder : To capture spatial geometry and temporal context, we employ two DINOv2 ViT-S en-coders [29] for RGB and depth observations, respectively. The historical RGB images are processed by the RGB encoder, while the current depth image is replicated into three channels and processed by the depth encoder. The resulting RGB and depth tokens are fused through a lightweight Transformer decoder and projected into the conditional rep-resentation hcond = ϕθ (ot).
+
+Obstacle Proximity Prediction(OPP) : To enable the vi-sual encoder to learn spatially-aware feature representations, we introduce the OPP auxiliary task. OPP partitions the space surrounding the robot into 12 uniform angular sectors and predicts the distance to the nearest obstacle within each sector. OPP auxiliary task employs an MLP to project hcond 
+
+into the predicted distance vector dpred .Ground truth labels are derived directly from the obstacle point clouds in the dataset. We compute the relative distance and azimuth of each obstacle point. These points are then assigned to their corresponding sectors based on angle, and the minimum distance within each sector dmin is selected as the label. The OPP loss is defined as: 
+
+LOP P = SmoothL1 (dpred , d min ) (1) 
+
+Policy Head : Our policy head predicts the velocity field 
+
+uθ (zt, t, h cond ) within the flow matching process [9], where 
+
+t ∈ [0 , 1] represents the flow time and zτ denotes the flow state. This improvement enables a transition from multi-step denoising to efficient flow-based generation. We model trajectory generation as a deterministic flow from a standard Gaussian noise distribution ϵ ∼ N (0 , I ) to the expert trajectory distribution atgt . We define the linearly interpolated path as zt = (1 − t)atgt + tϵ . The training objective is to train the network uθ to predict the average velocity field capable of transporting noise to data in a single step ( K = 1 ). The average velocity field satisfies the following equation: 
+
+ddt u(zt, r, t ) = v(zt, t )∂z u + ∂tu (2) The MeanFlow loss function is defined as: 
+
+LM F (θ) = E ∥uθ (zt, r, t, h ) − utgt ∥22
+
+ (3) where utgt = ( ϵ − atgt ) represents the target velocity directed from data to noise. As shown in Sec. IV-A, directly applying one-step Mean-Flow generation results in a low navigation success rate, even when dispersion regularization is used [10], [12]. In particular, the generated trajectory may point directly toward the goal while failing to represent alternative paths around an obstacle. We therefore use multi-step MeanFlow integration to provide additional opportunities for visual features to interact with the trajectory representation. We divide the generation interval [0 , 1] into T segments, where tk = k/T ,and update the flow state as follows: 
+
+ztk+1 = ztk − 1
+
+T · uθ (ztk , t k, t k+1 , h cond ) (4) 
+
+Critic Head : During inference, the policy generates N
+
+candidate trajectories in parallel. A critic head network 
+
+C(zt, h cond ) evaluates each trajectory and predicts a quality score [8]. The critic shares the same Transformer decoder as the policy head, enabling it to jointly assess trajectory safety and goal-directed progress. The scoring function is derived from obstacle point cloud supervision: 
+
+s(τ ) = −λc · 1
+
+NτNτX
+
+> i
+
+[D(τi) < d saf e ] + λg · ∆dgoal (5) where D(τi) denotes the minimum distance between way-point τi and the observed obstacle points, dsaf e is the collision-safety threshold, and ∆dgoal measures the goal progress from the first waypoint to the last waypoint. The indicator term penalizes waypoints that violate the safety threshold. We set λc = 5 .0, λ g = 0 .1 to prioritize obstacle avoidance, while the goal term serves as a tiebreaker among equally safe trajectories. The critic is trained via mean squared error between predicted and ground-truth scores: 
+
+LC = ∥C(τexp , h ) − s(τexp )∥2 + ∥C(τaug , h ) − s(τaug )∥2
+
+(6) where τexp and τaug denote the expert trajectory and its randomly perturbed counterpart, respectively. The total pre-training loss is defined as : 
+
+LStage 1 = λM F LM F + λOP P LOP P + λCritic LC
+
++λaux Laux 
+
+(7) where Laux represents the positional encoding loss [8]. The MeanFlow denoising network is updated via back-propagation using the Jacobian-Vector Product (JVP) [9]. This formulation ensures that the policy effectively captures diverse navigation modes. 
+
+Critic-Guided Trajectory Refinement(CGTR) : Al-though the MeanFlow Policy can improve the success rate under few-step denoising, the limited number of generation steps still poses potential safety risks. To address this, we propose a trajectory correction method based on Critic gradients. In the penultimate step of the denoising process, the gradient signals from a pre-trained Critic network are utilized to explicitly refine the intermediate trajectory. 
+
+zτ ← zτ + η · Clip (∇z C(zt, h cond ), δ ) (8) where C(·) is the critic trained with obstacle-point-cloud supervision, η is the guidance coefficient, and δ is the gradient-clipping threshold. We apply CGTR at the penul-timate generation step, denoted by τ . Because a larger critic value represents a safer and more goal-directed trajectory, the positive critic gradient provides a local direction for improving the intermediate trajectory. This mechanism is inspired by classifier guidance [30], but uses a navigation critic rather than a class-conditional image classifier. 
+
+C. Online RL Fine-tuning for Meanflow Policy 
+
+In Stage 2, we optimize the robot navigation policy using reinforcement learning in simulation. We formalize the fine-tuning process as the optimization of MeanFlow Policy. To facilitate exploration, we inject stochastic noise into the last few flow process during training, parameterizing the action distribution as a Gaussian centered on the MeanFlow prediction [11]–[13], [31]: 
+
+p(ztk+1 |ztk ) = N
+
+
+
+ztk − 1
+
+T u(ztk , t k+1 , t k, h ), σ 2I
+
+
+
+(9) We employ Proximal Policy Optimization (PPO) to update the policy parameters θ. The denoising log-probability is defined as: 
+
+log π(ztk+1 |ztk , h ) = log N  ztk+1 |μk, σ 2I , t k̸ = τ (10) With the incorporation of CGTR at denoising step τ , the log-probability becomes: 
+
+log π(zτ +1 |zτ , s) = log N  zτ +1 + C| μk, σ 2I (11) where C is the CGTR correction term (8). 
+
+Reward : For the robot navigation task, we design a dense reward function defined as: 
+
+Rt = βpRprogress + βsRsaf ety + βg Rgoal (12) where Rprogress = dt−1 
+
+> goal
+
+− dtgoal measures the reduction in Euclidean distance to the goal, providing dense feedback at each step. rsaf ety leverages the Euclidean Signed Dis-tance Field (ESDF) map to penalize collisions and unsafe proximity: 
+
+Rsaf ety = −1, if D(pt) < d saf e (13) where D(pt) is the ESDF map values of the robot at the current position. Rgoal = 1 is a bonus awarded upon reaching within 0.5m of the goal. Following PPO-based generative-policy fine-tuning [11], [12], we optimize the standard clipped surrogate objective: 
+
+LP P O = −E
+
+h
+
+min 
+
+
+
+ρt,k ˆAt, clip( ρt,k , 1 − ϵ, 1 + ϵ) ˆAt
+
+i 
+
+,
+
+(14) where ρt,k = πθ (ztk+1 | ztk , h )/π θroll (ztk+1 | ztk , h ), ˆAt is the estimated advantage, and ϵ is the clipping coefficient. Here πθroll is the rollout policy, while πref below denotes the frozen BC reference policy. 
+
+Critic Update : Changes in camera placement, field of view, and robot embodiment can shift the visual observa-tions encountered during deployment, thereby reducing the accuracy of the pre-trained critic. Because the critic is used both to rank candidate trajectories and to compute the CGTR direction, we continue to optimize it during Stage 2 using the same score definition and supervised critic loss as in Eqs. 5 and 6. To retain the navigation prior learned during pre-training, we keep a frozen reference policy πref and penalize devia-tions of the fine-tuned policy from its generated trajectories: 
+
+LBC = E ∥τπref − τπθ ∥22
+
+ . (15) PPO clipping and BC regularization serve different pur-poses. PPO clipping constrains each update relative to the policy that collected the current rollout, whereas LBC an-chors the policy to the fixed pre-trained navigation prior throughout fine-tuning. The latter reduces long-term drift and catastrophic forgetting over multiple PPO updates. The final optimization objective for the second stage is defined as: 
+
+LStage 2 = LP P O + λBC LBC + λCritic 2LC (16) This formulation enables the robot to adapt to complex dynamics and optimize trajectory smoothness while retaining the robust visual representations learned from large-scale datasets. IV. E XPERIMENTS 
+
+To compare our method with NavDP, we adopt NavDP’s evaluation benchmark and assess our algorithm’s perfor-mance in both simulation and real-world settings. The sim-ulation test environment is built on IsaacSim, with Dingo wheeled robot. The test environments include Cluttered-Easy, Cluttered-Hard, Home, and Commercial scenes. Our primary evaluation focuses on point-to-point navigation tasks. Addi-tionally, we conduct real-world experiments using a Unitree Go2 quadruped robot across three scenarios: indoor static TABLE I POINT -GOAL NAVIGATION RESULTS UNDER THE REPORTED EVALUATION PROTOCOLS . B EST RESULTS ARE SHOWN IN BOLD ; “–” INDICATES THAT THE CORRESPONDING RESULT IS NOT AVAILABLE OR WAS NOT REPORTED .Method Cluttered-Hard Home Commercial Average Inference SR / SPL SR / SPL SR / SPL SR / SPL (ms) DD-PPO - - - 8.6 / 8.5 -iplanner - - - 54.1 / 51.2 -Viplanner 68.4 / 56.8 53.7 / 51.2 68.1 / 66.0 62.4 / 58.2 30 NavDP 72.8 / 51.2 60.3 / 54.7 74.1 / 70.5 68.3 / 60.3 85 MP1 77.6 / 61.4 46.4 / 43.2 62.5 / 59.2 59.1 / 53.2 30            
+
+> NavCMP 76.8 / 59.2 61.1 / 55.8 73.4 / 70.1 69.2 / 62.2 60
+> NavCMPO 82.8 / 59.4 66.9 / 60.6 78.4 / 72.3 74.7 / 65.1 60
+
+scenes, indoor dynamic scenes, and outdoor scenes, likewise evaluating point-to-point navigation tasks. Evaluation Metrics. Following standard navigation evalu-ation protocols, we report:  
+
+> •
+
+Success Rate (SR) : The percentage of episodes in which the robot reaches within 1m of the goal.  
+
+> •
+
+Success weighted by Path Length (SPL) : SR weighted by the ratio of optimal path length to actual path length, measuring path efficiency.  
+
+> •
+
+Inference Time : The average wall-clock time per plan-ning step (measured on an NVIDIA RTX 4090). 
+
+A. Simulation Results  
+
+> Fig. 2. Qualitative trajectory comparison in two representative indoor scenes. Left: Long distance task; Right: Narrow and complex indoor scene with other baselines failing. Our method (NavCMPO, red) generates safer paths while successfully avoiding obstacles.
+
+In this section, we conducted a series of comparative and ablation studies in simulation. To ensure a fair comparison, all algorithms were trained using identical computational resources and training durations. The training settings are: Pre-training: 8 ×A800 GPUs, batch size of 128, trained for 24 hours; Fine-tuning: A single RTX 4090 GPU, batch size of 8, trained for 12 hours. Thus, Table I reports a matched-compute comparison with our retrained NavDP baseline and does not imply superiority over the original NavDP across its larger-scale training or broader embodiment coverage [8]. We fine-tune the test robot using an indoor environment from In-ternUtopia. The test benchmarks in simulation include three types of scenarios: Cluttered Hard, Home, and Commercial, among which Cluttered Hard has 500 episodes, while Home and Commercial each have 1000 episodes. In the comparative experiments, our baselines include:  
+
+> •
+
+DD-PPO [32]: A reinforcement-learning navigation baseline trained using decentralized distributed PPO.  
+
+> •
+
+iPlanner [22]: A differentiable local-planning method that learns to generate collision-free trajectories.  
+
+> •
+
+Viplanner : Visual semantic instruction planner.  
+
+> •
+
+NavDP : Uses Diffusion Policy for behavior cloning navigation with 10 denoising steps.  
+
+> •
+
+MP1 : Uses One Step Dispersive MeanFlow Policy [10] for behavior cloning navigation.  
+
+> •
+
+NavCMP(ours) : Uses Critic-Guided MeanFlow Policy for behavior cloning navigation with 5 denoising steps. The experimental results are presented in Table I. MP1 (one-step MeanFlow) achieves the fastest inference (30ms) but suffers from significantly lower success rates in com-plex environments (Home: 46.4%, Commercial: 62.5%), confirming that single-step generation is insufficient for navigation tasks requiring spatial reasoning. Our NavCMP (5-step Critic-Guided MeanFlow) recovers performance to match NavDP across all scenes while reducing inference time to 60ms. Flow-based models tend to generate more direct trajectories, as illustrated in Fig. 2, whereas diffusion models often produce more tortuous paths due to injected noise. The integration of reinforcement learning proves cru-cial: NavCMPO achieves the highest average SR and SPL, outperforming NavDP by 6.4% SR and 4.8% SPL. Regarding inference latency, NavCMPO (60ms) operates at real-time frequency while outperforming NavDP (85ms) by 6.4% in average SR. The 5-step MeanFlow formulation provides the best quality-latency tradeoff, as shown in Fig. 3. Overall, our method achieves state-of-the-art performance with an average success rate of 74.7% and SPL of 65.1%. Simultaneously, we conducted an ablation study to analyze the effectiveness of our proposed improvements. The variants in the ablation study include:  
+
+> •
+
+FlowNav : Replace the MeanFlow Policy with Flow Matching Policy, with 5 denoising steps.  
+
+> •
+
+w/o OPP : The MeanFlow Policy is pre-trained without Obstacle Proximity Prediction.  
+
+> •
+
+w/o CGTR : The MeanFlow Policy is pre-trained with-out Critic-Guided Trajectory Refinement.  
+
+> •
+
+w/o RFT : The model is deployed without reinforcement learning fine-tuning.  
+
+> •
+
+w/o CriUp : The Critic Head is not updated in stage 2. • w/o BC Loss : The Behavior Cloning (BC) loss is ex-cluded from the total loss function during reinforcement learning training. 
+
+TABLE II ABLATION STUDY RESULTS .Method Easy Hard Average SR / SPL SR / SPL SR / SPL FlowNav 60 / 53.1 42 / 40.4 51.0 / 46.8 w/o OPP 71 / 64.6 58 / 51.4 64.5 / 58.0 w/o CGTR 67 / 59.2 53 / 49.2 60.0 / 54.2 w/o RFT 73 / 65.9 59 / 52.9 66.0 / 59.4 w/o CriUp 79 / 64.3 66 / 59.4 72.5 / 61.2 w/o BC Loss 81 / 58.9 66 / 54.7 73.5 / 56.8 
+
+NavCMPO 79 / 65.2 68 / 62.1 73.5 / 64.2 1 3 5 8 10     
+
+> Denoising Steps
+> 30
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> Success Rate (%)
+> MeanFlow Policy
+> MeanFlow Policy + CGTR 135810
+> Denoising Steps
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120
+> Inference Time (ms)
+> MeanFlow Policy
+> MeanFlow Policy + CGTR
+
+Fig. 3. Left: Success rate versus denoising steps with and without CGTR. Right: Inference time versus denoising steps with and without CGTR. 
+
+Table II reports results on 100 indoor scenes under Easy and Hard settings. FlowNav achieves the lowest average SR (51.0%), below the one-step MeanFlow policy MP1, indicating that MeanFlow provides better few-step gen-eration quality. Removing CGTR causes the largest SR drop (13.5%), while removing OPP reduces SR by 9.0%, confirming the importance of critic-guided refinement and obstacle-aware representation learning. Without RL fine-tuning, SR decreases by 7.5%, although Easy-scene SPL slightly improves to 65.9%, suggesting that the behavior-cloned policy produces efficient but less robust paths. Updat-ing the critic improves SR/SPL by 1.0/3.0 percentage points, while removing BC regularization increases Easy SR to 81% but reduces average SPL by 7.4%. NavCMPO achieves the best Hard-scene and average performance, demonstrating the complementary effects of its components. In the pre-training stage, we conduct ablation experiments to determine the optimal generation and guidance configura-tions. As shown in Fig. 3, single-step MeanFlow achieves only 36.3% SR due to trajectory collapse, while 5-step generation reaches 53.3% SR with significantly lower latency than 10-step (59.2%). With CGTR enabled, the 5-step con-figuration achieves 59.4% SR, matching the 10-step baseline without CGTR, confirming that CGTR effectively compen-sates for fewer denoising steps at minimal overhead ( 10ms). For CGTR configuration, Fig. 4 demonstrates that single-step guidance optimally steers trajectories around obstacles, whereas multi-step guidance causes excessive correction and trajectory instability. The sensitivity analysis of guidance coefficient η (Fig. 5) reveals a clear peak at η = 0 .4 (61% SR, 57.1% SPL), with smaller values providing insufficient (a) steps = 0  (b) steps = 1  (c) steps = 3 
+
+Fig. 4. Effect of CGTR steps on trajectory quality. The top row shows planned trajectories (blue) and the optimal trajectory (red) on a top-down occupancy map, while the bottom row shows the image in camera. (a) steps = 0: without CGTR, the planned trajectories penetrate the obstacle region. (b) steps = 1: a single CGTR step effectively steers trajectories around the obstacle. (c) steps = 3: excessive guidance causes over-correction. 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9  
+
+> Guidance Coefficient η
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> 60.0
+> 62.5
+> 65.0
+> Success Rate (%)
+> SR (%)
+> SPL (%)
+> 40.0
+> 42.5
+> 45.0
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> 60.0
+> SPL (%)
+
+Fig. 5. Sensitivity analysis of CGTR guidance coefficient η with fixed clipping threshold δ = 1 .0 and step =1. Both SR and SPL peak at η = 0 .4.
+
+correction and larger values causing over-correction ( η = 0 .8
+
+drops to 51% SR). Based on these results, we adopt 5 denoising steps with single-step CGTR at η = 0.4 and 
+
+δ = 1 .0 as our default configuration. 0 1000 2000 3000 4000 
+
+> Training Step
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Success Reward
+> 5-Step Fine-Tuning
+> 3-Step Fine-Tuning
+> 1-Step Fine-Tuning
+
+Fig. 6. PPO fine-tuning reward curves under different numbers of trainable flow integration steps. 
+
+In fine-tuning stage, we conducted ablation experiments on the number of fine-tuning steps in reinforcement learning. Fig. 6 shows the training reward curves under different denoising steps. We take βp = 5 , β s = 50 , β g = 20 in eq.12. The 5-step configuration achieves the highest and most stable reward growth, while the 1-step configuration stagnates, confirming that sufficient denoising steps are essential for effective PPO fine-tuning of MeanFlow policies. (c) Complex indoor scenes (a) Indoor scenes  (b) Outdoor scenes  
+
+> NavDP
+> NavCMPO Fig. 7. Real-world Experiments. (a) Indoor scene: the top row shows the robot traversing a cluttered corridor; the bottom row shows the corresponding top-down trajectory on a point-cloud map, where the red solid line denotes NavCMPO (Ours) and the blue dashed line denotes NavDP. (b) Outdoor navigation: the robot navigates along an unstructured outdoor path with obstacles. (c) Complex indoor scene: NavDP collides with furniture and fails ( ×), while NavCMPO successfully avoids the obstacle and reaches the goal ( ✓).
+
+B. Real World Results 
+
+We conducted real-world experiments using the Unitree Go2 quadruped robot, navigation strategies are generated with a D435i depth camera. Before real-world deployment, the policy was trained by reinforcement learning in a simu-lated environment using the Go2 model, followed by Sim-to-Real transfer. To evaluate the performance of our method, we designed point-goal navigation experiments across various scenarios, including simple indoor, complex indoor, and outdoor environments. In indoor and outdoor scenarios, we chose relatively open spaces with clearly defined obstacles. In complex indoor scenarios, we guided the robot to navigate through narrow spaces. The baseline algorithms selected for comparison include ViPlanner, NavDP, NavCMP, and NavCMPO.                          
+
+> TABLE III REAL WORLD EXPERIMENTS .Method Easy Outdoor Hard Average SR SR SR SR Viplanner 4/10 5/10 1/10 33.3% NavDP 7/10 7/10 3/10 56.7% NavCMP 7/10 6/10 3/10 53.3%
+> NavCMPO 7/10 8/10 5/10 66.7%
+
+As summarized in Table III, ViPlanner achieves the lowest overall success rate (33.3%), particularly in Hard scenes (1/10). NavDP and NavCMP perform comparably in Easy (7/10) and Hard (3/10) scenes, indicating that MeanFlow-based trajectory generation achieves similar sim-to-real transfer capability as the DDPM-based approach. However, NavCMPO significantly outperforms all baselines in both Outdoor (8/10) and Hard (5/10) scenarios, achieving the highest average success rate of 66.7%. As illustrated in Fig. 7(c), in complex indoor scenes where NavDP collides with obstacles and fails, NavCMPO successfully navigates through narrow passages. The trajectory visualization in Fig. 7(c) further reveals that NavCMPO generates safer tra-jectories with better obstacle clearance compared to NavDP, which tends to produce erratic paths near obstacles. The improvements in Hard and Outdoor scenes demonstrate that the combination of CGTR and PPO fine-tuning enhances the policy’s robustness to real-world distributional shifts, partic-ularly in scenarios requiring precise obstacle avoidance that were not adequately covered by the expert demonstrations. V. C ONCLUSION 
+
+In this paper, we presented NavCMPO, a two-stage frame-work for low-latency and adaptive visual navigation. By combining few-step MeanFlow generation with obstacle-aware representation learning and critic-guided trajectory refinement, NavCMPO maintains reliable obstacle avoidance while reducing inference latency. PPO fine-tuning further improves task performance, while critic adaptation and behavior-cloning regularization support stable specialization to a target embodiment. Under a matched training budget, NavCMPO improves the average success rate over the re-trained NavDP baseline and transfers effectively to a Unitree Go2. The current evaluation is limited to a matched-compute setting and a single real-world robot embodiment, and it does not directly compare against applying the same RL fine-tuning procedure to NavDP. In addition, policy adaptation is currently performed in simulation because unrestricted online reinforcement learning on physical robots introduces safety risks. Future work will investigate broader cross-embodiment evaluation, explicit geometric-guidance baselines, and safe real-world policy adaptation. REFERENCES [1] S. Thrun, “Probabilistic robotics,” Communications of the ACM ,vol. 45, no. 3, pp. 52–57, 2002. [2] S. Gupta, J. Davidson, S. Levine, R. Sukthankar, and J. Malik, “Cog-nitive mapping and planning for visual navigation,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , July 2017. [3] P. Anderson, A. Chang, D. S. Chaplot, A. Dosovitskiy, S. Gupta, V. Koltun, J. Kosecka, J. Malik, R. Mottaghi, M. Savva, and A. R. Zamir, “On evaluation of embodied navigation agents,” 2018. [Online]. Available: https://arxiv.org/abs/1807.06757 [4] Y. Zhu, R. Mottaghi, E. Kolve, J. J. Lim, A. Gupta, L. Fei-Fei, and A. Farhadi, “Target-driven visual navigation in indoor scenes using deep reinforcement learning,” in 2017 IEEE International Conference on Robotics and Automation (ICRA) , 2017, pp. 3357–3364. [5] P. Mirowski, R. Pascanu, F. Viola, H. Soyer, A. Ballard, A. Banino, M. Denil, R. Goroshin, L. Sifre, K. Kavukcuoglu, D. Kumaran, and R. Hadsell, “Learning to navigate in complex environments,” in International Conference on Learning Representations , 2017. [Online]. Available: https://openreview.net/forum?id=SJMGPrcle [6] F. Yang, P. Frivik, D. Hoeller, C. Wang, C. Cadena, and M. Hutter, “Spatially-enhanced recurrent memory for long-range mapless naviga-tion via end-to-end reinforcement learning,” The International Journal of Robotics Research , 2025. [7] C. Chi, S. Feng, Y. Du, Z. Xu, E. Cousineau, B. Burchfiel, and S. Song, “Diffusion policy: Visuomotor policy learning via action diffusion,” 
+
+The International Journal of Robotics Research , vol. 44, no. 10-11, pp. 1684–1704, 2024. [8] W. Cai, J. Peng, Y. Yang, Y. Zhang, M. Wei, H. Wang, Y. Chen, T. Wang, and J. Pang, “Navdp: Learning sim-to-real navigation diffusion policy with privileged information guidance,” 
+
+CoRR , vol. abs/2505.08712, 2025. [Online]. Available: https: //doi.org/10.48550/arXiv.2505.08712 [9] Z. Geng, M. Deng, X. Bai, J. Z. Kolter, and K. He, “Mean flows for one-step generative modeling,” 2025. [Online]. Available: https://arxiv.org/abs/2505.13447 [10] J. Sheng, Z. Wang, P. Li, and M. Liu, “Mp1: Meanflow tames policy learning in 1-step for robotic manipulation,” CoRR , vol. abs/2507.10543, July 2025. [Online]. Available: https://doi.org/10. 48550/arXiv.2507.10543 [11] A. Z. Ren, J. Lidard, L. L. Ankile, A. Simeonov, P. Agrawal, A. Majumdar, B. Burchfiel, H. Dai, and M. Simchowitz, “Diffusion policy policy optimization,” in The Thirteenth International Conference on Learning Representations , 2025. [Online]. Available: https://openreview.net/forum?id=mEpqHvbD2h [12] G. Zou, H. Wang, H. Wu, Y. Qian, Y. Wang, and W. Li, “One step is enough: Dispersive meanflow policy optimization,” 2026. [Online]. Available: https://arxiv.org/abs/2601.20701 [13] K. Chen, Z. Liu, T. Zhang, Z. Guo, S. Xu, H. Lin, H. Zang, X. Li, Q. Zhang, Z. Yu, G. Fan, T. Huang, Y. Wang, and C. Yu, “ πRL :Online rl fine-tuning for flow-based vision-language-action models,” 2026. [Online]. Available: https://arxiv.org/abs/2510.25889 [14] M. Janner, Y. Du, J. Tenenbaum, and S. Levine, “Planning with diffusion for flexible behavior synthesis,” in International Conference on Machine Learning , 2022. [15] M. Cl´ emente, L. M. Brunswic, R. H. Yang, X. Zhao, Y. H. Khalil, H. LEI, A. Rasouli, and Y. Li, “Two-steps diffusion policy for robotic manipulation via genetic denoising,” in The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [Online]. Available: https://openreview.net/forum?id=YY1MPKBHp7 [16] Z. Wang, Z. Li, A. Mandlekar, Z. Xu, J. Fan, Y. Narang, L. Fan, Y. Zhu, Y. Balaji, M. Zhou, M.-Y. Liu, and Y. Zeng, “One-step diffusion policy: Fast visuomotor policies via diffusion distillation,” CoRR , vol. abs/2410.21257, 2024. [Online]. Available: https://doi.org/10.48550/arXiv.2410.21257 [17] Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” in The Eleventh International Conference on Learning Representations , 2023. [Online]. Available: https://openreview.net/forum?id=PqvMRDCJT9t [18] Q. Zhang, Z. Liu, H. Fan, G. Liu, B. Zeng, and S. Liu, “Flowpolicy: Enabling fast and robust 3d flow-based policy via consistency flow matching for robot manipulation,” CoRR , vol. abs/2412.04987, 2024. [Online]. Available: https://doi.org/10.48550/arXiv.2412.04987 [19] X. Liu, C. Gong, and qiang liu, “Flow straight and fast: Learning to generate and transfer data with rectified flow,” in NeurIPS 2022 Workshop on Score-Based Methods , 2022. [Online]. Available: https://openreview.net/forum?id=gWxpdtQpiYV [20] S. Gode, A. Nayak, D. N. P. Oliveira, M. Krawez, C. Schmid, and W. Burgard, “FlowNav: Combining flow matching and depth priors for efficient navigation,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2025. [Online]. Available: https://arxiv.org/abs/2411.09524 [21] Y. Zeng, H. Ren, S. Wang, J. Huang, and H. Cheng, “NaviDiffusor: Cost-guided diffusion model for visual navigation,” in 2025 IEEE International Conference on Robotics and Automation (ICRA) , 2025, pp. 11 994–12 001. [Online]. Available: https://arxiv.org/abs/2504. 10003 [22] F. Yang, C. Wang, C. Cadena, and M. Hutter, “iplanner: Imperative path planning,” in Robotics: Science and Systems XIX , ser. RSS2023. Robotics: Science and Systems Foundation, Jul. 2023. [Online]. Available: http://dx.doi.org/10.15607/RSS.2023.XIX.064 [23] P. Roth, J. Nubert, F. Yang, M. Mittal, and M. Hutter, “Viplanner: Visual semantic imperative learning for local navigation,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) ,2024, pp. 5243–5249. [24] A. Sridhar, D. Shah, C. Glossop, and S. Levine, “Nomad: Goal masked diffusion policies for navigation and exploration,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) ,2024, pp. 63–70. [25] T. Zhang, C. Yu, S. Su, and Y. Wang, “Reinflow: Fine-tuning flow matching policy with online reinforcement learning,” in The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [Online]. Available: https://openreview.net/forum?id= ACagRwCCqu [26] J. Liu, G. Liu, J. Liang, Y. Li, J. Liu, X. Wang, P. Wan, D. ZHANG, and W. Ouyang, “Flow-GRPO: Training flow matching models via online RL,” in The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [Online]. Available: https://openreview.net/forum?id=oCBKGw5HNf [27] K. Pertsch, Y. Lee, and J. Lim, “Accelerating reinforcement learning with learned skill priors,” in Conference on robot learning . PMLR, 2021, pp. 188–204. [28] X. Gao, J. Si, and H. Huang, “Reinforcement learning control with knowledge shaping,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 3, pp. 3156–3167, 2023. [29] M. Oquab, T. Darcet, T. Moutakanni, H. V. Vo, M. Szafraniec, V. Khalidov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby, M. Assran, N. Ballas, W. Galuba, R. Howes, P.-Y. Huang, S.-W. Li, I. Misra, M. Rabbat, V. Sharma, G. Synnaeve, H. Xu, H. J´ egou, J. Mairal, P. Labatut, A. Joulin, and P. Bojanowski, “DINOv2: Learning robust visual features without supervision,” 
+
+Transactions on Machine Learning Research , 2024. [Online]. Available: https://openreview.net/forum?id=a68SUt6zFt [30] P. Dhariwal and A. Nichol, “Diffusion models beat gans on image synthesis,” Advances in neural information processing systems , vol. 34, pp. 8780–8794, 2021. [31] D. McAllister, S. Ge, B. Yi, C. M. Kim, E. Weber, H. Choi, H. Feng, and A. Kanazawa, “Flow matching policy gradients,” 2025. [Online]. Available: https://arxiv.org/abs/2507.21053 [32] E. Wijmans, A. Kadian, A. Morcos, S. Lee, I. Essa, D. Parikh, M. Savva, and D. Batra, “DD-PPO: Learning near-perfect pointgoal navigators from 2.5 billion frames,” in International Conference on Learning Representations , 2020. [Online]. Available: https: //openreview.net/forum?id=H1gX8C4YPr

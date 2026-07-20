@@ -6,28 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-19
-- 运行时间：2026-07-19 20:01:40 UTC
+- 最新运行日期：2026-07-20
+- 运行时间：2026-07-20 21:36:06 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-1. 今日精选两篇论文，聚焦机器人自适应导航与强化学习微调，其中精读篇《NavCMPO》评分8.0，值得深度关注。  
-2. 核心结论：Critic-Guided MeanFlow策略优化能有效提升导航适应性；低分速读篇《ExToken》探索视觉-语言-行动模型的结构化微调，效果一般。  
-3. 建议优先精读《NavCMPO》，了解其核心方法与实验对比；若对多模态微调感兴趣，可速览《ExToken》的探索设计部分。
-- 详情：[/202607/19/README](/202607/19/README)
+今天重点看了两篇导航论文，分别涉及自适应策略优化和零样本物体视觉导航。  
+值得关注的是零样本目标检测与直接仿真到现实迁移的可行性，以及均值流策略优化的实际效果。  
+建议后续可深入测试这些方法在真实环境中的泛化能力和迁移效果。
+- 详情：[/202607/20/README](/202607/20/README)
 
 ### 精读区论文标签
-1. [NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation](/202607/19/2607.14643v1-navcmpo-critic-guided-meanflow-policy-optimization-for-adaptive-navigation)  
-   标签：评分：8.0/10、query:rl-path-opt
-   evidence：使用强化学习微调进行自适应导航，类似于机器人路径优化
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [ExToken: Structured Exploration for Efficient Vision-Language-Action Reinforcement Fine-tuning](/202607/19/2607.12931v1-extoken-structured-exploration-for-efficient-vision-language-action-reinforcement-fine-tuning)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：使用结构化探索和离散行为先验改进VLA模型的RL微调，用于复杂操作，与机器人路径规划相关
+1. [NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation](/202607/20/2607.14643v1-navcmpo-critic-guided-meanflow-policy-optimization-for-adaptive-navigation)  
+   标签：评分：7.0/10、query:rl-path-opt
+   evidence：使用强化学习微调进行自适应导航路径规划
+2. [Difference-Based Relational Learning for Zero-Shot Object-Goal Visual Navigation With Direct Sim-to-Real Transfer](/202607/20/2607.15642v1-difference-based-relational-learning-for-zero-shot-object-goal-visual-navigation-with-direct-sim-to-real-transfer)  
+   标签：评分：7.0/10、query:rl-path-opt
+   evidence：深度强化学习用于机器人路径规划
 
 
 <div class="dpr-home-promo-card">
