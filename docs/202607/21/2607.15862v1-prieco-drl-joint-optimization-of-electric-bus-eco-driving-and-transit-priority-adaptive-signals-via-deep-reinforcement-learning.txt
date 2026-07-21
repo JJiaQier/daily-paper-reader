@@ -1,0 +1,1414 @@
+Title: PriEco-DRL: Joint Optimization of Electric-Bus Eco-Driving and Transit-Priority Adaptive Signals via Deep Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2607.15862v1
+
+Published Time: Mon, 20 Jul 2026 01:07:57 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+> 1
+
+# PriEco-DRL: Joint Optimization of Electric-Bus Eco-Driving and Transit-Priority Adaptive Signals via Deep Reinforcement Learning 
+
+Dingshan Sun, Ang Li, Chaopeng Tan, Zicheng Su, Wanjing Ma, and Marco Rinaldi 
+
+Abstract —Urban transit electrification requires balancing en-ergy efficiency, schedule reliability, and ride comfort for electric buses (EBs), particularly when interacting with transit-priority adaptive signals in congested networks. This paper proposes PriEco-DRL, a joint optimization framework that integrates EB eco-driving with transit-priority adaptive signal control using deep reinforcement learning (DRL). The signal layer employs a priority-weighted max-pressure (Priority-MP) controller to allocate green time based on occupancy-aware pressures, while the vehicle layer adapts longitudinal control based on local uncertain, dynamically evolving signal cues. A structured reward combines guidance and event-based reinforcement to align EB arrivals with green opportunities, while considering energy, time, comfort, and safety. The framework uses centralized training and decentralized execution (CTDE) with parameter sharing, allow-ing a single DRL agent to learn from multiple buses and routes using local observations. Experiments on a real-world corridor show that PriEco-DRL reduces EB energy consumption while maintaining network efficiency and transit priority compared to fixed-time, actuated, and rule-based signal–vehicle coordination baselines. Energy- and trajectory-based analyses reveal that the improvements stem from fewer unscheduled stop–start events and smoother speed regulation under adaptive signals. The results highlight a tunable energy–time trade-off, allowing flexible operational choices through reward weighting. 
+
+Index Terms —Eco-driving; Transit priority signal; Max-pressure; Deep reinforcement learning; Electric bus. 
+
+I. I NTRODUCTION 
+
+# WITH ongoing urbanization, cities are becoming in-creasingly crowded, placing substantial pressure on urban transportation systems. Meanwhile, vehicle emissions continue to degrade the urban living environment. Promoting public transportation and reducing private car use is therefore widely recognized as an effective way to alleviate both con-gestion and environmental impacts [1], [2]. Within modern public transport systems, electric buses (EBs) have become 
+
+*Corresponding author: Chaopeng Tan (email: chaopeng.tan@tu-dresden.de). Dingshan Sun, Zicheng Su and Wanjing Ma are with the Key Laboratory of Road and Traffic Engineering of the Ministry of Education, College of Transportation, Tongji University, Shanghai 201804, China. Ang Li is with the Department of Aeronautical and Aviation Engineering, The Hong Kong Polytechnic University, Kowloon, Hong Kong, China. Chaopeng Tan is with the Chair of Traffic Process Automation, Technische Universit¨ at Dresden, 01069 Dresden, Germany. Marco Rinaldi is with the Department of Transport and Planning, Delft University of Technology, 2628 CN Delft, The Netherlands. The authors would like to acknowledge partial financial support of the National Natural Science Foundation of China (No. 52325210) and the EU Horizon Europe Research and Innovation Programme (Grant Agreement No. 101103808 ACUMEN). 
+
+an important component due to their environmental benefits and their potential to support sustainable urban mobility [3]. However, EB operation also faces significant challenges. A key issue is how to jointly balance operational efficiency, operating cost, and passenger experience under complex and highly variable driving conditions, including fluctuating traffic density, temperature, passenger occupancy, and terrain [4], [5]. In addition, range anxiety and battery degradation re-main important concerns, especially under repeated charging– discharging cycles and frequent stop-and-go driving [6], [7]. Developing advanced EB operation strategies is therefore of great practical importance. Existing studies on EB operation can be broadly divided into macro-level and micro-level approaches [8]. Macro-level studies mainly focus on long-term planning, such as route opti-mization and charging scheduling [9], [10]. Although effective for strategic planning, such methods rely on historical data and cannot adapt to dynamically changing traffic conditions or unexpected events. In contrast, micro-level approaches provide real-time speed guidance, i.e., eco-driving, to reduce stop-and-go behavior and improve energy efficiency [11]–[13]. By leveraging signal phase and timing (SPaT) information and vehicle-to-infrastructure (V2I) communication, these methods can align bus arrivals with feasible green windows and gener-ate speed profiles that account for safety, comfort, and energy use. However, most existing eco-driving studies assume fixed or deterministic traffic signals [14]–[16]. In practice, adaptive signal control has become increasingly important in intel-ligent transportation systems, as it adjusts phase selection and green time in real time according to traffic demand and system performance. Compared with fixed-time control, adaptive signals can better reduce delay and spillback and support transit-priority operations [17]. Yet this also makes SPaT stochastic and time-varying, creating a challenging en-vironment for conventional eco-driving strategies that rely on predictable green windows. This is particularly problematic for bus operations, which are inherently multi-stage due to fixed routes, designated stops, dwell, and post-stop departures. Methods developed for simplified or single-stage scenarios therefore transfer poorly to realistic bus settings. For EBs, the challenge is further compounded by the need to explicitly balance energy consumption with travel efficiency and service reliability. The key difficulty is therefore eco-driving under uncertain, dynamically evolving SPaT rather than under deter-ministic future green windows. To the best of our knowledge, arXiv:2607.15862v1 [math.OC] 17 Jul 2026 2
+
+few studies have explicitly addressed EB eco-driving under adaptive or transit-priority signal control [18]. To address these gaps, we propose PriEco-DRL, a cou-pled framework that integrates priority-weighted max-pressure (Priority-MP) adaptive signal control with a deep reinforce-ment learning (DRL) eco-driving policy for electric buses. Priority-MP reallocates green time using occupancy-aware pressures to improve network efficiency while preserving transit priority. On the vehicle side, a DRL agent learns longi-tudinal speed guidance under dynamically evolving, pressure-driven SPaT. The policy operates over complete EB routes and explicitly accounts for multi-stage driving contexts, including cruise, stop approach, dwell, and intersection crossing. By modeling the signal–vehicle coupling explicitly, PriEco-DRL aims to reduce energy consumption while maintaining service efficiency and operational smoothness under uncertain traffic conditions and concurrent multi-route bus operations. The main contributions of this paper are as follows:  
+
+> •
+
+Coupled priority–eco-driving framework. We propose PriEco-DRL, which explicitly couples a Priority-MP con-troller with a DRL eco-driving policy for electric buses. The policy uses local signal and pressure information to coordinate speed decisions with uncertain adaptive transit-priority signal control, extending EB eco-driving beyond fixed-time settings.  
+
+> •
+
+Generalizable training and deployment regime. We adopt centralized training, decentralized execution (CTDE) with parameter sharing and a network-agnostic state space. This improves data efficiency during training and sup-ports decentralized deployment across multiple routes, layouts, and simultaneous EB operations.  
+
+> •
+
+Real-world network evaluation. We validate the proposed framework on a real Amsterdam arterial corridor with three signalized intersections, eight bus lines, and 18 stops. The policy is trained on a subset of routes and tested on unseen routes, demonstrating transferability under realistic mixed-lane and dedicated-lane operations. The remainder of this paper is organized as follows. Sec-tion II reviews the related work on adaptive signal control and eco-driving strategies. Section III formulates the problem addressed in this study. Section IV presents the Priority-MP signal control method. Section V introduces the proposed PriEco-DRL framework. Section VI presents the case study and experimental results. Finally, Section VII concludes the paper and outlines future research directions. II. R ELATED WORK 
+
+A. Adaptive signal control 
+
+Adaptive signal control has long been studied as an effective strategy for reducing delay, queues, and stops under time-varying demand. Early responsive methods, such as SCOOT [19] and OPAC [20], adjust signal timings online based on detector data and short-horizon traffic estimates, but their largely reactive nature limits their ability to address complex network interactions and rapidly changing traffic conditions. More advanced approaches, including model predictive con-trol (MPC) and DRL, have therefore been increasingly ex-plored. MPC enables prediction-based and constraint-aware optimization of traffic signals [21]–[23], while DRL learns adaptive control policies directly from interaction data without requiring an explicit predictive model [24]. However, MPC often faces challenges in model fidelity and online compu-tational tractability for large-scale urban networks, whereas DRL-based policies are typically less interpretable and less transparent for coordination with vehicle-side eco-driving de-cisions [25]. These limitations motivate the need for a signal control framework that is adaptive, computationally efficient, and sufficiently interpretable for integration with vehicle-side control. Among real-time decentralized approaches, Max-Pressure (MP) control has emerged as a particularly promising strategy due to its simplicity, low computational burden, and provable stability properties under standard stochastic traffic assump-tions [26]. At each decision step, MP selects the phase associ-ated with the highest upstream–downstream queue imbalance, thereby alleviating local bottlenecks while implicitly promot-ing network-wide coordination. MP requires only adjacent-link traffic states and does not depend on an explicit predictive model, making it well suited for real-time applications [27], [28]. In addition, its pressure formulation can be naturally ex-tended to account for transit priority by weighting movements according to bus occupancy or delay [29]–[31]. Compared with MPC- and DRL-based signal control, MP offers a more interpretable and computationally efficient infrastructure-side controller, which makes it particularly suitable for coupling with eco-driving strategies. Therefore, we adopt MP as the signal control backbone in this study. Specifically, we build on our recent Priority-MP design, which incorporates transit priority into pressure-based control while preserving the de-centralized mechanism. Implementation details are provided in Section IV. 
+
+B. Eco-driving strategies 
+
+With the emergence of autonomous driving and electric buses (EBs), eco-driving has become an important technology for improving energy efficiency while accounting for regen-erative braking, auxiliary loads, and service reliability [32], [33]. In general, eco-driving seeks longitudinal speed control strategies that balance energy consumption, traffic efficiency, and passenger comfort under vehicle, traffic, and signal con-straints. Existing methods can be broadly categorized into three groups: rule-based heuristics, optimization-based control, and learning-based policies. Rule-based approaches prescribe speed profiles through hand-crafted logic using local roadway and SPaT information. A representative family is GLOSA, which computes a target speed so that vehicles arrive within a feasible green window, thereby reducing stops and traction energy [34], [35]. For transit operations, GLODTA-type methods further coordinate dwell adjustment with downstream signal timing to improve green-wave alignment [36], [37]. These methods are attractive because of their simplicity, interpretability, and lightweight implementation. However, they usually rely on fixed thresholds and deterministic trigger logic, making them sensitive to 3
+
+calibration and less robust under stochastic traffic conditions and complex multi-objective trade-offs. Optimization-based methods formulate eco-driving as aconstrained optimal control problem, often solved by dynamic programming or MPC [38], [39]. With SPaT/V2I information, these methods can explicitly encode signal timing, speed, jerk, and energy constraints, and are therefore well suited to energy-efficient approach and departure control [40], [41]. For EBs, optimization models can additionally incorporate re-generative braking, auxiliary loads, passenger-load-dependent mass, grade, and service-related objectives such as schedule adherence [42], [43]. Their main advantage lies in explicit con-straint handling and physical interpretability. However, their effectiveness depends on model fidelity and reliable forecasts, while online computation becomes increasingly challenging in uncertain and highly dynamic traffic environments. Learning-based approaches, especially DRL, provide an al-ternative by learning control policies directly from interaction data without relying on explicit predictive models [44], [45]. DRL is particularly attractive for nonlinear, high-dimensional settings and can naturally optimize long-horizon objectives while incorporating safety or comfort constraints through re-ward shaping and action restrictions. Although DRL has been widely explored for vehicle eco-driving, studies on EB eco-driving remain limited. Existing works either focus on only part of the bus operation process or assume fixed/predictable signal timing [18], [46], which restricts their applicability to real-world adaptive signal environments. A smaller but growing body of literature considers eco-driving jointly with dynamic signal control. One line of work predicts vehicle arrivals and then adapts green windows to fa-cilitate non-stop passage [11], [47]. Another line formulates a bi-level optimization problem, where the upper level optimizes signal timing and the lower level computes energy-efficient vehicle trajectories [48]–[50]. While effective in controlled set-tings, these methods remain strongly model-dependent and can become computationally demanding in complex corridors with mixed traffic and uncertain SPaT evolution. More importantly, existing formulations mainly target standard vehicles and do not explicitly account for EB-specific multi-stage operations such as stop approach, dwell, and post-stop departure. In summary, the integration of EB eco-driving with adap-tive and transit-priority signal control remains insufficiently explored. This paper addresses this gap by proposing PriEco-DRL, a coupled framework that combines a Priority-MP signal controller with a DRL-based eco-driving policy. The Priority-MP controller handles adaptive, occupancy-aware transit-priority signal control, while pressure-related signal infor-mation is provided to the DRL agent to support informed speed decisions under complex traffic conditions. In parallel, the reward design encodes multi-stage bus operations and multi-objective trade-offs, resulting in a practical eco-driving strategy for complete EB routes under adaptive signals. III. P ROBLEM STATEMENT 
+
+In this paper, we consider EB eco-driving over an entire route. According to the driving context and operational ob-jective, the route is divided into four stages: cruise , stop Stage 1: Cruise       
+
+> Stage 2: Stop approach
+> Stage 3: Dwell
+> Stage 4: Intersection crossing
+> EB
+> RSU
+> Stage 1 Stage 2 Stage 3 Stage 4
+> Adaptive signal
+> controller
+> Stage 1
+> Fig. 1. Stage division of EB entire route time
+> location
+> Intersection
+> Bus stop
+> EB trajectory with fixed signal control
+> time
+> location
+> Intersection
+> Bus stop
+> EB trajectory with adaptive signal control
+> EB without eco-driving
+> EB with conventional
+> eco-driving
+> EB with conventional
+> eco-driving
+> EB with signal-coordinated
+> eco-driving
+> Green light Red light
+> Fig. 2. Comparisons of different driving strategies under different signal control methods
+
+approach , dwell , and intersection crossing , as illustrated in Fig. 1. In the cruise stage, the EB travels between stops and intersections while maintaining safe car-following and energy-efficient motion. When approaching a stop, the EB enters the stop-approach stage, where it must decelerate safely and dock accurately. During the dwell stage, the EB remains at the stop for passenger boarding and alighting. In the intersection-crossing stage, the EB seeks to pass the intersection efficiently while avoiding unnecessary stopping and excessive energy use. The main challenge lies in the intersection-crossing stage under adaptive signal control. As illustrated in Fig. 2, con-ventional eco-driving strategies typically compute a target speed by aligning the bus arrival time with an expected green window. This approach works when signal timing is fixed or predictable, but it becomes unreliable when the signal is adaptively adjusted according to real-time traffic conditions. In such cases, the green or red duration may be extended or terminated depending on competing traffic demands, so a bus following a conventional green-window strategy may still encounter an unexpected stop. This motivates a signal-coordinated eco-driving strategy that can exploit the infor-mation driving adaptive signal control and adjust bus speed accordingly. The goal of this paper is therefore to develop a comprehen-sive EB eco-driving strategy that operates over the entire route and adapts to dynamic signal evolution. The overall objective is to jointly reduce trip energy consumption and travel time: 
+
+min( ωe·Etrip +ωt·Ttrip ), (1) where Etrip and Ttrip denote the total energy consumption and travel time of a trip, and ωe and ωt are the corresponding weights. We assume that the required vehicle–infrastructure information exchange is available through connected infras-tructure (e.g., RSUs/i-VICS). The main notations used in this paper are summarized in Table I. 4
+
+TABLE I NOTATIONS OF IMPORTANT VARIABLES 
+
+Variables Explanation (A) Signal control variables 
+
+N The set of intersection nodes n in the network 
+
+Mn The set of movements for a node ns(i,o ) Signal state of movement (i,o )∈Mn where i,o are link indices 
+
+sn Signal vector of node n composed of s(i,o )
+
+s The overall signal vector of the network composed of sn
+
+S The feasible space of all signal states 
+
+c(i,o ) Saturation flow rate of movement (i,o )
+
+r(i,o ) Turning ratio of movement (i,o ): the fraction of vehicles on incoming link i to outgoing link ouj The state of j-th vehicle in the movement 
+
+pj The number of passengers on the j-th vehicle in the movement 
+
+αj The binary indicator that whether the j-th vehicle is counted for pressure calculation 
+
+xj The position of the j-th vehicle in the movement 
+
+J(i,o ) The set of all vehicles in the movement (i,o )
+
+P(i,o ) The pressure of the movement (i,o )
+
+(B) Eco-driving variables 
+
+vt The speed of ego EB at time step tat The acceleration of ego EB at time step tσt The binary indicator of whether the EB is in the dwell stage at time step tαt The binary indicator of whether the EB has departed from the nearest upstream stop of the downstream intersection at time step tδt Traffic signal status in the lane of EB (0, 1, 2 corresponds to green, yellow, and red respectively) 
+
+τrem Remaining time for currently active signal phase 
+
+Pt Traffic signal pressure information vector: 
+
+Pt=[ Pϕc ,P ϕm ,∆P ] where Pϕc and Pϕm are the aggregated pressure of specific phases ϕc and ϕm, and 
+
+∆P is the difference between these two 
+
+ϕc The phase that includes the current movement of EB 
+
+ϕm The phase with the largest pressure among all other phases excluding ϕc
+
+aact  
+
+> t
+
+The action of DRL agent at time step t: the acceleration implemented on EB 
+
+dl,d N S ,d N I The distances from the EB to the leading vehicle, the next stop, and the stop line, respectively 
+
+dL The distance threshold beyond which the bus can be classified as initiating the stop maneuver at the next berth 
+
+Dprep The distance to identify whether the EB starts preparing to cross the intersection 
+
+disec , ¯disec The lower and upper bounds of Dprep , respectively 
+
+Tc Signal control step interval 
+
+Tsafe ,T hard The safe and hard time thresholds of time to collision, respectively 
+
+ventry ,V safe The bus stop entry speed of EB, and the maximum acceptable entry speed in the stop area 
+
+E[∆ G] The expected green extension of the current green phase 
+
+IV. M AX -P RESSURE CONTROL WITH TRANSIT PRIORITY 
+
+Max-Pressure (MP) control is an adaptive, model-free, and decentralized signal control strategy that selects, at each deci-sion instant, the feasible phase plan with the largest upstream– downstream queue imbalance [26]. In this paper, we adopt a stop-aware, occupancy-weighted Priority-MP controller devel-oped in our previous work, and briefly summarize only the elements needed for the subsequent DRL formulation; full details can be found in [31]. The key idea is to weight vehicle contributions by occu-pancy so that movements serving high-occupancy transit vehi-cles receive higher priority, as illustrated in Fig 3. In addition, to avoid wasting green time when a bus is still dwelling 
+
+Fig. 3. Parameters for Priority-MP considering transit stations 
+
+at the nearest upstream stop, a transit vehicle contributes to pressure only after it has departed from that stop. The resulting movement pressure is defined as 
+
+P(i,o )=s(i,o )c(i,o )
+
+X
+
+> j∈JC
+> (i,o )
+
+pj uj + X
+
+> j∈JT r
+> (i,o )
+
+αj pj uj
+
+− X
+
+> (o,k )∈Mn′
+
+r(o,k )
+
+ X
+
+> j∈JC
+> (o,k )
+
+pj uj + X
+
+> j∈JT r
+> (o,k )
+
+αj pj uj
+
+!
+
+,
+
+(2) and the signal plan is selected as 
+
+s∗=argmax 
+
+> s∈S
+
+X
+
+> n∈N
+
+X
+
+> (i,o )∈Mn
+
+P(i,o )
+
+!
+
+. (3) Here, JC 
+
+> (i,o )
+
+and JT r  
+
+> (i,o )
+
+denote the sets of private cars and transit vehicles in movement (i,o ), respectively; pj is vehicle occupancy; c(i,o ) is the saturation flow rate; and r(o,k ) is the turning ratio toward downstream movement (o,k ).The binary variable αj determines whether a transit vehicle is counted in the pressure calculation: 
+
+αj =
+
+(
+
+0, if xj <x st i, 1 or T dwell j >0,
+
+1, otherwise, (4) where xj is the vehicle position, xst i, 1 is the position of the stop nearest to the downstream intersection on link i, and T dwell j
+
+is the remaining planned dwell time. The vehicle state used in the pressure calculation is the normalized link travel time, 
+
+uj (t)= t−t0
+
+> j
+
+¯τ(i,o )
+
+, (5) where t0 
+
+> j
+
+is the link-entry time of vehicle j and ¯τ(i,o ) is the free-flow travel time of movement (i,o ). Eqs. (2)–(5) define the Priority-MP controller used in this study. Note that we assume that vehicle link travel times can be obtained in real time through commonly available sensing sources such as dedicated short-range communications, automated vehicle identification, or LiDAR detectors. For more information on how detected vehicle penetration rates affect MP control, please refer to the study by [30], [31]. V. D EEP REINFORCEMENT LEARNING MODEL FOR EB 
+
+ECO -DRIVING 
+
+This section presents the proposed PriEco-DRL framework for EB eco-driving. A DRL agent interacts with both the traffic signal controller and the traffic environment to learn a longitudinal control policy for EBs. The policy aims to jointly optimize energy consumption and traffic efficiency, and 5
+
+is defined by the state space, action space, and reward design described below. 
+
+A. State and action 
+
+The state space is constructed from the local observations available to the EB on its current link. We assume that the EB can access the surrounding traffic state, including the distance and speed of the lead vehicle, while the lead-vehicle acceleration is either communicated by a connected lead vehicle or estimated from successive observations. The EB can also receive signal-related information from the traffic controller. The state is defined as 
+
+St=[ vt,a t,d l,v l,a l,d N S ,d N I ,σ t,α t,δ t,τ rem ,Pt], (6) where vt and at are the current speed and acceleration of the EB, and dl, vl, and al denote the distance to, speed of, and acceleration of the leading vehicle, respectively. The variables 
+
+dN S and dN I represent the distance to the next stop and the next signalized intersection; σt indicates whether the EB is in the dwell stage; and αt, as defined in Eq. (4), indicates whether the bus has departed from the stop and is therefore included in the pressure calculation. The traffic signal state in the EB lane is denoted by δt (green/yellow/red), and τrem is the residual time of the currently active signal phase. To encode the pressure information of the downstream intersection, let ϕc denote the phase serving the EB lane. Its phase pressure is 
+
+Pϕc = X
+
+> (i,o )∈ϕc
+
+P(i,o ), (7) where P(i,o ) is computed by Eq. (2). Among the remaining phases, we select the one with the largest pressure and denote it by ϕm, with corresponding phase pressure Pϕm . We further define the pressure difference as ∆P =Pϕc −Pϕm , and construct the pressure vector 
+
+Pt=[ Pϕc ,P ϕm ,∆P ]. (8) Together, dN I , δt, τrem , and Pt provide the agent with local signal and priority cues, enabling more informed intersection-approach decisions under adaptive, pressure-driven SPaT. The state design is route-agnostic and can therefore accommodate EBs operating on different routes and intersection layouts. All variables are normalized before being fed to the DRL agent. The action of the DRL agent is a scalar acceleration command applied to the EB, 
+
+At=[ aact  
+
+> t
+
+], aact  
+
+> t
+
+∈[−2.6,2.6] m/s 2. (9) The action is updated every EB operation step, which is the simulation step, i.e., 1 s in this study. 
+
+B. Reward function formulation 
+
+Reward design is pivotal to DRL because it translates high-level control objectives into learnable, step-wise feedback that shapes the policy. This agent aims at learning an eco-driving policy that enables the multi-objective and multi-stage opera-tion of EB. Therefore, the reward function R(St,a act  
+
+> t
+
+) should be designed accordingly to cover multiple stages and various objectives. According to Eq. (1), the energy consumption and traffic efficiency are the two main objectives of eco-driving. 
+
+1) Energy consumption reward function: Energy consump-tion is a crucial issue of EB, since it directly impacts the travel distance and battery life. In order to manage the energy consumption more precisely, an energy consumption model is used to calculate the real-time energy consumed by EB. The model integrates passenger load, road incline, and HVAC system, resulting in a comprehensive mathematical model that calculates the energy consumption based on real-time speed, acceleration, and other external factors. In this study, we employ the model from [18] and use it to calculate the instantaneous EB energy consumption. Based on the real-time operating status of the EB, the step-wise energy reward is defined as 
+
+Reng =− [Et]+
+
+Emax 
+
+, [Et]+=max( Et,0) , (10) where Et denotes the electrical energy consumed by the EB during control step t, and Emax is a normalization constant. Thus, only positive energy consumption is penalized, while regenerative energy recovery does not produce a positive reward. 
+
+2) Traffic efficiency reward function: Traffic efficiency is the other major objective of EB operation, which is crucial to reduce traffic congestion and improve public transportation service level. Due to the multi-stage operation feature of EB, the traffic efficiency cannot be evaluated with a unified formu-lation. Therefore, the efficiency reward function is designed for each operation stage separately. Since efficiency is not relevant when the EB is in the dwell stage, efficiency reward function is not needed for stage 3. 
+
+Stage 1: Cruise-stage efficiency and safety reward 
+
+In the cruise stage, the EB travels with the surrounding flow. The reward should encourage steady progress while preserving longitudinal safety under mixed traffic. We therefore combine (i) a small progress incentive to avoid overly conservative cruising, and (ii) a TTC-based soft safety constraint to dis-courage tailgating. 
+
+a) Progress term. Let vt denote the EB speed at time step t.We provide a bounded progress reward only when the vehicle is effectively moving: 
+
+Rprog (vt)= 
+
+
+
+wprog min 
+
+
+
+1, vt
+
+sref 
+
+
+
+, vt≥vprog min ,
+
+0, vt<v prog min ,
+
+(11) where wprog >0 is the maximum progress reward, sref >0 is a normalization scale (in m/s), and vprog min >0 prevents rewarding near-stop crawling. 
+
+b) Safety term. Let TTC t denote the estimated time-to-collision with the lead vehicle (undefined if no leader exists). Penalties are applied only when TTC t falls below preset thresholds Tsafe >T hard >0: the soft band [Thard ,T safe ) discour-ages short headways, while the hard band (0 ,T hard ) imposes stronger penalties to recover safety margins. Specifically, 
+
+Rttc (TTC t)= −wsafe 
+
+ [Tsafe −TTC t]+
+
+Tsafe 
+
+p
+
+−whard 
+
+ [Thard −TTC t]+
+
+Thard 
+
+p
+
+,
+
+(12) where wsafe >0 and whard >0 weight the two bands, and 
+
+p∈{ 1,2} controls the curvature (linear or quadratic). For 6
+
+numerical robustness, we set Rttc =0 when TTC t is undefined, non-positive, or exceeds a large cutoff (e.g., TTC t≥10 s), in which case collision risk is negligible. 
+
+c) Stage-1 reward. The cruise-stage reward is then 
+
+Rstage1 =Rprog (vt)+ Rttc (TTC t), (13) which promotes forward motion while softly enforcing safe car-following. 
+
+Stage 2: Stop-approach stage efficiency reward 
+
+During the stop-approach stage, the agent must ensure a gentle, low-speed entry into the bus stop. Similar to the reward design in [12], we predict the entry speed at the stop line using constant-acceleration kinematics over the remaining approach distance. With the current speed vt and acceleration at, the distance to the next stop dN S , and a look-ahead cap dL, we define the effective approach distance 
+
+dstop =min {dN S ,d L}, (14) and the predicted entry speed 
+
+ventry =
+
+q
+
+v2 
+
+> t
+
++2 atdstop , (15) where the discriminant v2 
+
+> t
+
++2 atdstop must be nonnegative. Let 
+
+Vsafe denote the maximum acceptable entry speed in the stop area (e.g., Vsafe =2 .6m /s). The reward is then defined as a piecewise shaping term: 
+
+Rstage2 =
+
+
+
+−1, v2 
+
+> t
+
++2 atdstop <0 (unsafe ),
+
+2 Vsafe −ventry 
+
+Vsafe 
+
+, 0≤ventry ≤Vsafe ,
+
+−3, ventry >V safe .
+
+(16) Thus the agent receives a positive linear reward for planning a sufficiently slow entry (maximal at ventry =0 and tapering to 0
+
+at Vsafe ), a strong penalty if the predicted entry speed exceeds 
+
+Vsafe , and a mild penalty when the kinematic prediction is invalid (negative discriminant). This shaping promotes safe, smooth docking while preserving learnability. 
+
+Stage 4: Intersection-crossing stage efficiency reward 
+
+Intersection crossing is the most delicate stage because the SPaT observed by the EB is time-varying and stochastic under Priority-MP control. Rather than using a future phase table, we rely only on the current residual time and local pressure cues. The idea is to estimate the likelihood that the current green will be extended, convert it into an expected usable green window, and compare that window with the EB’s expected time of arrival (ETA). The resulting reward consists of a guidance term and a sparse event bonus for passing on green. 
+
+a) Time-aware green-extension probability. Recall the pres-sure state vector Pt=[ Pϕc ,P ϕm ,∆P ] from Eqs. (7)–(8). We define the normalized phase advantage 
+
+adv= ∆P
+
+|Pϕc |+|Pϕm |+ε ∈(−1,1) , (17) which measures how strongly the current phase ϕc is favored over its main competitor ϕm (normalization equalizes scale across intersections and ε> 0 prevents division by zero). To reflect decision urgency, we introduce the time-aware weight 
+
+wadv =max 
+
+n
+
+wmin ,1−min  1,τ rem /T c
+
+o
+
+∈[wmin ,1] , (18) where τrem is the residual phase time and Tc is the signal control step. A pressure-based extension likelihood is then obtained via 
+
+ppress = 11+ e−kadv ∈(0 ,1) , (19) a smooth, bounded transformation of adv whose slope k> 0
+
+controls sensitivity around adv=0 . Finally, we blended it with an uninformed prior using the time-aware weight: 
+
+pext =(1 −wadv )·0.5+ wadv ·ppress ∈[0 ,1] . (20) Thus, early in the phase the estimate stays conservative, while near the switching instant it relies more on pressure information. 
+
+b) Expected extra green. Treating pext as the per-step probability that the current phase continues for one more control step of length Tc, we estimate the expected extra green beyond τrem as 
+
+E[∆ G]= TcHX
+
+> i=1
+
+ρi−1pi
+
+> ext
+
+=Tc
+
+pext 
+
+ 1−(ρp ext )H 
+
+1−ρp ext 
+
+, (21) where ρ∈(0 ,1) discounts long extension chains and H trun-cates the horizon. 
+
+c) Guidance reward using ETA vs. expected green. We compare the vehicle’s arrival time with the usable green window implied by the current SPaT. Let vt be the current speed, dN I the distance to the stop line, and 
+
+ETA= dN I 
+
+max( vt,ϵ ) , ϵ> 0. (22) Under a green signal ( G), the expected usable green is 
+
+G(G) exp =[ τrem −marg] ++E[∆ G], (23) where marg >0 is a small scheduling margin. Let slack= 
+
+G(G) exp −ETA that measures catchability, and the corresponding shaping reward is 
+
+R(G) guide =
+
+
+
+r+guide ·min 1, slack+marg 
+
+G(G) exp +marg+ ϵ
+
+!
+
+, slack ≥0,r−
+
+> guide
+
+·min 
+
+
+
+1, −slack marg+ETA 
+
+
+
+, slack <0,
+
+(24) so that feasible catch-the-green arrivals are rewarded (up to 
+
+r+guide ), while late arrivals are gently penalized (down to 
+
+r−
+
+> guide
+
+); the min( ·,1) caps magnitude to stabilize learning. For yellow ( Y) or red ( R), we encourage planning beyond the imminent switch rather than rushing. We therefore define 
+
+etrem =
+
+(
+
+τrem +Tc, Y,τrem +Tc(1 −pext ), R, earr =ETA −(etrem +marg) ,
+
+(25) and 
+
+R(Y /R) guide =
+
+
+
+r+guide ·min 
+
+
+
+1, earr 
+
+earr +marg 
+
+
+
+, earr ≥0,r−
+
+> guide
+
+·min 
+
+
+
+1, −earr 
+
+marg+ etrem +ϵ
+
+
+
+, earr <0.
+
+(26) This construction rewards feasible green passage under G and discourages risky rushing under Y/R.
+
+d) Event bonus and total reward. Let IpassG ∈{ 0,1} indicate whether the EB crosses the stop line under green at the current step. We add the sparse event bonus 
+
+Revent =wpass IpassG , (27) 7
+
+and define the stage-4 reward as 
+
+Rstage4 =
+
+(R(G) guide +Revent , if the signal state is G,R(Y /R) guide +Revent , if the signal state is Y or R.
+
+(28) Overall, the stage-4 reward follows a guidance-plus-event structure: the guidance term steers ETA toward a feasible green window inferred from local pressure cues and residual time, while the event term reinforces successful green passage. Because the design depends only on local SPaT information and pressures, it remains lightweight and transferable across intersections. 
+
+Overall efficiency reward 
+
+With the stage-wise rewards defined above, the agent must first identify the current operating stage and then apply the corresponding reward. We use a lightweight rule-based stage classifier that gives priority to stop-approach when a stop is imminent, switches to intersection-crossing when the signal becomes the nearer target and lies within a speed-dependent preparation distance, and otherwise keeps the EB in cruise .Stage identification is performed only when the EB is not dwelling at a stop, since the dwell stage is handled separately. Given the current speed vt, the preparation distance for signal approach is defined as 
+
+Dprep (vt)=clip 
+
+
+
+max 
+
+n
+
+vttwin ,vtτreac + v2
+
+> t
+
+2acomf 
+
++dstatic +buffer 
+
+o
+
+,[disec , ¯disec ]
+
+
+
+.
+
+(29) Here, twin is a short preview window, τreac is the reaction time, acomf is a comfortable deceleration, and dstatic is a static safety distance with an additional buffer. This construction combines a time-based look-ahead with a physics-based stop-ping distance, so that the EB enters the signal-approach stage early enough either to align with a feasible green or to brake comfortably if not. Let dN I ∈(0 ,+∞] denote the distance to the next signalized intersection (set to +∞ if none exists on the current segment), and let dN S ∈(0 ,+∞] denote the distance to the next stop (also set to +∞ if none exists). With a near-stop threshold dL, the stage is determined as 
+
+stage= 
+
+
+
+2, dN S ≤dL , d N S <d N I ,
+
+4, dN I ≤Dprep (vt) , d N I <d N S ,
+
+1, otherwise .
+
+(30) This rule ensures that stop docking takes precedence when necessary, while intersection-related decision making is acti-vated only when the signal is the nearer target and the EB has entered the preparation zone. Let qt∈{ 1,2,4} denote the current stage. To discourage overly conservative behavior and reflect schedule-reliability requirements, we include a small per-step time cost rtime <0
+
+in the efficiency reward. The overall efficiency reward is then 
+
+Reff =
+
+
+
+Rstage1 +rtime , qt=1 ,Rstage2 +rtime , qt=2 ,Rstage4 +rtime , qt=4 ,
+
+(31) where Rstage1 , Rstage2 , and Rstage4 are defined in (13), (16), and (28), respectively. 
+
+3) Reward functions for other objectives: Beyond the stage-conditioned efficiency terms, we include auxiliary rewards to promote ride comfort, safety, and operational regularity. These terms are deliberately simple, bounded, and additive so they can be tuned without destabilizing learning. 
+
+a) Jerk smoothing (comfort): Let at and at−1 denote longitudinal accelerations and ∆t the EB control step. The jerk is 
+
+jt= at−at−1
+
+∆t , (32) and we penalize excessive jerk quadratically with a normal-ization constant J0>0:
+
+Rjerk =− j2
+
+> t
+
+J0
+
+≤0. (33) In implementation, we use ∆t=1 .0 s and J0=27 .04 (so that √J0≈ 2.6−(−2.6) 1 =5 .2 m /s3), which sets the scale of this penalty term under the adopted action bounds. 
+
+b) Collision penalty (safety): Let col t∈{ 0,1} indicate whether a collision is detected at time t. A hard safety penalty is applied: 
+
+Rcol =−wcol col t, wcol >0, (34) with wcol =10 by default. If no collision occurs, the term is zero. 
+
+c) Unscheduled stop penalty (operations): To discourage full stops outside designated berths, we add a small penalty when the vehicle is (nearly) stationary away from a bus stop. With the current speed vt, the distance to the next bus stop 
+
+dN S , and a small threshold εv , we have: 
+
+Rusp =
+
+(
+
+−wusp , if dN S >0 and vt≤εv ,
+
+0, otherwise , (35) with wusp =5 .0 and εv =0 .5 m/s by default. Note that the penalty is not applied when the EB is stuck in congestion or waiting for the traffic light. 
+
+d) Harsh braking penalty (comfort/safety): Finally, overly aggressive braking receives a small penalty: 
+
+Rhb =
+
+(
+
+−whb , if at<−athr ,
+
+0, otherwise , (36) where athr =2 .0 m/s 2 and whb =0 .5 by default. 
+
+4) Overall reward: The auxiliary (non-efficiency) compo-nent is the sum of the above terms, 
+
+Roth =Rjerk +Rcol +Rusp +Rhb ≤0, (37) and the overall training signal combines the stage-conditioned efficiency reward with energy and comfort/safety weights: 
+
+Rt=ωeReng +ωtReff +ωoRoth , (38) where (ωe,ω t,ω o) and the constants in (33)–(36) are tunable parameters. This design keeps safety terms always active, enforces smoothness through jerk shaping, and discourages operationally undesirable full stops outside berths, while leav-ing most of the long-horizon timing behavior to the efficiency rewards. 
+
+C. CTDE with parameter-sharing training framework 
+
+Eco-driving requires continuous control under mixed continuous–discrete observations and dynamically changing 8
+
+traffic conditions. We therefore adopt Soft Actor–Critic (SAC) [51], an off-policy maximum-entropy algorithm well suited to continuous action spaces. SAC combines stochastic policy learning, replay-based sample reuse, and double-Q value es-timation with target networks, which together provide strong stability and sample efficiency in nonstationary environments. These properties make SAC an appropriate optimization back-bone for the proposed pressure-aware EB eco-driving problem. To further improve data efficiency and transferability, we employ a centralized-training, decentralized-execution (CTDE) framework with parameter sharing. Instead of training a separate policy for each route or vehicle, we train a single shared SAC actor–critic using experiences collected from mul-tiple buses. This is enabled by the route-agnostic observation design, which encodes local SPaT and stage information so that the same policy can be applied across different routes and layouts. During training, the ego vehicle is switched every period 
+
+∆Tsw (or when the current ego EB leaves the network), after which interaction continues on the newly assigned bus. This mechanism exposes the learner to diverse operating conditions, including different link geometries, stop spacing, traffic demand, and pressure patterns, thereby enriching the replay buffer while keeping the controller architecture un-changed. The shared actor and critics are then updated off-policy from the aggregated replay memory. At deployment, execution is fully decentralized: the trained policy runs inde-pendently on each EB using only local observations, without requiring online coordination among buses. This CTDE with parameter-sharing framework therefore improves training effi-ciency and generalization while preserving real-time onboard implementability. The pseudocode of the training procedure is given in Algorithm 1. Although SAC is adopted in this study, the overall framework is not restricted to SAC and can be extended to other DRL algorithms. VI. N UMERICAL EXPERIMENTS 
+
+A. Experimental settings 
+
+We evaluate the proposed PriEco-DRL framework on a real-world corridor in Amsterdam. The corridor contains three signalized intersections, eight bus lines, and 18 bus stops, as shown in Fig. 4. The corresponding SUMO simulation environment includes dedicated lanes for buses and trams, mixed-use lanes, and general-purpose lanes for private vehi-cles. Following the real-world signal layout, movements from the same incoming link are grouped into one phase group. EBs on dedicated lanes are granted higher priority during green, which in practice can be implemented by warning private cars before transit passage. The corridor has eight boundary links, resulting in eight origins/destinations and 56 OD pairs for private-car traffic. Over the 3-hour simulation horizon, the demand on the two main-road OD pairs (1–5 and 5–1) increases from 72 veh/h to 252 veh/h and then decreases to 36 veh/h, while all other OD pairs are fixed at 30 veh/h. The total corridor demand therefore varies between approximately 1500 and 2000 veh/h. Public-transit departures follow the real-world headways, i.e., 
+
+Algorithm 1 PriEco–DRL training with SAC under CTDE and parameter sharing 
+
+Require: simulation interval length T , ego-switch period ∆Tsw ,signal control cycle Tc, replay capacity |R| 
+
+Ensure: shared actor πθ , shared double critics Qψ1 ,Q ψ2 
+
+> 1:
+
+Initialize the actor network πθ (aact |S), critic networks 
+
+Qψ1 ,Q ψ2 , target networks ¯Qψ1 , ¯Qψ2 
+
+> 2:
+
+Initialize shared replay buffer R, entropy temperature αent  
+
+> 3:
+
+for simulation run =1 ,2,... do  
+
+> 4:
+
+Reset the environment; set Priority-MP control by (2)-(3)  
+
+> 5:
+
+Identify EB set B on the network; sample ego b∼Unif( B);obtain initial state S1 
+
+> 6:
+
+Set the initial switch time tnext ←∆Tsw  
+
+> 7:
+
+for t=1 to T do  
+
+> 8:
+
+Sample an action from the policy aact  
+
+> t
+
+∼πθ (·| St) 
+
+> 9:
+
+Project aact  
+
+> t
+
+by rule layer to ensure feasible acceleration, speed, and headway  
+
+> 10:
+
+Perform EB eco-driving strategy by applying acceleration action aact  
+
+> t
+
+on ego b 
+
+> 11:
+
+Simulate the environment by one step  
+
+> 12:
+
+Calculate the movement pressures P(i,o ) using (2)  
+
+> 13:
+
+if t mod Tc=0 then  
+
+> 14:
+
+Perform Priority-MP signal control (3) determining the phases for the next control cycle  
+
+> 15:
+
+end if  
+
+> 16:
+
+Get EB status, traffic environment, and SPaT information 
+
+δt,τ rem ,Pt; construct state St+1  
+
+> 17:
+
+Compute energy consumption reward Reng by (10)  
+
+> 18:
+
+Compute Dprep (vt) by (29)  
+
+> 19:
+
+Determine stage qt∈{ 1,2,4} by (30)  
+
+> 20:
+
+Set the efficiency reward Reff according to (31)  
+
+> 21:
+
+Compute Rjerk (33), Rcol (34), Rusp (35), Rhb (36)  
+
+> 22:
+
+Calculate overall reward by (38)  
+
+> 23:
+
+Push (St,a act  
+
+> t
+
+,R t,St+1 ) into R (evict oldest if full)  
+
+> 24:
+
+if update SAC model then  
+
+> 25:
+
+for k=1 to K do  
+
+> 26:
+
+Sample mini-batch {(S,a act ,R, S′)} from R 
+
+> 27:
+
+˜a′∼πθ (·| S′);
+
+y←r+γ min j=1 ,2 ¯Qψj (S′,˜a′)−αent log πθ (˜ a′|S′) 
+
+> 28:
+
+Update critics: minimize P(Qψj (S,a )−y)2 for j=1 ,2 
+
+> 29:
+
+˜a∼πθ (·| S); update actor: maximize P  min j Qψj (S,˜a)−αent log πθ (˜ a|S) 
+
+> 30:
+
+Auto-tune αent ; soft-update 
+
+¯Qψj ←τ Q ψj +(1 −τ ) ¯Qψj for j=1 ,2 
+
+> 31:
+
+end for  
+
+> 32:
+
+end if  
+
+> 33:
+
+if t≥tnext or ego b is outside the network then  
+
+> 34:
+
+Update EB set B on the network  
+
+> 35:
+
+Sample new ego b∼Unif( B); tnext ←t+∆ Tsw  
+
+> 36:
+
+end if  
+
+> 37:
+
+St←St+1  
+
+> 38:
+
+end for  
+
+> 39:
+
+end for 
+
+10 or 20 min depending on the line. Figure 5 shows the route geometry and stop distribution, together with route lengths and stop counts. For readability, the bus lines are denoted by line number and direction: Line 37-W/37-E, Line 40-WS/40-SW, Line 22-WN/22-SW, and Line 65-S/65-N, where W, E, N, and S indicate west, east, north, and south, respectively. EBs are dispatched evenly over time within each run. During the 3-hour simulation, 12 trips are completed on Lines 37-W, 37-E, 65-S, and 65-N; 9 trips on Lines 40-WS and 40-SW; and 18 trips on Lines 22-WN and 22-SW. For signal control, we consider three methods: (i) fixed-9
+
+Fig. 4. Layout of the studied corridor in Amsterdam with three intersections and the total demand in the network Line 37-W    
+
+> Line 37-E
+> Line 22-WN
+> Line 22-SW
+> Line 40-WS
+> Line 40-SW
+> Line 65-S
+> Line 65-N
+> Bus stop
+> Tunnel
+> 529 m 972 m 786 m 465 m
+> 469 m
+> 315 m
+> 468 m
+
+Fig. 5. Bus routes and stops distribution. Route labels use line number plus direction abbreviation. 
+
+time control, with deterministic phase durations; (ii) actuated control in SUMO, which adjusts green times using detector inputs; and (iii) the proposed Priority-MP controller described in Section IV. For EB longitudinal control, we consider: (i) the SUMO IDM model [52]; (ii) a rule-based eco-driving module, denoted as G2, that combines GLOSA [34] and GLODTA; and (iii) the proposed PriEco-DRL policy. To construct coupled baselines, we integrate G2 with each signal controller in a plug-and-play manner. At each step, the signal controller updates the current indication, while each bus computes a desired speed from local SPaT information using GLOSA; at stops, GLODTA may add a holding time (subject to minimum dwell constraints) to improve downstream green alignment. This yields the following comparison methods:  
+
+> •
+
+FT-IDM: fixed-time signal control with IDM;  
+
+> •
+
+FT-G2: fixed-time signal control with GLOSA– GLODTA;  
+
+> •
+
+AC-IDM: actuated control with IDM;  
+
+> •
+
+AC-G2: actuated control with GLOSA–GLODTA; 
+
+TABLE II SAC TRAINING HYPERPARAMETERS USED IN THIS STUDY 
+
+Category Setting (SAC) 
+
+Training & Optimization 
+
+Total timesteps 5×10 5
+
+Learning rate 3×10 −4
+
+Discount factor 0.99 
+
+Batch size 512 Replay buffer size 200 ,000 
+
+Train frequency / Gradient steps 1 / 1 Soft update coefficient 0.002 Entropy coefficient "auto" (automatic temperature) Target entropy "auto" ≈− dim( At)
+
+Policy / Networks 
+
+Policy type MlpPolicy 
+
+Hidden layers [256, 256] Activation ReLU  
+
+> •
+
+PMP-IDM: Priority-MP control with IDM;  
+
+> •
+
+PMP-G2: Priority-MP control with GLOSA–GLODTA;  
+
+> •
+
+PriEco-DRL: the proposed integrated framework. We evaluate the methods from both the network and EB perspectives. Network-level metrics include: (i) average vehi-cle delay (s), (ii) network vehicle count, (iii) maximum queue count, and (iv) maximum spillover count. EB-level metrics in-clude: (i) EB delay (s), defined as time loss relative to free-flow travel time over all completed trips; (ii) EB energy consump-tion (kWh), defined as the total electrical energy consumed by all completed EB trips, including traction and auxiliary loads; and (iii) EB unscheduled stops, defined as the number of full stops outside designated bus stops. The SAC hyperparameters are listed in Table II, and all the key simulation parameter values are presented in Table III. To examine the energy– travel-time trade-off, we test three reward-weight settings: PriEco-DRL-T with (ωe,ω t,ω o)=(1 ,2,1) , PriEco-DRL-E with 
+
+(2 ,1,1) , and PriEco-DRL-B with (1 ,1,1) .
+
+TABLE III KEY SIMULATION AND REWARD PARAMETERS 
+
+Tc ∆Tsw wprog sref vprog min wsafe whard 
+
+10 s 500 s 1.0 10 m/s 0.5 1.0 3.0 
+
+Tsafe Thard dL r+guide r− 
+
+> guide
+
+wpass acomf 
+
+3.5 s 1.5 s 50 m 3.0 -3.0 5.0 2.0 m/s 2
+
+wmin disec ¯disec twin τreac dstatic rtime 
+
+0.15 30 m 120 m 10 s 2.0 s 5.0 m -0.1 
+
+B. Model training 
+
+During each training run, we optimize a SAC agent un-der a CTDE, parameter-sharing setup for a total of 5×10 5
+
+environment steps. Only a subset of bus lines are used as ego vehicles during training, namely Line 37-W, Line 22-WN, Line 40-SW, and Line 65-S. The training process is organized into fixed-length episodes with a constant interval 
+
+∆Tsw =500 s. In each episode, the ego vehicle remains active for 500 seconds before switching to another ego bus. This protocol allows for dynamic switching of buses while ensuring consistent interaction data across multiple routes. At test stage, the learned policy is deployed to any EB across the full 10 0 100000 200000 300000 400000 500000     
+
+> Training timesteps
+> 500
+> 400
+> 300
+> 200
+> 100
+> 0
+> Reward
+> Training curves (mean ± 95% CI across runs)
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+> Fig. 6. Training curves of PriEco-DRL variants under SAC with a fixed ego-switch interval ∆Tsw =500 s. The Y-axis shows the episode return (episode reward), where each episode corresponds to one 500 -s simulation segment between ego switches; the X-axis is the number of environment timesteps. Solid lines report the mean over 5 random seeds, and shaded bands indicate the 95% confidence interval.
+
+network using only local observations. This protocol explicitly separates the training and evaluation distributions by training on a subset of routes and evaluating on the entire network, thereby assessing transferability beyond a single-route setting with concurrent buses from different lines. For each PriEco-DRL variant (PriEco-DRL-T/E/B), training is repeated five times with distinct random seeds. Figure 6 reports the learning curves as the mean episode return across runs with a shaded 95% confidence interval. Since the episode interval is fixed, episode returns are directly comparable across runs and vari-ants; we additionally smooth the curves for visualization while preserving the underlying trend. As shown, all variants exhibit rapid performance improvement in early training and then gradually stabilize, indicating that SAC converges to a steady policy under the proposed training setup. The hyperparameters of SAC are listed in Table II. 
+
+C. Results and analysis 1) Overall performance: In the test stage, the trained SAC agent is deployed to all EBs operating on the eight bus lines in the network. We first examine network-level traffic efficiency. Fig. 7 compares the temporal evolution of (i) the number of vehicles in the network, (ii) queued vehicles, (iii) spillovers, and (iv) average waiting time under different signal control schemes. Under fixed-time control, the network rapidly enters a congested regime: network accumulation and queued vehicles grow monotonically, spillovers emerge after the mid-horizon and continue to increase, and the average waiting time becomes much higher and more volatile, indicating severe gridlock. In contrast, both actuated control and PMP mitigate congestion relative to fixed-time control, reducing queues and largely suppressing spillovers. Their behaviors, however, differ under sustained high demand. Actuated control performs well in the early stage but gradually deteriorates later, as shown by increasing network accumulation, queue growth, and rising waiting time. By comparison, PMP maintains a more stable evolution: queues and waiting time remain lower and even decline toward the end of the simulation, while spillovers are essentially eliminated. These results indicate that adaptive sig-0 2000 4000 6000 8000 10000                   
+
+> 0
+> 200
+> 400
+> 600
+> 800
+> Count
+> Network Vehicles
+> 02000 4000 6000 8000 10000
+> 0
+> 200
+> 400
+> 600
+> Count
+> Queued vehicles
+> 02000 4000 6000 8000 10000
+> Simulation time [s]
+> 0
+> 500
+> 1000
+> Count
+> Spillovers
+> 02000 4000 6000 8000 10000
+> Simulation time [s]
+> 0
+> 50
+> 100
+> 150
+> Seconds
+> Average waiting time
+> FT-IDM AC-IDM PMP-IDM
+> Fig. 7. Network-level evolution under different signal control methods.
+
+nal control is critical for this corridor and that pressure-based priority control provides more robust congestion containment than standard actuated control. Table IV summarizes network-level performance in terms of car delay, EB delay, EB energy consumption, and EB unscheduled stops. As expected, the fixed-time baselines (FT-IDM and FT-G2) result in the highest delays for both cars and EBs, as well as severe spillovers, indicating network-wide congestion. Introducing the rule-based G2 strategy under fixed-time signals (FT-G2) yields only marginal improvements in energy consumption and delays, suggesting that when queues and forced stops dominate, vehicle-side speed guidance alone has limited impact without adaptive signal control. In contrast, adaptive signal control significantly improves traffic efficiency. Both AC and PMP reduce delays and sup-press spillovers by responding to real-time traffic conditions. However, the effectiveness of the G2 module depends on the signal controller. Under AC, adding G2 (AC-G2) does not improve delays and increases spillovers, indicating that the speed and dwell advice from G2 is difficult to implement when phase switching is event-driven and unpredictable, particularly under mixed-traffic conditions. Under PMP, PMP-G2 achieves similar spillover suppression as PMP-IDM and yields compa-rable unscheduled stops, with only marginal changes in energy and delay. This suggests that when a transit-priority adaptive controller already provides favorable progression, adding rule-based guidance offers limited additional benefit. The three reward-weight settings in PriEco-DRL highlight a clear energy-reliability trade-off. The travel-time-prioritized variant PriEco-DRL-T achieves the lowest EB delay, while the energy-prioritized variant PriEco-DRL-E reduces EB energy consumption the most. The balanced variant PriEco-DRL-B minimizes unscheduled stops, effectively reducing stop-start events under transit-priority signals. Compared to FT-IDM, all PriEco-DRL variants substantially reduce EB delay and avoid network spillovers, offering configurable operating points between energy efficiency and service reliability. 
+
+2) Ablation study on reward design: To validate the ne-cessity of the proposed stage-wise efficiency reward design, we conduct an ablation study based on the balanced setting PriEco-DRL-B. Table V reports network-level metrics for (i) the full model PriEco-DRL-B, (ii) PriEco-DRL-B-A1, 11                                                                                                   
+
+> TABLE IV NETWORK -LEVEL SUMMARY METRICS
+> Method Car delay [s] EB delay [s] EB energy [kWh] EB stops unsched. Max vehicles Max queued Max spillo. FT-IDM 1616.48 582.48 195.87 306 787 684 1386 FT-G2 1610.23 589.79 191.81 302 782 678 1367 AC-IDM 414.26 317.96 197.80 136 524 421 16 AC-G2 486.93 385.69 189.96 142 602 476 93 PMP-IDM 321.03 280.72 196.51 69 355 195 7PMP-G2 347.81 323.20 192.55 68 365 216 7PriEco-DRL-T 292.29 190.13 246.57 52 316 175 7PriEco-DRL-E 307.86 238.03 185.47 49 328 190 7PriEco-DRL-B 309.24 220.30 215.46 48 332 187 7TABLE V ABLATION STUDY ON STAGE -WISE EFFICIENCY REWARD DESIGN
+> Method Car delay [s] EB delay [s] EB energy [kWh] EB stops unsched. Max vehicles Max queued Max spillo. PriEco-DRL-B 309.24 220.30 215.46 48 332 187 7PriEco-DRL-B-A1 314.79 228.31 216.93 62 334 187 7PriEco-DRL-B-A2 452.38 480.15 120.56 112 431 267 7
+
+which removes the Stage-4 (intersection-crossing) coordina-tion reward while keeping all other terms unchanged, and (iii) PriEco-DRL-B-A2, which removes all stage-dependent efficiency rewards (Stage 1/2/4), such that the policy is driven only by the global energy and safety/comfort terms. Removing the Stage-4 reward (A1) leads to a clear de-terioration in operational reliability: EB unscheduled stops increase from 48 to 62 and EB delay rises moderately, while total EB energy remains nearly unchanged. This confirms that the Stage-4 reward primarily contributes to signal–vehicle coordination around intersections by reducing non-scheduled stop–start events, rather than directly driving energy savings. In contrast, removing all stage-wise efficiency shaping (A2) causes a substantial degradation in traffic performance, with sharply increased car and EB delays, more unscheduled stops, and larger network accumulation (higher maximum vehicle and queue counts). Although A2 yields lower total energy con-sumption, this reduction is achieved by an overly conservative low-speed policy that sacrifices service reliability and progres-sion. It therefore represents a degenerate energy-minimizing solution rather than a practical eco-driving strategy. Overall, the ablation results demonstrate that stage-wise reward shaping is essential for preventing trivial behaviors and for achieving operationally meaningful trade-offs between en-ergy efficiency and travel performance under adaptive, transit-priority signals. The following sections provide more detailed analyses of EB performance at the line and trajectory levels. 
+
+3) Line-level EB performance: We next examine line-level EB performance on both the routes encountered during train-ing and the unseen routes used for transfer tests. FT baselines are excluded because gridlock under fixed-time control dom-inates both travel time and energy use, making the resulting EB metrics less informative for eco-driving comparison. We also omit the G2 variants of AC and PMP here, since their gains under adaptive SPaT are limited and inconsistent at the network level. Tables VI and VII report, respectively, the average total EB energy consumption (kWh) and travel time (s) per line, aver-aged over all buses in each line, with AC-IDM as the baseline. Overall, PMP-IDM reduces EB travel time on all lines relative to AC-IDM (Table VII), indicating that priority-weighted max-pressure control improves EB progression through intersec-tions. Its effect on energy is more mixed but remains broadly comparable to AC-IDM across lines (Table VI). The three PriEco-DRL variants (T/E/B) expose distinct operating points through reward weighting. Table VII shows that all PriEco-DRL variants reduce EB travel time relative to AC-IDM on all eight lines, including the unseen routes, demonstrat-ing transferability beyond the training routes. Among them, the travel-time–oriented variant PriEco-DRL-T achieves the largest reductions (e.g., −26 .2% and −27 .2% on the longer lines Line 37-W and Line 37-E, and up to −39 .6% on Line 65-S), whereas PriEco-DRL-E and PriEco-DRL-B yield slightly smaller but still consistent improvements. The energy results in Table VI reveal a more nuanced pic-ture. PriEco-DRL-E achieves the most favorable energy per-formance overall and reduces energy consumption on several lines (e.g., Line 22-WN, Line 37-W, Line 37-E, Line 40-SW, and Line 40-WS), whereas PriEco-DRL-T tends to increase total energy use on most lines. PriEco-DRL-B generally lies between T and E, although it may still increase energy on some routes. This pattern suggests that, under transit-priority adaptive signals, faster progression may come at the cost of higher energy use, while stronger energy-oriented control encourages smoother and lower-power driving. At the same time, the magnitude of the energy benefit remains route-dependent, reflecting differences in stop spacing, intersection exposure, and mixed-traffic interactions. For example, on the unseen short route Line 65-N, PriEco-DRL-E does not reduce total energy relative to AC-IDM, likely because the baseline energy is already low and the room for additional savings is limited (see its counterpart, the trained Line 65-S). Taken together, these line-level results show that PriEco-DRL provides configurable operating points for practice: PriEco-DRL-T prioritizes service efficiency, PriEco-DRL-E 12                                                                                                                                                                                       
+
+> TABLE VI LINE -LEVEL EB ENERGY CONSUMPTION COMPARISON ACROSS METHODS . T HE METRICS ARE AVERAGED OVER ALL BUSES IN EACH LINE ;∆IS THE RELATIVE INCREASE /DECREASE OF PRI ECO -DRL METHODS COMPARED TO THE BASELINE METHOD AC-IDM. Line Travel distance [km] Energy consumption [kWh] AC-IDM PMP-IDM PriEco-DRL-T ∆[%] PriEco-DRL-E ∆[%] PriEco-DRL-B ∆[%] Line 22-SW 0.976 1.323 1.298 1.695 +28.2% 1.461 +10.4% 1.594 +20.5% Line 22-WN 0.948 1.382 1.395 1.705 +23.4% 1.309 -5.3% 1.591 +15.1% Line 37-W 2.851 4.373 4.207 5.421 +24.0% 3.734 -14.6% 4.575 +4.6% Line 37-E 2.826 4.132 4.193 5.522 +33.6% 3.674 -11.1% 4.169 +0.9% Line 40-SW 0.805 1.116 1.184 1.300 +16.4% 1.039 -6.9% 1.265 +13.3% Line 40-WS 0.804 1.239 1.219 1.284 +3.6% 1.076 -13.2% 1.210 -2.3% Line 65-N 0.815 0.981 1.015 1.294 +31.9% 1.143 +16.5% 1.293 +31.7% Line 65-S 0.817 1.172 1.119 1.272 +8.5% 1.165 -0.6% 1.284 +9.5% TABLE VII LINE -LEVEL EB TRAVEL TIME COMPARISON ACROSS METHODS . T HE METRICS ARE AVERAGED OVER ALL BUSES IN EACH LINE ;∆IS THE RELATIVE INCREASE /DECREASE OF PRI ECO -DRL METHODS COMPARED TO THE BASELINE METHOD AC-IDM. Line Travel distance [km] Travel time [s] AC-IDM PMP-IDM PriEco-DRL-T ∆[%] PriEco-DRL-E ∆[%] PriEco-DRL-B ∆[%] Line 22-SW 0.976 357 345 243 -32.1% 266 -25.6% 258 -27.9% Line 22-WN 0.948 351 331 254 -27.5% 278 -20.7% 272 -22.4% Line 37-W 2.851 617 550 456 -26.2% 549 -11.0% 517 -16.2% Line 37-E 2.826 725 652 528 -27.2% 677 -6.7% 614 -15.3% Line 40-SW 0.805 311 276 194 -37.7% 213 -31.5% 214 -31.3% Line 40-WS 0.804 285 273 188 -33.9% 223 -21.7% 202 -28.9% Line 65-N 0.815 342 283 212 -38.0% 234 -31.4% 218 -36.3% Line 65-S 0.817 346 289 209 -39.6% 237 -31.5% 235 -32.1%
+
+prioritizes energy savings where feasible, and PriEco-DRL-B offers an intermediate compromise. These observations motivate the trajectory-level analysis in the next section, where we further examine how speed-profile shaping and intersection coordination produce the observed time–energy patterns. Fig. 8 complements Tables VI–VII by visualizing the distri-bution of individual-bus outcomes within each line, revealing within-line heterogeneity that is masked by line-averaged totals. To ensure comparability across routes of different lengths, both energy and travel time are normalized by traveled distance (kWh/km and min/km). The travel-time distributions show noticeable spreads for most lines, reflecting varying network conditions, particularly during periods of heavier congestion, when signal delays, residual queues, and mixed-traffic interactions become more significant. The PriEco-DRL variants distinctly separate the travel-time distributions (panel b). The time-oriented PriEco-DRL-T consistently shifts the distribution downward, achieving faster progression (lower min/km) than both AC-IDM and PMP-IDM. In contrast, PriEco-DRL-E and PriEco-DRL-B generally show higher min/km, reflecting their stronger focus on energy efficiency or balanced operation. This distribution-level sep-aration visually confirms that reward weighting governs the trade-off between travel efficiency and energy efficiency. Energy outcomes (panel a) reveal a more heterogeneous pattern. PriEco-DRL-E tends to lower kWh/km on several lines and often achieves the lowest median energy, indicating that prioritizing energy efficiency drives the policy toward smoother transients and lower-power cruising. Meanwhile, PriEco-DRL-T frequently shows higher kWh/km, consistent with faster operations that require more traction power and less time for speed smoothing. The balanced PriEco-DRL-B generally lies between T and E in both energy and travel time, offering an intermediate behavior. The PriEco-DRL variants also exhibit tighter distributions on almost all lines, particularly in travel time (panel b), as indicated by smaller interquartile ranges and shorter whiskers. This suggests that the learned policy improves not only median performance but also consistency across individual trips, reducing variability caused by stochastic signal evolu-tion and queue interactions. By regulating approach speeds based on local, pressure-informed signal cues, PriEco-DRL minimizes stop–start perturbations and dampens small timing mismatches, leading to more reliable trip outcomes. Overall, Fig. 8 shows that reward weighting controls the operating point in the energy–time space and highlights that PriEco-DRL improves not just average performance but also the reliability of EB operations at the individual-bus level. 
+
+4) Trajectory-level evidence: Representative trip-level pro-files further support the line-level time–energy trade-off ob-served above. In general, the time-prioritized variant tends to complete the trip earlier at the expense of higher cumulative energy, whereas the energy-prioritized variant favors smoother operation and lower energy use, with the balanced variant lying in between. These trajectory-level patterns are consistent with the aggregate findings. Detailed space–time trajectories and trip-level energy profiles for representative buses are provided in the Supplementary Material. VII. C ONCLUSION 
+
+This paper presents PriEco-DRL, a framework that inte-grates priority-aware adaptive signal control with DRL-based 13 Line 22-SW Line 22-WN Line 37-W Line 37-E Line 40-SW Line 40-WS Line 65-N Line 65-S 
+
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> 2.0
+> Energy consumption [kWh/km]
+> AC-IDM
+> PMP-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+(a) Line-level EB energy consumption distribution (per bus, normalized by distance) Line 22-SW Line 22-WN Line 37-W Line 37-E Line 40-SW Line 40-WS Line 65-N Line 65-S 
+
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> Travel time [min/km]
+> AC-IDM
+> PMP-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+(b) Line-level EB travel time distribution (per bus, normalized by distance) Fig. 8. Line-level distributions of individual EB performance across the eight bus lines under different control methods: (a) energy consumption (kWh/km) and (b) travel time (min/km), both normalized by traveled distance. 
+
+eco-driving for electric buses (EBs), enabling joint optimiza-tion of intersection operations and EB control. The Priority Max-Pressure (Priority-MP) controller dynamically allocates green time, while the DRL policy uses pressure-informed cues for anticipative speed decisions. The CTDE approach with parameter sharing enhances data efficiency and supports deployment across different routes and intersections. Experiments on a real-world Amsterdam corridor demon-strate that PriEco-DRL significantly reduces EB energy con-sumption, while maintaining transit priority and avoiding network instability. The energy-prioritized variant achieves the lowest energy use, while the time-prioritized and balanced variants show smaller travel-time increases. The results high-light two key mechanisms: (i) reduced non-scheduled stops due to improved signal–vehicle coordination, and (ii) smoother speed regulation closer to energy-efficient regimes. Ablation analysis confirms that stage-wise reward shaping is crucial for achieving effective energy–reliability trade-offs. Future work will extend PriEco-DRL to a multi-objective formulation that adjusts the energy–time trade-off online based on changing traffic and EB states, reducing the need for manual reward-weight tuning and offline retraining. REFERENCES [1] D. Banister, “The sustainable mobility paradigm,” Transport Policy ,vol. 15, no. 2, pp. 73–80, 2008. [2] P. Miller, A. G. de Barros, L. Kattan, and S. Wirasinghe, “Public transportation and sustainability: A review,” KSCE Journal of Civil Engineering , vol. 20, no. 3, pp. 1076–1083, 2016. [3] J. A. Manzolli, J. P. Trovao, and C. H. Antunes, “A review of elec-tric bus vehicles research topics–methods and trends,” Renewable and Sustainable Energy Reviews , vol. 159, p. 112211, 2022. [4] G. Papa, M. Santo Zarnik, and V. Vukaˇ sinovi´ c, “Electric-bus routes in hilly urban areas: Overview and challenges,” Renewable and Sustainable Energy Reviews , vol. 165, p. 112555, 2022. [5] R. A. Alarrouqi, F. Ahmad, S. Bayhan, and L. Al-Fagih, “Electric buses in hot climates: Challenges, technologies, and the road ahead,” IEEE Access , vol. 12, pp. 55 531–55 550, 2024. [6] G. Rainieri, C. Buizza, and A. Ghilardi, “The psychological, human factors and socio-technical contribution: A systematic review towards range anxiety of battery electric vehicles’ drivers,” Transportation Re-search Part F: Traffic Psychology and Behaviour , vol. 99, pp. 52–70, 2023. [7] Z. Zeng, S. Wang, and X. Qu, “On the role of battery degradation in en-route charge scheduling for an electric bus system,” Transportation Research Part E: Logistics and Transportation Review , vol. 161, p. 102727, 2022. [8] L. Zhang, Y. Han, J. Peng, and Y. Wang, “Vehicle and charging scheduling of electric bus fleets: A comprehensive review,” Journal of Intelligent and Connected Vehicles , vol. 6, no. 3, pp. 116–124, 2023. [9] W. Zhang, J. Liu, K. Wang, and L. Wang, “Routing and charging optimization for electric bus operations,” Transportation Research Part E: Logistics and Transportation Review , vol. 181, p. 103372, 2024. [10] Y. Zhou, H. Wang, Y. Wang, B. Yu, and T. Tang, “Charging facility planning and scheduling problems for battery electric bus systems: A 14 
+
+comprehensive review,” Transportation Research Part E: Logistics and Transportation Review , vol. 183, p. 103463, 2024. [11] W. Ma, Y. Liu, and B. Han, “A rule-based model for integrated operation of bus priority signal timings and traveling speed,” Journal of Advanced Transportation , vol. 47, no. 3, pp. 369–383, 2013. [12] Y. Zhang, R. Fu, Y. Guo, and W. Yuan, “Eco-driving strategy for connected electric buses at the signalized intersection with a station,” 
+
+Transportation Research Part D: Transport and Environment , vol. 128, p. 104076, 2024. [13] Y. Pan, Y. Xi, W. Fang, Y. Liu, Y. Zhang, and W. Zhang, “An eco-driving strategy for electric buses at signalized intersection with a bus stop based on energy consumption prediction,” Energy , vol. 317, p. 134672, 2025. [14] J. Li, X. Wu, J. Fan, Y. Liu, and M. Xu, “Overcoming driving challenges in complex urban traffic: A multi-objective eco-driving strategy via safety model based reinforcement learning,” Energy , vol. 284, p. 128517, 2023. [15] Z. Yang, Z. Zheng, J. Kim, and H. Rakha, “Eco-driving strategies using reinforcement learning for mixed traffic in the vicinity of signalized intersections,” Transportation Research Part C: Emerging Technologies ,vol. 165, p. 104683, 2024. [16] M. Wegener, L. Koch, M. Eisenbarth, and J. Andert, “Automated eco-driving in urban scenarios using deep reinforcement learning,” Trans-portation Research Part C: Emerging Technologies , vol. 126, p. 102967, 2021. [17] Y. Lin, X. Yang, N. Zou, and M. Franz, “Transit signal priority control at signalized intersections: A comprehensive review,” Transportation letters , vol. 7, no. 3, pp. 168–180, 2015. [18] L. Yang, Z. Hu, L. Wang, Y. Liu, J. He, X. Qu, X. Zhao, and S. Fang, “Entire route eco-driving method for electric bus based on rule-based reinforcement learning,” Transportation Research Part E: Logistics and Transportation Review , vol. 189, p. 103636, 2024. [19] P. Hunt, D. Robertson, R. Bretherton, and R. Winton, “SCOOT-a traffic responsive method of coordinating signals,” in 60th Annual Meeting of the Transportation Research Board . Washington, DC: TRB, 1981. [20] N. H. Gartner, “OPAC: A demand-responsive strategy for traffic signal control,” in 62nd Annual Meeting of the Transportation Research Board .Washington, DC: TRB, 1983. [21] C. E. Garcia, D. M. Prett, and M. Morari, “Model predictive control: Theory and practice—a survey,” Automatica , vol. 25, no. 3, pp. 335–348, 1989. [22] B.-L. Ye, W. Wu, K. Ruan, L. Li, T. Chen, H. Gao, and Y. Chen, “A survey of model predictive control methods for traffic signal control,” 
+
+IEEE/CAA Journal of Automatica Sinica , vol. 6, no. 3, pp. 623–640, 2019. [23] Y. Guo, Z. Su, H. Yang, E. Liang, C. Zhong, and W. Ma, “A smart predict-then-optimize framework for vehicle rebalancing prob-lem,” Transportation Research Part B: Methodological , vol. 206, p. 103411, 2026. [24] A. Haydari and Y. Yılmaz, “Deep reinforcement learning for intelligent transportation systems: A survey,” IEEE Transactions on Intelligent Transportation Systems , vol. 23, no. 1, pp. 11–32, 2020. [25] G. Dulac-Arnold, N. Levine, D. J. Mankowitz, J. Li, C. Paduraru, S. Gowal, and T. Hester, “Challenges of real-world reinforcement learning: definitions, benchmarks and analysis,” Machine Learning , vol. 110, no. 9, pp. 2419–2468, 2021. [26] P. Varaiya, “Max pressure control of a network of signalized intersec-tions,” Transportation Research Part C: Emerging Technologies , vol. 36, pp. 177–195, 2013. [27] L. Li and S. E. Jabari, “Position weighted backpressure intersection control for urban networks,” Transportation Research Part B: Method-ological , vol. 128, pp. 435–461, 2019. [28] H. Liu and V. V. Gayah, “A novel max pressure algorithm based on traffic delay,” Transportation Research Part C: Emerging Technologies ,vol. 143, p. 103803, 2022. [29] T. Xu, S. Barman, M. W. Levin, R. Chen, and T. Li, “Integrating public transit signal priority into max-pressure signal control: Methodology and simulation study on a downtown network,” Transportation Research Part C: Emerging Technologies , vol. 138, p. 103614, 2022. [30] C. Tan, D. Sun, H. Liu, M. Rinaldi, and H. Van Lint, “CV-MP: Max-pressure control in heterogeneously distributed and partially connected vehicle environments,” Transportation Research Part B: Methodological ,vol. 204, p. 103387, 2026. [31] C. Tan, H. Liu, D. Sun, M. Rinaldi, and H. van Lint, “Transit-MP: Transit-prioritized max-pressure control in sparse connected vehicle environments,” arXiv preprint arXiv:2511.00309 , 2025. [32] Y. Huang, E. C. Ng, J. L. Zhou, N. C. Surawski, E. F. Chan, and G. Hong, “Eco-driving technology for sustainable road transport: A review,” Renewable and sustainable energy reviews , vol. 93, pp. 596– 609, 2018. [33] F. Mensing, E. Bideaux, R. Trigui, J. Ribet, and B. Jeanneret, “Eco-driving: An economic or ecologic driving style?” Transportation Re-search Part C: Emerging Technologies , vol. 38, pp. 110–121, 2014. [34] M. Barth, S. Mandava, K. Boriboonsomsin, and H. Xia, “Dynamic eco-driving for arterial corridors,” in 2011 IEEE Forum on Integrated and Sustainable Transportation Systems . IEEE, 2011, pp. 182–188. [35] D. Eckhoff, B. Halmos, and R. German, “Potentials and limitations of green light optimal speed advisory systems,” in 2013 IEEE Vehicular Networking Conference . IEEE, 2013, pp. 103–110. [36] G. Giorgione, F. Viti, M. Rinaldi, G. Laskaris, and M. Seredynski, “Experimental analysis of eglosa and eglodta transit control strategies,” in 2017 5th IEEE International Conference on Models and Technologies for Intelligent Transportation Systems (MT-ITS) . IEEE, 2017, pp. 170– 175. [37] G. Laskaris, M. Seredynski, and F. Viti, “Sensitivity analysis on regu-larity based driver advisory systems,” in 2020 IEEE 23rd International Conference on Intelligent Transportation Systems (ITSC) . IEEE, 2020, pp. 1–6. [38] L. Guo, B. Gao, Y. Gao, and H. Chen, “Optimal energy management for hevs in eco-driving applications using bi-level mpc,” IEEE Transactions on Intelligent Transportation Systems , vol. 18, no. 8, pp. 2153–2162, 2016. [39] G. Li, D. G¨ orges, and M. Wang, “Online optimization of gear shift and velocity for eco-driving using adaptive dynamic programming,” IEEE transactions on intelligent vehicles , vol. 7, no. 1, pp. 123–132, 2021. [40] H. Yang, F. Almutairi, and H. Rakha, “Eco-driving at signalized inter-sections: A multiple signal optimization approach,” IEEE Transactions on Intelligent Transportation Systems , vol. 22, no. 5, pp. 2943–2955, 2020. [41] C. Zhang and A. Vahidi, “Predictive cruise control with probabilistic constraints for eco driving,” in Dynamic Systems and Control Confer-ence , vol. 54761, 2011, pp. 233–238. [42] A. H. Chow, S. Li, and R. Zhong, “Multi-objective optimal control for-mulations for bus service reliability with traffic signals,” Transportation Research Part B: Methodological , vol. 103, pp. 248–268, 2017. [43] C. Jia, J. Zhou, H. He, J. Li, Z. Wei, K. Li, and M. Shi, “A novel energy management strategy for hybrid electric bus with fuel cell health and battery thermal-and health-constrained awareness,” Energy , vol. 271, p. 127105, 2023. [44] J. Li, X. Wu, M. Xu, and Y. Liu, “Deep reinforcement learning and reward shaping based eco-driving control for automated HEVs among signalized intersections,” Energy , vol. 251, p. 123924, 2022. [45] X. Wu, J. Li, C. Su, J. Fan, and M. Xu, “A deep reinforcement learning based hierarchical eco-driving strategy for connected and automated HEVs,” IEEE Transactions on Vehicular Technology , vol. 72, no. 11, pp. 13 901–13 916, 2023. [46] R. Huang, H. He, Q. Su, and J. Wu, “Towards sustainable and intelligent urban transportation: A novel deep transfer reinforcement learning framework for eco-driving of fuel cell buses,” Energy , p. 136730, 2025. [47] P. Sun, D. Nam, R. Jayakrishnan, and W. Jin, “An eco-driving algorithm based on vehicle to infrastructure (v2i) communications for signalized intersections,” Transportation Research Part C: Emerging Technologies ,vol. 144, p. 103876, 2022. [48] H. Jung, S. Choi, B. B. Park, H. Lee, and S. H. Son, “Bi-level optimiza-tion for eco-traffic signal system,” in 2016 International Conference on Connected Vehicles and Expo (ICCVE) . IEEE, 2016, pp. 29–35. [49] M. Li, X. Wu, X. He, G. Yu, and Y. Wang, “An eco-driving system for electric vehicles with signal control under v2x environment,” Trans-portation Research Part C: Emerging Technologies , vol. 93, pp. 335– 350, 2018. [50] H. Ding, Y. Sun, L. Wang, X. Zheng, W. Huang, and X. Lu, “Intersec-tion eco-driving strategies under mixed traffic environment: An novel cooperation of traffic signal and vehicle trajectory planning,” Physica A: Statistical Mechanics and its Applications , vol. 655, p. 130203, 2024. [51] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor,” in International Conference on Machine Learning . PMLR, 2018, pp. 1861–1870. [52] M. Treiber, A. Hennecke, and D. Helbing, “Congested traffic states in empirical observations and microscopic simulations,” Physical Review E, vol. 62, no. 2, p. 1805, 2000. Supplementary Material 
+
+# for 
+
+# PriEco-DRL: Joint Optimization of Electric-Bus Eco-Driving and Transit-Priority Adaptive Signals via Deep Reinforcement Learning 
+
+This supplementary document provides additional experimental details and extended results that support the findings reported in the main manuscript. In particular, it includes additional trajectory-level comparisons, trip-level energy profiles, and representative bus longitudinal pro-files that could not be fully presented in the main text due to space limitations. 
+
+# S1 Additional Trajectory-Level Analyses 
+
+This section provides additional trajectory-level evidence that complements the line-level results in the main paper. In particular, we present representative space–time trajectories, trip-level energy profiles, and detailed longitudinal speed/acceleration/jerk comparisons for selected EBs from unseen lines. These results further illustrate how PriEco-DRL reduces non-scheduled stop–start events, smooths speed transitions, and selects different operating points along the energy–time trade-off. 
+
+S1.1 Representative space–time trajectories 
+
+Fig. S1 presents representative longitudinal space–time trajectories of electric buses from four unseen lines under the selected control methods. Panels (a) and (b) correspond to the begin-ning and the middle of the 3-hour simulation, respectively. Because adaptive signal controllers generate method-specific phase sequences, the exact switching instants are not directly com-parable across methods; therefore, only intersection locations (solid horizontal lines) and bus stops (dashed lines) are marked. During the low-demand period (Fig. S1a), AC-IDM exhibits clear progression slowdowns around intersections, with longer flat segments near the intersection markers indicating non-scheduled waiting. In contrast, all PriEco-DRL variants achieve faster progression and shorter non-scheduled holds, which is consistent with the line-level reduction in travel time reported in the main text. The difference is especially visible on longer trajectories such as Line 37-E.0, where PriEco-DRL maintains more continuous advancement over successive intersections. Among the variants, PriEco-DRL-T generally exhibits the steepest effective slope, reflecting a stronger emphasis on travel-time efficiency, whereas PriEco-DRL-E adopts a more conservative progression pattern. PriEco-DRL-B typically lies between the two. In the congested period (Fig. S1b), all methods experience slower progression due to longer queues and intermittent spillbacks, and some buses (e.g., Line 22-SW.9) undergo extended waiting at intersections. Under such conditions, uninterrupted green access becomes difficult for all methods, so the main advantage of PriEco-DRL comes from bus-side pacing rather than guaranteed non-stop passage. Even in these cases, PriEco-DRL reduces large stop–start 1300 400 500 600 700 800 
+
+Simulation time [s] 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+> Travel distance [m]
+
+Line: Line 22-SW | Line 22-SW.0 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+200 300 400 500 600 700 
+
+Simulation time [s] 
+
+0
+
+500 
+
+1000 
+
+1500 
+
+2000 
+
+2500 
+
+3000 
+
+> Travel distance [m]
+
+Line: Line 37-E | Line 37-E.0 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+500 550 600 650 700 
+
+Simulation time [s] 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+> Travel distance [m]
+
+Line: Line 40-WS | Line 40-WS.0 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+300 350 400 450 500 550 
+
+Simulation time [s] 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+> Travel distance [m]
+
+Line: Line 65-N | Line 65-N.0 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+(a) EB trajectories of the unseen four lines at the start of the simulation with light traffic volume 5700 5750 5800 5850 5900 5950 6000 6050 6100 
+
+Simulation time [s] 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+> Travel distance [m]
+
+Line: Line 22-SW | Line 22-SW.9 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+5600 5700 5800 5900 6000 6100 6200 6300 
+
+Simulation time [s] 
+
+0
+
+500 
+
+1000 
+
+1500 
+
+2000 
+
+2500 
+
+3000 
+
+> Travel distance [m]
+
+Line: Line 37-E | Line 37-E.6 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+5300 5350 5400 5450 5500 
+
+Simulation time [s] 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+> Travel distance [m]
+
+Line: Line 40-WS | Line 40-WS.4 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+5700 5750 5800 5850 5900 5950 6000 6050 
+
+Simulation time [s] 
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+> Travel distance [m]
+
+Line: Line 65-N | Line 65-N.6 
+
+> AC-IDM
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+(b) EB trajectories of the unseen four lines in the middle of the simulation with heavy traffic volume 
+
+Figure S1: The EB longitudinal space–time trajectories of all the unseen lines under the selected control methods. The solid horizontal line indicates the location of intersection, the dashed blue lines indicate the location of bus stops, and the simulation time indicates the absolute time within the entire simulation. disruptions and yields a more regular advancement pattern. For example, for Line 37-E.6 and bus 40Mui.4, the PriEco-DRL trajectories progress more steadily across successive intersections and show shorter non-scheduled holds than AC-IDM. Overall, these trajectory-level observations support the two main mechanisms identified in the paper: (i) reducing intersection-induced stop–start events through anticipative approach-speed regulation, and (ii) shaping smoother speed profiles that avoid unnecessary high-power transients, with the specific pacing determined by the reward-weight setting. 25700 5750 5800 5850 5900 5950 6000                    
+
+> Simulation time [s]
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Cumulative Energy [kWh]
+> Line: Line 22-SW | Line 22-SW.9
+> 5600 5700 5800 5900 6000 6100 6200 6300
+> Simulation time [s]
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Cumulative Energy [kWh]
+> Line: Line 37-E | Line 37-E.6
+> 5300 5325 5350 5375 5400 5425 5450 5475
+> Simulation time [s]
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> Cumulative Energy [kWh]
+> Line: Line 40-WS | Line 40-WS.4
+> 5700 5750 5800 5850 5900 5950
+> Simulation time [s]
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> Cumulative Energy [kWh]
+> Line: Line 65-N | Line 65-N.6
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Energy per step [kWh]
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Energy per step [kWh]
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Energy per step [kWh]
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Energy per step [kWh]
+> PriEco-DRL-E Cumulative Energy
+> PriEco-DRL-T Cumulative Energy
+> PriEco-DRL-E Energy per Step
+> PriEco-DRL-T Energy per Step
+
+Figure S2: Representative cumulative electrical energy trajectories and step-wise net energy increments for unseen lines during the congested period. 
+
+S1.2 Additional trip-level energy profiles 
+
+Fig. S2 further illustrates the trip-level energy-consumption dynamics by plotting (i) the cumu-lative electrical energy consumption (solid curves, left axis) and (ii) the step-wise net energy increment (shaded bars, right axis) for four representative EBs from unseen lines during the congested period. The shaded series reveals how energy accumulates under mixed traffic and adaptive SPaT: large positive spikes typically correspond to high-power traction events such as re-acceleration after queuing or stop–go recovery, whereas smaller increments indicate smoother progression with fewer abrupt power demands. Negative increments, when present, correspond to regenerative braking, i.e., partial recovery of kinetic or potential energy during deceleration. Comparing the two reward-weight variants, PriEco-DRL-E consistently yields lower cumu-lative energy trajectories than PriEco-DRL-T across all four trips, and the gap grows as the trip proceeds. This difference can be traced to the step-wise profiles: PriEco-DRL-T exhibits more frequent and larger energy spikes (e.g., for Line 37-E.6 and Line 22-SW.9), indicating repeated high-power transients associated with aggressive progression and stop–go recovery in congestion. In contrast, PriEco-DRL-E suppresses both the frequency and magnitude of these spikes, suggesting that stronger energy-oriented reward weighting encourages more moderate approach and discharge speeds, fewer unnecessary stop–start maneuvers, and a lower-variance speed profile. These effects accumulate over time and explain the lower total energy use of PriEco-DRL-E observed in the line-level results. 
+
+S1.3 Representative EB longitudinal profiles 
+
+To further explain the time–energy trade-off among the PriEco-DRL variants, Fig. S3 compares the longitudinal profiles of a representative EB trip (Line 22-SW.9) during the congested pe-riod. Panels (a)–(c) show the speed, acceleration, and jerk trajectories, and panel (d) reports cumulative energy consumption. 35700 5750 5800 5850 5900 5950 6000                   
+
+> Simulation time [s]
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> speed [m/s]
+> (a) EB Line 22-SW.9 speed
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+> 5700 5750 5800 5850 5900 5950 6000
+> Simulation time [s]
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> accel [m/s²]
+> (b) EB Line 22-SW.9 acceleration
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+> 5700 5750 5800 5850 5900 5950 6000
+> Simulation time [s]
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> jerk [m/s³]
+> (c) EB Line 22-SW.9 jerk
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+> 5700 5750 5800 5850 5900 5950 6000
+> Simulation time [s]
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Cumulative energy [kWh]
+> (5987, 1.735)
+> (6007, 1.509)
+> (5999, 1.556)
+> (d) EB Line 22-SW.9 energy consumption
+> PriEco-DRL-T
+> PriEco-DRL-E
+> PriEco-DRL-B
+
+Figure S3: Representative longitudinal profiles of Line 22-SW.9 under PriEco-DRL-T, PriEco-DRL-E, and PriEco-DRL-B during the congested period: (a) speed, (b) acceleration, (c) jerk, and (d) cumulative electrical energy consumption. The time-prioritized variant PriEco-DRL-T pursues more aggressive progression, reach-ing higher cruising speeds and exhibiting more pronounced acceleration events. In contrast, the energy-prioritized variant PriEco-DRL-E adopts a smoother and more conservative pacing strategy, with fewer high-speed excursions and milder acceleration/deceleration swings. PriEco-DRL-B provides an intermediate behavior, combining relatively steady progression with mod-erated actuation, although localized transients can still appear depending on the surrounding traffic and signal interactions. These behavioral differences are directly reflected in the cumulative energy trajectories. PriEco-DRL-T completes the trip earlier but consumes the most energy, PriEco-DRL-E achieves the lowest energy at the cost of a longer completion time, and PriEco-DRL-B lies in between. The three trip-end points therefore form a clear Pareto-like ordering for this representative trip, which is consistent with the system-level energy–time trade-off discussed in the main paper. Overall, the example illustrates two key contributors to energy reduction in PriEco-DRL: (i) suppressing energy-intensive stop–start recovery through anticipative speed regulation, and (ii) avoiding unnecessary high-speed cruising and large actuation transients so that the bus operates closer to an energy-efficient regime. 4
