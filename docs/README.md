@@ -6,38 +6,46 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-21
-- 运行时间：2026-07-21 20:25:47 UTC
+- 最新运行日期：2026-07-22
+- 运行时间：2026-07-22 21:38:05 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：2
-- 速读区：4
+- 本次总论文数：8
+- 精读区：1
+- 速读区：7
 
 ### 今日简报（AI）
-今日推荐6篇强化学习应用研究，精读2篇最高分分别聚焦随机需求车辆路径问题与可通行行人路径生成。重点关注《A Deep Reinforcement Learning Algorithm for the Vehicle Routing Problem with Stochastic Demands and Outsourcing》（10.0分）的算法设计，以及《TraversRL: Traversable Pedestrian Pathway Generation With Reinforcement Learning》（8.0分）的路径生成方法。建议优先阅读这两篇精读论文，并跟进速读中导航与生态驾驶的联合优化方向。
-- 详情：[/202607/21/README](/202607/21/README)
+今日阅读8篇论文，精读1篇高分强化学习求解随机需求车辆路径问题，速读3篇涵盖四足导航、多无人机通信及无人机感知。  
+最值得关注的是DRL处理随机需求与外协的VRP问题，以及从预测想象与分层LLM等多角度探索自主导航与协同。  
+建议优先精读VRP论文以深化随机优化理解，同时关注多智能体导航与LLM结合的创新思路。
+- 详情：[/202607/22/README](/202607/22/README)
 
 ### 精读区论文标签
-1. [A Deep Reinforcement Learning Algorithm for the Vehicle Routing Problem with Stochastic Demands and Outsourcing](/202607/21/2607.16875v1-a-deep-reinforcement-learning-algorithm-for-the-vehicle-routing-problem-with-stochastic-demands-and-outsourcing)  
-   标签：评分：10.0/10、query:rl-last-mile
-   evidence：面向随机需求和外包的车辆路径问题的深度强化学习算法
-2. [TraversRL: Traversable Pedestrian Pathway Generation With Reinforcement Learning](/202607/21/2607.17479v1-traversrl-traversable-pedestrian-pathway-generation-with-reinforcement-learning)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：强化学习用于路径生成和路由规划
+1. [A Deep Reinforcement Learning Algorithm for the Vehicle Routing Problem with Stochastic Demands and Outsourcing](/202607/22/2607.16875v2-a-deep-reinforcement-learning-algorithm-for-the-vehicle-routing-problem-with-stochastic-demands-and-outsourcing)  
+   标签：评分：9.0/10、query:rl-last-mile
+   evidence：针对车辆路径问题的深度强化学习算法
 
 ### 速读区论文标签
-1. [NavCMPO: Critic-Guided MeanFlow Policy Optimization for Adaptive Navigation](/202607/21/2607.14643v1-navcmpo-critic-guided-meanflow-policy-optimization-for-adaptive-navigation)  
+1. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/22/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
    标签：评分：7.0/10、query:rl-path-opt
-   evidence：使用强化学习微调进行自适应导航，可迁移至机器人路径优化
-2. [PriEco-DRL: Joint Optimization of Electric-Bus Eco-Driving and Transit-Priority Adaptive Signals via Deep Reinforcement Learning](/202607/21/2607.15862v1-prieco-drl-joint-optimization-of-electric-bus-eco-driving-and-transit-priority-adaptive-signals-via-deep-reinforcement-learning)  
+   evidence：用于四足机器人的强化学习导航策略，结合预测性监督
+2. [Intelligent Multi-UAV Navigation in ITNTNs: A Hierarchical LLM Approach](/202607/22/2607.18604v1-intelligent-multi-uav-navigation-in-itntns-a-hierarchical-llm-approach)  
    标签：评分：7.0/10、query:rl-last-mile
-   evidence：深度强化学习用于生态驾驶与公交信号优先联合优化
-3. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/21/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：使用强化学习进行四足机器人视觉导航预测训练，与路径优化相关
-4. [LaT: LLM-as-Trainer for Multi-Task Vehicle Routing Solvers](/202607/21/2607.17708v1-lat-llm-as-trainer-for-multi-task-vehicle-routing-solvers)  
+   evidence：层次化大语言模型与深度强化学习框架用于无人机物流网络导航，直接适用于末端路径规划
+3. [Reinforcement Learning for Delivery Drone-Based Participatory Sensing in Dynamic Environments](/202607/22/2607.18874v1-reinforcement-learning-for-delivery-drone-based-participatory-sensing-in-dynamic-environments)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：强化学习用于动态环境下配送无人机路径优化
+4. [On the Effectiveness of Pretraining for Graph Combinatorial Optimization](/202607/22/2607.19072v1-on-the-effectiveness-of-pretraining-for-graph-combinatorial-optimization)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：图组合优化的预训练方法，应用于旅行商问题等路径规划
+5. [Stochastic Reset Pathfinding: Path-Level Regret for Cascading Bandits over Graph Paths](/202607/22/2607.15440v1-stochastic-reset-pathfinding-path-level-regret-for-cascading-bandits-over-graph-paths)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：利用大模型作为训练器优化多任务车辆路径求解器
+   evidence：基于图路径的级联赌博机框架，捕捉不可靠网状网络中的配送场景
+6. [TraversRL: Traversable Pedestrian Pathway Generation With Reinforcement Learning](/202607/22/2607.17479v1-traversrl-traversable-pedestrian-pathway-generation-with-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-path-opt
+   evidence：使用强化学习生成行人路径网络
+7. [Stale but Stable: Staleness-Adaptive Trust Regions for Stabilizing Asynchronous Reinforcement Learning](/202607/22/2607.18722v1-stale-but-stable-staleness-adaptive-trust-regions-for-stabilizing-asynchronous-reinforcement-learning)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：适应陈旧度的信任区域方法，稳定异步强化学习训练
 
 
 <div class="dpr-home-promo-card">

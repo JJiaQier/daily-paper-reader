@@ -1,0 +1,461 @@
+Title: Intelligent Multi-UAV Navigation in ITNTNs: A Hierarchical LLM Approach
+
+URL Source: https://arxiv.org/pdf/2607.18604v1
+
+Published Time: Wed, 22 Jul 2026 00:21:09 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+This paper has been accepted by GLOBECOM’2026 – IEEE Global Communications Conference © 2026 IEEE 
+
+# Intelligent Multi-UAV Navigation in ITNTNs: A Hierarchical LLM Approach 
+
+Zijiang Yan ∗, Hao Zhou †, Wael Jaafar ‡, Jianhua Pei ∗, Ping Wang ∗, Halim Yanikomeroglu §, and Hina Tabassum ∗∗York University, Toronto, ON, Canada †Samsung Research America, Toronto, ON, Canada  
+
+> ‡
+
+´ETS, University of Quebec, Montr´ eal, QC, Canada § Carleton University, Ottawa, ON, Canada 
+
+Abstract —The deployment of high-speed Uncrewed Aerial Vehicles (UAVs) in 3D aerial highways necessitates robust co-ordination of physical flight kinematics and multi-tier network handovers. While Deep Reinforcement Learning (DRL) offers rapid tactical control, it lacks the zero-shot strategic reasoning required to quickly adapt to dynamic Integrated Terrestrial and Non-Terrestrial Networks (ITNTNs). Conversely, Large Language Models (LLMs) excel at semantic reasoning but suffer from high inference latency, rendering them unsuitable for real-time aerodynamic control. To bridge this gap, we propose a novel Hierarchical LLM-driven control framework. A massive cloud-based LLM deployed on a High-Altitude Platform Station (HAPS) manages slow-timescale global load balancing, while lightweight edge-LLMs on individual UAVs translate local observations into tactical sub-goals. These sub-goals guide a fast-timescale physical DRL controller to execute collision-free, handover-aware trajectories. Simulation results demonstrate that our agentic architecture significantly reduces collision rates and improves aggregate system throughput compared to existing baselines. 
+
+Index Terms —Uncrewed Aerial Vehicles (UAVs), Large Language Models (LLMs), Integrated Terrestrial and Non-Terrestrial Networks (ITNTNs), Handover Management. 
+
+I. I NTRODUCTION 
+
+The rapid proliferation of Uncrewed Aerial Vehicles (UAVs) is driving the conceptualization of 3D aerial high-ways, dedicated corridors designed to support dense, high-speed autonomous logistics [1]. Operating safely in these environments requires uninterrupted Command and Control (C2) and telemetry links [2]. To satisfy these stringent con-nectivity requirements, 6G architectures are shifting toward Integrated Terrestrial and Non-Terrestrial Networks (ITNTNs) [3], leveraging High-Altitude Platform Stations (HAPS) to complement the terrestrial base stations’ (TBSs) coverage. However, as UAVs traverse these overlapping coverage tiers at high velocities, they inevitably trigger frequent network handovers (HOs) [4], necessitating the joint optimization of physical flight kinematics and communication reliability. Although Deep Reinforcement Learning (DRL) has been widely adopted for UAV trajectory planning and cell asso-ciation [5], it inherently relies on trial-and-error exploration [2]. In multi-agent aerial corridors, such exploration often leads to localized and greedy optimization, which can result in the systemic depletion of shared resources. Uncoordinated     
+
+> Emails: {zijiang, pingw, hinat }@yorku.ca, haozhou029@gmail.com, wael.jaafar@etsmtl.ca, jianhuapei98@gmail.com, halim@sce.carleton.ca.
+
+agents may inadvertently overload specific TBSs or saturate the limited bandwidth of the HAPS, ultimately compromising both the aggregate system capacity and flight safety [6], [7]. Recently, the integration of Generative AI, especially Large Language Models (LLMs), has emerged as a transformative approach for autonomous vehicle control [8]. LLMs possess unparalleled zero-shot reasoning, enabling complex mission adaptation and global strategic planning [9]. Yet, standard LLM inference suffers from significant latency bottlenecks. Relying purely on LLMs is fundamentally incompatible with the fast-timescale execution required for sub-millisecond RF channel handovers and high-frequency rotor control [10], [11]. Bridging the gap between slow-timescale semantic reasoning and fast-timescale physical execution is an open challenge. To overcome these limitations, this paper proposes a novel 
+
+Dual-Timescale Hierarchical LLM architecture that syner-gizes the cognitive reasoning of foundation models with the rapid execution of DRL. Indeed, given the potential of Agentic AI and the latency challenges inherent in dynamic aerial networks, we propose here a novel Cloud-Edge framework that jointly optimizes UAV mobility and handover manage-ment. In particular, we first formulate the problem as aHierarchical Multi-Objective Partially Observable Markov De-cision Process (H-MO-POMDP), which strictly accounts for high-fidelity 3D rigid-body kinematics and realistic ITNTN capacity constraints. To address this complex hierarchy, we introduce a dual-timescale architecture powered by LLMs. Specifically, a strategic meta-controller (Qwen3.5-122B 
+
+[12]) deployed on the HAPS operates at a slow timescale to dictate global load-balancing policies. Moreover, unlike previous studies that relied solely on trial-and-error DRL, we integrate here lightweight edge-agents ( Qwen3.5-9B [12]) directly on individual UAVs. The latter generate cognitive reflections to dynamically tune the reward functions of a fast-timescale Deep Double Q-Network (DDQN), success-fully bridging semantic reasoning with real-time physical execution. Finally, extensive simulations in a high-fidelity 3D physics environment demonstrate that the proposed LLM-guided framework mitigates severe collision penalties and maximizes system throughput, thus outperforming baselines. The remainder of this paper is organized as follows. Section II describes the ITNTN system model, including the high-fidelity 3D UAV kinematics and the multi-tier communication architecture. Section III formulates the joint optimization arXiv:2607.18604v1 [cs.RO] 21 Jul 2026 This paper has been accepted by GLOBECOM’2026 – IEEE Global Communications Conference © 2026 IEEE 
+
+Figure 1: 3D aerial network model. problem as a H-MO-POMDP. The proposed dual-timescale hierarchical LLM framework and its cognitive reasoning modules are introduced in Section IV. Section V presents the numerical results and performance evaluations. Finally, Section VI concludes the paper. II. S YSTEM MODEL 
+
+A. 3D Aerial Highway and ITNTN Architecture 
+
+As depicted in Fig. 1, we consider a dynamic 3D aerial highway where a set of M UAVs, denoted by M =
+
+{1, 2, . . . , M }, navigate a shared airspace. Each UAV m ∈ M 
+
+is assigned an independent transit mission to a unique 3D target waypoint, xm
+
+> target
+
+, and must continuously adjust its altitude and heading to bypass obstacles and avoid collisions. To support mission-critical C2 and telemetry, the airspace is covered by an ITNTN. The network comprises a set of 
+
+B TBSs, denoted as B = {1, 2, . . . , B }, and a one HAPS, denoted by H. A UAV m can connect to any serving node 
+
+c ∈ B ∪ { H}, but high-speed traversal triggers handovers. 
+
+B. Communication Model 
+
+To evaluate the reliability of the C2 links, we formulate the signal-to-interference-plus-noise ratio (SINR) [13]. Let Gm,c t
+
+denote the linear channel power gain between UAV m and serving node c at time t, encapsulating both large-scale path loss and small-scale Rician fading. The received downlink SINR at UAV m is given by SINR m,c t = PcGm,c t
+
+N0Bc + It
+
+, (1) where Pc is the transmit power of node c, N0 is the noise power spectral density, and Bc is the allocated bandwidth. The term It = P  
+
+> c′̸=c
+
+Pc′ Gm,c ′ 
+
+> t
+
+represents the aggregate interference from other active transmitting nodes in the tier. The achievable data rate for UAV m is calculated as 
+
+Rm,c t = Bc log 2 (1 + SINR m,c t ) . (2) To penalize the latency and packet drops associated with frequent network switching, we define the handover-aware weighted data rate as WR m,c t = Rm,c t − γIm
+
+> HO ,t
+
+, (3) where Im 
+
+> HO ,t
+
+∈ { 0, 1} is a binary indicator that equals 1 if a handover occurs at time t, and γ is the handover penalty coefficient. Also, the HAPS is constrained by a maximum aggregate capacity CHAPS max and any node c has a users association capacity Qc, ∀c ∈ B ∪ { H}.
+
+C. Kinematic Model 
+
+We adopt a high-fidelity 3D rigid-body kinematics model, where the physical state of UAV m at time t is defined by its 3D position xmt ∈ R3 and linear velocity vmt ∈ R3. The system evolves at a fast discrete timescale ∆t (e.g., =0.05 s), and the continuous kinematic state updates are governed by [14] 
+
+xmt+1 = xmt + vmt ∆t, (4) 
+
+vmt+1 = vmt +
+
+ FT,m 
+
+Mu
+
+− g − dm
+
+
+
+∆t, (5) where Mu is the UAV mass, g is the gravitational acceleration vector, and dm is the aerodynamic drag. The collective thrust vector FT,m is derived from the real-time rotational speeds (RPM) of the four individual rotors. To ensure flight safety, a severe collision penalty is incurred if the 3D Euclidean distance between any two UAVs falls below the physical safety threshold: ∥xmt − xjt ∥2 < d safe for any m̸ = j.III. P ROBLEM FORMULATION 
+
+To capture the coupled dynamics of flight kinematics and network handovers across different operational timescales, we formulate the system as a H-MO-POMDP consisting of a slow-timescale global meta-controller (HAPS) and fast-timescale tactical edge-agents (UAVs). 
+
+A. State and Observation Spaces 
+
+Due to the limited sensing range of individual UAVs, the global environmental state St is partially observable. At the fast tactical timescale t, each UAV m receives a local observation omt ∈ Ω, defined as 
+
+omt = xmt , vmt , xm
+
+> target
+
+, {xjt , vjt }j∈N mt , c mt , WR m,c t
+
+, (6) where N mt is the set of neighboring UAVs within sensing range, cmt is the current serving node, and WR m,c t is the handover-aware weighted data rate. Conversely, at the slow strategic timescale THAPS , the HAPS receives a global meta-observation oHAPS  
+
+> T
+
+comprising the aggregate traffic load on each TBS, the available HAPS backhaul capacity, and the spatial distribution of the UAV swarm. 
+
+B. Hybrid Action Spaces 
+
+The action space encompasses both continuous physical controls and discrete network decisions as follows. 
+
+1) HAPS Strategic Action: At each macro-step THAPS ,the HAPS agent outputs a discrete meta-action aHAPS  
+
+> T
+
+∈{Offload , Recall , Idle }. These directives are broadcast to spe-cific high-density congestion zones to enforce load-balancing before node capacities are breached. This paper has been accepted by GLOBECOM’2026 – IEEE Global Communications Conference © 2026 IEEE 
+
+2) UAV Tactical Action: At each micro-step t, UAV m
+
+executes a joint hybrid action amt = [ am
+
+> mot ,t
+
+, am
+
+> tele ,t
+
+]⊤. The continuous motion action am 
+
+> mot ,t
+
+∈ [−1, 1] 4 regulates the RPM of the four individual rotors for physical 3D navigation. Concurrently, the discrete telecommunication action am 
+
+> tele ,t
+
+∈B ∪{ H} selects the target serving node, triggering a handover if am
+
+> tele ,t
+
+̸ = cmt .
+
+C. Multi-Objective Reward Functions 
+
+To simultaneously optimize mobility and connectivity, we define scalarized reward structures for edge and HAPS levels. 
+
+1) UAV Edge Reward: The objective of UAV m is to safely navigate to its target while maintaining a robust C2 link. The reward is formulated as 
+
+Rmt = α1Rm 
+
+> tran ,t
+
++ α2WR m,c t + α3ρcrash , (7) where Rm 
+
+> tran ,t
+
+= exp( −∥ xmt − xm
+
+> target
+
+∥2) − λ∥am
+
+> mot ,t
+
+∥22 rewards forward progression while penalizing aggressive, energy-consuming rotor maneuvers. The term WR m,c t maximizes the data rate while penalizing handovers. Finally, ρcrash applies a severe negative penalty if the safety distance dsafe is violated. The weights α{1,2,3} balance the rewrards/penalties. 
+
+2) HAPS Reward: The objective of the HAPS meta-controller is to maximize aggregate system throughput while enforcing node capacity limits. Its reward is given by 
+
+RHAPS  
+
+> T
+
+= η1
+
+X
+
+> m∈M
+
+Rm,c t −η2
+
+X
+
+> c∈B∪{ H}
+
+max(0 , n c,t −Qc), (8) where nc,t is the number of UAVs currently associated with node c. The second term heavily penalizes any policy that results in network congestion (i.e., exceeding the capacity 
+
+Qc), balanced by the weights η{1,2}. To capture the coupled dynamics of 3D trajectory control and handover-aware cell association, we define the joint optimization problem P below. The objective is to maximize the aggregate system utility while adhering to physical kinematics and network capacity constraints. 
+
+P : max  
+
+> A,α
+
+E
+
+" TX
+
+> t=0
+
+γt X
+
+> m∈M
+
+Rmt (amt , αmt )
+
+#
+
+s.t. C1 : xmt+1 = f (xmt , vmt , am
+
+> mot ,t
+
+), ∀m, t, 
+
+C2 : ∥xmt − xjt ∥2 ≥ dsafe , ∀m̸ = j, 
+
+C3 : X
+
+> c∈B∪{ H}
+
+um,c t = 1 , ∀m, t, 
+
+C4 : X
+
+> m∈M
+
+um,c t ≤ Qc, ∀c ∈ B ∪ { H},
+
+C5 : αmt ∈ ∆3,
+
+> 3
+
+X
+
+> i=1
+
+αmt,i = 1 .
+
+(9) In ( P), A ≜ {amt } and α ≜ {αmt } (∀m ∈ M, ∀t)denote the joint hybrid action policy and the dynamically tuned multi-objective reward weights across all UAVs over the operational horizon, respectively. amt = [ am
+
+> mot ,t
+
+, a m
+
+> tele ,t
+
+]⊤
+
+represents the hybrid action vector. C1 ensures the trajectory updates follow the 3D rigid-body physics model defined in (4)-(5). C2 maintains the physical safety separation between any two UAVs. C3 ensures that each UAV m is associated with exactly one serving node (TBS or HAPS) at any time 
+
+t. C4 restricts the number of associated users per node to its capacity Qc to prevent network saturation. C5 defines the simplex ∆3 for the cognitive reward weights α{1,2,3} tuned by the edge-LLM. Problem P is a highly non-convex mixed-integer non-linear programming problem coupling flight kinematics and aerial communications. To enable real-time control, we decompose this optimization via a two-tier Hierarchical Multi-Objective POMDP framework, delegating specific constraints to distinct LLM cognitive tiers, as described in the next section. IV. P ROPOSED HIERARCHICAL LLM F RAMEWORK 
+
+To bridge the latency gap between semantic reasoning and real-time aerodynamic control, we propose a Cloud-Edge Agentic architecture, as illustrated in Fig. 2. The framework separates decision-making into three distinct timescales: 1) slow strategic meta-timescale ( THAPS ), 2) intermediate tacti-cal reasoning timescale ( TLLM ), and 3) fast physical execution timescale ( Tfast ). 
+
+A. HAPS Cloud Meta-Controller 
+
+At the highest level of the hierarchy, the HAPS acts as a global orchestrator. Since global load balancing requires complex spatial reasoning across the entire ITNTN, we deploy a large foundation model, i.e., Qwen3.5-122B , hosted in the cloud computing cluster of HAPS. Operating at THAPS =5.0 s, the HAPS meta-controller evaluates the global obser-vation oHAPS  
+
+> T
+
+. In particular, if the number of users associated with a specific TBS nc,t is close to Qc, the LLM generates zero-shot strategic directives ( aHAPS  
+
+> T
+
+), forcing specific UAV edge-agents to offload their C2 links to neighboring TBSs or the HAPS. 
+
+B. UAV Edge-Agent 
+
+Each UAV is equipped with a lightweight edge-LLM (i.e., 
+
+Qwen3.5-9B ) that operates at TLLM = 1 .0 s. The cognitive edge-agent translates the localized observation ( omt ) into a structured textual prompt. Rather than outputting direct motor controls, the edge-LLM performs cognitive reflection , i.e., if the UAV experiences severe handover penalties or is close to a collision threshold ( dsafe ), the LLM dynamically adjusts the weights α{1,2,3} of the multi-objective reward vector. By doing so, this semantic reasoning guides the underlying DRL, shifting its priority between aggressive forward transit and conservative safety. 
+
+C. Fast-Timescale DRL Execution 
+
+At the lowest level, a DDQN operates at the physics timescale Tfast = 0 .05 s (20 Hz). The DDQN receives the dynamic reward weights generated by the edge-LLM and executes the continuous motor commands ( am
+
+> mot ,t
+
+) and discrete handover actions ( am
+
+> tele ,t
+
+). By offloading semantic reasoning to This paper has been accepted by GLOBECOM’2026 – IEEE Global Communications Conference © 2026 IEEE 
+
+Figure 2: Hierarchical control for UAVs in an ITNTN. the LLM, the DDQN acts purely as a high-speed, reflexive physical controller. The complete execution flow is summarized in Algorithm 1. 
+
+Algorithm 1: Dual-Timescale Hierarchical LLM Con-trol 
+
+Initialize: Environment state S0, HAPS LLM (Qwen-122B ), UAV LLMs ( Qwen-9B ), and DDQN networks. 
+
+for each physics micro-step t = 1 , 2, . . . , T max do if t (mod THAPS ) == 0 then 
+
+Extract global meta-observation oHAPS  
+
+> T
+
+;HAPS LLM generates strategic meta-action aHAPS 
+
+> T
+
+to balance node quotas Qc;
+
+for each UAV m ∈ M do 
+
+Extract local numerical observation omt ;
+
+if t (mod TLLM ) == 0 then 
+
+Format omt into dynamic text prompt pdyn  
+
+> t
+
+;Edge LLM evaluates safety threshold ρthresh ;Edge LLM outputs cognitive reflection to dynamically tune reward weights α{1,2,3};DDQN receives tuned rewards and selects hybrid action amt = [ am
+
+> mot ,t
+
+, am
+
+> tele ,t
+
+]⊤;Execute amt , update kinematics at Tfast , and store transition in memory buffer Dm;Sample mini-batch from Dm to train DDQN; 
+
+D. State Discretization and Prompt Engineering 
+
+To bridge the gap between numerical kinematics and the semantic reasoning of the Qwen3.5-9B edge-LLM, we leverage a structured prompt engineering methodology. Directly feeding high-precision floating-point arrays (e.g., 
+
+vmt = [12 .43 , −3.21 , 0.5] ) often degrades LLM reasoning and inflates inference latency. Therefore, we discretize the con-tinuous observation omt into semantic language descriptors, denoted as L(omt ). Specifically, the 3D relative distance to neighboring UAVs ( ∥xmt −xjt ∥2, ∀j ∈ M\{ m}) is categorized into predefined semantic zones: Safe (d > 3dsafe ), Warning 
+
+(dsafe ≤ d ≤ 3dsafe ), and Critical (d < d safe ). Similarly, the handover-aware network state WR m,c t is mapped to Stable 
+
+(when WR m,c t ≥ 20 Mbps, indicating an un-congested link), 
+
+Degraded (when 0 ≤ WR m,c t < 20 Mbps, indicating capacity saturation), or Hand-over (when WR m,c t < 0, triggered by the massive γ penalty during network switching). To enhance the zero-shot generalization of the LLM, we utilize distance-based few-shot example selection. Rather than using static prompts, the edge-agent retrieves a set of K his-torical states from its local memory buffer Dm that exhibit the shortest Euclidean distance to the current kinematic state. The successful reward-weight configurations from these retrieved states are appended as in-context learning examples. The final synthesized prompt strictly follows a modular template: [Role] , [Current State] , [Historical Examples] , and [Task] . An illustrative example of the generated prompt is provided below:                
+
+> [Role]: You are an autonomous UAV edge-agent navigating a 3D corridor. Your task is to dynamically tune the multi-objective DRL reward weights
+> (α1, α 2, α 3)for Transit Efficiency, Network Reliability, and Safety.
+> [Current State]: Distance to target is Approaching . Neighbor UAV-3 is in the
+> Warning zone (7.2m). Network link to TBS-2 is Stable .
+> [Historical Example]: When Neighbor was Warning and Link was Stable ,optimal weights were (0 .2,0.1,0.7) to heavily prioritize collision avoidance over forward transit.
+> [Task]: Based on the current state, output the updated scalarization weights in the exact format [w1, w2, w3]. Do not output conversational text or explanations.
+
+V. N UMERICAL RESULTS 
+
+A. Simulation Setup 
+
+We evaluate the proposed Cloud-Edge Agentic framework using a high-fidelity 3D multi-rotor physics simulator based on gym-pybullet-drones [14]. The ITNTN environment con-sists of 4 TBSs and 1 HAPS serving a number of UAVs 
+
+M ∈ { 10 , 20 , 30 }. The Qwen-based LLMs interact with the physical simulation via structured API calls. The detailed simulation parameters are summarized in Table I. A key challenge in applying generative AI to high-speed UAV networks is LLM inference latency, which is incom-patible with the fast reaction time required for aerodynamic stabilization. To address this issue, we adopted a two-level HAPS–UAV architecture with separated cognitive and control timescales. At the UAV edge, we consider a 4-bit quantized This paper has been accepted by GLOBECOM’2026 – IEEE Global Communications Conference © 2026 IEEE 
+
+Qwen3.5-9B deployed on an edge-AI platform. With an average generation speed of about 25 tokens/s, a structured prompt and a concise output yield an estimated edge latency of 
+
+tedge = 0 .6 s. At the HAPS layer, the larger Qwen3.5-122B 
+
+meta-controller runs on a high-performance GPU cluster, with total delay modeled as tcloud = tinf + ttx = 2 .55 s. These values mathematically motivate our proposed timescale hierarchy. The fast aerodynamic loop runs at Tfast =0.05 s, making direct LLM inference in the control path physically impractical. We therefore set the UAV-level cog-nitive reflection interval to TLLM = 1 .0 s and the HAPS-level coordination interval to THAPS = 5 .0 s, strictly satisfying the hardware bounds TLLM > t edge and THAPS ≫ tcloud . During one edge-LLM inference interval, the DDQN controller can still execute 20 fast, uninterrupted control steps using the latest validated reward configuration. This asynchronous decoupling avoids computation-induced crashes while enabling robust LLM strategic reasoning. In our simulations, we compare the proposed Hierarchical LLM-DDQN framework against the “DDQN” baseline [4], [15], which relies on trial-and-error exploration without LLM cognitive reflection or HAPS load-balancing, and the “Enve-lope MORL” method proposed in [16]. Table I: Simulation Parameters                                                                                
+
+> Parameter Value Physics & Airspace Parameters
+> Simulation airspace volume 1000 ×1000 ×300 m3
+> Number of UAVs ( M){5,10 ,15 ,20 ,25 ,30 }
+> UAV Mass ( Mu)1.5kg Physical safety separation ( dsafe )5.0mGravity ( g)9.81 m/s 2
+> Control frequency ( 1/T fast )20 Hz ( ∆t= 0 .05 s)
+> ITNTN Communication Parameters
+> Number of TBSs ( B)4
+> HAPS altitude 20 km Carrier frequencies 2.0GHz (HAPS), 2.1GHz (TBS) Node bandwidth ( Bc)20 MHz HAPS total capacity ( CHAPS
+> max )100 Mbps Node transmit power ( Pc)40 dBm ( 10 ,000 mW) TBS peak antenna gain ( Gmax )8dBi Node capacity quota ( Qc)5concurrent users Path loss exponents ηLoS = 2 .0,ηNLoS = 3 .5
+> Rician LoS factor 15 dB Noise power spectral density ( N0)−174 dBm/Hz
+> Algorithm & Cognitive Parameters
+> HAPS Meta-Controller LLM Qwen3.5-122B
+> UAV Edge-Agent LLM Qwen3.5-9B
+> HAPS strategic timescale ( THAPS )5.0sUAV LLM reasoning interval ( TLLM )1.0sEdge inference latency ( tedge )0.6sCloud inference latency ( tcloud )2.55 sReflection trigger threshold ( ρthresh )−10 .0
+> Collision crash penalty ( ρcrash )−100 .0
+> HAPS reward weights ( η{1,2}){1.0,50 .0}
+> UAV reward weights ( α{1,2,3}){1.0,0.1,0.2}
+> Handover penalty coeff. ( γ)5.0
+> Energy penalty coeff. ( λ)0.1
+> Memory retrieval size ( K)5experiences DDQN learning rate 1×10 −4
+> Discount factor ( γd)0.99
+> Target update frequency 500 steps
+
+B. Simulation Results 
+
+To evaluate the robustness in congested aerial corridors, Fig. 3 reports key metrics, i.e., transportation reward, survival time, communication reward, and HO probability. Fig. 3a and Fig. 3b illustrate the convergence of the transportation reward and the survival step count, respectively. As shown in Fig. 3a, the conventional DDQN baseline learns quickly but saturates at a suboptimal local minimum. This is because standard DRL struggles with the large and sparse exploration space of joint 3D kinematics and network selec-tion. In contrast, the proposed framework exhibits a steeper, more sustained learning curve, overtaking DDQN near episode 1,500 and achieving the highest steady-state reward. This superiority is directly tied to physical safety, as re-flected by the survival step count in Fig. 3b. Specifically, in DDQN, severe collisions cause early termination. Because the latter relies only on trial-and-error, it suffers from frequent early collisions. Conversely, when a UAV in our framework detects a high-risk state, the onboard edge-LLM immediately shifts the scalarization weights via cognitive reflection to prioritize the collision penalty ( ρcrash ). This zero-shot guidance avoids early terminations and allows the proposed framework to converge to near-maximum episode lengths. Fig. 3c evaluates the communication reward as a function of the number of TBSs. Initially, without any TBS, UAVs are connected to the HAPS without any attenuation in the link quality. However, introducing a single or 2 TBSs creates severe interference and uncoordinated handover opportunities between the TBSs and HAPS, causing a sharp drop in the communication reward for all methods. However, as more TBSs are added to provide continuous coverage, the reward recovers and better coordination is achieved. The proposed framework consistently maintains the highest communication reward since the HAPS meta-controller intelligently coordi-nates associations to minimize cross-tier interference. Fig. 3d illustrates the handover probability as the UAV swarm density increases from M = 5 to 30 . As the airspace becomes congested, baseline DRL agents greedily chase the strongest instantaneous signal, resulting in erratic, high-frequency handovers. In contrast, the HAPS meta-controller anticipates congestion and issues zero-shot spatial offloading directives. This strategic coordination successfully suppresses unnecessary network switching, granting the proposed frame-work the lowest and most stable handover probability across all traffic densities. VI. C ONCLUSION 
+
+In this paper, we proposed a Cloud-Edge Agentic AI frame-work for jointly optimizing 3D UAV mobility and handover management in ITNTNs. By decoupling strategic reasoning and fast physical control across multiple timescales, the frame-work bridges LLM reasoning with real-time DRL execution. A HAPS-based meta-controller mitigates network conges-tion, while edge-LLMs improve local safety-aware decision-making. Simulation results show clear gains over conventional DRL in safety, learning efficiency, and system throughput. This paper has been accepted by GLOBECOM’2026 – IEEE Global Communications Conference © 2026 IEEE 0 1000 2000 3000 4000 5000 
+
+> Episodes
+> 10
+> 15
+> 20
+> 25
+> 30
+> Total Reward
+> DDQN
+> Envelope MORL
+> Proposed Framework
+
+(a) Transportation Reward ( Rm
+
+> tran ,t
+
+)0 1000 2000 3000 4000 5000  
+
+> Episodes
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> Step Count
+> DDQN
+> Envelope MORL
+> Proposed Framework
+
+(b) Survival (Episode Length) 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+Number of TBSs 
+
+> 9
+> 8
+> 7
+> 6
+> 5
+> 4
+> 3
+> Telecommunication Reward
+> DDQN
+> Envelope-MORL
+> Proposed Framework
+
+(c) Communication Reward 5 10 15 20 25 30 
+
+Number of UAVs  
+
+> 0.05
+> 0.06
+> 0.07
+> 0.08
+> 0.09
+> 0.10
+> 0.11
+> Handover Probability
+> DDQN
+> Envelope-MORL
+> Proposed Framework
+
+(d) HO Probability 
+
+Figure 3: Training convergence and scalability evaluation of the proposed Cloud-Edge Agentic framework. Future work will investigate lightweight quantization to reduce edge inference latency. REFERENCES [1] N. Cherif et al. , “3D aerial highway: The key enabler of the retail industry transformation,” IEEE Commun. Mag. , vol. 59, no. 9, pp. 65– 71, 2021. [2] Z. Yan et al. , “Multi-UAV speed control with collision avoidance and handover-aware cell association: DRL with action branching,” in Proc. IEEE Global Commun. Conf. (GLOBECOM) , 2023, pp. 5067–5072. [3] W. Jaafar and H. Yanikomeroglu, “HAPS-ITS: Enabling future its services in trans-continental highways,” IEEE Commun. Mag. , vol. 60, no. 10, pp. 80–86, 2022. [4] Z. Yan and H. Tabassum, “Reinforcement learning for joint V2I network selection and autonomous driving policies,” in Proc. IEEE Global Commun. Conf. (GLOBECOM) , 2022, pp. 1241–1246. [5] N. Cherif et al. , “RL-based cargo-UAV trajectory planning and cell association for minimum handoffs, disconnectivity, and energy con-sumption,” IEEE Trans. Veh. Technol. , vol. 73, no. 5, pp. 7304–7309, 2024. [6] W. Jaafar and H. Yanikomeroglu, “Dynamics of laser-charged UAVs: A battery perspective,” IEEE Internet Things J. , vol. 8, no. 13, pp. 10 573–10 582, 2020. [7] Z. Yan et al. , “CVaR-based variational quantum optimization for user association in handoff-aware vehicular networks,” in Proc. IEEE Int. Conf. Commun. (ICC) , 2025, pp. 6088–6093. [8] L. Dong et al. , “Aerial Agentic AI: Synergizing LLM and SLM for Low-Altitude Wireless Networks,” arXiv preprint arXiv:2603.22866 ,2026. [9] Z. Yan et al. , “Hierarchical and Collaborative LLM-Based Control for Multi-UAV Motion and Communication in Integrated Terrestrial and Non-Terrestrial Networks,” arXiv preprint arXiv:2506.06532 , 2025. [10] J.-H. Chen et al. , “BDFL: A byzantine-fault-tolerance decentralized federated learning method for autonomous vehicle,” IEEE Trans. Veh. Technol. , vol. 70, no. 9, pp. 8639–8652, 2021. [11] Z. Yan et al. , “Hybrid LLM-DDQN-Based Joint Optimization of V2I Communication and Autonomous Driving,” IEEE Wireless Commun. Lett. , vol. 14, no. 4, pp. 1214–1218, 2025. [12] A. Yang et al. , “Qwen3 technical report,” arXiv preprint arXiv:2505.09388 , 2025. [13] N. Cherif, “Cellular-connected UAV in next-generation wireless net-works,” Ph.D. dissertation, Univ. Ottawa, 2022. [14] J. Panerati et al. , “Learning to fly—a gym environment with pybullet physics for reinforcement learning of multi-agent quadcopter control,” in 
+
+Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , 2021, pp. 7512– 7519. [15] K. Zhang et al. , “A machine learning-based toolbox for p4 pro-grammable data-planes,” IEEE Trans. Netw. Serv. Manag. , vol. 21, no. 4, pp. 4450–4465, 2024. [16] Z. Yan and H. Tabassum, “Generalized multi-objective reinforcement learning with envelope updates in URLLC-enabled vehicular networks,” 
+
+IEEE Trans. Veh. Technol. , vol. 74, no. 11, pp. 17 666–17 682, 2025.
