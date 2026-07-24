@@ -1,0 +1,511 @@
+Title: Lifelong Multi-Subsystem Pickup and Delivery with Buffer-Limited Handover Stations
+
+URL Source: https://arxiv.org/pdf/2607.17724v1
+
+Published Time: Tue, 21 Jul 2026 01:59:04 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Lifelong Multi-Subsystem Pickup and Delivery with Buffer-Limited Handover Stations 
+
+Chuanlong Zang 1,2, Isabelle Barz 1, Anna Mannucci 1, Philipp Schillinger 1, Florian Lier 1, Wolfgang H¨ onig 2,3
+
+Abstract — Coordinating payload transfers between subsys-tems is a critical challenge in lifelong Multi-Agent Pickup and Delivery (MAPD). We study systems where agents are confined to separate regions and must exchange payloads through shared handover stations. These stations, equipped with single docks and finite buffers, are inherently vulnerable to blocking and starvation. We formalize this problem as Multi-Subsystem MAPD with Buffer-limited Handover Stations (MS-MAPD-BHS). We then propose Handover-Aware Reservation and Routing (HARR), an online controller that couples per-subsystem planners. HARR uses a shared dock reservation calendar and a deterministic rolling-horizon projection of buffer occupancy to coordinate actions. A candidate route is accepted only if its dock interval is free and the resulting buffer occupancy projection remains within capacity. Under perfect execution, these checks ensure collision-free dock use and buffer-safe committed operations within the reservation horizon. In simulation, HARR achieves up to 77% higher throughput and 92% lower backlog than a fixed-dock ablation at moderate load, while also reducing planning time relative to a coupled station-aware Token Passing baseline. These results show that explicit interface coordination substantially improves stability in modular multi-subsystem transport. 
+
+I. I NTRODUCTION 
+
+Multi-Agent Pathfinding (MAPF) and especially its life-long variants, such as Multi-Agent Pickup and Delivery (MAPD), provide foundational tools for coordinated trans-port in warehouses, factories, and traffic systems. These frameworks couple task allocation with collision-free routing under continuous task arrivals [1], [2], [3]. While powerful, they typically assume a single, globally-coordinated fleet. However, many real-world deployments are inherently 
+
+multi-subsystem , where distinct agent fleets operate within separate regions — often under different management — but must collaboratively exchange payloads at shared in-terfaces to complete end-to-end transport. Examples range from multi-vendor logistics, robotic systems interfacing with conveyors to heterogeneous cooperative teams and interact-ing subsystems in terminals [4], [5], [6], [7]. The primary challenge in such distributed architectures lies in coordinat-ing the interfaces between subsystems without sacrificing modularity or scalability. Our focus is on the common scenario where subsystems exchange payloads exclusively through fixed handover sta-tions. Unlike in standard MAPD, each handover station is a critical shared resource: it has one dock vertex with ex-clusive access, non-preemptive operation times, and a finite-      
+
+> 1Robert Bosch GmbH, Corporate Research, Stuttgart, Germany.
+
+Chuanlong.Zang@de.bosch.com    
+
+> 2Technical University of Berlin, Berlin, Germany.
+> 3Robotics Institute Germany (RIG).
+> Fig. 1. Two-fleet lifelong MAPD with buffer-limited handover stations. The crossed-circle marking on the upper route denotes a dock entry that is inadmissible at the illustrated timestep because the loaded upstream agent would unload into a full buffer; it does not make the entire route permanently forbidden. The agent may wait or replan and enter after capacity becomes available.
+
+capacity buffer. Under realistic load, these constraints can cause upstream blocking (an unload cannot start because the buffer is full) and downstream starvation (a load cannot start because the requested payload is unavailable), even when motion within each individual subsystem is efficient [8], [9]. Here, buffer safety means that no accepted operation causes a station buffer to underflow or exceed its capacity, whereas 
+
+availability coordination means that a downstream load is reserved only for a payload already present at that station. Consequently, merely running independent MAPD solvers and allowing agents to ‘queue’ at the interface can commit mutually incompatible station operations. To address this challenge, we formalize MS-MAPD-BHS 
+
+(Multi-Subsystem MAPD with Buffer-limited Handover 
+
+Stations) and propose HARR (Handover-Aware Reservation and Routing). HARR schedules two-sided station operations while respecting dock exclusivity and finite-buffer dynamics. Its interface state is a deterministic schedule derived from operations that have already been accepted. The main contributions of this paper are:  
+
+> •
+
+We formally define MS-MAPD-BHS , a lifelong multi-subsystem pickup-and-delivery problem where agents are confined to regions and inter-subsystem transfers oc-cur only through shared handover stations with single-dock access, non-preemptive load/unload times, and finite-capacity buffers with explicit dynamics (Fig. 1).  
+
+> •
+
+We propose HARR , an online controller that couples per-subsystem Token Passing (TP) planners [2] using a shared dock calendar and a deterministic rolling-horizon buffer occupancy projection. Candidate plans arXiv:2607.17724v1 [cs.RO] 20 Jul 2026 are accepted only when the dock interval is free and the resulting committed buffer schedule remains feasible.  
+
+> •
+
+We evaluate mean service time under online task ar-rivals, comparing HARR against a coupled TP refer-ence and a fixed-dock ablation, measuring service time, throughput, backlog, and planning cost. II. R ELATED WORK 
+
+MAPF methods range from optimal search variants to bounded-suboptimal, large-neighborhood, prioritized, and rolling-horizon approaches [10], [11]. Package-exchange and shared-infrastructure variants also exist [12], [13], but do not address lifelong finite-buffer transfer. Online Multi-Agent Pickup and Delivery (MAPD), where tasks arrive dynamically, is commonly addressed via Token Passing (TP) and reservation-table methods [2], [14]. Other MAPD variants incorporate richer objectives and constraints like task deadlines [15], [16], external agents [17], kine-matic constraints [14], or exchange coordination (e.g., PERR, MAPD-MP [18], MAPF-E [13], MAPD-HA [19]). These formulations enrich tasks and motion, but do not model a finite-capacity, single-server transfer interface that stores payloads between independently operating fleets. Cooperation among heterogeneous teams is also studied outside MAPD. For example, decentralized hierarchical plan-ning coordinates aerial and ground vehicles with distinct capabilities [7]. Such work motivates inter-team task de-composition and coordination, but does not address lifelong collision-free payload flow through a shared finite buffer. Conversely, parcel-transshipment research studies terminal capacity, sorting resources, blocking, and combined simu-lation and optimization [20], [21]. These models provide relevant operational context for handover bottlenecks, but typically aggregate parcel flow rather than plan time-indexed trajectories for individual robots. Table I positions MS-MAPD-BHS along five dimensions: online task arrivals, multiple fleets or environments, explicit payload transfer, finite transfer-point storage, and time win-dows or deadlines. Existing work covers several of these dimensions separately, but not their combination. In partic-ular, it does not explicitly model the buffer dynamics that create blocking and starvation at an asynchronous handover interface, as highlighted by the Buf column. HARR is complementary to work on joint task allocation and path planning [22], [23], [24]. Rather than redesigning allocation or MAPF solvers, it augments scalable online MAPD with explicit dock and buffer calendars while keeping motion planning subsystem-local. III. P ROBLEM STATEMENT 
+
+We formally define MS-MAPD-BHS : Multi-Subsystem MAPD with Buffer-limited Handover Stations. We study the two-subsystem, one-way-flow case, which is the smallest setting in which a shared finite buffer induces blocking and starvation. The controller and experiments are limited to this case; reverse flow, bidirectional competition for the same station, and chains with more than two subsystems are                                                                
+
+> TABLE I COMPARISON OF RELATED MAPF AND MAPD VARIANTS .
+> Variants Online Multi Xfer Buf TW
+> PDP [25] ✓✗✓✗✓
+> PERR [12] ✗✗✓✗✗
+> online MAPD [2] ✓✗✗✗✗
+> MAPD-D [15] ✓✗✗✗✓
+> MAPD-MP [18] ✓✓✓✗✗
+> MAPD-EA [17] ✓✓✗✗✗
+> DPDTW [16] ✓✗✗✗✓
+> MAPF-E [13] ✗✓✗✗✗
+> MAPD-HA [19] ✓✓✓✗✗
+> MS-MAPD-BHS (ours) ✓✓✓✓✗
+> Online : Online tasks. Multi : multiple fleets/environments. Xfer :handover/exchange. Buf : buffer/storage. TW : time windows/deadlines.
+
+outside the evaluated scope. Throughout this section, we use the notation summarized in Table II. 
+
+A. Environment and motion model 
+
+As in the standard discrete MAPF/MAPD setting, the environment is an undirected graph G = ( V, E ) typically induced by a 4-neighbor grid map: each free grid cell is a vertex and an edge connects horizontally/vertically adjacent free cells. Time is discrete, i.e., t ∈ Z≥0.Each subsystem i ∈ {1, 2} operates within its own dedicated region defined by a vertex set Vi ⊆ V , forming a vertex-induced subgraph Gi = G[Vi] = ( Vi, E i), with 
+
+Ei = {{ u, v } ∈ E : u, v ∈ Vi}. These subsystems are geo-graphically disjoint except for a set of shared dock vertices ,
+
+H = {h1, . . . , h |H|}, which constitute their only overlap (V1 ∩ V2 = H) and are otherwise disjoint ( (V1 \ H) ∩
+
+(V2 \ H) = ∅). Crucially, there are no edges connecting non-dock regions directly across subsystems. This means payload transfers are exclusively conducted via dock vertices in H. Each dock vertex itself represents an isolated station, implying no direct edges exist between distinct dock vertices (h̸ = h′ ∈ H =⇒ { h, h ′} /∈ E).  
+
+> TABLE II SELECTED NOTATION USED IN SEC . III.
+
+Symbol Meaning 
+
+G = ( V, E ) global undirected graph environment 
+
+Vi ⊆ V vertex set of subsystem iGi = ( Vi, E i) subsystem-i induced subgraph G[Vi]
+
+H ⊆ V handover station vertices 
+
+A = S 
+
+> i
+
+Ai set of all agents (for all subsystems i)
+
+pa(t) vertex of agent a at timestep tτ load , τ unload load/unload durations [timesteps] 
+
+Bh buffer capacity of dock h ∈ Hbh(t) buffer occupancy of dock h at to = ( s(o), g (o), r (o)) task (source, destination, release time) 
+
+c(o) completion time of task oEach subsystem i has its own set of agents Ai. Let pa(t)
+
+denote the location (i.e., occupied vertex) of agent a at the timestep t. Agents are strictly confined to their respective 
+
+Gi: for any a ∈ Ai, pa(t) ∈ Vi, ∀t, and all moves must be along edges in Ei. Also, at each t, an agent executes one action (either wait or move to an adjacent vertex in its subsystem graph), yielding the next position pa(t + 1) ∈{pa(t)} ∪ NGi (pa(t)) , where NGi (.) denotes neighbor set in 
+
+Gi. All agents act simultaneously at each t. Let A = S 
+
+> i
+
+Ai.A vertex collision between agents a̸ = b ∈ A occurs at timestep t iff pa(t) = pb(t). An edge collision (swap) occurs at timestep t iff pa(t) = pb(t + 1) and pa(t + 1) = pb(t).Agents must avoid collisions. We assume perfect execution. We define τ load , τ unload ∈ Z>0 as the fixed durations for load/unload operations at task sources/destinations or dock vertices. Operations are non-preemptive and are modeled as consecutive waits at the operation vertex. If an agent arrives at time t0 and waits for τ steps, it occupies that vertex at integer times {t0, . . . , t 0 +τ } and may depart at t0 +τ +1 . An agent begins its assigned operation immediately upon arrival at the vertex if preconditions are met (see Section III-C). 
+
+B. Handover station interface model 
+
+Subsystems exchange payloads only via handover stations. Each station is represented by a shared dock vertex h ∈ H
+
+together with a finite buffer of capacity Bh ∈ Z>0 (max number of storable payloads). At any timestep t, the dock vertex h may be occupied by at most one agent. 
+
+C. Tasks and buffer dynamics 
+
+Tasks arrive online. Each task o is a triple 
+
+(s(o), g (o), r (o)) with source s(o) ∈ V1 \ H, destination 
+
+g(o) ∈ V2 \ H, and release time r(o) ∈ Z≥0. Thus subsystem 1 is upstream and subsystem 2 is downstream .We consider only one-way inter-subsystem tasks from upstream to downstream; reverse and bidirectional flows are not modeled in this paper. At time r(o), a payload becomes available at s(o) and remains there until an upstream agent loads it. Payloads do not block agent paths. The buffer models storage capacity only, holding up to 
+
+Bh payloads. By imposing no physical ordering (e.g., FI-FO/LIFO), it abstracts a common staging area where any item can be accessed. Buffered payloads retain their task association o (including destination g(o)). A downstream agent loading at h may retrieve any available payload, providing maximum planning flexibility but complicating coordination. Each agent starts empty and carries at most one payload at a time. Let bh(t) ∈ Z≥0 denote the buffer occupancy at dock vertex h at timestep t. All buffers are initially empty (i.e., 
+
+bh(0) = 0 , ∀h ∈ H), and occupancy is always limited by the buffer capacity (i.e., 0 ≤ bh(t) ≤ Bh for all t). An upstream agent performs the following sequence: loads a payload at 
+
+s(o) (duration τ load ), travels to a chosen dock vertex h ∈ H,and unloads at h (duration τ unload ). An upstream agent may enter h and start the unload operation at timestep t only if the buffer is not full ( bh(t) < B h). If the operation starts at 
+
+t, the payload enters the buffer, and bh increases by one, at timestep t + τ unload .A downstream agent performs the following sequence: loads a buffered payload at h (duration τ load ), travels to the corresponding g(o), and unloads it (duration τ unload ). A downstream agent may enter h and start the load operation at timestep t only if the selected payload is present at h;in particular, bh(t) > 0. If the operation starts at t, that payload is removed from the buffer, and bh decreases by one at timestep t + τ load . The entry guards for upstream and downstream operations apply only at the planned dock-entry time: an agent may wait elsewhere or replan until the operation becomes admissible. 
+
+D. Service time metric and optimization goal 
+
+Let c(o) denote the completion time of task o, defined as the timestep at which the downstream agent finishes its unload operation at g(o). For a horizon T , let OT = {o :
+
+c(o) ≤ T }. When OT̸ = ∅, service time [18] is the mean completion delay: 
+
+ServiceTime( T ) = 1
+
+|OT |
+
+X
+
+> o∈OT
+
+ c(o) − r(o), (1) Given  G, {Ai} , {Bh} , τ load , τ unload  and an online task stream, a solution to MS-MAPD-BHS is an online policy that assigns tasks, selects handover stations, schedules station usage, and plans collision-free paths. The primary objective is low service time subject to motion and buffer safety; Sec. VI additionally reports throughput and backlog to diagnose overload. IV. H ANDOVER -A WARE RESERVATION AND ROUTING 
+
+(HARR) 
+
+A. Overview and Token Passing 
+
+Token Passing (TP) is an online MAPD scheme in which a token stores every local agent’s committed, time-indexed path and task assignment [2]. An agent requests the token when it reaches the end of its stored path. While holding the token, it selects an unassigned task, computes a space-time path that avoids the other paths stored in the token, writes its new path back, and releases the token. We call this stored sequence a token path ; for agent a, it is πa =(πa(t), π a(t+1) , . . . ) with πa(t) = pa(t).HARR maintains one TP token per subsystem and a shared station manager that reserves dock occupancy and enforces buffer feasibility. Each inter-subsystem task is decomposed into two subtasks, called legs : an upstream push leg from 
+
+s(o) to a selected dock h ∈ H, followed by a downstream 
+
+pull leg from the same dock to g(o). HARR processes pulls before pushes at each timestep to favor buffer drainage. Alg. 1 details the HARR online control loop. Throughout this section, dGi (u, v ) denotes the shortest-path distance between u, v ∈ Vi in Gi.
+
+B. Shared station calendars 
+
+At global time t, HARR maintains per-dock calendars over a rolling horizon Θ = [ t, t +W ] ∩ Z, where W ∈ Z>0 is the window size. Fig. 2. HARR runs TP in each subsystem and couples the planners only through shared station state. Rh reserves exclusive dock occupancy, and  
+
+> Qhis a deterministic projection obtained by applying the events of already committed buffer operations to the observed current occupancy.
+
+a) Dock reservation calendar: For each dock vertex 
+
+h ∈ H, we define its dock reservation calendar as a time-indexed map Rh : Z≥0 → A∪{⊥} . Rh(θ) ∈ A indicates the unique agent reserved to occupy h at time θ, or Rh(θ) = ⊥
+
+if h is unreserved. This calendar Rh is global; it is queried during planning and updated when a new token path is committed (Alg. 1, R ESERVE DOCKS ). 
+
+b) Committed buffer-event calendar and occupancy projection: For each dock h, the event calendar Eh : Z≥0 →
+
+Z stores occupancy changes caused by already committed operations. An upstream unload beginning at dock-entry time 
+
+t0 adds +1 to Eh(t0 + τ unload ), whereas a downstream load adds −1 to Eh(t0 + τ load ). These events define the deterministic occupancy projection Qh:
+
+Qh(t) = bh(t), Q h(θ) = Qh(θ−1)+ Eh(θ) for θ > t. (2) Thus, Qh is the time-indexed buffer schedule implied by accepted operations. As the planning horizon advances, past events are discarded and Qh(t) is re-anchored to the ob-served occupancy bh(t). Events are committed online via COMMIT DOCK AND BUFFER (Alg. 1). 
+
+c) Dock occupancy interval: Under the operation model defined in Sec. III, an operation of duration τ that begins upon an agent entering h at time t0 exclusively 
+
+occupies the dock vertex at integer times 
+
+Idock (t0, τ ) = {t0, t 0+1 , . . . , t 0+τ }.
+
+d) Station-feasible insertion of a dock operation: To insert an operation for agent a at dock h with dock-entry time t0, duration τ , and event sign σ ∈ { +1 , −1} (+1 for push/unload, −1 for pull/load), we define the event time 
+
+θevt := t0 + τ with θevt ∈ Θ. The insertion is station-feasible iff: 
+
+∀θ ∈ Idock (t0, τ ) : Rh(θ) = ⊥, (3) start guard: 
+
+(
+
+Qh(t0) < B h if σ = +1 ( push )
+
+Qh(t0) > 0 if σ = −1 ( pull ) (4) 
+
+∀θ ∈ [θevt , t +W ] ∩ Z : 0 ≤ Qh(θ) + σ ≤ Bh. (5) These conditions require:  
+
+> •
+
+Condition (3): The dock must be unreserved ( Rh(θ) = 
+
+⊥) throughout the operation’s exclusive interval 
+
+Idock (t0, τ ). 
+
+> •
+
+Condition (4): At t0, the buffer must have space for a push ( Qh(t0) < B h) or contain the selected pull payload; the latter also implies Qh(t0) > 0. 
+
+> •
+
+Condition (5): After inserting the candidate event, the committed occupancy projection must remain within 
+
+[0 , B h] through the end of the enforced horizon, so the insertion cannot invalidate an already accepted later operation. 
+
+C. Station-aware Token Passing 
+
+When an agent requests its subsystem token, P LAN FIRST -FEASIBLE runs space-time A* on Gi. The search avoids vertex and edge conflicts with the other token paths in that subsystem, and additionally respects the shared station calendar. 
+
+a) Dock constraints: During A* for agent a, a dock state (h, θ ) is unavailable whenever Rh(θ) /∈ {⊥ , a }. After a path is accepted, RESERVE DOCKS writes every dock occupancy on that path within the horizon to Rh, preventing cross-subsystem conflicts at shared dock vertices. 
+
+b) Dock operations: A dock operation beginning t0 is admissible only if Eqs. (3)–(5) hold. If accepted, the corre-sponding event is posted to Eh and the occupancy projection 
+
+Qh is updated before the next request is considered. 
+
+D. Leg paths and unassigned-leg sets 
+
+Let Ei ⊆ Vi denote the endpoint set used by TP in sub-system i (task endpoints plus additional parking endpoints). Parking is restricted to Ei \ H.HARR uses two sets to track work that is currently avail-able for assignment. T ↑(t) contains released tasks whose push leg is unassigned, and T ↓(t) contains buffered tasks whose pull leg is unassigned. For each o ∈ T ↓(t), the data structure also stores the dock h(o) where the payload is present. A task leaves T ↑ when its push path is committed, enters T ↓ only after the upstream unload completes, leaves 
+
+T ↓ when its pull path is committed, and exits the system after the downstream unload at g(o). While a leg is in progress, its state is represented by the responsible agent’s token path rather than duplicated in either set. 
+
+a) Push template (subsystem 1): A push for task o to dock h plans through s(o) (wait τ load ), then h (wait τ unload ), and finally a parking endpoint e ∈ E 1\H. The dock operation uses (σ, τ ) = (+1 , τ unload ).
+
+b) Pull template (subsystem 2): A pull for buffered task 
+
+o at dock h(o) plans through h(o) (wait τ load ), then g(o)
+
+(wait τ unload ), and finally a parking endpoint e ∈ E 2 \ H.The dock operation uses (σ, τ ) = ( −1, τ load ).
+
+c) Algorithm helpers: MODE PARAMS selects 
+
+(T ↑, +1 , τ unload ) for pushes and (T ↓, −1, τ load )
+
+for pulls; CANDIDATES applies the ordering below. PLAN FIRST FEASIBLE runs space-time A* for each pair and enforces R and Eqs. (3)–(5). RESERVE DOCKS writes accepted dock-time states to 
+
+R, and C OMMIT DOCK AND BUFFER posts the event to E
+
+and updates Q. P ARK uses the same path constraints to reach a non-dock endpoint. Algorithm 1 HARR: station- and buffer-aware decoupled Token Passing. 
+
+Require: Subsystem graphs Gi, agents Ai, docks H, capacities 
+
+Bh, endpoints Ei
+
+Require: Operation times τ load , τ unload , parameters W , kmax ,
+
+Mmax  
+
+> 1:
+
+Initialize TP tokens: πa ← [pa(0)] for all a ∈ A 
+
+> 2:
+
+Initialize station calendars Rh(θ) ← ⊥ , Eh(θ) ← 0 for all 
+
+h ∈ H, θ ∈ [0 , W ] 
+
+> 3:
+
+Initialize unassigned-leg sets T ↑ ← ∅ , T ↓ ← ∅  
+
+> 4:
+
+for t = 0 , 1, 2, . . . do  
+
+> 5:
+
+Observe bh(t) for all h ∈ H 
+
+> 6:
+
+Shift horizon Θ = [ t, t +W ] ∩ Z; discard Rh(θ), E h(θ) for 
+
+θ < t  
+
+> 7:
+
+Anchor Qh(t) = bh(t) and recompute Qh from Eh on Θ 
+
+> 8:
+
+Insert newly released tasks into T ↑ 
+
+> 9:
+
+Update the sets from executed operations (completed push 
+
+→ T ↓ with h(o); completed pull → remove from system)  
+
+> 10:
+
+PROCESS REQUESTS (2 , PULL ) ▷ downstream first  
+
+> 11:
+
+PROCESS REQUESTS (1 , PUSH ) 
+
+> 12:
+
+Execute one timestep: all agents follow their token paths; advance to t+1  
+
+> 13:
+
+end for  
+
+> 14:
+
+function PROCESS REQUESTS (i, MODE ) 
+
+> 15:
+
+(T ⋆, σ, τ ) ← MODE PARAMS (MODE ) ▷ T ⋆: unassigned legs for this mode  
+
+> 16:
+
+for each agent a ∈ Ai requesting the token do  
+
+> 17:
+
+C ← CANDIDATES (a, MODE , T ⋆) 
+
+> 18:
+
+(π, o, h, t 0) ← PLAN FIRST FEASIBLE (a, C, MODE , R, Q ) 
+
+> 19:
+
+if π̸ = ⊥ then  
+
+> 20:
+
+πa ← π; R ESERVE DOCKS (a, π, R ) 
+
+> 21:
+
+COMMIT DOCK AND BUFFER (h, t 0, σ, τ, E, Q ); re-move o from T ⋆ ▷ the leg is now in progress  
+
+> 22:
+
+else  
+
+> 23:
+
+πa ← PARK (a, Ei \ H) 
+
+> 24:
+
+end if  
+
+> 25:
+
+end for  
+
+> 26:
+
+end function 
+
+E. Task and dock selection 
+
+When a downstream agent a ∈ A2 requests the token, it considers up to Mmax candidates o ∈ T ↓ in increasing order of 
+
+J↓(a, o ) = dG2
+
+ pa(t), h (o) + dG2
+
+ h(o), g (o).
+
+When an upstream agent a ∈ A1 requests the token, it considers up to Mmax tasks o ∈ T ↑ (oldest first). For each task, it considers up to kmax docks h ∈ H in increasing order of 
+
+J↑(a, o, h ) = dG1
+
+ pa(t), s (o)+dG1
+
+ s(o), h +dG2
+
+ h, g (o).
+
+Candidates are attempted in the above order; the first can-didate for which station-aware A* finds a feasible plan is accepted. 
+
+F. Computational cost, guarantees, and feasibility a) Computational cost: For one token request, a pull attempts at most Mmax task–dock pairs, whereas a push attempts at most Mmax min {kmax , |H|} pairs. Each pair invokes one space-time A* search. In addition to TP’s collision checks, HARR examines the τ + 1 dock slots in Eq. (3) and at most W + 1 occupancy entries in Eq. (5). The rolling-horizon arrays R, E, and Q each store |H|(W + 1) 
+
+entries. Enumeration stops at the first feasible pair. 
+
+b) Collision safety: Within each subsystem, standard TP checks preserve vertex- and edge- collision freedom among committed local paths. Across subsystems, the only shared vertices are docks, and Rh(θ) permits at most one agent to occupy a dock at a time. Therefore, under perfect execution, committed dock use is collision-free over the enforced reservation horizon. It does not claim completeness or collision safety beyond t + W , where future paths have not yet been committed. 
+
+c) Sequential insertion semantics: Requests are pro-cessed sequentially as in Alg. 1. After each accepted plan, COMMIT DOCK AND BUFFER immediately updates (Eh, Q h)
+
+before the next candidate is checked. The guarantee below therefore assumes this insertion order and perfect execution. 
+
+d) Buffer safety: At time t, each occupancy projection is anchored at Qh(t) = bh(t) ∈ [0 , B h]. Committing an operation leaves Qh unchanged before its event and shifts it by σ from the event time onward. Condition (5) is exactly the requirement that the updated projection remain in 
+
+[0 , B h]. By induction over sequentially accepted insertions, every committed event calendar is occupancy-consistent over 
+
+[t, t + W ]. The guarantee is horizon-local. HARR makes no claim beyond t + W until the horizon advances and the projection is re-anchored. 
+
+e) Feasibility and completeness: MS-MAPD-BHS is not universally solvable. Feasibility depends on subsystem geometry, endpoint availability, reachability between task vertices and admissible docks, staffing balance, and interface load. HARR is not complete: it uses a finite horizon, caps task candidates at Mmax , and inherits the limitations of prioritized TP planning. Our domains avoid trivial endpoint deadlocks—agents can park outside H, and the relevant task and dock vertices are reachable—but a full completeness and stability characterization is left to future work. V. C OMPARATORS AND ABLATIONS 
+
+We compare HARR with one coupled reference method and two mechanism ablations. The reference evaluates the computational effect of subsystem-local rather than global Token Passing, whereas the ablations isolate online dock selection and forward buffer projection. 
+
+a) MONO SBTP (coupled station- and buffer-aware TP): We run TP with a single global token over all agents 
+
+A, while restricting each agent’s search space to its subsys-tem vertices Vi. Dock exclusivity is enforced implicitly by global collision avoidance at shared dock vertices, and buffer feasibility uses the same committed occupancy projection 
+
+(Eh, Q h) and capacity guard (Eq. (5)) as HARR. 
+
+b) FIXED DOCK (no online dock selection): This method is identical to HARR, except that each task is assigned at release to the dock minimizing dG1 (s(o), h ) + 
+
+dG2 (h, g (o)) and cannot change docks online. It is an abla-tion of adaptive dock selection. TABLE III COMPARATORS AND ABLATIONS .                    
+
+> Method G-TP RProjection DynDock MONO SBTP ✓✗✓✓
+> FIXED DOCK ✗✓✓✗
+> START RES BUF ✗✓✗✓
+> HARR (ours) ✗✓✓✓
+> G-TP : token scope in P ROCESS REQUESTS .
+> R: written by R ESERVE DOCKS .
+> Projection : updated by C OMMIT DOCK AND BUFFER .
+> DynDock : dock enumeration in C ANDIDATES .
+
+c) START RES BUF negative control (local start-time ad-mission only): This ablation omits the rolling-horizon occu-pancy projection: a newly inserted dock operation is checked only against dock availability and its local start guard, without (Eh, Q h) and Eq. (5). Because online insertions can occur out of chronological order, a newly accepted earlier event can invalidate an already committed later operation. In our simulator, S TART RES BUF yielded no valid run in the tested settings, so it is retained as a negative control and excluded from quantitative plots. VI. E XPERIMENTS 
+
+We evaluate HARR in a C++ simulator implementing the two-subsystem MS-MAPD-BHS model from Sec. III. Unless stated otherwise, all methods use the same motion model, task process, and endpoint sets Ei (with parking restricted to Ei \ H), as well as uniform station parameters 
+
+τ load = τ unload = 2 and Bh = B. For HARR, we set 
+
+W = 60 , Mmax = 20 , and kmax = 8 . Because the largest tested configuration has |H| = 8 , the dock-candidate cap never binds in the reported experiments. Default provisioning is |H| = 4 , B = 1 , with n1 = n2 = 12 agents. 
+
+A. Domains and station layouts 
+
+We use two representative grid domains: Empty , an open map ( 40 × 20 ) that isolates interface-induced effects (dock contention, blocking, and starvation); and Warehouse , a shelf-like layout ( 34 × 26 ) that induces within-subsystem congestion and longer detours. At each timestep t, the number of new inter-subsystem tasks is Nt ∼ Poisson( ρ). Each task o = ( s(o), g (o), r (o)) 
+
+samples s(o) uniformly from a fixed upstream source set 
+
+S ⊂ V1 \ H and g(o) uniformly from a fixed downstream destination set G ⊂ V2 \ H. We choose 4 sources and 4 destinations, whose locations are initialized by random seeds. Handover stations are distributed approximately uniformly along the interface; the released configurations specify their exact coordinates for every tested |H|. To compare runs across different numbers of docks |H| and operation times, we define the normalized offered dock load 
+
+ϱ = ρ · (τ unload +1) + ( τ load +1) 
+
+|H| ,
+
+where τ +1 matches the dock-occupancy interval length 
+
+|Idock (·, τ )| used by HARR (Sec. IV). Thus, ϱ compares requested dock time with nominal aggregate dock capacity. It is an offered-load indicator, not a sufficient stability condition, because path congestion, staffing imbalance, and heterogeneous dock accessibility also affect throughput. 
+
+B. Protocol and metrics 
+
+Each configuration runs for Ttot = 4000 timesteps. We discard the first Twarm = 1000 timesteps (25% of the run) to reduce the common initialization transient caused by initially empty buffers and seeded initial agent positions; the same warm-up is used for every method and configuration. Results are averaged over Nseed = 10 independent random seeds and reported with 95% confidence intervals. 
+
+a) Performance metrics: We report three complemen-tary metrics: 1) Service time [timesteps]. ServiceTime( Ttot ) from Eq. (1), computed over tasks released after warm-up and completed by Ttot .2) Throughput [tasks/timestep] (stability). 
+
+Throughput = |{ o : c(o) ∈ (Twarm , T tot ]}| 
+
+Ttot − Twarm 
+
+,
+
+i.e., completed tasks per timestep during the measure-ment window. 3) Backlog [tasks] (unserved demand). 
+
+Backlog = |{ o : Twarm < r (o) ≤ Ttot , c (o) > T tot }| .
+
+Throughput and backlog remain informative in overload regimes and prevent survivorship bias. 
+
+C. Results 
+
+The two comparison studies target different mechanisms. The load and provisioning sweeps compare HARR with the F IXED DOCK ablation to isolate adaptive dock selection, whereas the fleet-size sweep compares HARR with the cou-pled M ONO SBTP reference to isolate global-token coupling. They should therefore be read as two controlled comparisons, not as a single three-way ranking. 
+
+1) Adaptive dock selection: HARR vs. FIXED DOCK : We first study whether online dock selection improves both ser-vice time and stability as the interface approaches saturation. We sweep the offered dock load ϱ on both maps under default provisioning and balanced staffing. For each configuration, we report service time, throughput, and backlog. Figure 3 shows that HARR outperforms F IXED DOCK 
+
+across the tested load range. At moderate load, it achieves higher throughput and substantially lower backlog on both maps (Table IV). Near saturation, throughput and backlog reveal overload more reliably than service time; the largest gains occur on Warehouse , where congestion makes static dock assignments less effective. We next vary the number of docks |H| and buffer capacity 
+
+B separately at an arrival rate near saturation. Figure 4 shows that HARR benefits more from additional docks because it can exploit the currently reachable, buffer-feasible interface. At |H| = 8 , its throughput is 202% higher on Empty and 245% higher on Warehouse .Fig. 3. Load sweep under default provisioning ( |H| = 4 , B = 1 ). Rows are Empty and Warehouse ; columns show service time [timesteps] (lower is better), throughput [tasks/timestep] (higher is better), and backlog [tasks] (lower is better, log scale). TABLE IV MODERATE -LOAD RESULTS (ϱ = 0 .15 ; DEFAULT PROVISIONING ). T HROUGHPUT IS MEASURED IN TASKS /TIMESTEP AND BACKLOG IN TASKS .
+
+Throughput ↑ Backlog ↓
+
+Map FIXED DOCK HARR Gain FIXED DOCK HARR Reduction Empty 0.071 ±0.005 0.099 ± 0.007 +39% 110 ±34 9.2 ± 3.6 92% Warehouse 0.053 ±0.006 0.093 ± 0.005 +77% 181 ±33 31 ± 18 83%     
+
+> Fig. 4. Interface provisioning sweeps (throughput). Columns sweep the number of docks |H|and the buffer capacity B.
+
+2) Fleet-size planning cost: HARR vs. MONO SBTP :
+
+We compare the computational cost of decoupled planning in HARR with the coupled M ONO SBTP reference while checking service time. We sweep the total number of agents 
+
+N ∈ { 5, 10 , 15 , 20 , 25 , 30 , 35 , 40 , 45 } with a balanced split 
+
+(n1, n 2) = (⌊N/ 2⌋, ⌈N/ 2⌉). Workload, workspace, and interface provisioning remain fixed, so this is a fleet-size 
+
+study rather than a workspace-size scaling study. Figure 5 shows that HARR has lower or comparable mean planning time across the tested fleet sizes, with the clearest advantage on the structured Warehouse map. Service time is non-monotonic: adding agents initially reduces delay, but larger fleets eventually create more path interference and coordination work. On Warehouse , service time rises again beyond the best-performing fleet-size range. Thus, over-provisioning agents can be counterproductive even though demand and workspace are fixed. The comparison supports a narrower conclusion: subsystem-local tokens reduce planning cost relative to a global token over the tested fleet sizes while retaining comparable service quality. 
+
+D. Scope and limitations 
+
+The evaluation covers two fixed workspaces and does not establish workspace-size or asymptotic scalability. The A* expansion term Si in Sec. IV can grow substantially with map size, congestion, and reservation horizon. Sensitivity to 
+
+W , Mmax , and kmax is not swept; all are held constant to isolate the interface mechanisms. Since kmax = 8 and every tested configuration has |H| ≤ 8, the cap never binds, so the experiments do not measure the effect of dock-candidate truncation in larger interfaces. The two comparator studies use different independent variables because they isolate different mechanisms, and no unified three-way ranking is claimed. Longer or hierarchical subsystem networks, reverse Fig. 5. Fleet-size sweep on two fixed workspaces. Mean planning time per step [s] and service time [timesteps] are both lower when better; curves summarize ten seeds. 
+
+or bidirectional flow, deadlines and priorities, execution uncertainty, broader parameter sweeps, and spatial scaling remain future work. VII. C ONCLUSION 
+
+We introduce MS-MAPD-BHS, a lifelong pickup-and-delivery problem in which region-confined fleets exchange payloads through buffer-limited handover stations. HARR coordinates subsystem-local Token Passing planners through shared dock reservations and a deterministic rolling-horizon projection of committed buffer events. Under perfect execu-tion, accepted dock operations are collision-free and buffer-safe within the enforced horizon, although the method is explicitly incomplete. In simulation, HARR achieves up to 77% higher throughput and 92% lower backlog than FIXED DOCK at moderate load and reduces planning time relative to M ONO SBTP at comparable service time. Future work includes implementing and evaluating longer and hierarchical subsystem chains, incorporating deadlines and priority-aware assignment, handling execution uncer-tainty and bidirectional transfers, and studying workspace-size, parameter-sensitivity, and stability scaling. REFERENCES [1] J. Li, Z. Chen et al. , “Scalable rail planning and replanning: Winning the 2020 flatland challenge,” in International Conference on Auto-mated Planning and Scheduling (ICAPS) , 2021, pp. 477–485. [2] H. Ma, J. Li et al. , “Lifelong multi-agent path finding for online pickup and delivery tasks,” in International Conference on Autonomous Agents and Multiagent Systems (AAMAS) , 2017, pp. 837–845. [3] J. He, Y. Zhang et al. , “Scaling lifelong multi-agent path finding to more realistic settings: Research challenges and opportunities,” in 
+
+International Symposium on Combinatorial Search (SOCS) , 2024, pp. 234–242. [4] X. Chen, S. He et al. , “Yard crane and AGV scheduling in auto-mated container terminal: A multi-robot task allocation framework,” 
+
+Transportation Research Part C: Emerging Technologies , vol. 114, pp. 241–271, 2020. [5] G. Fragapane, R. de Koster et al. , “Planning and control of au-tonomous mobile robots for intralogistics: Literature review and re-search agenda,” European Journal of Operational Research (EJOR) ,vol. 294, no. 2, pp. 405–426, 2021. [6] F. Menebr¨ oker, J. Stadtler et al. , “Mobile robot collaboration in indus-trial applications: A structured survey,” in International Conference on Automation Science and Engineering (CASE) , 2025, pp. 2428–2435. [7] B. Arbanas, A. Ivanovic et al. , “Decentralized planning and control for UAV–UGV cooperative teams,” Autonomous Robots , vol. 42, no. 8, pp. 1601–1618, 2018. [8] A. Bonetti, S. Proia et al. , “AGV traffic management in automated industrial plants: An enhanced lifelong multi-agent path finding ap-proach,” in International Conference on Automation Science and Engineering (CASE) , 2024, pp. 626–632. [9] C. H. Chung and Y. J. Jang, “Deadlock prevention and multi agent path finding algorithm considering physical constraint for a massive fleet AGV system,” Applied Soft Computing , vol. 161, p. 111725, 2024. [10] R. Stern, N. R. Sturtevant et al. , “Multi-agent pathfinding: Definitions, variants, and benchmarks,” in International Symposium on Combina-torial Search (SOCS) , 2019, pp. 151–158. [11] J. Gao, Y. Li et al. , “A review of graph-based multi-agent pathfinding solvers: From classical to beyond classical,” Knowledge-based Sys-tems , vol. 283, p. 111121, 2024. [12] H. Ma, C. A. Tovey et al. , “Multi-agent path finding with payload transfers and the package-exchange robot-routing problem,” in AAAI Conference on Artificial Intelligence (AAAI) , 2016, pp. 3166–3173. [13] H. He, X. Wu et al. , “Conflict-based search for multi-agent path finding with elevators,” CoRR , vol. abs/2602.20512, 2026. [14] H. Ma, W. H¨ onig et al. , “Lifelong path planning with kinematic constraints for multi-agent pickup and delivery,” in AAAI Conference on Artificial Intelligence (AAAI) , 2019, pp. 7651–7658. [15] H. Makino and S. Ito, “Online multi-agent pickup and delivery with task deadlines,” in International Conference on Intelligent Robots and Systems (IROS) , 2024, pp. 8428–8434. [16] H. Huang, Q. Zhang et al. , “Distributed and transferable task as-signment for dynamic pickup-and-delivery with time windows,” IEEE Robotics and Automation Letters (RA-L) , vol. 11, no. 2, pp. 1442– 1449, 2026. [17] L. Bonalumi, B. Flammini et al. , “Multi-agent pickup and delivery with external agents,” Robotics and Autonomous Systems , vol. 191, p. 105000, 2025. [18] B. Flammini, N. Hawes et al. , “Multi-agent pickup and delivery with mobile pickups,” in International Conference on Intelligent Robots and Systems (IROS) , 2025, pp. 10 525–10 531. [19] B. Flammini, F. Amigoni et al. , “Multi-agent pickup and delivery with heterogeneous agents,” in International Conference on Autonomous Agents and Multiagent Systems (AAMAS) , 2026, p. 2356–2364. [20] D. McWilliams, “Performance modelling and analysis of transship-ment terminals in the parcel delivery industry,” International Journal of Industrial and Systems Engineering (IJISE) , vol. 16, no. 4, pp. 493– 522, 2014. [21] U. Clausen, D. Diekmann et al. , “Operating parcel transshipment terminals: A combined simulation and optimization approach,” Journal of Simulation , vol. 11, no. 1, pp. 2–10, 2017. [22] W. H¨ onig, S. Kiesel et al. , “Conflict-based search with optimal task assignment,” in International Conference on Autonomous Agents and Multiagent Systems (AAMAS) , 2018, pp. 757–765. [23] H. Fan, B. Ouyang et al. , “Joint optimization of multi-agent task allocation and path planning for continuous pickup and delivery tasks,” in International Conference on Intelligent Robots and Systems (IROS) ,2025, pp. 20 014–20 019. [24] Z. Chen, J. Alonso-Mora et al. , “Integrated task assignment and path planning for capacitated multi-agent pickup and delivery,” IEEE Robotics and Automation Letters (RA-L) , vol. 6, no. 3, pp. 5816–5823, 2021. [25] B. Coltin and M. M. Veloso, “Online pickup and delivery planning with transfers for mobile robots,” in International Conference on Robotics and Automation (ICRA) , 2014, pp. 5786–5791.

@@ -1,0 +1,1129 @@
+Title: Learning to recover: Adaptive local branching with reinforcement learning for log-truck routing and scheduling under disruptions
+
+URL Source: https://arxiv.org/pdf/2607.20901v1
+
+Published Time: Fri, 24 Jul 2026 00:27:36 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# Learning to recover: Adaptive local branching with reinforcement learning for log-truck routing and scheduling under disruptions 
+
+## Abdelhakim Abdellaoui 1,3,∗ Loubna Benabbou 2 Issmail El Hallaoui 1
+
+## Franc ¸ois Aub´ e3 Mouloud Amazouz 3
+
+> 1
+
+Department of Mathematics and Industrial Engineering, Polytechnique Montr´ eal, succ. Centre-ville, Montr´ eal, Qu´ ebec, H3C 3A7, Canada 
+
+> 2
+
+Department of Management Science, Universit´ e du Qu´ ebec ` a Rimouski (UQAR), Levis, QC G6V 0A6, Qu´ ebec, Canada 
+
+> 3
+
+Natural Resources Canada, CanmetENERGY, 1615 Lionel-Boulet Blvd, P.O. Box 4800, Varennes, Qu´ ebec, J3X 1P7, Canada 
+
+Abstract : We consider the problem of reoptimising log-truck routing and scheduling operations in real time following unforeseen disruptions in the Canadian forestry industry. Such disruptions, including road closures, vehicle breakdowns, travel delays, and demand fluctuations, invalidate pre-established tactical plans and require recovery decisions that simultaneously restore operational feasibility and limit deviation from the original schedule, two objectives that are inherently in tension under tight time constraints. We formulate the recovery problem as a sequence of neighbourhood-restricted mixed-integer linear programs parameterised by a deviation bound 𝑘 measuring the ℓ1 distance between the recovered and the baseline tactical plan. We show that the minimum feasible value 𝑘 min can be computed exactly, anchoring the recovery search at its most stable extreme. Rather than targeting a single value of 𝑘 , we seek a Pareto front of non-dominated recovery plans spanning the stability–cost space, so as to present dispatchers with a structured set of operational options. To navigate this space efficiently, we propose a reinforcement learning policy, trained via the REINFORCE policy-gradient algorithm, that selects successive values of 𝑘 adaptively based on solver feedback, concentrating computational effort in productive regions of the search space and terminating exploration when further improvement is unlikely. We evaluate the proposed framework on weekly instances derived from historical operational data provided by a Canadian forestry partner, under disruption scenarios covering all event categories considered. The reinforcement learning-guided approach recovers richer Pareto fronts with fewer solver calls than a fixed-𝑘 grid and dichotomic search baselines, and produces feasible recovery plans within operationally acceptable reoptimization times across all tested configurations and disruption types. 
+
+Keywords : Log-truck routing and scheduling ; disruption management ; local branching ; reinforcement learning ; pareto front ; mixed-integer programming ; real-time reoptimization ; forestry logistics. 
+
+# 1 Introduction 
+
+The forestry industry plays a vital role in the Canadian economy, contributing significantly to national GDP [1]. In recent years, however, the sector has faced increasing challenges due to global economic fluctuations, the COVID-19 pandemic, trade tensions such as U.S. tariffs, and intensified international competition. In this context, transportation costs, which represent up to 40% of total operating costs [2], have become a critical lever for maintaining profitabi-lity. Ensuring efficient and sustainable transportation logistics is therefore central to the industry’s competitiveness, particularly in Canada, where vast geographic distances, seasonal constraints, and fluctuating market demands create 
+
+> ∗Corresponding author: abdelhakim.abdellaoui@polymtl.ca
+
+1arXiv:2607.20901v1 [math.OC] 23 Jul 2026 unique operational challenges [4]. Among these logistics challenges, log transportation stands out as a key research area, directly influencing operational efficiency and cost performance. Planning in this domain is typically divided into tactical planning, which defines medium-term strategies such as weekly or monthly plans, and operational planning, which focuses on the day-to-day execution of these strategies. Tactical planning aims to optimize overall efficiency based on static parameters such as the road network, required demand, and known product supply, and operational planning is, in theory, expected to follow the tactical plan closely. In practice, however, forestry operations are exposed to frequent and often unpredictable disruptions [5], including sudden road closures due to weather events, equipment breakdowns, and changes in forest accessibility [3]. In the Canadian context, our industrial partners emphasised that disruption is the norm rather than the exception : virtually every operational week involves at least one event that invalidates part of the tactical plan, and the absence of recovery tooling is the single most frequently cited reason for the limited operational adoption of existing log-truck planning systems. Recovering from such disruptions requires producing a new transportation plan that satisfies all existing operational constraints together with those imposed by the event, while controlling cost and remaining as close as possible to the baseline plan. Through extensive discussions with our industrial partner, a sharper requirement emerged : dispatchers do not want a single prescribed recovery plan, but a structured set of trade-off options spanning the stability–cost space, from which the most suitable plan can be selected depending on the severity of the disruption and on operational priorities. Recovery is therefore inherently a bi-objective problem, and to the best of our knowledge no prior work has addressed the reoptimization of log-truck routing and scheduling under unforeseen events from this perspective. Methodologically, the recovery problem sits at the intersection of three streams that have evolved largely in isolation. Local branching [26] provides an effective matheuristic for repair-type mixed-integer programs through a Hamming-distance constraint parameterised by a neighbourhood radius 𝑘 , and [28] showed that this radius can itself be controlled by a reinforcement learning (RL) agent. In a parallel direction, multi-objective reinforcement learning (MORL) [29, 30] has matured into a recognised paradigm for approximating Pareto fronts, but assumes cheap policy evaluations rather than the solver-call-bounded regime of MILP-based recovery. No existing work bridges these streams ; nor does the local-branching literature provide analytical structure on the radius itself, even though this radius governs the entire feasibility–cost trade-off in repair settings. The contributions of this paper are as follows. 1. We extend RL-guided local branching to a multi-objective setting, in which the agent navigates a Pareto front rather than improving a single incumbent, with a state, reward, and termination signal redesigned around Pareto dominance. 2. We derive analytical lower and upper bounds on the minimum feasible deviation 𝑘 min that restores feasibility after a disruption, independent of the RL machinery and applicable to any repair-type local branching problem. 3. We integrate these components into a Pareto-recovery framework that returns a structured menu of non-dominated recovery plans, anchored at 𝑘 min and explored adaptively under a fixed solver-call budget. 4. We provide, to the best of our knowledge, the first reoptimization framework for the Log-Truck Routing and Scheduling Problem under unforeseen events, validated on twenty weekly instances from a Canadian forestry partner and confirmed by partner dispatchers as addressing a long-standing gap in deployed planning tools. The remainder of this paper is organised as follows. Section 2 reviews the relevant literature on local branching, RL-guided matheuristics, multi-objective RL, and disruption recovery in vehicle routing. Section 3 describes the problem and presents the MILP formulation of the LT RSP . Section 4 details the recovery framework, including the analytical bounds on 𝑘 min and the multi-objective RL agent that controls the local-branching radius. Section 5 reports the computational results, and Section 6 concludes with directions for future research. 
+
+# 2 Literature Review 
+
+The reoptimization of vehicle routing problems (VRPs) has received significant attention in recent decades, par-ticularly in dynamic contexts where uncertainties affect road networks, customer demands, or fleet availability. The comprehensive review by [14] synthesises the dynamic VRP literature and identifies the principal sources of uncer-tainty that motivate online and reactive solution approaches. Within this body of work, early contributions emphasised the need for systematic frameworks to handle stochastic and unforeseen events. [9] studied reoptimization policies for the VRP with stochastic demands, highlighting the importance of timely policy updates to mitigate disruptions. More recently, [10] addressed VRPs with stochastic demands and proposed partial reoptimization strategies that reduce 2computational effort while preserving solution quality. [11] developed strategies for reoptimization in a dynamic VRP with mixed backhauls, underscoring the role of decision timing in maintaining feasible routes. [12] proposed a heuristic reoptimization approach for the capacitated VRP, offering scalable solutions suitable for large instances, while [13] introduced periodic reoptimization mechanisms for dynamic VRPs, demonstrating the value of adaptive frameworks in complex and evolving networks. Together, these studies form the methodological backbone for handling reoptimization in dynamic routing contexts. A more focused stream of the dynamic VRP literature has explicitly addressed disruption recovery, in which routes must be repaired in response to discrete events that invalidate the planned schedule. [15] formulated the disrupted VRP as a recovery problem and proposed two heuristics, tabu search and a Lagrangian relaxation–based method, to repair the planned routes after a vehicle break-down or a similar incident. [16] reviewed disruption-related dynamic VRP variants and identified the trade-off between solution stability and cost as a central but under-explored design dimension across the recovery literature. These works frame disruption recovery as a stand-alone algorithmic problem rather than a special case of stochastic VRP, and motivate the bi-objective treatment adopted in the present paper. In the forestry sector, the problem of reoptimization has been explicitly recognised as critical due to the high exposure to disruptions such as delays, equipment failures, and road network changes [6]. Methods have been pro-posed to dynamically update log-truck routes when faced with unforeseen events such as delays or road closures. [7] introduced a rolling horizon approach that incorporates real-time data streams to periodically reschedule log-truck operations, enabling near-optimal adjustments. [17] presented RuttOpt, a decision support system for log-truck routing that integrates optimization with practical constraints and reports efficiency gains of up to 30% in real applications. [3] presented a framework for the real-time management of transportation disruptions in forestry, examining a wide range of disruption scenarios including changes in demand, equipment breakdowns, and road network variability, and proposing optimization models to mitigate their impact. [18] focused specifically on the management of unforeseen events, showing how real-time data can be leveraged to support rapid reoptimization of forest transport operations. The review by [19] provides a comprehensive survey of planning methods and decision support systems in timber transportation, emphasising the evolution of solution approaches and identifying persistent gaps in addressing dynamic disruptions. A common limitation across all of these contributions is that each proposes a single recovery plan in response to a disruption, leaving dispatchers with no structured means to explore the trade-off between plan stability and cost efficiency. In practice, the severity of a disruption, the time remaining in the planning horizon, and local operational priorities all influence which recovery option is most appropriate. To the best of our knowledge, no existing work in forestry logistics formulates the reoptimization problem as a multi-objective problem and presents dispatchers with a Pareto front of non-dominated recovery alternatives. This gap directly motivates the design of our framework. A second methodological stream relevant to this work is the use of local branching for multi-objective integer pro-gramming. [20] proposed a multi-objective variable neighbourhood search built on the local branching idea, collecting Pareto-front segments during the search and combining them at termination. [21] extended local branching as a primal heuristic embedded inside a bi-objective branch-and-cut algorithm for binary multi-objective integer programs. These works establish that the local branching neighbourhood structure can be exploited in multi-objective settings, but the radius is either fixed or controlled by classical metaheuristic rules. The contribution of the present paper is orthogonal to these works : rather than proposing a new multi-objective local branching scheme per se, we use local branching as the matheuristic substrate over which a reinforcement learning agent adaptively controls the neighbourhood radius for Pareto-front exploration. The emergence of data-driven approaches has introduced new perspectives for adaptive reoptimization. The survey by [22] provides a methodological tour of machine learning for combinatorial optimization, identifying the control of mathematical programming heuristics through learned policies as one of the most promising research directions. Concrete instantiations of this paradigm have grown rapidly. [23] learned branching variable selection rules for mixed-integer programs through imitation learning, while [24] employed reinforcement learning to control cut-selection in cutting-plane algorithms. In the dynamic routing context, [25] and [27] have analysed how RL captures complex trade-offs across multiple objectives in repeated interaction with the environment. Most directly related to our approach, [28] demonstrated that a reinforcement learning agent can adaptively control the neighbourhood search radius in local branching for MILP problems, achieving significant reductions in computational effort while maintaining solution quality. Our framework builds on the architectural blueprint of [28], but extends it to a multi-objective setting in which the agent navigates the deviation–cost Pareto space rather than pursuing a single incumbent improvement. In the context of multi-objective optimization, a growing body of work has studied the use of RL to approximate Pareto fronts, an area known as multi-objective reinforcement learning (MORL). [29] provided a comprehensive survey of multi-objective sequential decision-making frameworks, establishing the theoretical foundations of the field. [30] 3developed foundational multi-objective Q-learning methods capable of learning sets of Pareto-optimal policies, and showed that hypervolume-based reward signals effectively guide exploration across the objective space. [31] proposed prediction-guided MORL for continuous control tasks, using a learned model to anticipate trade-offs across objectives and concentrate exploration on productive regions of the Pareto front. [32] introduced preference-driven MORL algorithms that incorporate explicit preference models into the policy network, enabling agents to recover targeted portions of the Pareto front according to dispatcher priorities. At the algorithmic level, [33] proposed a divide-and-conquer approach that provably converges to the full Pareto front by decomposing the multi-objective problem into a sequence of single-objective subproblems, each solved by a dedicated oracle, an approach that shares structural similarities with our local branching decomposition. Despite these advances, the application of MORL to combinatorial optimization problems in transportation logistics remains largely unexplored. Existing MORL methods predominantly operate in continuous or small discrete state spaces and assume that each policy evaluation is computationally inexpensive. In our setting, by contrast, each evaluation of a candidate value of 𝑘 requires solving a large-scale MILP, making the budget of solver calls the primary computational resource to be managed. The RL agent in our framework must therefore learn not only which regions of the trade-off space are productive, but also when to terminate exploration, a problem structure that is absent from standard MORL benchmarks. The integration of mathematical programming, local branching, and reinforcement learning for forestry logistics remains largely unexplored, and to our knowledge this paper presents the first framework that addresses the stability–cost trade-off in LT RSP reoptimization through a Pareto-front approach guided by reinforcement learning. 
+
+# 3 Problem Description 
+
+We dedicate this section to describing the LT RSP reoptimization task in response to unforeseen events in forestry operations. We begin by highlighting the key characteristics that significantly impact the routing and scheduling process. We then introduce the mathematical model of LT RSP , which serves as the foundation for tactical planning, and finally describe the common unforeseen events that necessitate reoptimization in forestry operations. 
+
+3.1 Mathematical Model of the LT RSP 
+
+The LT RSP represents the tactical planning layer of forestry logistics. As introduced in [4], its objective is to determine a weekly transportation plan that assigns a fleet of trucks to feasible sequences of trips between forest harvesting sites and processing mills. Each route consists of alternating empty and loaded trips, together with loading and unloading operations that must be scheduled within site- and mill-specific time windows. Compared to classical vehicle routing problems, the LT RSP integrates several structural characteristics unique to forestry operations. Multiple wood assortments and species must be transported, while each mill imposes product-specific demand requirements that must be satisfied within the planning horizon. Loader resources are explicitly modeled, as they constitute critical operating equipment at both forest sites and mills. The sparse road infrastructure and long travel distances further restrict route feasibility. In addition, trucks typically perform multiple trips per day, which requires synchronization across consecutive trips and strict compliance with driver working-time regulations. Table 1 presents the sets and parameters that define the model. The formulation is stated on a space–time network in which each node 𝑛 = (ℓ, 𝑖 ) couples a physical location ℓ ∈ L with a time interval 𝑖 ∈ 𝐼 , so that an arc 𝑎 ∈ 𝐴 
+
+simultaneously encodes a movement between two locations and its temporal placement within the day. The decision variables are ; 
+
+𝑥 𝑎𝑣𝑡 = 1 if arc 𝑎 is traversed by vehicle 𝑣 on day 𝑡, and 0 otherwise, 
+
+𝛿 𝑚 𝑝 = unmet demand for product 𝑝 at mill 𝑚. 
+
+The model (1)–(13) is denoted as P𝑚 and seeks to minimize the total system cost through Equation 1, which is composed of two elements : the cost of routing trucks along arcs of the transportation network, and the penalty cost of unmet demand when mill requirements cannot be fully satisfied. The optimization problem is subject to a set of constraints that guarantee the logical and operational feasibility of the solution : — Fleet constraints : Equations 2–3 ensure that each truck departs from and returns to its designated home base at most once per day. — Flow conservation : Equation 4 maintains route continuity at every visited space–time node. — Demand satisfaction : Equation 5 enforces mill demand for each product, while allowing unmet demand variables when full satisfaction is infeasible. 4— Supply limitations : Equation 6 ensures that the harvested volume at each forest site does not exceed its available stock. — Trip limits : Equation 7 restricts the number of loaded trips performed by each vehicle on each day. — Loader availability : Equations 8 and 9 restrict simultaneous loading and unloading operations at forest sites and mills to the number of loaders available in each time interval. — Time window constraints : Equations 10 and 11 enforce the opening and closing times of the location reached by each arc, accounting for the service duration performed there.  
+
+> Table 1 – Model sets and parameters
+
+Symbol Definition 
+
+L set of locations representing mills, forest sites, and home bases 
+
+𝐹 set of forest sites 
+
+𝑀 set of mills 
+
+𝑉 set of trucks 
+
+𝑃 set of wood products 
+
+𝐼 set of time intervals 
+
+𝑁 set of space–time nodes 𝑛 = (ℓ, 𝑖 ), with ℓ ∈ L and 𝑖 ∈ 𝐼 
+
+H B 𝑣 set of eligible home bases for truck 𝑣 𝑇 set of days in the planning horizon 
+
+𝐴 set of arcs connecting pairs of nodes across time intervals 
+
+𝐴 + (𝑛 ) set of arcs leaving node 𝑛 𝐴 − (𝑛 ) set of arcs entering node 𝑛 𝐴 𝑚 𝑝 𝑓 set of loaded arcs from forest site 𝑓 to mill 𝑚 for product 𝑝 𝐴 𝐿 𝑓 𝑖 loading arcs at forest site 𝑓 at time interval 𝑖 𝐴 𝑈 𝑚𝑖 unloading arcs at mill 𝑚 at time interval 𝑖 𝑐 ℎ𝑎 hauling cost for arc 𝑎 𝑐 𝑤 𝑎 waiting cost for arc 𝑎 𝑐 𝑚 𝑝 penalty cost per unit of unmet demand for product 𝑝 at mill 𝑚 𝑖 + 
+
+> 𝑎
+
+start time of the time interval associated with the head node of arc 𝑎 𝑑 𝑚 𝑝 weekly demand for product 𝑝 at mill 𝑚 , expressed in GMT 
+
+𝑞 𝑣 payload capacity of vehicle 𝑣 , expressed in GMT 
+
+𝐾 𝑣 maximum number of trips allowed for vehicle 𝑣 𝛽 𝑣 indicator equal to 1 if vehicle 𝑣 lacks self-loading capability 
+
+𝑠 𝑓 𝑝 available supply of product 𝑝 at forest site 𝑓 , expressed in GMT 
+
+𝑆 𝑎 service duration on arc 𝑎 , corresponding to loading time at forest sites and unloading time at mills 
+
+Λ𝑚𝑖 loader capacity at mill 𝑚 during time interval 𝑖 
+
+Λ 𝑓 𝑖 loader capacity at forest site 𝑓 during time interval 𝑖 𝜏 𝑜 𝑎 , 𝜏 𝑐 𝑎 operating window (opening and closing times) at the head location of arc 𝑎 
+
+BigM sufficiently large constant The mathematical model is given as follows : 
+
+min ∑︁  
+
+> 𝑡 ∈𝑇
+
+∑︁ 𝑣 ∈𝑉 ∑︁ 𝑎 ∈ 𝐴 
+
+(𝑐 ℎ𝑎 + 𝑐 𝑤 𝑎 ) 𝑥 𝑎𝑣𝑡 +∑︁  
+
+> 𝑚 ∈𝑀
+
+∑︁ 𝑝 ∈ 𝑃 
+
+𝑐 𝑚 𝑝 𝛿 𝑚 𝑝 (1) s.t. ∑︁   
+
+> 𝑎 ∈𝐴 +(ℎ)
+
+𝑥 𝑎𝑣𝑡 ≤ 1, ∀ 𝑣 ∈ 𝑉, ℎ ∈ H B 𝑣 , 𝑡 ∈ 𝑇 (2) 
+
+5∑︁ 𝑎 ∈ 𝐴 − (ℎ)
+
+𝑥 𝑎𝑣𝑡 =∑︁   
+
+> 𝑎 ∈𝐴 +(ℎ)
+
+𝑥 𝑎𝑣𝑡 , ∀ 𝑣 ∈ 𝑉, ℎ ∈ H B 𝑣 , 𝑡 ∈ 𝑇 (3) ∑︁   
+
+> 𝑎 ∈𝐴 +(𝑛 )
+
+𝑥 𝑎𝑣𝑡 =∑︁   
+
+> 𝑎 ∈𝐴 −(𝑛 )
+
+𝑥 𝑎𝑣𝑡 , ∀ 𝑣 ∈ 𝑉, 𝑛 ∈ 𝑁, 𝑡 ∈ 𝑇 (4) ∑︁  
+
+> 𝑡 ∈𝑇
+
+∑︁ 𝑓 ∈𝐹 ∑︁ 𝑣 ∈𝑉 ∑︁ 𝑎 ∈ 𝐴 𝑚 𝑝 𝑓 
+
+𝑞 𝑣 𝑥 𝑎𝑣𝑡 + 𝛿 𝑚 𝑝 = 𝑑 𝑚 𝑝 , ∀ 𝑚 ∈ 𝑀, 𝑝 ∈ 𝑃 (5) ∑︁  
+
+> 𝑡 ∈𝑇
+
+∑︁ 𝑚 ∈ 𝑀 ∑︁ 𝑣 ∈𝑉 ∑︁ 𝑎 ∈ 𝐴 𝑚 𝑝 𝑓 
+
+𝑞 𝑣 𝑥 𝑎𝑣𝑡 ≤ 𝑠 𝑓 𝑝 , ∀ 𝑓 ∈ 𝐹, 𝑝 ∈ 𝑃 (6) ∑︁  
+
+> 𝑚 ∈𝑀
+
+∑︁ 𝑓 ∈𝐹 ∑︁ 𝑝 ∈ 𝑃 ∑︁ 𝑎 ∈ 𝐴 𝑚 𝑝 𝑓 
+
+𝑥 𝑎𝑣𝑡 ≤ 𝐾 𝑣 , ∀ 𝑣 ∈ 𝑉, 𝑡 ∈ 𝑇 (7) ∑︁ 
+
+> 𝑣 ∈𝑉
+
+∑︁ 𝑎 ∈ 𝐴 𝐿 𝑓 𝑖 
+
+𝛽 𝑣 𝑥 𝑎𝑣𝑡 ≤ Λ 𝑓 𝑖 , ∀ 𝑖 ∈ 𝐼, 𝑓 ∈ 𝐹, 𝑡 ∈ 𝑇 (8) ∑︁ 
+
+> 𝑣 ∈𝑉
+
+∑︁ 𝑎 ∈ 𝐴 𝑈 𝑚𝑖 
+
+𝛽 𝑣 𝑥 𝑎𝑣𝑡 ≤ Λ𝑚𝑖 , ∀ 𝑖 ∈ 𝐼, 𝑚 ∈ 𝑀, 𝑡 ∈ 𝑇 (9) 
+
+𝑖 + 
+
+> 𝑎
+
+− BigM (1 − 𝑥 𝑎𝑣𝑡 ) + 𝑆 𝑎 ≤ 𝜏 𝑐 𝑎 , ∀ 𝑣 ∈ 𝑉, 𝑎 ∈ 𝐴, 𝑡 ∈ 𝑇 (10) 
+
+𝜏 𝑜 𝑎 ≤ 𝑖 + 
+
+> 𝑎
+
++ BigM (1 − 𝑥 𝑎𝑣𝑡 ), ∀ 𝑣 ∈ 𝑉, 𝑎 ∈ 𝐴, 𝑡 ∈ 𝑇 (11) 
+
+𝑥 𝑎𝑣𝑡 ∈ { 0, 1}, ∀ 𝑣 ∈ 𝑉, 𝑎 ∈ 𝐴, 𝑡 ∈ 𝑇 (12) 
+
+𝛿 𝑚 𝑝 ∈ { 0, . . . , 𝑑 𝑚 𝑝 }, ∀ 𝑚 ∈ 𝑀, 𝑝 ∈ 𝑃 (13) 
+
+This tactical model generates a set of truck routes that specify both loaded and empty trips for each day, together with their timing and allocation of resources. The resulting output defines a transportation plan that ensures mill demand is satisfied, forest supply is not exceeded, and operational restrictions are respected. A transportation plan consists of a set of routes assigned to different trucks. Each route is composed of a sequence of empty and loaded trips. A truck typically starts from its home base, travels to a forest block to load timber, and then proceeds to a mill to unload the requested products, before continuing with subsequent trips as required. Figure 1 illustrates an example of a daily truck route. Importantly, the transportation plan specifies not only the sequence of visits for each truck but also the expected arrival time at every stop. Figure 2 provides an example of a truck route where both the sequence of trips and the corresponding arrival times at each location are explicitly represented. However, this model assumes deterministic parameters and a disruption-free environment. In reality, unforeseen events frequently occur, making it necessary to embed this tactical model within a broader framework that allows for real-time reoptimization when deviations from the plan arise. Subsequent section presents unforeseen events in forestry. 6𝐹 1
+
+𝐹 2 𝐹 3
+
+𝑀 1
+
+𝑀 2
+
+𝐻𝐵 1
+
+1
+
+2
+
+34 5
+
+6
+
+7
+
+Figure 1 – Daily truck route : the truck departs from its homebase ( 𝐻 𝐵 1), visits forest sites ( 𝐹 1 , 𝐹 2 , 𝐹 3), delivers raw materials to mills ( 𝑀 1 , 𝑀 2), and finally returns to homebase. This route is represented by the sequence of trips : 𝐻 𝐵 1 −→ 𝐹 1 −→ 𝑀 1 −→ 𝐹 2 −→ 
+
+𝑀 1 −→ 𝐹 3 −→ 𝑀 2 −→ 𝐻 𝐵 1 .
+
+𝐻𝐵 1
+
+𝐹 2 𝑖 5
+
+𝑀 2 𝑖 7 𝐼 12 𝑖 16 
+
+𝐹 3 𝑖 9 𝑖 14 
+
+Time 
+
+> 4 :00
+> 4 :45
+> 5 :30
+> 6 :15
+> 7 :00
+> 7 :45
+> 8 :30
+> 9 :15
+> 10 :00
+> 10 :45
+> 11 :30
+> 12 :15
+> 13 :00
+> 13 :45
+> 14 :30
+> 15 :15
+> 16 :00
+> 16 :45
+> 17 :30
+> 18 :15
+> 19 :00
+> 19 :45
+> 20 :30
+
+𝑇 𝑏 1 , 𝑓 2
+
+𝑇 𝑓 2 ,𝑚 2
+
+𝑇 𝑚 2 , 𝑓 3 𝑇 𝑓 3 ,𝑚 2 𝑇 𝑚 2 , 𝑓 3 𝑇 𝑓 3 ,𝑚 2
+
+𝑇 𝑚 2 ,𝑏 1
+
+Figure 2 – Time-space representation of a daily truck route in the L T R S P . The truck departs from home base 𝐻 𝐵 1, visits forest blocks 𝐹 2 and 𝐹 3, delivers timber to mill 𝑀 2 across three trips, and returns to 𝐻 𝐵 1. Red blocks indicate loading and unloading operations ; arrows represent travel segments. 
+
+3.2 Unforeseen Events in Forestry Logistics 
+
+The Canadian forestry sector faces numerous operational challenges arising from the variability of field condi-tions and the complexity of managing transportation across vast geographic areas. Unforeseen events such as road closures, vehicle breakdowns, extreme weather, and sudden demand changes can significantly disrupt pre-established transportation plans, making it essential to design mechanisms for rapid and effective recovery. Unforeseen events in forestry transportation fall into three broad categories : 7— Network-related disruptions alter the feasible arc set 𝐴 through road closures caused by weather events, accidents, or maintenance work. Unlike urban logistics, forestry operations frequently rely on single-access roads, which severely limits rerouting flexibility. — Supply chain disruptions modify demand 𝑑 𝑚 𝑝 at mills 𝑚 ∈ 𝑀 or supply 𝑠 𝑓 𝑝 at forest sites 𝑓 ∈ 𝐹 , and tend to propagate rapidly across multiple trips, affecting the feasibility of pre-planned delivery sequences. — Operational disruptions reduce the availability of resources such as trucks 𝑣 ∈ V or loader capacities Λ𝑖 at sites 𝑖 ∈ 𝐹 ∪ 𝑀 , often creating bottlenecks and leaving equipment idle. Let E denote the set of all possible unforeseen events. An exact characterisation of each event 𝑒 ∈ E is the natural starting point for updating the routing and scheduling plan. Each event is described by two complementary components. Its intrinsic attributes identify what happened : the event type 𝑡 𝑒 (road closure, breakdown, demand variation, etc.), its location 𝑙 𝑒 in the network, its occurrence time 𝜏 𝑒 , and its duration 𝑑 𝑒 ∈ R+. Its induced impact captures how it modifies the model : the set Δ𝐴 𝑒 encodes arc removals or additions in the routing network, while Δ𝜃 𝑒 encodes changes to problem parameters such as supply 𝑠 𝑓 𝑝 , demand 𝑑 𝑚 𝑝 , or resource capacities Λ𝑖 . Formally, each event 𝑒 ∈ E is represented as the tuple 
+
+𝑒 ↦ →   𝑡 𝑒 , 𝑙 𝑒 , 𝜏 𝑒 , 𝑑 𝑒 , Δ𝐴 𝑒 , Δ𝜃 𝑒 
+
+ (14) which provides the necessary information to transform the feasible region F of the optimization model LT RSP into its disrupted counterpart F ( 𝑒 ), thereby enabling reoptimization under the new operational conditions. Table 2 details the selected subset of events from the three categories above, chosen because of their high frequency in practice, as reported by our industrial partner. When an event 𝑒 ∈ E occurs at time 𝜏 𝑒 , the current transportation plan may be affected through delays, trip cancellations, or parameter variations. At the occurrence, we assume that real-time information becomes available regarding the nature of the disruption and the current state of operations. This includes the location and status of every truck (loaded/empty, at mill, forest site, or in transit), the set of completed trips, and the set of remaining trips. Such information is used to update the time–space network and reoptimize the transportation plan in response to 𝑒 . Formally, the updated model P𝑚 (𝑒 ) fixes decision variables associated with already executed trips, removes infeasible arcs, and reschedules the remaining activities under the new feasibility domain F ( 𝑒 ).
+
+# 4 Methodology 
+
+In this section, we present a unified methodology for the reoptimization of log-truck routes and schedules in response to unforeseen events. The overall framework, illustrated in Figure 3, integrates five interrelated components that operate in a continuous feedback loop to ensure adaptive and resilient decision-making. The proposed framework, illustrated in Figure 3, is organized around a dynamic memory that decouples two operational layers. The upstream layer maintains the current plan and operational state and runs continuously ; the downstream layer activates only when a disruption is detected, reads the latest plan and system state from the memory, and writes back a recovered plan. This separation lets the framework absorb successive events asynchronously without interrupting nominal monitoring. The upstream layer comprises the Optimization Engine, which produces the initial tactical plan 𝑆 0 following [4], and Real-Time Monitoring, which tracks plan execution and emits the system state 𝑆 𝑡 from standard fleet-management infrastructure. Neither is a contribution of this paper. For the Unforeseen Events component shown in Figure 3, in a deployment setting disruptions would be communicated through monitoring systems or human interactions such as calls and emails from drivers, dispatchers, or mill operators. In this study, we instead rely on an Unforeseen Events Generator that supplies the disruption scenarios used to evaluate the framework. We start from a list of real unforeseen events collected through intensive discussions with our forestry partner and enrich it with synthetically generated events that share the same characteristics (type, frequency, duration, location) to produce a broader set of test scenarios. The Disruption Characterization and Impact Module maps each event 𝑒 to a structured pair 𝜑 (𝑒 ) =  Δ𝜃 (𝑒 ), ΔA ( 𝑒 )
+
+of parameter and arc-set updates. The Reoptimization Engine then computes a recovered plan 𝑆 𝑡 +1 via a local-branching MILP whose neighbourhood radius is adaptively controlled by a reinforcement learning agent, returning a Pareto front of stability–cost trade-offs to the dispatcher. These three components, namely the Unforeseen Events Generator, the DCIM, and the Reoptimization Engine, constitute the methodological core of this paper and are detailed in the subsequent subsections. 8Table 2  – Detailed characterization of unforeseen events : description, required information, and technical impact on the model. 
+
+> Event type  Description  Needed information  Technical impact (on network and data) Road / site closures  Temporary shutdown of forest sites, mills, or access roads. Since most forest roads are single-access, their closure  severely  limits  rerouting possibilities. Occurrence time  𝜏 , exact location of the closure, duration  𝑑 𝑒 , type of site affected (mill/forest), and list of trips completed prior to the event. Eliminate all incoming and outgoing arcs of the closed node or road during  𝑡  ∈[𝜏, 𝜏  + 𝑑 𝑒 ], i.e.,  𝐴  ← 𝐴  \ 𝐴 𝑒 . Waiting arcs are preserved. This reduces feasible routing options and may render the model infea-sible.
+> Delays  Travel slowdowns caused by ad-verse weather, road deterioration, traffic  congestion,  seasonal  hun-ting/fishing restrictions, or vehicle malfunctions. Occurrence time  𝜏 , delay duration
+> 𝑑 𝑒 , affected arcs  (𝑖, 𝑗 ) ∈  𝐴 , truck identifier if specific, and remaining distance. Update arc travel times :  𝜏 𝑖 𝑗  ← 𝜏 𝑖 𝑗  +
+> Δ𝜏 𝑖 𝑗  . Adjust duration constraints and pro-pagate shifts in the time–space network. For vehicle-specific delays, reconnect its start vertex at the delayed time. If  𝑑 𝑒  exceeds the planning horizon, remove the truck’s arcs.
+> Truck breakdowns  A vehicle is out of service during repair. Equivalent to a delay if the repair time  𝑑 𝑒  is within the horizon. Occurrence time  𝜏 , identifier of the affected truck  𝑣  ∈ V , repair dura-tion  𝑑 𝑒 , and its current location. Remove truck  𝑣  from the available fleet :
+> V ← V \ { 𝑣 } for  𝑡  ∈ [ 𝜏, 𝜏  + 𝑑 𝑒 ]. If the repair ends within the horizon, reconnect its source vertex at the repair completion time.
+> Demand / supply va-riations
+> Changes in mill demand or forest supply, e.g., mill capacity reduction due to breakdowns or updated de-mand forecasts. Occurrence time  𝜏 , location of the disruption (mill  𝑚  or forest  𝑓  ), pro-duct  𝑝 , variation  Δ𝑑 𝑚 𝑝  or  Δ𝑠  𝑓 𝑝  , and executed trips. Modify parameters  𝑑 𝑚 𝑝  and/or  𝑠  𝑓 𝑝  . Update balance constraints : ∑︁
+> 𝑎 ∈ 𝛿 − (𝑚 )
+> 𝑥 𝑎 𝑝  −∑︁
+> 𝑎 ∈ 𝛿 + (𝑚 )
+> 𝑥 𝑎 𝑝  = 𝑑 𝑚 𝑝  , ∀𝑚, 𝑝.
+> Enable or remove arcs between mills and sites if new flows become feasible.
+> Loader breakdowns  Reduced  or  unavailable  loa-ding/unloading  capacity  at  mills or forest sites. A full breakdown is equivalent to a site closure. Occurrence time  𝜏 , affected site  𝑖  ∈
+> 𝐹 ∪𝑀 , repair duration  𝑑 𝑒 , number of loaders before and after breakdown. Decrease loader capacity :  Λ𝑖  ← Λ𝑖  − ΔΛ 𝑖  .Update service constraints : ∑︁
+> 𝑣 ∈ V ∑︁  𝑎 ∈ 𝛿 − (𝑖 )
+> 𝑥 𝑎𝑣𝑡  ≤ Λ𝑖  , ∀𝑖, 𝑡.
+> If  Λ𝑖  = 0, remove all arcs entering or lea-ving  𝑖  for  𝑡  ∈ [ 𝜏, 𝜏  + 𝑑 𝑒 ].
+
+9Reoptimisation Architecture for LT RSP                        
+
+> Start
+> Optimization Engine
+> Generate baseline plan ˆX
+> via Relax-and-Fix decomposition
+> Initial Solution
+> S0
+> Real-Time Monitoring
+> Truck positions ·load status
+> Executed trips ·active disruptions
+> Updated Solution
+> St+1
+> cost
+> stab.
+> Pareto recovery options
+> Unforeseen Events
+> !Road closures ·breakdowns
+> Delays ·demand variations
+> Disruption Characterisation (DCIM)
+> e7→(te, l e, τ e, d e)
+> φ(e) = (∆ A(e),∆θ(e))
+> Feasibility domain F(τ, e )
+> Reoptimisation Engine
+> REINFORCEMENT LEARNING
+> Local branching LT RSP (k)
+> RL-guided k-selection ⇒Pareto plans
+> initial plan
+> system state
+> ˆX, k min
+> e∈ E φ(e)
+> P∗
+> St+1 options
+> Dynamic Memory
+
+Figure 3 – Continuous reoptimization architecture for the L T R S P . The initial plan S0 is stored in the dynamic memory, which is continuously updated by real-time. When unforeseen events appear, they are detected and characterized by the DCIM, which uses the current system state and event information to update the model. The updated model is reoptimized to produce a new plan S𝑡 +1, which is then stored back in the dynamic memory, ensuring continuous adaptation. 
+
+The main contribution of this paper lies in the design and integration of the third, fourth and fifth components of the proposed framework, namely Unforeseen Events Generator , Disruption Characterization and Impact Module (DCIM) ,and the Reoptimization Engine . As previously mentioned, the first component follows the deterministic formulation described in [4], while the second component, generally relies on existing monitoring infrastructures such as sensors, GPS tracking systems, and fleet management software to collect and transmit real-time operational data. The subsequent subsections therefore focus on providing a detailed description of these components, as well as their mathematical integration within the overall reoptimization architecture. 
+
+4.1 Unforeseen Events Generator 
+
+The first methodological component is an Unforeseen Events Generator, responsible for producing disruption scenarios to be applied to problem instances. This module is inspired by stochastic simulation approaches in the resilience-testing literature, tailored to the context of the LT RSP in collaboration with our forestry partner. Formally, let E denote the set of possible unforeseen events, and let Ω be the set of scenarios. Each scenario 𝜔 ∈ Ω
+
+corresponds to a subset E𝜔 ⊆ E of events occurring at specific times and locations during the planning horizon. The generator stochastically draws E𝜔 from predefined distributions over event type, frequency, location, and duration. We do not claim that the distributional parameters in Table 3 are statistically estimated from historical incident records. Rather, they constitute a parameterised stress-test specification informed by extensive discussions with our industrial partner regarding the event categories, typical durations, and approximate frequencies observed in operations. The purpose of the generator is to systematically span the relevant range of disruption severities, rather than to reproduce the empirical disruption distribution of any specific operation. This framing is consistent with the resilience-testing literature, where stochastic generators are used to stress-test recovery procedures across structurally diverse scenarios rather than to forecast disruption occurrence [37]. The output of the generator is a collection of scenarios 
+
+Ω = {E 1, E2, . . . , E|Ω| }, E𝜔 = {𝑒 1, 𝑒 2, . . . , 𝑒 𝑛 𝜔 }, 𝑒 𝑖 = (𝑡 𝑖 , 𝑙 𝑖 , 𝜏 𝑖 , 𝑑 𝑖 ),
+
+10 where each E𝜔 contains the detailed event specifications later translated into model modifications. This construction ensures that the reoptimization framework is tested across a broad set of disruption configurations rather than on a limited number of ad-hoc cases. The synthetic disruptions are generated according to the rules summarised in Table 3. 
+
+4.2 Disruption characterization and impact module (DCIM) 
+
+The second methodological block is the Disruption Characterization and Impact Module (DCIM) , which takes the raw events produced by the generator and translates them into explicit modifications of the mathematical model. The DCIM has two complementary functions : 1. Event characterization : Each event 𝑒 ∈ E is described by its intrinsic attributes, such as type, location, occurrence time, and duration. Formally, 
+
+𝑒 ↦ →  𝑡 𝑒 , 𝑙 𝑒 , 𝜏 𝑒 , 𝑑 𝑒 
+
+.
+
+2. Impact mapping : Each event is then mapped to a set of technical impacts, namely (i) modifications to the routing network 𝐴 and (ii) adjustments to the problem parameters 𝜃 (e.g., demand, supply, resource capacities). This mapping can be expressed as 
+
+𝜑 : 𝑒 ↦ −→  Δ𝐴 (𝑒 ), Δ𝜃 (𝑒 ),
+
+where Δ𝐴 (𝑒 ) represents arc additions/removals in the time–space network and Δ𝜃 (𝑒 ) represents parameter updates. . The rules of this mapping are event-specific, as detailed in Table 2. For example, a road closure event produces 
+
+Δ𝐴 (𝑒 ) = 𝐴 \ 𝐴 𝑒 (removal of arcs), while leaving 𝜃 unchanged. Conversely, a demand variation modifies 𝑑 𝑚 𝑝 in 𝜃 but leaves 𝐴 unchanged. More complex events, such as truck breakdowns, induce simultaneous changes in both sets. The DCIM therefore serves as the formal bridge between disruption scenarios and their integration into the reoptimization model. It ensures that each scenario 𝜔 generated by the first module is consistently and rigorously operationalized in terms of network feasibility and parameter constraints, thereby enabling systematic reoptimization of the LT RSP .                                                           
+
+> Table 3 – Stochastic generation rules for unforeseen events in the L T R S P .
+> Event type Distribution law Parameters Affected element Model impact
+> Road closure Bernoulli( 𝑝 =0.08), duration 𝑈 [1,3]days Independent by forest road Arc (𝑖, 𝑗 ) ∈ 𝐴 Δ𝐴 (𝑒 ): arc removal for duration Truck breakdown Poisson( 𝜆 =0.05/day), repair 𝑈 [4,12 ]hIndependent per vehicle 𝑣 ∈ V Truck 𝑣 Δ𝜃 (𝑒 ): downtime and availability shift Travel delay Exponential( 𝜆 =0.15) Arc-dependent mean delay 𝜇 𝑖 𝑗 Arc (𝑖, 𝑗 )Δ𝜃 (𝑒 ): travel time increase Demand variation Normal( 𝜇 =𝑑 𝑚 𝑝 ,𝜎 =0.1𝑑 𝑚 𝑝 )Mill–product pair (𝑚, 𝑝 )Demand parameter 𝑑 𝑚 𝑝 Δ𝜃 (𝑒 ): right-hand side change
+
+4.3 Reoptimization Engine 
+
+The reoptimization engine is responsible for generating a new routing and scheduling plan that explicitly accounts for the operational impacts of unforeseen events, represented by the perturbation sets (ΔA, Δ𝜃 ). Its primary objective is to minimize the total routing and scheduling cost while restoring feasibility and maintaining a high degree of consistency with the original tactical plan. In operational practice, drastic modifications to the baseline schedule are undesirable, as they may disrupt the commitments and working patterns of truck drivers, contractors, and mill operators, who organize their activities around the initially established plan. Consequently, the reoptimization process must simultaneously ensure two properties : cost efficiency by minimizing the overall operating cost, and stability by preserving as much as possible the structure of the pre-disruption plan. Through extensive discussions with forest planners and dispatchers from our industrial partner, a clear operational requirement emerged regarding how these two objectives should be handled in practice. When a disruption occurs, planners do not want a single prescribed recovery plan imposed by the optimization system. Rather, they need a structured set of recovery options, each representing a different compromise between plan stability and cost efficiency, so that they can select the most appropriate response depending on the severity of the disruption, the time remaining in the planning horizon, and their knowledge of field conditions. A highly stable plan that closely mirrors the original schedule may be preferred when the disruption is minor or when coordination costs are high, while a more aggressive restructuring may be acceptable when the potential cost savings are substantial. This insight fundamentally shapes the design of our reoptimization engine : rather than returning a single solution, the framework constructs a Pareto front of non-dominated recovery plans spanning the stability-cost space and presents it to the dispatcher as an explicit menu of options. 11 Let 𝑒 be an unforeseen event occurring at time 𝑡 𝑒 . After detection, its operational impact is translated through the DCIM, generating perturbations (ΔA, Δ𝜃 ) on the arc set and model parameters. This induces a new feasibility domain, denoted by F ( 𝑒 ) for the LT RSP model P𝑚 . The reoptimization problem then consists of solving P𝑚 over the updated feasibility domain F ( 𝑒 ) :min 𝑧 (𝑋 ) s.t. 𝑋 ∈ F ( 𝑒 ).
+
+Moreover, all operational decisions realized before the event occurrence time 𝑡 𝑒 are fixed. Let 𝑋 ∗ denote the original tactical solution, with components 𝑥 ∗ 
+
+> 𝑎𝑡 𝑣
+
+. We impose the fixing constraints : 
+
+𝑥 𝑎𝑡 𝑣 = 𝑥 ∗ 
+
+> 𝑎𝑡 𝑣
+
+, ∀( 𝑎, 𝑡, 𝑣 ) such that 𝑡 ≤ 𝑡 𝑒 .
+
+Thus, reoptimization only affects decisions corresponding to operations scheduled after 𝑡 𝑒 , while the pre-disruption portion of the plan remains unchanged. The updated model Preop  
+
+> 𝑚
+
+can be solved directly to reoptimize the LT RSP 
+
+under event 𝑒 . However, solving it without additional restrictions may yield a solution that differs substantially from the original solution 𝑋 ∗. To ensure stability, we instead search for a new solution that satisfies all constraints of Preop 
+
+> 𝑚
+
+while remaining within a controlled neighbourhood of 𝑋 ∗. To this end, a local branching approach is employed. The next subsection introduces the technical details. 
+
+4.3.1 Local Branching 
+
+To balance stability and solution quality, the reoptimization procedure solves Preop  
+
+> 𝑚
+
+under a local branching frame-work. Intuitively, when the search is restricted to a narrow neighbourhood around the original plan, stability is high and computational time is limited. Expanding the neighborhood allows greater flexibility, which may improve solution quality, but at the cost of increased runtime and reduced stability. Accordingly, the proposed approach introduces a neighborhood size parameter that controls this trade-off between stability and solution quality, following the local branching scheme of [26]. The deviation from the pre-disruption tactical plan is incorporated directly into the P𝑟 𝑒𝑜 𝑝 𝑚 through a constraint that measures the Hamming distance between the original and reoptimized solutions, as illustrated in Figure 4. The resulting P𝑟 𝑒𝑜 𝑝 𝑚 with the local branching constraint can be formulated as follows : X∗ X                  
+
+> ∥X−X∗∥1≤k
+> Reoptimization
+> Unforeseen event
+> Figure 4 – Illustration of the feasible polyhedral region P𝑟𝑒𝑜 𝑝 𝑚 . The distance between 𝑋 ∗and 𝑋 represents the local branching deviation bounded by ∥𝑋 −𝑋 ∗∥1≤𝑘 .
+
+Using binary variables 𝑥 𝑎𝑡 𝑣 of P𝑟 𝑒𝑜 𝑝 𝑚 indicating whether truck 𝑣 ∈ V uses arc 𝑎 ∈ 𝐴 at time 𝑡 ∈ T , and 𝑥 ∗
+
+> 𝑎𝑡 𝑣
+
+its value in the pre-disruption tactical plan 𝑋 ∗. The deviation from the baseline configuration is captured by auxiliary binary variables 𝑦 𝑎𝑡 𝑣 defined as : 
+
+𝑦 𝑎𝑡 𝑣 ≥ 𝑥 𝑎𝑡 𝑣 − 𝑥 ∗ 
+
+> 𝑎𝑡 𝑣
+
+, 𝑦 𝑎𝑡 𝑣 ≥ 𝑥 ∗ 
+
+> 𝑎𝑡 𝑣
+
+− 𝑥 𝑎𝑡 𝑣 ,
+
+so that 𝑦 𝑎𝑡 𝑣 = |𝑥 𝑎𝑡 𝑣 − 𝑥 ∗ 
+
+> 𝑎𝑡 𝑣
+
+| at optimality. The reoptimization problem can then be expressed as : min 
+
+> 𝑋 ∈ F ( 𝑒 )
+
+∑︁ 𝑡 ∈ T ∑︁ 𝑣 ∈ V ∑︁ 𝑎 ∈ 𝐴 
+
+𝑐 𝑎 𝑥 𝑎𝑡 𝑣 (15) ∑︁ 
+
+> (𝑎,𝑡 ,𝑣 )
+
+𝑦 𝑎𝑡 𝑣 ≤ 𝑘 (16) 12 such that F ( 𝑒 ) is the new feasibilty domain under the new disruptions events and 𝑘 is the neighborhood search size. The structure of Preop  
+
+> 𝑚
+
+requires the existence of a minimal deviation value 𝑘 min that guarantees model feasibility after a disruption. Solving Preop  
+
+> 𝑚
+
+(𝑘 min ) yields the most stable recovery plan, obtained quickly thanks to the restricted search space, although its routing cost may be suboptimal. This solution thus serves as the natural anchor of the Pareto front. The exact computation of 𝑘 min is addressed in the following subsection. 
+
+4.3.2 Analytical Bounds on the Minimal Feasible Deviation 
+
+The exploration of the stability–cost front takes place over an interval of deviation radii [𝑘 min , 𝑘 max ]. Its lower end anchors the front at its most stable extreme and must be exact, since it is the radius at which the first recovery plan is produced. Its upper end bounds the exploration and must be large enough not to exclude relevant plans, yet small enough to keep the search finite. This section establishes both. 
+
+Definition of the anchor. The minimal feasible deviation is 
+
+𝑘 min = min  
+
+> 𝑋 ∈ F ( 𝑒 )
+
+𝑋 − 𝑋 ∗
+
+> 1
+
+, (17) that is, the smallest number of binary changes required to transform the baseline tactical plan 𝑋 ∗ into a plan that is feasible for the disrupted region F ( 𝑒 ). Since 𝑋, 𝑋 ∗ ∈ { 0, 1}𝑛 , the ℓ1-distance coincides with the Hamming distance and 
+
+𝑘 min ∈ Z≥0. The value 𝑘 min = 0 is admissible and operationally meaningful : it indicates that the baseline plan remains feasible under the disruption, which occurs for instance after a demand variation that degrades cost without violating any constraint. 
+
+Exact computation. We compute 𝑘 min exactly, by solving the mixed-integer programme that minimises the Hamming distance to the baseline over the disrupted feasible region. Introducing, for every decision 𝑖 , two binary variables 𝛿 +
+
+> 𝑖
+
+and 𝛿 − 
+
+> 𝑖
+
+that account respectively for an activation and a deactivation with respect to 𝑋 ∗, the absolute value is linearised and the programme reads 
+
+𝑘 min = min  
+
+> 𝑋, 𝛿 +, 𝛿 −
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+ 𝛿 + 
+
+> 𝑖
+
++ 𝛿 −
+
+> 𝑖
+
+
+
+s.t. 𝛿 + 
+
+> 𝑖
+
+≥ 𝑋 𝑖 − 𝑋 ∗ 
+
+> 𝑖
+
+, 𝑖 = 1, . . . , 𝑛, 𝛿 − 
+
+> 𝑖
+
+≥ 𝑋 ∗ 
+
+> 𝑖
+
+− 𝑋 𝑖 , 𝑖 = 1, . . . , 𝑛, 𝑋 ∈ F ( 𝑒 ),𝑋 ∈ { 0, 1}𝑛 , 𝛿 +, 𝛿 − ∈ { 0, 1}𝑛 .
+
+(18) The feasible region F ( 𝑒 ) is expressed by the complete constraint set of the reoptimization model : flow conservation, demand satisfaction under the perturbed right-hand side, supply, loader and time-window restrictions, together with the arc removals ΔA ( 𝑒 ) induced by the event and the fixing of every decision completed before 𝜏 𝑒 . Formulation (18) therefore shares exactly the feasible region of Preop  
+
+> 𝑚
+
+(·) and differs from it only in the objective. 
+
+Proposition 1 (Exactness of the anchor) . Let (𝑋, 𝛿 +, 𝛿 − ) be an optimal solution of (18) . Then 𝛿 + 
+
+> 𝑖
+
++ 𝛿 − 
+
+> 𝑖
+
+= |𝑋 𝑖 − 𝑋 ∗ 
+
+> 𝑖
+
+|
+
+for every 𝑖 , and the optimal value of (18) equals 𝑘 min as defined in (17) . Moreover, the associated plan 𝑋 attains the minimum in (17) , so it is a most stable feasible recovery plan. 
+
+D ´ emonstration. Since 𝑋 𝑖 , 𝑋 ∗ 
+
+> 𝑖
+
+∈ { 0, 1}, at most one of 𝑋 𝑖 − 𝑋 ∗ 
+
+> 𝑖
+
+and 𝑋 ∗ 
+
+> 𝑖
+
+− 𝑋 𝑖 is positive, and the constraints impose 
+
+𝛿 + 
+
+> 𝑖
+
++ 𝛿 − 
+
+> 𝑖
+
+≥ | 𝑋 𝑖 − 𝑋 ∗ 
+
+> 𝑖
+
+|. As the objective minimises this sum with non-negative coefficients, equality holds at any optimum. The objective therefore coincides with ∥ 𝑋 − 𝑋 ∗ ∥1 over F ( 𝑒 ), and minimising it returns 𝑘 min together with a minimiser. □
+
+Solving (18) to optimality is not a computational obstacle in our setting, for three reasons. The routing cost is absent from the objective, which removes the coupling that makes the reoptimization model difficult and leaves a pure feasibility-restoration problem. The fixing of all decisions completed before 𝜏 𝑒 eliminates a large share of the binary variables, the more so as the event occurs later in the week. Finally, the disruption restrictions themselves prune the arc set. In our experiments, (18) is solved to proven optimality within seconds, against minutes for a single evaluation of 
+
+Preop  
+
+> 𝑚
+
+(𝑘 ).Exactness matters operationally, and is the reason we solve (18) rather than resorting to a primal heuristic. A radius below 𝑘 min renders Preop  
+
+> 𝑚
+
+(𝑘 ) infeasible, so an underestimate wastes a solver call and returns no plan at all. An overestimate, conversely, silently discards the most stable recovery plans, precisely those that dispatchers value most 13 when the disruption is minor. Since the anchor also calibrates the step sizes of the search, an inexact value would propagate to the entire exploration. 
+
+Structural cap. Let S∗ = {𝑖 : 𝑋 ∗ 
+
+> 𝑖
+
+= 1} denote the set of decisions active in the baseline plan and 𝑛 act = |S ∗ | its cardinality. We set 
+
+𝑘 max = 𝑛 act . (19) At this radius the recovered plan may differ from the baseline in every movement the baseline performs. Beyond it, the local branching constraint no longer conveys any stability requirement : the recovered plan bears no resemblance to the schedule around which drivers, loaders and mill operators have organised their day, which is the very property the constraint is meant to preserve. Radii larger than 𝑛 act are therefore excluded on operational grounds rather than computational ones. 
+
+Determination of the effective cap by relaxation. The structural cap bounds the search but does not indicate when it becomes useless to continue. This is obtained from the continuous relaxation. Let 𝑧 ∗ (𝑘 ) denote the optimal cost of 
+
+Preop  
+
+> 𝑚
+
+(𝑘 ) and let 
+
+𝑧 LP = min 
+
+n
+
+𝑧 (𝑋 ) : 𝑋 ∈ [ 0, 1]𝑛 , 𝑋 satisfies the constraints of F ( 𝑒 ), ∥ 𝑋 − 𝑋 ∗ ∥1 ≤ 𝑘 max 
+
+o
+
+(20) be the value of the linear relaxation obtained by replacing 𝑋 ∈ { 0, 1}𝑛 with 𝑋 ∈ [ 0, 1]𝑛 at the structural cap. This single linear programme is solved once, at initialization, in a few seconds. 
+
+Proposition 2 (LP floor and effective cap) . For every 𝑘 ∈ [ 𝑘 min , 𝑘 max ],
+
+𝑧 LP ≤ 𝑧 ∗ (𝑘 max ) ≤ 𝑧 ∗ (𝑘 ). (21) 
+
+Consequently, if a radius ˆ𝑘 satisfies 𝑧 ∗ ( ˆ𝑘 ) ≤ 𝑧 LP + 𝜀 , then no radius 𝑘 > ˆ𝑘 can improve the cost by more than 𝜀 , and ˆ𝑘 
+
+is an effective cap for the exploration. 
+
+D ´ emonstration. The relaxed feasible set at 𝑘 max contains the integer feasible set at 𝑘 max , hence 𝑧 LP ≤ 𝑧 ∗ (𝑘 max ). The nesting X( 𝑘 ) ⊆ X( 𝑘 max ) for 𝑘 ≤ 𝑘 max gives 𝑧 ∗ (𝑘 max ) ≤ 𝑧 ∗ (𝑘 ), which yields (21). If 𝑧 ∗ ( ˆ𝑘 ) ≤ 𝑧 LP + 𝜀 , then for any 𝑘 > ˆ𝑘 
+
+we have 𝑧 ∗ (𝑘 ) ≥ 𝑧 LP ≥ 𝑧 ∗ ( ˆ𝑘 ) − 𝜀 , so the attainable improvement is at most 𝜀 . □
+
+The interval [𝑘 min , 𝑘 max ] is thus delimited from below by an exact value and from above by a structural cap refined at run time by the LP floor. The relative distance to that floor, 
+
+𝑔 = 𝑧 ∗ (𝑘 ) − 𝑧 LP 
+
+max |𝑧 ∗ (𝑘 )| , 1 , (22) measures the improvement potential that remains and is supplied to the reinforcement learning agent of Section 4.3.3 as a state feature. A value close to zero certifies that the staircase has reached its floor and that terminating is rational ; a strictly positive value indicates that a larger radius may still uncover a non-dominated plan, and justifies crossing a plateau rather than stopping on it. The agent of Section 4.3.3 accordingly starts its exploration at 𝑘 min and navigates 
+
+[𝑘 min , 𝑘 max ] under this certificate. 
+
+4.3.3 Reinforcement learning for adaptive Pareto front exploration 
+
+Solving the local branching model Preop  
+
+> 𝑚
+
+(𝑘 ) at a single value of 𝑘 yields a single recovery plan. As mentioned before, dispatchers require instead a set of alternatives spanning the stability–cost trade-off. This set is the Pareto front of the bi-objective problem min (𝑘, 𝑧 ∗ (𝑘 )) , in which the best achievable cost at deviation 𝑘 and the corresponding feasible set are 
+
+𝑧 ∗ (𝑘 ) = min { 𝑧 (𝑋 ) : 𝑋 ∈ X( 𝑘 ) } , X( 𝑘 ) = F ( 𝑒 ) ∩ 𝑋 ∈ { 0, 1}𝑛 : ∥ 𝑋 − 𝑋 ∗ ∥1 ≤ 𝑘 . (23) Enumerating this front over a dense grid of values is computationally prohibitive : each evaluation of 𝑧 ∗ (𝑘 ) requires solving a large-scale MILP, and most values yield no new non-dominated plan. 14 Structure of the front. The sets X( 𝑘 ) are nested, X( 𝑘 ) ⊆ X( 𝑘 ′) for 𝑘 ≤ 𝑘 ′, so 𝑧 ∗ (·) is non-increasing and piecewise constant : it is a staircase whose steps are exactly the non-dominated points. Two consequences are exploited by the search. First, the front is anchored at 𝑘 min , the smallest feasible value. Second, detecting a new non-dominated point reduces to a scalar test on the running envelope ¯𝑧 (𝑘 ) = min { ˆ𝑧 (𝑘 ′) : 𝑘 ′ ∈ K , 𝑘 ′ ≤ 𝑘 }, (24) where K is the set of values already evaluated and ˆ 𝑧 (𝑘 ′) the objective recorded at 𝑘 ′ : a solve at 𝑘 is Pareto-improving if and only if it reduces ¯ 𝑧 (𝑘 ) by more than the absolute optimality tolerance of the solver. The agent interacts with the reoptimization environment as a Markov decision process (S , A, 𝑟, 𝛾 ), with one episode per disruption event. At each iteration the agent selects a value of 𝑘 , the solver evaluates Preop  
+
+> 𝑚
+
+(𝑘 ) under a per-call limit 
+
+𝑇 solve , and the outcome updates the envelope, the front F ∗ and the state. 
+
+Initialization. Before the learning loop, the framework computes the minimal feasible deviation 𝑘 min defined in 4.3.2, by solving a MILP that minimizes the ℓ1-distance to the reference plan subject to the rescheduling constraints, the disruption restrictions, and the fixing of decisions completed before the event. This solve is deterministic and lies outside the policy : it anchors the front at its most stable extreme and guarantees that one recovery option exists regardless of the severity of the disruption. A second quantity is computed once, in a single LP solve : the value 𝑧 LP of the continuous relaxation at the upper limit 𝑘 max . Since 𝑧 LP ≤ 𝑧 ∗ (𝑘 ) for every 𝑘 , it is a valid floor for the whole staircase and measures the improvement that may still remain. It is used both as a state feature and in the termination logic : a search whose incumbent has reached this floor cannot improve further, whereas a persistent gap indicates that a larger value of 𝑘 may still pay off. 
+
+State space. At iteration 𝑡 the agent observes 𝑠 𝑡 ∈ R9,
+
+𝑠 𝑡 =
+
+h 𝑘 𝑡  
+
+> 𝑘 min
+
+, | 𝑧 0 −𝑧 ∗    
+
+> 𝑡 ||𝑧 0|
+
+, 𝑡 solve  
+
+> 𝑇 solve
+
+, 𝑡 elapsed  
+
+> 𝑇 total
+
+, 1[Pareto ], 1[feasible ], | F ∗  
+
+> 𝑡 |
+> ¯𝑁
+
+, 𝜙 𝑒 , 𝑔 𝑡 
+
+i
+
+, (25) where all components are normalized so that they vary on comparable ranges, which is what makes the coefficients of the linear policy comparable to one another. The first two features locate the search in the stability–cost space. The expansion ratio 𝑘 𝑡 /𝑘 min compares the current value of 𝑘 with the stable anchor, and equals one at the first solve. The relative improvement compares the incumbent 
+
+𝑧 ∗ 
+
+> 𝑡
+
+, the best objective found up to iteration 𝑡 , with 𝑧 0 = 𝑧 ∗ (𝑘 min ), the objective of the anchor plan. The next two features describe the computational state. Here 𝑡 solve is the time consumed by the most recent solver call and 𝑇 solve the limit imposed on each call, so their ratio measures the difficulty of the last subproblem : a value close to one indicates that the solve was truncated. Likewise, 𝑡 elapsed is the time consumed since the beginning of the episode and 𝑇 total the budget allocated to the disruption event, so their ratio reports how much of that budget remains and drives the agent to concentrate exploration early. The two binary indicators state whether the last solve produced a new non-dominated point and whether it returned a feasible solution ; the distinction matters because an infeasible solve carries no information about the staircase. The seventh feature measures the coverage of the front, where |F ∗ 
+
+> 𝑡
+
+| is the number of non-dominated plans found up to iteration 𝑡 and ¯ 𝑁 a normalizing constant, the ratio being capped at one. The last two features condition the qualitative behaviour of the policy. The categorical encoding 𝜙 𝑒 ∈ { 0, 0.25 , 0.5, 0.75 , 1} identifies the disruption type, in the order road closure, truck breakdown, travel delay, demand increase and demand decrease, so that a single policy can adapt to the nature of the event ; localized and systemic disruptions have markedly different productive regions. The relative gap to the linear-programming floor 𝑧 LP ,
+
+𝑔 𝑡 = min 
+
+ 𝑧 ∗ 
+
+> 𝑡
+
+− 𝑧 LP 
+
+max {| 𝑧 ∗ 
+
+> 𝑡
+
+|, 1} , 1
+
+
+
+, (26) is close to zero when the incumbent has reached the floor and no further step can exist, and strictly positive when improvement potential remains. Without it, a plateau of equal objective values is indistinguishable from an exhausted search ; this feature is what allows the agent to separate the two situations and to choose between stopping and jumping further. 
+
+Action space. The agent selects among four actions, 
+
+A = {stop , large-step , small-step , bisect }, (27) whose semantics are defined relative to the set of values already evaluated, so that each action targets a region that has not yet been explored. Let ˆ 𝑘 = max K denote the largest value evaluated so far. The two forward actions extend the 15 sweep beyond ˆ 𝑘 ,
+
+𝑘 𝑡 +1 =
+
+( ˆ𝑘 + 𝛿 s, if 𝑎 𝑡 = small-step ,
+
+ˆ𝑘 + 𝛿 L, if 𝑎 𝑡 = large-step , 𝛿 s = max 
+
+n
+
+5,  𝑘 min 
+
+> 2
+
+o
+
+, 𝛿 L = max {2𝛿 s, ¯𝜏 }, (28) where ¯ 𝜏 is the average number of binary changes induced by a single truck trip, estimated from the reference plan as the ratio of active arcs to trips. Both increments are instance-adaptive : the small step refines the sweep at the scale of the anchor, while the large step advances by approximately one trip, the granularity at which the staircase actually changes. The bisect action searches where a new non-dominated point may still exist. Consider two consecutive evaluated values 𝑘 1 < 𝑘 2 with 𝑘 2 − 𝑘 1 > 1. If ¯ 𝑧 (𝑘 1) > ¯𝑧 (𝑘 2), the cost drops somewhere in (𝑘 1, 𝑘 2], so a non-dominated point may lie strictly between them ; we call such a pair an active interval . The action selects the active interval with the largest cost drop and evaluates its midpoint, which halves the range of values of 𝑘 in which the point can lie. Finally, stop ends the episode. Making termination an explicit decision, rather than a passive consequence of budget exhaustion, is what allows the agent to learn when to conserve computation. All values are clipped to [𝑘 min , 𝑘 max ],where 𝑘 max is the number of active arcs of the reference plan, beyond which the local branching constraint is no longer binding. 
+
+Reward function. The reward is aligned with the objective of the search, namely the discovery of many non-dominated plans as early as possible : 
+
+𝑟 𝑡 =
+
+
+
+𝜌 P + 𝜌 D min 
+
+n Δ𝑧 𝑡 
+
+𝛼 |𝑧 ref | , 1
+
+o
+
++ 𝜌 T
+
+𝑡 solve 
+
+𝑇 solve 
+
+, new non-dominated point ,𝜌 W + 𝜌 T
+
+𝑡 solve 
+
+𝑇 solve 
+
+, new solve, no new point ,𝜌 C, value already evaluated ,
+
+(29) where Δ𝑧 𝑡 is the reduction of the envelope obtained at iteration 𝑡 and 𝑧 ref the objective of the reference plan before the disruption. A solve that extends the front earns the reward 𝜌 P, increased by a bonus of magnitude at most 𝜌 D that grows with the cost reduction, the scale 𝛼 setting the drop above which the bonus saturates ; large steps of the staircase are thus valued above marginal ones. A solve that returns no new point receives the penalty 𝜌 W. In both cases the reward also carries the term 𝜌 T, weighted by the fraction of the per-call limit consumed, which reflects the cost of the call and leads the agent to explore early. If the agent proposes a value of 𝑘 already evaluated, the recorded objective is returned without calling the solver, and the penalty 𝜌 C discourages repetition at no computational cost. Stopping is rewarded according to the evidence available when the decision is taken : 
+
+𝑟 stop =
+
+
+
++𝜌 S, no active interval and 𝑔 𝑡 ≤ 𝜀 LP ,
+
+0, no active interval and 𝑔 𝑡 > 𝜀 LP ,
+
+−𝜌 S, at least one active interval remains .
+
+(30) Stopping is therefore rewarded only when no interval remains to be searched and the incumbent has reached the floor, is neutral when no interval remains but improvement is still possible, and is penalized when an active interval remains, which discourages premature termination. The reward 𝜌 P, the bonus 𝜌 D, the penalties 𝜌 W, 𝜌 C and 𝜌 T, the termination magnitude 𝜌 S, and the scale 𝛼 are reported in Table 4. 
+
+Policy and optimization. The policy 𝜋 𝜃 : S → Δ|A| maps the state to action logits through a single linear layer, 
+
+𝜋 𝜃 (𝑠 ) = softmax (𝑊 𝑠 + 𝑏 ) with 𝑊 ∈ R4×9 and 𝑏 ∈ R4, initialized following [36]. The architecture is deliberately parsimonious : each solver call consumes minutes, so an episode yields only a handful of transitions and a deeper network would overfit ; the linear form also keeps each coefficient interpretable as the influence of one feature on the propensity to advance, bisect or stop. Actions are sampled from the induced categorical distribution, which provides exploration without an explicit schedule. Parameters are optimized with REINFORCE [34]. For an episode 𝜏 = (𝑠 0, 𝑎 0, 𝑟 0, . . . , 𝑠 𝑇 ) the discounted returns 
+
+𝐺 𝑡 = Í𝑢 ≥𝑡 𝛾 𝑢 −𝑡 𝑟 𝑢 are standardized within the episode, which acts as a variance-reduction baseline and matters here because episodes are short and rewards are sparse. The loss augments the policy-gradient term with an entropy bonus, 
+
+L( 𝜃 ) = −
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =0
+
+ˆ𝐺 𝑡 log 𝜋 𝜃 (𝑎 𝑡 | 𝑠 𝑡 ) − 𝛽 
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =0
+
+𝐻  𝜋 𝜃 (· | 𝑠 𝑡 ), (31) 16 which prevents the policy from collapsing prematurely onto the stop action, a degenerate optimum that is otherwise attractive because stopping is free whereas probing is not. Updates are applied by Adam [35] after each completed episode. 
+
+Termination. An episode ends when the agent selects stop ; when the remaining budget falls below the reserve required for one solve ; when 𝑁 streak consecutive fresh probes fail to extend the front, cached proposals being excluded from the count so that the criterion measures genuine exploration ; or when the search is provably exhausted, that is, when ˆ 𝑘 = 𝑘 max and no active interval remains. 
+
+Training approach. A separate policy is trained for each weekly instance, which matches the operating rhythm of the partner : the tactical plan is released at the end of the week, the agent is trained before execution begins, and the resulting policy is available when disruptions occur during the week. Specializing the policy to the instance is therefore operationally natural, and it allows the learned rule to adapt to the structure of the staircase induced by that particular network and fleet. Training runs for 𝑁 epoch = 50 epochs. A fresh scenario of disruptions is regenerated at every epoch, with the generator seed advancing, so that the agent is exposed to different events rather than replaying a fixed set ; this prevents overfitting to a particular scenario. The first epoch is run in observation mode, without gradient updates, to collect baseline performance. Table 4 reports the complete parameter setting.                                          
+
+> Table 4 – Parameter setting of the reinforcement learning agent.
+> Symbol Description Value
+> 𝑁 epoch Training epochs 50
+> 𝑇 total Time budget per disruption event (s) 900
+> 𝑇 solve Time limit per solver call (s) 180
+> 𝑁 streak Fresh non-improving probes before stopping 6
+> 𝛿 sSmall step max {5,⌈𝑘 min /2⌉}
+> 𝛿 LLarge step max {2𝛿 s,¯𝜏 }
+> 𝑘 max Upper limit on 𝑘 active arcs of 𝑋 ∗
+> ¯𝑁 Normalization constant for the front size 10
+> 𝜀 LP Tolerance on the gap to the LP floor 10 −4
+> 𝜌 P, 𝜌 DPareto reward and drop bonus 1.0, 0 .5
+> 𝜌 W, 𝜌 C, 𝜌 TWasted, cached, time penalties −0.3, −0.5, −0.1
+> 𝜌 STermination reward magnitude 0.5
+> 𝛼 Scale of the drop bonus 0.01
+> 𝛾 Discount factor 0.99
+> 𝛽 Entropy coefficient 0.01
+> 𝜂 Learning rate (Adam) 10 −2
+
+# 5 Computational Study 
+
+This section reports the computational experiments carried out to evaluate the proposed framework for the reopti-mization of the LT RSP under unforeseen events. The objective of the study is to quantify the efficiency, adaptability, and resilience of the integrated methodology, as well as the relative contribution of its two main components : the ma-thematical programming approach based on local branching and the reinforcement learning module. All experiments were conducted on a 3.7 GHz 32-core CPU workstation with 128 GB RAM. The MILP components were solved with 
+
+Gurobi 12.0 , and the learning agent was implemented in PyTorch 2.2 .The experimental plan follows a structured process inspired by resilience-oriented optimization studies. Each experiment begins with the generation of a nominal tactical plan ˆ 𝑥 for a given weekly instance, solved under deterministic conditions with the base model P𝑚 . This nominal plan represents the optimal routing and scheduling configuration in the absence of disruptions. Once the baseline is established, a set of scenarios Ω = {E 1, . . . , E|Ω| } is produced by the Unforeseen Events Generator described in Section 4. Each scenario E𝜔 corresponds to a distinct realization of disruptions over the planning horizon, including the occurrence time, spatial location, and duration of each event. The Disruption Characterization and Impact Module (DCIM) then transforms each E𝜔 into technical model modifications (Δ𝐴 𝜔 , Δ𝜃 𝜔 ), which are applied to the original network and parameter set. The resulting instance P𝑚 (𝑒 ) captures both the new feasibility conditions and the operational impacts of the disruptions. 17 5.1 Instances and Unforeseen Events Generation 
+
+The computational experiments are based on 20 weekly instances W = {𝑊 1, 𝑊 2, . . . , 𝑊 20 } derived from real operational data provided by our industrial partner. Each instance corresponds to a one-week tactical plan of log-truck movements between forest blocks, mills, and home bases. Following the classification proposed in prior large-scale vehicle routing studies, the instances are grouped according to the density of their routing network, expressed by the total number of arcs | 𝐴 |. Specifically, small instances contain fewer than 30,000 arcs, medium instances include between 30,000 and 50,000 arcs, and large instances exceed 50,000 arcs. The number of arcs serves as a proxy for network complexity and directly affects computational difficulty : denser networks yield exponentially more feasible routes, leading to a combinatorial explosion of potential trip combinations. This characteristic is particularly relevant in heterogeneous-fleet problems such as the LT RSP , where vehicle types, capacities, and equipment configurations interact with the network structure. Each instance includes up to five days of operations, multiple product categories, and time-dependent travel times calibrated from GPS and road-condition data. The baseline plan 𝑋 ∗ obtained from the deterministic optimization model 
+
+P𝑚 serves as the reference solution for all disruption experiments. The full characteristics of the 20 weekly instances are reported in Table 5. 
+
+Table 5 – Characteristics of the 20 weekly instances categorized by number of arcs. Instance : label of the weekly instance ; Dates : planning horizon ; Served Mills : number of mills served ; Used Blocks : number of forest blocks used ; Products : number of product types ; Vehicles : number of vehicles available ; Homebases : number of truck home bases ; Nodes : number of nodes in the network ; Arcs : number of arcs ; Total Demand (GMT) : total demand expressed in green metric tonnes ; Avg Distance : average distance per arc (km) ; Max Distance : maximum distance between any two points (km).                                                                                                                                                                                                                                                
+
+> Instance Dates Served Mills Used Blocks Products Vehicles Homebases Nodes Arcs Total Demand (GMT) Avg Distance Max Distance Small Instances (Arcs <30,000)
+> 𝑊 12025-01-10 – 2025-01-14 11 25 370 27 1295 26372 6140 242.06 574.00
+> 𝑊 22024-12-30 – 2025-01-04 13 24 360 19 1303 26504 8820 272.00 629.27
+> 𝑊 32024-12-24 – 2024-12-29 11 19 336 19 1063 17189 3820 259.31 651.28
+> 𝑊 42024-11-29 – 2024-12-03 13 23 351 25 1267 26934 7180 245.39 680.30
+> 𝑊 52024-11-24 – 2024-11-28 15 23 353 17 1321 29265 10440 206.22 628.94
+> Medium Instances (30,000 ≤Arcs ≤50,000)
+> 𝑊 62024-12-04 – 2024-12-08 14 24 357 25 1333 32603 9600 231.08 660.30
+> 𝑊 72024-12-09 – 2024-12-13 17 30 366 27 1629 45237 14250 227.31 574.37
+> 𝑊 82024-11-19 – 2024-11-23 14 22 367 27 1267 32044 10800 283.70 657.06
+> 𝑊 92024-11-14 – 2024-11-18 17 23 368 30 1376 37120 10320 229.56 660.30
+> 𝑊 10 2024-11-09 – 2024-11-13 16 21 362 26 1280 31172 9630 225.54 657.06
+> 𝑊 11 2024-10-30 – 2024-11-03 18 46 459 27 1465 44237 12930 241.16 728.76
+> 𝑊 12 2024-10-14 – 2024-10-18 16 26 456 26 1464 36989 8140 264.96 739.14
+> 𝑊 13 2024-10-10 – 2024-10-14 13 37 462 27 1777 40795 11330 252.04 739.14
+> 𝑊 14 2025-01-05 – 2025-01-09 16 31 388 27 1637 43155 20130 244.92 574.00
+> Large Instances (Arcs >50,000)
+> 𝑊 15 2024-10-25 – 2024-10-29 17 37 472 30 1888 53103 12850 246.67 657.06
+> 𝑊 16 2024-12-19 – 2024-12-23 17 35 371 28 1808 50238 10540 268.47 651.28
+> 𝑊 17 2024-12-14 – 2024-12-18 17 38 364 27 1917 52736 11630 257.75 659.57
+> 𝑊 18 2024-11-04 – 2024-11-08 18 46 472 27 2233 86959 20240 220.54 702.36
+> 𝑊 19 2024-10-20 – 2024-10-24 17 40 478 30 1996 60449 23500 234.08 721.61
+> 𝑊 20 2024-10-15 – 2024-10-19 16 36 485 27 1825 50790 17170 227.70 739.14
+
+To assess the robustness and adaptability of the proposed framework, each instance is subjected to a set of synthetically generated unforeseen events E𝜔 , designed to span the main classes of disruptions encountered in forest transportation systems. Following stochastic simulation principles widely used in resilient transportation and supply chain optimization [37], the event-generation process explicitly accounts for randomness in occurrence, duration, location, and severity. Consistent with the framing of Section 4.1, the distributions in Table 3 are used here as a parameterised stress-test specification rather than as a calibrated probabilistic model of forestry incidents. Formally, let Ω = {E 1, . . . , E|Ω| } denote the set of disruption scenarios, where each scenario E𝜔 is composed of a finite number of stochastic events : 
+
+E𝜔 = {𝑒 1, 𝑒 2, . . . , 𝑒 𝑛 𝜔 }, 𝑒 𝑖 = (𝑡 𝑖 , 𝑙 𝑖 , 𝜏 𝑖 , 𝑑 𝑖 ).
+
+In line with common practice in the resilient scheduling literature [38], ten disruptions are generated per instance, corresponding to approximately two events per operational day. The stochastic mechanisms are summarised in Table 3. The event generation follows a two-stage process combining temporal and spatial sampling. First, the number of events per day 𝑁 𝑡 is sampled from a Poisson process, 
+
+𝑁 𝑡 ∼ Poisson (𝜆 𝑡 ), 𝑡 = 1, . . . , 𝑇, 
+
+18 where 𝜆 𝑡 denotes the expected daily frequency, set to two events per day in the experiments. Conditional on 𝑁 𝑡 , the occurrence time of each event within day 𝑡 is drawn from a continuous uniform distribution U ( 0, 𝐻 ) over the working hours 𝐻 = [6:00 , 18:00 ]. The duration 𝑒 𝑖 and location 𝑙 𝑖 are then drawn according to the corresponding event law in Table 3. Spatial dependencies are introduced for certain event types (e.g., road closures) through a correlated sampling mechanism : the occurrence probability of a closure on road 𝑎 is increased by a factor 𝜂 = 1.5 if adjacent arcs have already been closed on the same day, reflecting the spatial propagation of weather-induced failures [39].                                                                                                                                         
+
+> Table 6 – Example of generated unforeseen events over a five-day horizon for a representative weekly instance.
+> Day Event ID Event Type Location Start Time Duration Distribution Source Impact on Model
+> 1𝑒 1Road closure Road (F23 →HB07) 07 :30 2 days Bernoulli( 𝑝 =0.08) + 𝑈 [1,3]Arc removal Δ𝐴 (𝑒 1)
+> 1𝑒 2Demand decrease Mill M12 09 :00 1 day N ( 0,0.12)Δ𝑑 𝑚 𝑝 =−8% 2𝑒 3Truck breakdown Vehicle V34 10 :15 6 hours Poisson( 𝜆 =0.05) + 𝑈 [4,12 ]Vehicle unavailable Δ𝜃 (𝑒 3)
+> 2𝑒 4Travel delay Arc (HB05 →M03) 13 :45 3 hours Exp( 𝜆 =0.15) 𝜏 𝑖 𝑗 ←𝜏 𝑖 𝑗 +Δ𝜏
+> 3𝑒 5Road closure Road (F41 →M09) 08 :10 1 day Bernoulli( 𝑝 =0.08) + 𝑈 [1,3]Arc removal Δ𝐴 (𝑒 5)
+> 3𝑒 6Demand increase Mill M15 15 :00 1 day N ( 0,0.12)Δ𝑑 𝑚 𝑝 =+12% 4𝑒 7Truck breakdown Vehicle V05 11 :20 10 hours Poisson( 𝜆 =0.05) + 𝑈 [4,12 ]Vehicle downtime Δ𝜃 (𝑒 7)
+> 4𝑒 8Travel delay Arc (F06 →HB03) 14 :30 2 hours Exp( 𝜆 =0.15) Shift in time windows 5𝑒 9Road closure Road (HB01 →M02) 06 :45 2 days Bernoulli( 𝑝 =0.08) + 𝑈 [1,3]Δ𝐴 (𝑒 9), infeasible trips pruned 5𝑒 10 Demand decrease Mill M04 09 :00 1 day N ( 0,0.12)Δ𝑑 𝑚 𝑝 =−5%
+
+The resulting set of events E𝜔 thus spans both isolated and cascading disruptions across space and time. All events are sorted chronologically to build a dynamic timeline as presented in the example of table 6. This stochastic construction yields diverse scenarios, ranging from single short-duration events to concurrent multi-day disruptions, covering the operational range of interest for the resilience evaluation. Each event is then passed to the Disruption Characterization and Impact Module (DCIM), which transforms it into a pair of model perturbations (Δ𝐴 (𝑒 ), Δ𝜃 (𝑒 )) . This transformation ensures that disruptions are encoded directly within the mathematical structure of the MILP model : road closures modify the feasible network by removing affected arcs, breakdowns reduce available vehicle capacity over specific time windows, delays shift time-dependent travel durations, and demand variations alter the right-hand side of demand constraints. 
+
+5.2 Numerical results 
+
+We evaluate the proposed framework on 20 weekly instances W = {𝑊 1, . . . , 𝑊 20 } derived from real operational data provided by our Canadian forestry partner, grouped into small ( | 𝐴 | < 30 ,000), medium (30 ,000 ≤ | 𝐴 | ≤ 50 ,000), and large ( | 𝐴 | > 50 ,000) categories. Each instance is subjected to 10 synthetically generated disruption scenarios spanning road closures, truck breakdowns, travel delays, and demand variations, following the generation rules of Table 3, which delays, and demand variations, following the generation rules of Table , which yields 200 recovery problems per strategy. All strategies begin identically : the disruption is characterised, 𝑘 min is computed, and the local branching model is solved at 𝑘 = 𝑘 min to obtain the first Pareto point, the most stable feasible recovery plan. They then differ only in the rule that selects the next value of 𝑘 :1. Fixed-𝑘 grid. The interval [𝑘 min , 𝑘 max ] is divided into equally spaced steps and Preop  
+
+> 𝑚
+
+(𝑘 ) is solved at each grid value in turn until the budget 𝑇 total is exhausted. The grid is set independently of what previous solves reveal, which makes it the natural reference for the effort required without any adaptive rule. Additional details are given in A. 2. Dichotomic search. A deterministic rule that repeatedly splits the active interval with the largest cost drop, advances beyond the largest value already evaluated when no active interval remains, and stops when neither operation applies. This strategy shares the entire computational infrastructure of the learned policy, namely the memory of evaluated values, the monotone envelope, the elimination of flat intervals and the warm start. It differs from it only in the selection rule, so the comparison isolates the contribution of learning from that of the structure of the front. Further details are presented in Appendix A. 3. RL-guided. The trained agent selects 𝑘 from the 9-dimensional state vector of Equation (25), concentrating solver calls where new non-dominated plans are most likely, jumping across plateaus when the gap to the floor indicates remaining potential, and terminating when the evidence shows that no further plan can be found. All strategies operate under the same budget 𝑇 total per event and the same solver settings, so differences in the reported metrics are attributable to the selection rule alone. Since the 200 recovery problems are solved by every strategy, the metrics are compared pairwise on each event, and the significance of the differences is assessed with the Wilcoxon signed-rank test. 19 5.2.1 Training Convergence 
+
+Figure 5 reports training metrics over 50 epochs. The average return increases steadily from near zero to approxi-mately 6.5, confirming that the REINFORCE agent learns to select actions that produce Pareto-improving solutions. The average number of Pareto points per event rises from 1.0 at epoch 0 to approximately 6.7 at epoch 50, more than a six-fold increase in the number of recovery options presented to the dispatcher. The return remains close to zero during 0 10 20 30 40 50 
+
+> Epoch
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Average return
+
+(a) Return per epoch      
+
+> 010 20 30 40 50
+> Epoch
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Avg. Pareto points
+
+(b) Pareto points per event  
+
+> Figure 5 – RL policy training over 50 epochs. Solid lines show the rolling mean ; shaded regions indicate standard deviation. (a) Ave-rage return per epoch. (b) Average number of Pareto-optimal recovery plans discovered per event.
+
+the first few epochs, then grows steadily as the agent improves its action-selection strategy. The convergence plateau is reached after approximately 35–40 epochs, consistent with the small number of state-action observations per episode and the linear policy architecture ; beyond this point both metrics stabilise and the variability across runs narrows. The final learned policy exhibits a structured adaptation rule : it favours small-step advances for minor disruptions such as single travel delays, and combines large-step jumps with bisect refinements for systemic events such as multi-day road closures, rapidly leaving the neighbourhood of 𝑘 min to explore more distant regions of the deviation axis. 
+
+5.2.2 Performance metrics 
+
+All strategies operate under the same time budget 𝑇 total per disruption event and share the same computational infrastructure, so the elapsed time is not itself a discriminating quantity. What separates the strategies is how they convert this budget into recovery options and how good those options are. We measure this along three complementary dimensions : the computational efficiency of the exploration, the operational quality of the best recovered plan, and the overall spread of the front. 
+
+Hit rate. The number of Pareto-improving calls per solver call, 
+
+𝜂 = |F ∗ |
+
+𝑁 solve 
+
+∈ (0, 1], (32) where 𝑁 solve is the number of solver calls issued for the event and |F ∗ | the size of the returned front. Since every plan on the front originates from exactly one call, 𝜂 is the fraction of the computational effort that translates into an option for the dispatcher. 𝑁 solve includes the anchor solve at 𝑘 min , which yields the first point, and excludes proposals of a value already evaluated, which are served from memory. A hit rate of one is not attainable in general : certifying that a region of the staircase contains no further step requires at least one call that returns none. This metric captures how efficiently the strategy identifies productive regions of the deviation axis ; a strategy that solves in regions where the staircase is flat wastes calls and reports a low 𝜂 .
+
+Cost deviation. The relative change in pure routing cost of the best plan of the front, compared to the baseline, 
+
+Δ ˜𝐶 = ˜𝐶 (𝑥 ∗) − ˜𝐶 ( ˆ𝑥 )
+
+˜𝐶 ( ˆ𝑥 ) × 100% , (33) where ˜𝐶 (𝑥 ∗) is the lowest pure routing cost attained across the recovered Pareto points and ˜𝐶 ( ˆ𝑥 ) that of the baseline plan. A value of zero means the disruption has been absorbed at no additional cost, and a large positive value means the 20 strategy failed to find a plan close to the pre-disruption cost. Unlike the hit rate, which is agnostic to solution quality, Δ ˜𝐶 
+
+measures the operational impact actually incurred by the company after recovery : it answers the question of whether the strategy found a good plan, not merely a lot of plans.  
+
+> Hypervolume.
+
+The hit rate rewards a strategy for finding many plans, but says nothing about how those plans are distributed on the front, and Δ ˜𝐶 reports only the cheapest plan. Neither captures the case in which a strategy recovers a large front made of nearby, mutually similar plans : many points, few genuine options. The standard indicator that penalises this is the hypervolume [40]. In the (𝑘, 𝑧 ) plane, where both objectives are minimised, it is the area dominated by F ∗ up to a reference point, normalised by the area of the region in which any front must lie : 
+
+𝐻𝑉 (F ∗) = 1
+
+(𝑘 max − 𝑘 min ) ( 𝑧 w 
+
+> 𝑒
+
+− 𝑧 LP )
+
+Ø
+
+> (𝑘, 𝑧 ) ∈ F ∗
+
+[ 𝑘, 𝑘 max ] × [ 𝑧, 𝑧 w 
+
+> 𝑒
+
+] , (34) where | · | denotes area and 𝑧 w 
+
+> 𝑒
+
+is the highest cost observed for event 𝑒 across all strategies, so that the same reference point is used for all methods on a given event. The lower edge of the box is the linear-programming floor 𝑧 LP of Section 4.3.3, which no plan can undercut. The resulting value lies in [0, 1] and grows both with the number of recovered plans and with their coverage of the stability–cost region : a front of ten mutually close plans is penalised relative to a front of five well-separated ones. The interest of 𝐻𝑉 is comparative, since it summarises the front on a single scale on which strategies producing fronts of different cardinality can be ranked.  
+
+> 5.2.3 Comparison of Exploration Strategies
+
+Each of the 20 weekly instances of W is subjected to the same protocol as during training : a scenario of 10 disruption events is drawn from the generator of Section 4.1, spanning road closures, truck breakdowns, travel delays, and demand variations, so that the reported results cover the full range of event categories rather than a fixed configuration. Table 7 reports the three metrics of Section 5.2.2 averaged over the 10 events of each instance, for the three strategies compared at equal time budget. Training a dedicated policy on each instance takes approximately 25 hours of wall-clock time on the hardware described in Section 5.1, comfortably within the operational window between the release of the weekly plan and the start of execution. The three metrics point in the same direction across the twenty instances. The learned policy attains the highest hit rate on every instance, averaging 70 .6% against 48 .2% for the dichotomic search and 32 .7% for the fixed-𝑘 grid. Since the three strategies operate under identical time budgets and share the same computational infrastructure – the cache of evaluated values, the monotone envelope, the closure of flat intervals, and the warm start – this difference is attributable to the selection rule alone. The learned rule allocates the same effort to regions of the deviation axis where a Pareto-improving solve is more likely to be found, while the two baselines either search rigidly (fixed grid) or split only intervals already bracketed between known points (dichotomic search). The cost deviation of the best recovered plan follows the same ranking, falling from 6 .34% and 7 .05% for the two baselines to 3 .35% for the learned policy. This is the metric most directly interpretable in operational terms : after recovery, the dispatcher retains, on average, a plan whose routing cost is within 3 .35% of the pre-disruption baseline, against nearly 7% under a rule that does not exploit information from previous solves. The normalised hypervolume separates the strategies on a single scale that combines quantity and quality of plans, and rises consistently across the three columns (0 .168 → 0.195 → 0.310), which indicates that the additional plans returned by the learned policy do not accumulate in a narrow region of the front but effectively widen its coverage of the stability–cost region. The advantage is stable across the three instance size categories. On the six large instances ( | 𝐴 | > 50 ,000), the learned policy averages a hit rate of 65 .5% and a hypervolume of 0 .302, comparable to the values on smaller instances, which indicates that the advantage of adaptive selection does not depend on the scale of the underlying network. Two instances warrant a specific comment. On 𝑊 11 , the learned policy reports the highest hit rate (50 .02%) but a lower hypervolume (0 .24) than the dichotomic search (0 .29) : more Pareto-improving solves were found, but distributed in a narrower region of the front, while the dichotomic search produced fewer plans more widely spread. On 𝑊 18 , the cost deviation of the learned policy (4 .71%) is slightly worse than that of the dichotomic search (6 .68%), yet its hypervolume is more than twice as large (0 .39 vs 0 .19) : the policy covered more of the front but did not reach its lowest point. These two cases show that the three metrics are not perfectly correlated, which is precisely why they are reported jointly : a strategy that dominates on one may lose on another, and the joint reporting allows the reader to assess the trade-off directly. Figure 6 makes the interpretation of the hypervolume tangible on a single event. Both panels use the same reference box [𝑘 min , 𝑘 max ] × [ 𝑧 LP , 𝑧 w 
+
+> 𝑒
+
+], so that the dominated areas of the two fronts are directly comparable. 21 Table 7 – Comparison of the three search strategies.                                                                                                                                                                                                                         
+
+> Fixed-𝑘 grid Dichotomic search RL-guided Instance 𝜂 Δ˜𝐶 𝐻𝑉 𝜂 Δ˜𝐶 𝐻𝑉 𝜂 Δ˜𝐶 𝐻𝑉
+> Small instances (|𝐴 |<30 ,000)
+> 𝑊 126.55 4.42 0.12 43.03 5.24 0.12 57.72 4.03 0.24
+> 𝑊 231.37 6.44 0.17 52.18 8.03 0.19 82.24 3.45 0.31
+> 𝑊 333.60 6.24 0.17 50.33 5.28 0.18 79.93 3.09 0.31
+> 𝑊 437.44 7.36 0.15 52.04 4.65 0.16 63.11 3.07 0.35
+> 𝑊 529.48 5.01 0.21 40.73 9.20 0.24 57.47 2.03 0.26
+> Medium instances (30 ,000 ≤ | 𝐴 | ≤ 50 ,000)
+> 𝑊 638.23 8.26 0.12 45.46 9.96 0.13 59.41 3.69 0.38
+> 𝑊 737.63 5.77 0.15 47.13 6.65 0.16 68.33 2.58 0.29
+> 𝑊 835.70 7.42 0.14 46.94 9.31 0.15 59.36 4.25 0.35
+> 𝑊 938.84 6.66 0.23 45.94 9.62 0.27 75.13 4.90 0.32
+> 𝑊 10 30.28 8.38 0.19 53.41 7.58 0.22 74.93 2.43 0.38
+> 𝑊 11 28.60 4.39 0.24 44.14 7.16 0.29 58.85 4.85 0.24
+> 𝑊 12 28.92 8.22 0.21 53.98 4.45 0.25 56.72 3.78 0.38
+> 𝑊 13 31.83 6.83 0.22 52.91 9.01 0.26 75.34 2.29 0.33
+> 𝑊 14 27.58 4.54 0.12 53.09 5.75 0.13 80.81 3.66 0.25
+> Large instances (|𝐴 |>50 ,000)
+> 𝑊 15 38.41 7.03 0.24 52.64 6.40 0.29 82.08 2.30 0.33
+> 𝑊 16 27.08 4.01 0.13 48.61 5.53 0.14 77.84 1.98 0.22
+> 𝑊 17 30.49 3.15 0.14 49.96 4.40 0.14 75.91 2.87 0.20
+> 𝑊 18 38.87 8.76 0.18 44.45 6.68 0.19 70.22 4.71 0.39
+> 𝑊 19 39.88 8.85 0.15 44.60 9.36 0.17 77.71 4.22 0.40
+> 𝑊 20 30.42 5.06 0.12 42.43 6.74 0.12 78.89 2.82 0.27
+> Average 32.7% 6.34% 0.168 48.2% 7.05% 0.195 70.6% 3.35% 0.310
+
+The two panels of Figure 6 share the same reference box because the anchor 𝑘 min , the upper limit 𝑘 max , the linear-programming floor 𝑧 LP , and the worst observed cost 𝑧 w 
+
+> 𝑒
+
+are common to all strategies on a given event : they depend on the event and the model, not on the search rule. The dichotomic search returns five plans clustered near the anchor and terminates with its best cost still well above the floor. Its dominated region is the small staircase at the upper-left of the left panel, covering roughly 16% of the box. The learned policy, in contrast, does not remain confined to the region bracketed by its early solves : when the gap to the floor indicates that improvement remains possible while no active interval is left to split, it performs a long jump, reaches values of 𝑘 that the dichotomic search never visits, and recovers plans that approach the linear-programming floor. Its dominated region is the much wider staircase of the right panel, covering roughly 39% of the box. This ratio of 2 .4 between the two hypervolumes is not a difference in the number of plans alone – it reflects the additional depth of the front, that is, the ability to reach lower-cost plans that a purely interval-splitting rule cannot produce by construction. The mechanism is the same one that delivers the aggregate advantage in cost deviation and hypervolume observed in Table 7. 
+
+5.3 Discussion 
+
+The results reported in the previous section demonstrate that the proposed framework achieves its core operational objective : providing forestry dispatchers with a structured set of recovery options within a time frame compatible with real-time decision-making. The ability to recover, on average, several non-dominated plans per event – each representing a distinct stability–cost trade-off – fundamentally changes how planners can respond to unforeseen events. Rather than being presented with a single prescribed recovery schedule, dispatchers retain full decision authority and can select the plan that best matches their immediate operational context, whether that means preserving driver commitments and mill delivery schedules at the cost of slightly higher routing costs, or accepting a more substantial restructuring in exchange for meaningful cost savings. The structural guarantee provided by 𝑘 min is of particular practical value. The first Pareto point, always obtained at the minimum feasible deviation from the baseline plan, ensures that at least one recovery option is available within a single anchor call, regardless of the severity of the disruption. This conservative anchor gives dispatchers a safe baseline that requires the fewest changes to the pre-established schedule, which is especially important in forestry operations 22 𝑘 min 𝑘 max                  
+
+> 𝑧 LP
+> 𝑧 w
+> 𝑒
+> Dichotomic search
+> 5 plans, 𝐻𝑉 ≈0.16
+> 𝑘 min 𝑘 max
+> 𝑧 LP
+> 𝑧 w
+> 𝑒
+> RL-guided policy
+> 8 plans, 𝐻𝑉 ≈0.39
+> Figure 6 – Illustration of the normalised hypervolume on a single disruption event. In each panel, the dashed box is the reference region [𝑘 min , 𝑘 max ] × [ 𝑧 LP , 𝑧 w
+> 𝑒 ]; filled circles are the non-dominated plans returned by the strategy ; the shaded area is the region dominated by the front. The normalised hypervolume is the ratio of the shaded area to the area of the reference box. Both strategies start from the same anchor at 𝑘 min and operate under the same solver budget ; only the selection rule differs.
+
+where drivers, loader operators, and mill staff organise their activities around the initial plan and where last-minute changes carry coordination costs that are not fully captured by the routing objective alone. The efficiency of the REINFORCE-guided exploration is equally significant from an operational standpoint. Under an identical time budget of 15 minutes per event, the learned policy converts 70 .6% of its solver calls into Pareto-improving plans, against 48 .2% for the dichotomic search and 32 .7% for the fixed-𝑘 grid, while reducing the cost deviation of the best recovered plan from around 7% to 3 .35%. Since the three strategies share the same infrastructure – the cache of evaluated values, the monotone envelope, the closure of flat intervals, and the warm start – this difference is attributable to the selection rule alone, and it leaves dispatchers with a substantially larger and better distributed set of options to evaluate before committing to a recovery. In a context where a truck breakdown on a remote single-access road can quickly cascade into missed mill delivery windows and loader idle time, the speed of recovery is as important as its quality. 
+
+Practical fit with the weekly planning cycle. Training a dedicated policy for each weekly instance may appear to introduce a significant computational overhead : approximately 25 hours of wall-clock time on the hardware described in Section 5.1. In practice, this overhead is absorbed by the operational cycle itself. Tactical planning is completed on Friday, and the plan is released to dispatchers over the weekend before execution begins on Monday. During this idle window, no productive solver work is required, and the policy for the coming week can be trained in the background. When execution starts on Monday and disruptions begin to occur, the trained policy is already available and its evaluation at decision time is instantaneous : a single forward pass of the linear model returns the next value of 𝑘 , and the only computational cost incurred during recovery is the local branching solve itself – the same cost that all three strategies would incur. Under this arrangement, per-instance training is not a limitation but a natural fit with the weekly rhythm of forestry operations. The practical deployment of such a framework, however, must account for several limitations specific to the Canadian forestry sector. First, the framework assumes that the occurrence time, location, and duration of each disruption are known at the moment of detection. In practice, the degree of digitalisation varies considerably across forestry operations. Many companies still rely on radio communication and manual reporting, which can introduce delays between the actual occurrence of an event and its formal characterisation in the system. Under such conditions, the disruption impact module may operate on incomplete or imprecise information, potentially leading to recovery plans that are suboptimal once the full extent of the disruption becomes clear. Second, the framework assumes that the real-time positions and load status of all trucks are continuously available, as would be provided by an active GPS fleet management system. While such systems are increasingly common in large forestry operations, smaller contractors may not have this infrastructure in place, limiting the accuracy of the pre-disruption plan fixing constraints. Third, the stochastic disruption scenarios used in the computational experiments, while calibrated through discussions with our industrial partner, cannot fully replicate the spatial correlations and seasonal patterns of real disruption occurrences, particularly those driven by weather events that tend to affect multiple roads and sites simultaneously. 23 Despite these limitations, the framework is designed to be robust to incomplete information : the local branching constraint ensures that any feasible recovery plan remains close to the baseline regardless of whether the disruption characterization is exact, and the Pareto front structure allows planners to manually favour more conservative options when uncertainty about the disruption’s true extent is high. Future work should investigate the integration of the framework with existing fleet management and road monitoring systems, as well as the extension of the stochastic event generator to incorporate spatial and temporal correlation structures derived from historical incident data. The development of online learning mechanisms that update the REINFORCE policy as new disruption patterns emerge over the course of an operational season also represents a promising direction for increasing the long-term adaptability of the framework. 
+
+# 6 Conclusion 
+
+This paper addressed the reoptimization of log-truck routing and scheduling operations in the Canadian forestry industry, where unforeseen disruptions frequently invalidate pre-established tactical plans and require rapid recovery decisions under competing operational objectives. We proposed an integrated framework that couples a mixed-integer linear programming formulation of the LT RSP with a local branching heuristic whose neighbourhood radius 𝑘 
+
+is adaptively controlled by a reinforcement learning agent trained via the REINFORCE policy-gradient algorithm. The framework departs from the conventional single-solution recovery paradigm by constructing a Pareto front of non-dominated recovery plans for each disruption event, providing dispatchers with an explicit menu of stability–cost trade-offs from which the most contextually appropriate option can be selected. The minimum feasible deviation 𝑘 min 
+
+is computed exactly prior to each exploration, anchoring the Pareto front at its most stable extreme and guaranteeing the availability of at least one feasible recovery plan within a single solver call. The computational evaluation on twenty weekly instances derived from real operational data of a Canadian forestry partner demonstrated that the RL-guided framework consistently recovers richer Pareto fronts than both a fixed-𝑘 
+
+grid baseline and a dichotomic search across all disruption types and network size categories, while operating under identical time budgets. Since the three strategies share the same computational infrastructure – the cache of evaluated values, the monotone envelope, the closure of flat intervals, and the warm start – the difference is attributable to the selection rule alone, and originates in the ability of the learned policy to leave the region of the deviation axis bracketed by known Pareto points when the gap to the linear-programming floor indicates that improvement remains possible. Cost deviations remain controlled and plan stability is preserved across all tested configurations, confirming that the framework achieves effective cost recovery while maintaining the continuity of driver schedules, loader operations, and mill deliveries. The per-instance training cycle naturally aligns with the weekly rhythm of forestry operations, since the policy for the coming week can be trained during the weekend and is ready before execution begins on Monday. These results validate the practical viability of the approach as a decision-support tool for large-scale forestry logistics operations. Several directions remain open for future research. The deployment of the framework within a fully digitised operational environment, with direct integration to fleet management and road monitoring systems, would allow disruption information to flow automatically into the characterization module, reducing the dependency on manual reporting that currently limits responsiveness in many Canadian forestry operations. The generalisation of the Pareto front exploration paradigm to other transportation reoptimization settings, including rail freight, intermodal logistics, and humanitarian supply chains, also represents a natural and promising extension of the contributions presented here. 
+
+# R ´ ef ´ erences      
+
+> [1] Natural Resources Canada (2022). The State of Canada’s Forests : Annual Report 2022 . Government of Canada, Ottawa. [2] Audy, J.-F., D’Amours, S., Favreau, J., & Rousseau, L.-M. (2013). Virtual transportation manager : a decision support system for collaborative forest transportation. CIRRELT Technical Report 2013-37 , Universit´ e de Montr´ eal. [3] Amrouss, A., El Hachemi, N., Gendreau, M., & Gendron, B. (2017). Real-time management of transportation disruptions in forestry. Computers & Operations Research , 83, 95–105. https ://doi.org/10.1016/j.cor.2017.02.008 [4] Abdellaoui, A., El Hallaoui, I., Benabbou, L., Aub´ e, F. & Amazouz, M. Real-World, Large Scale, Multi-Period Log Truck Routing and Scheduling : Application to Canadian Forestry. ArXiv Preprint ArXiv :2607.16978 . (2026) [5] Audy, J.-F., D’Amours, S., & R¨ onnqvist, M. (2012). Planning methods and decision support systems in vehicle routing problems for timber transportation : a review. CIRRELT Technical Report 2012-38 , Universit´ e de Montr´ eal. [6] Palander, T., & V¨ a¨ at¨ ainen, J. (2005). Impacts of interenterprise collaboration and backhauling on wood procurement in Finland.
+> Scandinavian Journal of Forest Research , 20(2), 177–183.
+
+24 [7] Epstein, R., Karlsson, J., R¨ onnqvist, M., & Weintraub, A. (2007). Harvest operational models in forestry. In Handbook of Operations Research in Natural Resources (pp. 365–377). Springer, Boston, MA. [8] Flisberg, P., Lid´ en, B., & R¨ onnqvist, M. (2009). A hybrid method based on linear programming and tabu search for routing of logging trucks. Computers & Operations Research , 36(4), 1122–1144. [9] Secomandi, N., & Margot, F. (2009). Reoptimization approaches for the vehicle-routing problem with stochastic demands. 
+
+Operations Research , 57(1), 214–230. [10] Florio, A. M., Feillet, D., & Poggi, M. (2022). Vehicle routing with stochastic demands and partial reoptimization. Transpor-tation Science , 56(5), 1321–1338. [11] Niknass, G., & Minis, I. (2014). Reoptimization strategies for a dynamic vehicle routing problem with mixed backhauls. 
+
+Networks , 63(2), 145–160. [12] Linfati, R., & Escobar, J. W. (2018). Reoptimization heuristic for the capacitated vehicle routing problem. Journal of Advanced Transportation , 2018, Article ID 1469625. [13] AbdAllah, A. M. F. M., Essam, D. L., & Sarker, R. A. (2017). On solving periodic re-optimization dynamic vehicle routing problems. Applied Soft Computing , 52, 177–191. [14] Pillac, V., Gendreau, M., Gu´ eret, C., & Medaglia, A. L. (2013). A review of dynamic vehicle routing problems. European Journal of Operational Research , 225(1), 1–11. https ://doi.org/10.1016/j.ejor.2012.08.015 [15] Mu, Q., Fu, Z., Lysgaard, J., & Eglese, R. (2011). Disruption management of the vehicle routing problem with vehicle breakdown. Journal of the Operational Research Society , 62(4), 742–749. [16] Eglese, R., & Zambirinis, S. (2018). Disruption management in vehicle routing and scheduling for road freight transport : a review. TOP , 26(1), 1–17. [17] Andersson, G., Flisberg, P., Lid´ en, B., & R¨ onnqvist, M. (2008). RuttOpt : a decision support system for routing of logging trucks. Canadian Journal of Forest Research , 38(7), 1784–1796. [18] Amrouss, A., Gendreau, M., & Gendron, B. (2016). Managing unforeseen events in forest transportation. Journal of Science and Technology for Forest Products and Processes , 6(1), 35–44. [19] Audy, J.-F., R¨ onnqvist, M., & D’Amours, S. (2023). Planning methods and decision support systems in vehicle routing problems for timber transportation : a review. Journal of Forest Economics , 39(2), 151–180. https ://doi.org/10.1561/112.00000559 [20] Soylu, B. (2015). A general variable neighborhood search heuristic for multiple traveling salesmen problem. Computers & Industrial Engineering , 90, 390–401. [21] Stidsen, T., Andersen, K. A., & Dammann, B. (2014). A branch-and-cut algorithm for a class of bi-objective mixed integer programs. Management Science , 60(4), 1009–1032. [22] Bengio, Y., Lodi, A., & Prouvost, A. (2021). Machine learning for combinatorial optimization : a methodological tour d’horizon. 
+
+European Journal of Operational Research , 290(2), 405–421. https ://doi.org/10.1016/j.ejor.2020.07.063 [23] Khalil, E. B., Le Bodic, P., Song, L., Nemhauser, G., & Dilkina, B. (2016). Learning to branch in mixed integer programming. In Proceedings of the AAAI Conference on Artificial Intelligence , 30(1), 724–731. [24] Tang, Y., Agrawal, S., & Faenza, Y. (2020). Reinforcement learning for integer programming : learning to cut. In Proceedings of the 37th International Conference on Machine Learning (ICML) , pp. 9367–9376. [25] Li, J., Xu, H., & Sun, W. (2018). Reinforcement learning for dynamic vehicle dispatching in stochastic environments. Trans-portation Research Part C : Emerging Technologies , 95, 332–349. [26] Fischetti, M., & Lodi, A. (2003). Local branching. Mathematical Programming , 98(1), 23–47. [27] Soeffker, N., Ulmer, M. W., & Mattfeld, D. C. (2022). Stochastic dynamic vehicle routing in the light of prescriptive analytics : a review. European Journal of Operational Research , 298(3), 801–820. [28] Liu, D., Fischetti, M., & Lodi, A. (2022). Learning to search in local branching. In Proceedings of the AAAI Conference on Artificial Intelligence , 36(4), 3796–3803. [29] Roijers, D. M., Vamplew, P., Whiteson, S., & Dazeley, R. (2013). A survey of multi-objective sequential decision-making. 
+
+Journal of Artificial Intelligence Research , 48, 67–113. [30] Van Moffaert, K., & Now´ e, A. (2014). Multi-objective reinforcement learning using sets of Pareto dominating policies. Journal of Machine Learning Research , 15(1), 3663–3692. [31] Xu, J., Tian, Y., Ma, P., Rus, D., Sueda, S., & Matusik, W. (2020). Prediction-guided multi-objective reinforcement learning for continuous robot control. In Proceedings of the 37th International Conference on Machine Learning (ICML) , pp. 10607–10616. [32] Basaklar, T., Gumussoy, S., & Ogras, U. (2023). PD-MORL : preference-driven multi-objective reinforcement learning algorithm. In Proceedings of the Eleventh International Conference on Learning Representations (ICLR) .[33] R¨ opke, W., Hayes, C. F., Mannion, P., Now´ e, A., & Roijers, D. M. (2024). Divide and conquer : provably unveiling the Pareto front with multi-objective reinforcement learning. In Proceedings of the International Conference on Learning Representations (ICLR) .[34] Williams, R. J. (1992). Simple statistical gradient-following algorithms for connectionist reinforcement learning. Machine Learning , 8(3–4), 229–256. 
+
+25 [35] Kingma, D. P., & Ba, J. (2015). Adam : a method for stochastic optimization. In Proceedings of the Third International Conference on Learning Representations (ICLR) .[36] Glorot, X., & Bengio, Y. (2010). Understanding the difficulty of training deep feedforward neural networks. In Proceedings of the Thirteenth International Conference on Artificial Intelligence and Statistics (AISTATS) , pp. 249–256. [37] Wang, S., & Bo, R. (2023). A resilience-oriented multi-stage adaptive distribution system planning considering multiple extreme weather events. IEEE Transactions on Sustainable Energy , 14(2), 1193–1204. [38] Gendreau, M., Jabali, O., & Rei, W. (2016). 50th anniversary invited article—future research directions in stochastic vehicle routing. Transportation Science , 50(4), 1163–1173. [39] Flisberg, P., R¨ onnqvist, M., Will´ en, E., Forsmark, V., & Davidsson, A. (2022). Optimized locations of landings in forest operations. Canadian Journal of Forest Research , 52(1), 59–69. [40] Zitzler, E. & Thiele, L. Multiobjective evolutionary algorithms : a comparative case study and the strength Pareto approach. 
+
+IEEE Transactions On Evolutionary Computation . 3, 257-271 (1999) 
+
+# A Baseline exploration strategies 
+
+This appendix describes the two deterministic baselines used in the computational comparison of Section 5.2.3 : the dichotomic search and the fixed-𝑘 grid. Both operate within the same computational infrastructure as the RL-guided policy – the cache of evaluated values, the monotone envelope ¯ 𝑧 (𝑘 ), the closure of flat intervals, and the warm start of Section 4.3.3 – and differ from it only in the rule that selects the next value of 𝑘 . This design isolates the contribution of the learned selection rule from that of the shared search structure. Throughout this appendix, K ⊆ [ 𝑘 min , 𝑘 max ] denotes the set of values of 𝑘 already evaluated, ¯ 𝑧 (𝑘 ) the monotone envelope defined in (24), and ˆ 𝑘 = max K the largest value evaluated so far. Both baselines share the initialisation of the RL-guided policy : the exact minimal feasible deviation 𝑘 min is computed, the local branching model Preop  
+
+> 𝑚
+
+(𝑘 min )
+
+is solved to obtain the anchor plan with objective 𝑧 0, and the linear-programming floor 𝑧 LP is computed once via the continuous relaxation at 𝑘 max .
+
+A.1 Dichotomic search 
+
+The dichotomic search subdivides the intervals of the deviation axis where a non-dominated plan has been shown to lie. Its behaviour is driven by the set of active intervals , defined as in Section 4.3.3. A pair of consecutive evaluated values 𝑘 1 < 𝑘 2 with 𝑘 2 − 𝑘 1 > 1 is an active interval if ¯ 𝑧 (𝑘 1) > ¯𝑧 (𝑘 2) : the envelope drops strictly between 𝑘 1 and 𝑘 2,so a non-dominated plan may lie in (𝑘 1, 𝑘 2). When the envelope does not drop, the pair is provably flat and is removed from consideration once and for all. At each iteration, the rule proceeds as follows. If at least one active interval remains, the interval with the largest envelope drop ¯ 𝑧 (𝑘 1) − ¯𝑧 (𝑘 2) is selected and its midpoint 𝑘 = ⌊( 𝑘 1 + 𝑘 2)/ 2⌋ is evaluated. If no active interval remains but the search has not yet reached the upper limit 𝑘 max , the next value is ˆ 𝑘 + 𝛿 s, where the small step 𝛿 s is the same as in the RL policy, so that the sweep extends into the region beyond ˆ 𝑘 . If neither operation applies – no active interval and ˆ 𝑘 = 𝑘 max – the search terminates. 
+
+Algorithm 1. Dichotomic search on the deviation radius. 1 :Compute 𝑘 min ; solve Preop  
+
+> 𝑚
+
+(𝑘 min ) ; set K ← { 𝑘 min }, F ∗ ← {( 𝑘 min , 𝑧 0)} 
+
+2 : while time budget not exhausted do 
+
+3 : I ← {( 𝑘 1, 𝑘 2) : 𝑘 1, 𝑘 2 ∈ K , 𝑘 2 − 𝑘 1 > 1, ¯𝑧 (𝑘 1) > ¯𝑧 (𝑘 2), (𝑘 1, 𝑘 2) not closed }
+
+4 : if I ≠ ∅ then 
+
+5 : (𝑘 ∗
+
+> 1
+
+, 𝑘 ∗
+
+> 2
+
+) ← arg max (𝑘 1 ,𝑘 2 ) ∈ I 
+
+  ¯𝑧 (𝑘 1) − ¯𝑧 (𝑘 2)
+
+6 : 𝑘 ← ⌊( 𝑘 ∗ 
+
+> 1
+
++ 𝑘 ∗
+
+> 2
+
+)/ 2⌋
+
+7 : else if ˆ𝑘 < 𝑘 max then 
+
+8 : 𝑘 ← min { ˆ𝑘 + 𝛿 s, 𝑘 max }
+
+9 : else stop 
+
+10 : end if 
+
+11 : Solve Preop  
+
+> 𝑚
+
+(𝑘 ) ; update K, ¯ 𝑧 , F ∗ ; close flat intervals 12 : end while 
+
+13 : return F ∗
+
+26 The dichotomic search is well-suited to localising non-dominated plans that lie between known Pareto points, since by construction each bisection halves the range of values of 𝑘 in which such a plan may lie. Its structural limitation is that it can only refine the region already bracketed by F ∗ : when the largest evaluated value ˆ 𝑘 is smaller than the location of an undiscovered non-dominated plan, no active interval brackets that plan, and the rule advances by a small step 𝛿 s at a time. Under a finite time budget, this behaviour prevents the search from reaching plans that lie well beyond ˆ𝑘 , which is the situation illustrated in Figure 6. 
+
+A.2 Fixed-𝑘 grid 
+
+The fixed-𝑘 grid evaluates Preop  
+
+> 𝑚
+
+(𝑘 ) at a set of values of 𝑘 chosen a priori , independently of the outcome of previous solves. Given a target number of grid points 𝑁 𝑔 , the interval [𝑘 min , 𝑘 max ] is partitioned into 𝑁 𝑔 equally spaced values 
+
+𝑘 𝑖 = 𝑘 min +
+
+
+
+𝑖 · 𝑘 max − 𝑘 min 
+
+𝑁 𝑔 − 1
+
+
+
+, 𝑖 = 0, 1, . . . , 𝑁 𝑔 − 1, (35) which are evaluated in increasing order. In the experiments of Section 5.2.3, 𝑁 𝑔 = 10 ; other values were investigated during preliminary tuning and yielded comparable trends. 
+
+Algorithm 2. Fixed-𝑘 grid. 1 :Compute 𝑘 min , 𝑘 max 
+
+2 :Build the grid {𝑘 0, 𝑘 1, . . . , 𝑘 𝑁 𝑔 −1 } according to Equation (35) 3 : K ← ∅ , F ∗ ← ∅ 
+
+4 : for 𝑖 = 0, 1, . . . , 𝑁 𝑔 − 1 do 
+
+5 : if time budget exhausted then stop end if 
+
+6 : Solve Preop  
+
+> 𝑚
+
+(𝑘 𝑖 ) ; update K, ¯ 𝑧 , F ∗
+
+7 : end for 
+
+8 : return F ∗
+
+The fixed-𝑘 grid is the natural reference for the computational effort required in the absence of any adaptive rule. Because it ignores the outcome of previous solves, the same schedule of values is evaluated regardless of the shape of the staircase 𝑧 ∗ (·) induced by the disruption. Grid values that fall on flat regions of the staircase consume solver calls without extending the front, and closely spaced non-dominated plans between two grid values are missed. In experiments, the resulting hit rate is systematically lower than that of the dichotomic search or of the learned policy (Table 7), which quantifies the value of adapting the selection rule to the information revealed by previous solves. 27
