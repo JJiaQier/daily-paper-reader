@@ -1,0 +1,5697 @@
+Title: Scalable Policy Optimization for Networked Multi-Agent Reinforcement Learning with Continuous State-Action Spaces
+
+URL Source: https://arxiv.org/pdf/2607.18554v1
+
+Published Time: Wed, 22 Jul 2026 00:17:26 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+> 1
+
+# Scalable Policy Optimization for Networked Multi-Agent Reinforcement Learning with Continuous State-Action Spaces 
+
+Dongming Wang, Pengcheng Dai, Wenwu Yu, Senior Member, IEEE , Wei Ren, Fellow, IEEE 
+
+Abstract —We develop the Continuous Distributed Coupled Policy Gradient (CDCPG) algorithm for cooperative reinforce-ment learning in networked Markov decision processes with continuous state and action spaces. Each agent maintains a local actor over a bounded graph neighborhood, and a localized least-squares temporal-difference critic evaluates a truncated action-value function through a spectral random-feature representation of the local transition kernel. The analysis makes four contribu-tions. First, the truncated action-value function is constructed as a conditional expectation over the neighborhood, yielding a well-posed localized Bellman theory that removes the continuation-kernel mismatch of naive truncation arguments. Second, we expose a dimensional obstruction to temporal-difference stability for normalized random features and prove an unconditional ex-citation bound that reduces stability to a symmetric persistence-of-excitation condition, monitorable through an online matrix-concentration certificate. Third, under exponential spatial decay of agent interactions, the excitation condition, and smoothness of the objective, CDCPG drives an averaged per-agent stationarity measure to within any excess ϵ of an explicitly characterized approximation floor using eO(ϵ−2) shared-oracle samples, and the excess dependence matches the smooth nonconvex first-order rate; per-agent computation and communication are governed by the neighborhood size rather than the network size. Fourth, an adaptive-locality rule selects the radius that balances truncation and graph-decay residuals against the target accuracy. Experi-ments on a networked linear-quadratic benchmark corroborate the locality and feature-dimension predictions. 
+
+I. I NTRODUCTION 
+
+Multi-agent reinforcement learning (MARL) in networked systems is a foundational paradigm for distributed decision-making across modern cyber-physical systems [1]–[3]. The defining feature of such systems is that each agent’s dynamics, rewards, and observations are influenced by nearby neighbors rather than uniformly by all agents. The central challenge is scalability: the joint state-action space grows exponentially with the number of agents n, rendering centralized methods intractable, while purely decentralized methods often fail to coordinate. Localized methods that exploit spatial structure occupy the principled middle ground [3]–[5]. 
+
+D. Wang and W. Ren are with the Department of Electrical and Com-puter Engineering, University of California, Riverside, CA 92521, USA. 
+
+{wdong025, wei.ren }@ucr.edu .P. Dai is with the Engineering Systems and Design Pillar, Singapore Univer-sity of Technology and Design, Singapore 487372. Jldaipc@163.com .W. Yu is with the Frontiers Science Center for Mobile Information Communication and Security, School of Mathematics, Southeast University, Nanjing 211102, China, and also with Purple Mountain Laboratories, Nanjing, 211102, China. wwyu@seu.edu.cn .
+
+A. Related Work Networked multi-agent reinforcement learning and expo-nential decay. The foundational scalability result for net-worked Markov decision processes (MDPs) is due to Qu et al. [3], [4], who introduced the exponential decay property :under spatial coupling, each agent’s value function depends weakly on the states and actions of distant neighbors, with the influence decaying geometrically in graph distance. This property justifies truncated local approximations with quantifi-able bias and underlies the polynomial-in-network-size sample complexity of subsequent scalable methods. Lin et al. [5] extended the analysis to stochastic settings with explicit finite-sample guarantees under a generative model, and related work has established global-convergence guarantees for localized policy iteration [6]. Earlier work on fully decentralized actor-critic methods [7], [8] provided consensus-based algorithms whose analyses rely on asymptotic mixing rather than explicit spatial decay; subsequent extensions [9], [10] study finite-sample behavior under various communication protocols. The cited works address discrete state-action spaces; extending the decay-driven framework to continuous domains is non-trivial because truncation now interacts with kernel-approximation error, and the policy-evaluation step itself requires function approximation with a well-conditioned design matrix. 
+
+Continuous-domain reinforcement learning via spectral methods. For continuous state-action spaces, function ap-proximation is unavoidable, and spectral methods provide a natural approach with explicit approximation guarantees. Random Fourier Features (RFF) [11], [12] approximate translation-invariant kernels by finite-dimensional inner prod-ucts of trigonometric functions, with high-probability uniform-approximation guarantees on compact sets. This makes them well suited to kernel-ridge policy evaluation and to settings where the kernel itself is induced by the dynamics rather than chosen for representational convenience. Ren et al. [13] combined spectral dynamic embeddings with the networked-MDP framework and showed that the per-agent accuracy rate matches the discrete case under a generative model with shared trajectories. Their analysis, however, postulates a bounded inverse M−1 
+
+> i
+
+≤ D for the least-squares temporal-difference (LSTD) design matrix as a problem primitive, without linking 
+
+D to the random-feature dimension m, to the policy parameter 
+
+θ, or to any quantity that can be monitored from samples. Our temporal-difference (TD) stability hypothesis is designed to make this dependence explicit: the stability constant is arXiv:2607.18554v1 [cs.MA] 20 Jul 2026 2
+
+treated as a feature-dimension-dependent primitive μM (m)
+
+with a provable obstruction to dimension-free constants in Proposition 2, accompanied by a matrix-Bernstein diagnostic whose false-certification probability is at most δ for the population TD-stability component along realized iterates in Proposition 3. The random-feature residual is then accounted for as a structural-floor component rather than as an accuracy-tunable quantity. 
+
+LSTD learning and matrix concentration. The LSTD frame-work introduced by Bradtke and Barto [14] and refined by Boyan [15] provides a natural batch method for policy evaluation under linear function approximation; its finite-sample analysis was developed by Lazaric et al. [16]. The related TD( 0) iteration was analyzed in finite samples by Bhandari et al. [17], who established explicit rates under linear function approximation and identified the role of the smallest eigenvalue of the feature covariance. The technical toolkit for the matrix-concentration arguments in our paper comes from Tropp’s matrix-Bernstein inequalities [18], Vershynin’s high-dimensional probability framework [19], and Pinelis’s dimension-free Hoeffding-type inequality for Hilbert-space martingales [20, Thm. 3.5]. Persistence-of-excitation results from adaptive control [21] provide a structural complement: they identify conditions under which the smallest singular value of a regressor design matrix is uniformly bounded below along realized trajectories, which motivates the trajectory-conditional formulation of our TD-stability hypothesis. 
+
+Policy-gradient sample complexity and lower bounds. The policy-gradient theorem of Sutton et al. [22] is the conceptual basis for our update rule. For finite-sample analysis, the most directly relevant benchmark is the smooth nonconvex stochastic lower bound of Arjevani et al. [23], namely Ω( ϵ−4 
+
+> g
+
+)
+
+oracle calls to drive ∥∇ F ∥ ≤ ϵg , i.e. Ω( ϵ−2) under the squared-stationarity convention ϵ = ϵ2 
+
+> g
+
+used here; Agarwal et al. [24] provide a complementary theoretical framework specific to policy-gradient methods, characterizing global con-vergence under softmax and other parameterizations. In the distributed setting, decentralized actor-critic algorithms have been analyzed by Zhang et al. [7], Doan et al. [8], Lin et al. [9], and Chu et al. [10], typically under consensus-based parameter sharing rather than the spatial-locality model con-sidered here. The averaged-per-agent stationarity measure we adopt is, in spirit, the per-agent-normalized convention used in the distributed-MARL literature [3], [5], [13]; it removes the network-size factor that the unnormalized aggregate-objective measure would otherwise carry and preserves the canonical lower-bound rate at the per-agent level. 
+
+Empirical multi-agent reinforcement learning and attention-based methods. A parallel line of work has produced influential empirical algorithms for cooperative and competitive multi-agent settings. Lowe et al. [25] introduced the multi-agent deep deterministic policy gradient (MADDPG) framework with centralized training and decentralized execution; Foerster et al. [26] proposed the counterfactual multi-agent policy gradient (COMA) with a centralized critic that uses counter-factual baselines for credit assignment; Iqbal and Sha [27] introduced attention-based actor-critic for selective neighbor querying; and Yu et al. [28] demonstrated that suitably con-figured multi-agent proximal policy optimization (MAPPO) is competitive across standard benchmarks. These methods scale by architectural design rather than by exploiting graph-locality, and their finite-sample analyses remain open in general. Our work is complementary: we provide finite-sample guarantees with explicit error decompositions by working in a more structured (but still continuous) setting where exponential decay is available as a hypothesis. 
+
+Networked control applications. The motivation for scal-able continuous-state networked reinforcement learning comes largely from cyber-physical systems. Shin et al. [29] apply localized policy-gradient methods to power-system frequency control, demonstrating that locality-aware methods achieve near-optimal control with substantially reduced communica-tion. Feng [2] develops stability-aware multi-agent learning for networked control. Classical results on radial distribution network reconfiguration [30] and modern reviews [1] together identify a recurring application profile: continuous-valued states and actions, sparse coupling, hard requirements on monitorable conditioning constants, since deployment teams need diagnostics observable from realized trajectories, and tol-erance for approximation and localization floors, which finite-compute deployments commonly exhibit. These features moti-vate every design choice in CDCPG: the trajectory-conditional TD-stability hypothesis with a sample-level diagnostic, the fixed-dimension random-feature treatment with explicit floor accounting, the conditional-expectation truncation that pro-duces a well-defined Bellman residual, and the averaged-per-agent stationarity measure that scales properly with network size. 
+
+B. Contributions 
+
+This work refines spectral localized policy-gradient analysis for continuous networked MDPs in four directions. 
+
+Technical challenges. Four difficulties separate the continu-ous networked setting from its tabular counterpart and shape the entire analysis. (C1) Loss of tabular localization. The exponential-decay mechanism that justifies truncated critics in finite-state models must be re-derived at the level of condi-tional expectations of Qπi over local state–action windows, and the truncation must commute with a Bellman fixed point that is well defined only up to null sets of the occupancy mea-sure (Section IV). (C2) Dimension-limited conditioning. The population TD design matrix admits no dimension-free lower singular-value bound (Proposition 2), so stability must be formulated as a feature-dimension-aware primitive and, where possible, reduced to a feature-excitation premise (Lemma 3). 
+
+(C3) Signed global function approximation. Random-feature approximants of transition densities are signed and unnor-malized, so uniform compact-core kernel bounds must be converted into global L1 control with explicit envelopes and an explicit dimensional constant (Theorem 1). (C4) Localized credit assignment with provable bias. Distributed gradient es-timators aggregate neighboring critics whose statistical errors, within-bin fluctuations, and truncation residuals enter a four-component structural floor that the nonconvex optimization analysis must carry explicitly; see Sections V–VI. Each con-tribution below addresses one of (C1)–(C4). 3
+
+1) Conditional-expectation truncation. We define the trun-cated action-value function as a conditional expectation over the local neighborhood under the discounted occu-pancy, with an auxiliary local Bellman operator whose fixed-point residual is bounded explicitly in Section IV. This makes the truncation error a clean structural quan-tity rather than an artifact of an ill-posed local fixed point. 2) Feature-dimension-aware TD stability. We make the bounded-inverse postulate of prior spectral methods [13] explicit and dimension-aware, restating it as the feature-dimension-dependent temporal-difference stability hy-pothesis of Assumption 4, and prove in Proposition 2 a dimensional obstruction showing that dimension-free stability constants are impossible, so that the analysis op-erates in the fixed-m regime with the random-feature di-mension treated as a problem primitive. Lemma 3 estab-lishes the unconditional excitation bound σmin (Mθ 
+
+> i
+
+) ≥
+
+(1 − √γ)λmin (Hθ 
+
+> i
+
+) under occupancy sampling, reduc-ing the hypothesis to a symmetric feature-excitation condition. A strictly weaker trajectory-conditional ver-sion (Assumption 5) is paired with a matrix-Bernstein diagnostic of controlled false-certification rate (Propo-sition 3). Both (C) and (C ′) are unverified structural premises : the excitation lemma is a reduction, not a verification, and the probability 1−δM (m) is postulated rather than sample-controlled. 3) Sample complexity to a structural floor. Under ashared-sample generative model and exponential decay, we establish a shared-oracle excess-to-floor sample-complexity guarantee for an averaged per-agent sta-tionarity measure (Theorem 6): eO(ϵ−2) calls achieve excess ϵ above an explicit four-component structural floor, equivalently eO(( τ − ϵfloor )−2) for a total target 
+
+τ > ϵ floor , under the unverified structural premises stated in Assumption Sets B, C, and D. A trajectory-conditional companion theorem (Theorem 7) gives a predictable-prefix bound, equivalently a stopped-process bound, which implies the corresponding global favorable-event bound, with a specialized reduction recorded for the zero-radius actor (Corollary 2). 4) Adaptive-locality diagnostic. We give a rule for selecting the locality radius at which the truncation and graph-decay residuals fall below the target accuracy (Proposi-tion 4); this is reported as a bias-balancing diagnostic, not as a rate improvement. 
+
+Scope. The guarantees are conditional on the stated assump-tion sets; TD-stability and smoothness premises are exhibited simultaneously here. The comparison with the smooth non-convex lower bound is at the exponent level only: the oracle models differ, and no minimax-optimality claim is made. Table I summarizes the comparison with prior work; the dis-played rates are not directly comparable across rows because the suppressed prefactors, floor structures, sampling models, and stationarity measures differ. The remainder of the paper is organized as follows. Sec-tion II fixes notation, the networked MDP model and objective, and Assumption Sets A, B, and D. Section III develops the spectral framework and the RFF approximation. Section IV establishes exponential decay and the Q-function linear repre-sentation. Section V states the TD-stability Assumption Sets C and C ′, once the population TD matrix they constrain has been defined, and presents the algorithm and the regularized LSTD analysis. Section VI states the complexity theorems. Section VII reports numerical experiments. Section VIII con-cludes. Proofs are in the appendix. II. P RELIMINARIES 
+
+A. Notation 
+
+Vectors are bold lowercase, matrices bold uppercase, Id
+
+the identity, ∥·∥ the Euclidean norm; σmin (A) is the smallest singular value, λmin (A), λ max (A) the extreme eigenvalues of symmetric A. The network is an undirected graph G = ([ n], E)
+
+with maximum degree ∆ ≥ 2; agent i’s κ-hop neighbor-hood is N κi (N 0 
+
+> i
+
+= {i}, Ni := N 1 
+
+> i
+
+), Dκ := max i |N κi |,
+
+N κ, − 
+
+> i
+
+:= [n] \ N κi . Local state spaces Si = RdS ; local action spaces Ai ⊆ RdA are compact with diameter DA;the joint spaces are S := Q 
+
+> i
+
+Si and A := Q 
+
+> i
+
+Ai. Discount 
+
+γ ∈ (0 , 1) . eO(g) := O(g polylog( g)) . Three locality radii are fixed throughout: κπ ∈ N0 is the policy observation radius 
+
+(each local policy observes sN κπ i ; Assumption (A3) below), 
+
+κ ∈ N with κ ≥ max {1, κ π + 1 } is the critic truncation radius (the standing inequality is motivated in Definition 2), and κc := κ + κπ is the gradient aggregation radius .
+
+B. Networked model and problem statement 
+
+The joint state is s = ( s1, . . . , sn) and the joint action 
+
+a = ( a1, . . . , an). The transition law factorizes across agents into local kernels, P(s′ | s, a) = Qni=1 Pi(s′ 
+
+> i
+
+| sNi , aNi ), each agent receives a local reward ri(sNi , aNi ), and the initial state is drawn as s(0) ∼ μ0; the Gaussian form of Pi and all regular-ity constants are imposed in Assumption Set A below. Policies are local and factorized, π(a | s) = Q 
+
+> i
+
+πi(ai | sN κπ i ; θi),with joint parameter θ = ( θ1, . . . , θn) ranging over a compact product set Θ0 = Q 
+
+> i
+
+Θ0,i specified in (A4). The local value and action-value functions under joint policy 
+
+π are 
+
+V πi (s) := Eπ
+
+h ∞X
+
+> t=0
+
+γtri(s(t) 
+
+> Ni
+
+, a(t) 
+
+> Ni
+
+) s(0) = s
+
+i
+
+,Qπi (s, a) := ri(sNi , aNi ) + γEs′∼P[V πi (s′)] .
+
+(1) The global objective is J(θ) := Es(0) ∼μ0 [P 
+
+> i
+
+V πi (s(0) )] with 
+
+J∗ := sup θ∈Θ0 J(θ). Writing Pt for the law of s(t) under 
+
+π started from μ0, the discounted state occupancy and the state-action occupancy are 
+
+dπ := dπμ0 := (1 − γ)
+
+> ∞
+
+X
+
+> t=0
+
+γt Pt, νπ := dπ ⊗ π. (2) With Θ0 compact, the ascent projected-gradient mapping 
+
+Gη (θ) := η−1 ΠΘ0 (θ + η∇J(θ)) − θ (3) is the stationarity object: it coincides with ∇J(θ) whenever the unprojected update θ + η∇J(θ) remains in Θ0, in particu-lar in the unconstrained case, and ∥G η ∥ ≤ ∥∇ J∥ pointwise by 4
+
+TABLE I: Comparison with prior scalable networked multi-agent reinforcement learning methods. “Cond./diag.” describes the conditioning assumption and whether a sample-level diagnostic for the key conditioning constant is provided. “Cont.” indicates continuous state-action spaces. CDCPG rates are reported under the averaged projected-gradient-mapping stationarity measure as shared-oracle calls, stated to within a structural floor (Theorem 6, Remark 3). Rates are not directly comparable across rows because suppressed prefactors, floor structures, sampling models, and stationarity measures differ.                                 
+
+> Method Cond./diag. Cont. ϵ-Rate Sampling
+> Qu et al. [3] structural postulate ×eO(1 /ϵ 3)indep. trajectories Lin et al. [5] structural postulate ×eO(1 /ϵ 2)generative Ren et al. [13] bounded-inverse postulate ✓eO(1 /ϵ 2)shared
+> CDCPG (uniform) uniform TD-stability assumption ✓eO(1 /ϵ 2)to floor ‡shared
+> CDCPG (traj.-cond.) trajectory TD-stability (assumed) + post-hoc certificate †✓eO(1 /ϵ 2)to floor ‡shared
+> †Assumption (C ′) is a prospective premise . The matrix-Bernstein certificate (Proposition 3) provides a simultaneous post-hoc lower-confidence bound for the
+> executed run, with false-certification probability at most δ; it does not by itself establish (C ′), and a pilot run can only calibrate parameters, not certify the main trajectory. Neither certificate addresses the uniform-in-θAssumption 4, which the uniform variant invokes purely as a hypothesis.
+> ‡Displayed rate is the global shared-oracle count under the averaged projected-gradient-mapping stationarity measure; each shared sample is observed by every agent, so the same count applies to local observations per agent; no physical per-agent reduction by 1/n is implied (Theorem 6).
+
+non-expansiveness of ΠΘ0 . Under (A4), the product structure 
+
+Θ0 = Q 
+
+> i
+
+Θ0,i gives ΠΘ0 (θ + ηv) = (Π Θ0,i (θi + ηvi)) ni=1 ,so Algorithm 1’s blockwise update equals the global projec-tion step required by the convergence analysis. We measure progress by the averaged projected-gradient-mapping station-arity , n−1 ∥G η (θ)∥2 ≤ ϵ, in agreement with the distributed-MARL convention [3], [5], [13]. This per-agent normalization is an exact rescaling of the aggregate mapping: for the aver-aged objective J/n with step size nη one has GJ/n nη = Gη /n ,hence n−1 ∥G η ∥2 = n ∥G J/n nη ∥2; comparisons with generic complexity lower bounds are accordingly made at the level of the ϵ-exponent only. The policy gradient theorem [22] gives 
+
+∇J(θ) = 11−γ Eνπ
+
+hPni=1 Qπi (s, a) ∇θ log π(a | s)
+
+i
+
+, (4) with the occupancy pair (dπ , ν π ) as defined above. Since π(a |
+
+s) = Q 
+
+> j
+
+πj (aj | sN κπ j ; θj ) factorizes across agents and only 
+
+πi depends on θi, the per-agent gradient takes the form 
+
+∇θi J(θ) = 11−γ Eνπ
+
+hPnℓ=1 Qπℓ (s, a) ∇θi log πi(ai | sN κπ i )
+
+i
+
+.
+
+(5) This per-agent form is the basis of Algorithm 1’s gradient estimator, constructed in Section V. 
+
+C. Assumptions 
+
+We group the assumptions into four sets. The model set A, the decay set B, and the sampling set D are stated here; the TD-stability sets C and C ′ constrain the population temporal-difference matrix built from the critic features, and are there-fore stated in Section V, immediately after that matrix has been defined. 
+
+Assumption 1 (Set A: Model and regularity) .
+
+(A1) Local dynamics s′ 
+
+> i
+
+= fi(sNi , aNi )+ εi with fi determin-istic, sup ∥fi∥ ≤ Bf , Lf -Lipschitz jointly in (sNi , aNi ),and εi ∼ N (0, σ 2IdS ) independent across i, t . The initial distribution μ0 is supported in {s : ∥si∥ ≤ B0 ∀i}
+
+for some B0 < ∞.(A2) Local rewards |ri(sNi , aNi )| ≤ ¯r, Lr -Lipschitz. (A3) Each local policy πi(· | sN κπ i ; θi) admits a density on 
+
+Ai, jointly measurable in the action, the local state, and the parameter, that is strictly positive a.e. on a fixed support Asupp  
+
+> i
+
+⊆ A i, common to all θi ∈ Θ0,i and all conditioning states. The policy is θi-differentiable with score ∇θi log πi uniformly bounded by G, and is Lπ -Lipschitz in Wasserstein-2 distance with respect to sN κπ i .The joint policy factors as π(a | s) = Q 
+
+> i
+
+πi(ai | sN κπ i ).(A4) The parameter space has a product structure Θ0 =Qni=1 Θ0,i ⊆ Rnd θ , with each Θ0,i ⊂ Rdθ compact convex containing θ(0)  
+
+> i
+
+, and global diameter DΘ.
+
+Under (A2), V πi and Qπi are uniformly bounded by Qmax := ¯r/ (1 − γ); the map θ 7 → J(θ) is continuous on Θ0 under (A2)–(A3) by dominated convergence, so J∗ is attained on the compact Θ0, and ∆J := J∗ − J(θ(0) ) ≤ 2nQ max = O(n).An admissible policy class is a bounded-support, compactly parameterized exponential family satisfying (A3); concrete instances are policies whose sufficient statistics depend on the state through bounded or saturated local features, whereas policies with unbounded linear state features are admissible only after clipping or saturation. A tanh -squashed Gaussian satisfies the W 2-Lipschitz inequality on Θ0, but its score is unbounded near the action boundary in the absence of further truncation; we therefore adopt bounded-score parameteriza-tions as the standing primitive. Assumption (A3) is invoked only to justify bounded-gradient policy-gradient concentration together with the locality and decay arguments; in particular, no uniform upper or lower bound on the policy density is imposed; only strict positivity on a fixed common support is required, which underwrites the log-density comparison in the continuity argument for the population TD matrix (Lemma 10). Relaxing it lies outside the present scope. 
+
+Assumption 2 (Set B: Decay structure) .
+
+(B2) Every policy in the considered class satisfies (c, ρ )-exponential decay: for all i ∈ [n], κ ∈ N, and 
+
+(s, a), (s′, a′) agreeing on N κi at the state-action level, 
+
+|Qπi (s, a) − Qπi (s′, a′)| ≤ cρ κ+1 , (6) 
+
+with c, ρ independent of n, T .
+
+Set B contains the single decay item, labeled (B2) for cross-reference stability; the boundedness of the spectral splitting factor used by the feature construction is not assumed but 5
+
+derived explicitly from (A1) in Section III. Appendix A gives a heuristic contraction route (a sketch, not a proof) toward regimes in which (B2) is expected to hold; (B2) is assumed as a primitive in the main analysis. Other mechanisms include Dobrushin contraction of the joint chain [31], [32]. 
+
+Assumption 3 (Set D: Sampling and smoothness) .
+
+(D1) At each iteration k, a shared dataset D(k) 
+
+> s
+
+of Ms i.i.d. transitions (s, a, s′, a′) with s ∼ dπ(k)
+
+, a ∼ π(k)(· | s),
+
+s′ ∼ P(· | s, a), a′ ∼ π(k)(· | s′) is drawn and shared across agents for LSTD; a separate shared dataset D(k)
+
+> g
+
+of Mg pairs (s, a) ∼ dπ(k)
+
+⊗ π(k) is drawn for gradient estimation. The random-feature realization is sampled once at preprocessing and held fixed. (Local model access.) Each agent i knows the drift functions fj for 
+
+j ∈ N κc+κi , the reward functions rℓ for ℓ ∈ N κc 
+
+> i
+
+,and the noise scale σ, and the random-feature draws of all ℓ ∈ N κc 
+
+> i
+
+are reproducible from pseudorandom seeds broadcast once at preprocessing; these quantities are exactly what is needed to evaluate the augmented features of Definition 3 for agent i and its κc-neighbors. The feature construction is thus model-assisted : transi-tion and reward functions are known locally, while the occupancy measure is accessed only through samples. (D2) J(θ) is LJ -smooth on Θ0, i.e. ∇J is LJ -Lipschitz on 
+
+Θ0. We treat LJ as a primitive constant; under the additional regularity of (D3) below, LJ is moreover independent of the network size n, and Appendix B derives this n-uniformity from (D3). (D3) (Differentiated regularity, used only for the n-uniformity of LJ .) (i) Each local policy πi(· | sN κπ i ; θi) is twice continuously differentiable in θi on Θ0,i , and the score 
+
+∇θi log πi is uniformly Lipschitz in θi with constant G′,uniformly over sN κπ i ; under (A2)–(A3) and (i), J is then twice continuously differentiable on Θ0 by dominated convergence (Appendix B, Step 0). (ii) (Differentiated decay.) There exist constants c∂ < ∞ and ρ ∈ (0 , 1) 
+
+(the decay base of (B2)) such that the mixed parameter curvature of the objective decays geometrically in graph distance: for every pair i, j and every θ ∈ Θ0,
+
+[∇2J(θ)] ij ≤ c∂ ρ d(i,j ), (7) 
+
+where [∇2J]ij := ∂2 
+
+> θiθj
+
+J ∈ Rdθ ×dθ is the cross-parameter Hessian block and d(i, j ) is graph distance. This is the curvature analogue of the value-decay hy-pothesis (B2): whereas (B2) postulates that agent i’s value couples weakly to distant agents’ state-actions, (ii) postulates that the cross-parameter curvature ∂2 
+
+> θiθj
+
+J
+
+couples agents i and j weakly at graph distance. It does not follow from (B2): differentiating the policy-gradient identity in θj (Appendix B, Step 1) produces value-sensitivity, occupancy-sensitivity, and score-derivative terms whose combined decay involves mixed second-order differences that (B2) alone does not control. (iii) The cross-parameter curvature decay (ii) is summable over the bounded-degree graph: the standing graph-tail hypothesis ˜δ := (∆ − 1) ρ < 1 holds. 
+
+Sample counts in (D1) measure generative-oracle calls; realizing a call by geometric rollouts requires restart access to 
+
+μ0 and incurs an additional factor 1/(1 − γ) in environment steps per sample. The n-uniformity of LJ in (D2)–(D3) is essential to the network-size scalability claim of Theorem 6; if LJ instead scales with n (for example, under a sum-of-values objective without the differentiated-decay structure of (D3)), the descent term of the complexity inherits the same scaling. Assumption (D3)(ii) is a curvature counterpart of the exponential-decay hypothesis (B2): whereas (B2) controls the decay of Qπi itself, (D3)(ii) postulates the analogous geometric decay of the cross-parameter Hessian block ∂2 
+
+> θiθj
+
+J. We state it as a separate assumption because this decay does not follow from (B2) alone; Appendix B shows that (D3)(ii), summed over the bounded-degree graph under the tail hypothesis (D3)(iii), yields the n-uniform operator-norm bound on ∇2J,and Appendix A sketches when (D3) is itself realizable under contraction conditions on the joint chain. 
+
+Lemma 1 (Sub-Gaussian occupancy confinement) . Under (A1) (whose bounded-support condition on μ0 supplies the constant B0), for any T ∈ N, δ ∈ (0 , 1) ,
+
+Pπ
+
+
+
+sup 
+
+> 0≤t≤T, i ∈[n]
+
+s(t) 
+
+> i
+
+≤ DS (T, δ )
+
+
+
+≥ 1 − δ, (8) 
+
+with DS (T, δ ) := max {B0, B f + σ(√dS +p2 log( n(T + 1) /δ )) }, and confinement region 
+
+SδT := {s : ∥si∥ ≤ DS (T, δ ) ∀i}. The discounted-occupancy state marginal satisfies Ps∼dπ (s ∈ S δT ) ≥ 1 − δ − γT +1 .Proof. By (A1), s(t+1)  
+
+> i
+
+= fi(s(t) 
+
+> Ni
+
+, a(t) 
+
+> Ni
+
+) + ε(t) 
+
+> i
+
+with ∥fi∥ ≤ Bf
+
+and ε(t) 
+
+> i
+
+∼ N (0, σ 2IdS ) independent across (i, t ). Standard Gaussian concentration [19, Thm. 2.6.3] gives P( ε(t) 
+
+> i
+
+≤
+
+σ(√dS + √2u)) ≥ 1 − e−u. Setting u = log( n(T + 1) /δ ) and union-bounding over i ∈ [n], 0 ≤ t ≤ T yields the displayed sup bound with probability ≥ 1−δ. The discounted-occupancy marginal bound follows from dπ = (1 − γ) P∞ 
+
+> t=0
+
+γtPt: contri-butions from t > T have total mass P 
+
+> t>T
+
+(1 − γ)γt = γT +1 ,while contributions from t ≤ T are within SδT with probability 
+
+≥ 1 − δ.Throughout the paper we refer to this as “occupancy con-finement” rather than “trajectory confinement,” because the algorithm uses generative-oracle samples from dπ at each iteration (Assumption (D1)), not a single physical trajectory. The lemma is used solely to control the discounted-occupancy mass outside the bounded region. III. S PECTRAL REPRESENTATION FRAMEWORK 
+
+The local kernel Pi(s′ 
+
+> i
+
+| · ) = k(s′ 
+
+> i
+
+− fi(·)) with k(∆) = (2 πσ 2)−dS /2 exp( − ∥ ∆∥2 /(2 σ2)) is shift-invariant; the κ-neighborhood transition Pi,κ = Q 
+
+> j∈N κi
+
+Pj admits a Bochner decomposition on the tensor-product Hilbert space. 6
+
+Let di,κ := |N κi |· dS . For each i ∈ [n], draw an independent realization {(ωi,ℓ , b i,ℓ )}mℓ=1 with ωi,ℓ ∼ N (0, σ −2Idi,κ ) and 
+
+bi,ℓ ∼ Unif[0 , 2π]. Fix α ∈ (0 , 1) and define 
+
+g(i) 
+
+> α
+
+(s, a) := (2 πσ 2)−di,κ /2 exp 
+
+ α2∥fi,κ ∥2
+
+> 2σ2(1 −α2)
+
+
+
+,p(i) 
+
+> α
+
+(s′N κi ) := exp 
+
+
+
+− α2 s′N κi
+
+> 2
+> 2σ2
+
+
+
+,
+
+(9) with fi,κ := ( fj )j∈N κi , a function of the (κ+1) -neighborhood input Z := ( sN κ+1 
+
+> i
+
+, aN κ+1 
+
+> i
+
+), giving the splitting identity 
+
+Pi,κ (s′N κi | · )= g(i) 
+
+> α
+
+· p(i) 
+
+> α
+
+· k0
+
+ fi,κ  
+
+> √1−α2
+
+− p1 − α2 s′N κi
+
+
+
+, (10) 
+
+k0(∆) = exp( − ∥ ∆∥2 /(2 σ2)) . Under (A1), ∥fi,κ ∥ ≤√DκBf , so the splitting factor is explicitly and uniformly bounded: 
+
+sup 
+
+> i, Z
+
+g(i) 
+
+> α
+
+(Z) ≤ ¯gα(κ) := max {1, (2 πσ 2)−1}DκdS /2 exp 
+
+ α2DκB2
+
+> f
+> 2σ2(1 −α2)
+
+
+
+,
+
+(11) a derived bound (not an assumption) that is finite for fixed 
+
+κ but exponential in the neighborhood dimension DκdS ; this exponential dependence propagates into every feature-scale constant below and is the price of the spectral construction. 
+
+Definition 1 (Normalized RFF) . The raw RFF features are 
+
+ϕraw  
+
+> i,κ
+
+(Z) := g(i) 
+
+> α
+
+(Z)
+
+q 2
+
+> m
+
+×
+
+n
+
+cos 
+
+ ω⊤ 
+
+> i,ℓ fi,κ (Z)
+> √1−α2
+
++ bi,ℓ 
+
+o mℓ=1 
+
+,μraw  
+
+> i,κ
+
+(y) := p(i) 
+
+> α
+
+(y)
+
+q 2
+
+> m
+
+×
+
+n
+
+cos  p 1 − α2 ω⊤
+
+> i,ℓ
+
+y + bi,ℓ 
+
+omℓ=1 
+
+.
+
+(12) 
+
+The normalized features ˆϕi,κ := ϕraw  
+
+> i,κ
+
+/¯gα and ˆμi,κ := μraw  
+
+> i,κ
+
+¯gα
+
+preserve the inner product and satisfy ˆϕi,κ 
+
+> 2
+
+≤ 2. The finite-feature approximant ⟨ ˆϕi,κ , ˆμi,κ ⟩ is a signed function and need not be a (sub)probability kernel; it enters the analysis only through its L1 distance to Pi,κ against bounded integrands. 
+
+Theorem 1 (RFF approximation) . Let ˜gα := ¯gα max {1, (2 πσ 2/α 2)}DκdS /2, R2(ϵP ) := √DκBf +(σ/α )( √DκdS + p2 log(8˜ gα/ϵ P )) , and Dint  
+
+> R
+
+(ϵP ) := √DκBf /√1 − α2 + 2 R2(ϵP ). For δrff ∈ (0 , 1) , ϵP ∈ (0 , 1] ,if 
+
+m ≥ CRFF (DκdS ) ˜g2
+
+> α
+
+ϵ2
+
+> P
+
+× log 
+
+ 212 n D κdS
+
+ Dint  
+
+> R
+
+(ϵP ) ˜ gα
+
+2
+
+σ2 ϵ2 
+
+> P
+
+δrff 
+
+
+
+,
+
+(13) 
+
+where one may take CRFF (d) = 16( d + 2) : the displayed constant–logarithm pair is exactly the sufficient condition derived in Appendix D (after substituting σ2 
+
+> p
+
+= DκdS /σ 2); equivalently, CRFF (d) = C(d + 2) for a universal C with any logarithm of the same order. Then the favorable RFF event 
+
+Erff := 
+
+n
+
+sup 
+
+> i, Z
+
+Pi,κ (· | Z) − ⟨ ˆϕi,κ (Z), ˆμi,κ (·)⟩ L1 ≤ ϵP
+
+o
+
+(14) 
+
+satisfies P(Erff ) ≥ 1 − δrff . We define ϵP (m, δ rff , n ) := inf {ϵP ∈ (0 , 1] : (13) holds }; the required feature count on the right-hand side of (13) is strictly decreasing in ϵP on (0 , 1] , so the feasible set is an interval and the infimum is well defined and attained whenever it is nonempty; with CRFF (d) =16( d + 2) it satisfies ϵP (m)2 = eO(CRFF (DκdS ) ˜ g2
+
+> α
+
+/m ) = 
+
+eO(˜ g2
+
+> α
+
+DκdS /m ). The random-feature dimension m is a prob-lem primitive fixed before the target stationarity tolerance ϵ is sent to zero in Theorem 6. 
+
+The proof (Appendix D) combines (i) the random-phase Rahimi–Recht uniform bound on a scaled compact core at tolerance ϵP /(2˜ gα), (ii) integration of the weighted core error against the Gaussian factor p(i) 
+
+> α
+
+, (iii) the true Gaussian-transition tail, and (iv) the tail of the signed approximant via the pointwise envelope 2g(i) 
+
+> α
+
+p(i) 
+
+> α
+
+; the derivation yields the explicit dimensional factor CRFF (d) = 16( d + 2) . The intrinsic boundedness ∥fi,κ ∥ ≤ √DκBf from (A1) makes the conclusion global in Z.IV. E XPONENTIAL DECAY AND Q-F UNCTION 
+
+REPRESENTATION 
+
+A. Exponential decay 
+
+Lemma 2 (Value decay from Q-decay) . Under (A3) and (B2), for κ ≥ κπ + 1 and any s, s′ with sN κi = s′N κi
+
+,
+
+|V πi (s) − V πi (s′)| ≤ ˜cρ κ+1 , ˜c := 2 cρ −κπ . (15) The short proof is in Appendix E. 
+
+B. Conditional-expectation truncated Q-function 
+
+Definition 2 (Truncated Q-function) . Let Xκi := ( SN κi , AN κi )
+
+denote the local state–action window, where capitalized sym-bols denote the corresponding random elements under νπ .Throughout assume κ ≥ max {1, κ π + 1 }, so that Xκi contains the reward inputs and the score-conditioning variables of agent i; the policy-conditioning variables of boundary agents in N κi are integrated out through the marginal policy πmarg  
+
+> Nκi
+
+defined below. Define 
+
+¯Qπi (x) := Eνπ
+
+Qπi (S, A) Xκi = x,
+
+¯V πi (s) := Edπ
+
+V πi (S) SN κi = s,
+
+¯P πi,κ (dy | x) := Eνπ [Pi,κ (dy | SN κ+1 
+
+> i
+
+, AN κ+1 
+
+> i
+
+) | Xκi = x],πmarg  
+
+> Nκi
+
+(da | s) := Eνπ [πN κi (da | S) | SN κi = s],
+
+(16) 
+
+all a.s. elements of the appropriate L∞ space; we fix bounded measurable representatives via regular conditional expecta-tions. The conditional critic is tied to the objective’s initial distribution μ0 through dπ ; it is not claimed to be a statewise local Bellman object valid under every initial distribution. More precisely, let μπi,κ := ( SN κi )#dπ denote the local-state marginal of the discounted occupancy. The occupancy identity 
+
+dπ = (1 −γ)μ0 +γ Pπ⊤dπ gives Pπ⊤dπ ≤ dπ /γ as measures, and this domination is preserved by the projection s 7 → sN κi ;hence every μπi,κ -null set is null for the averaged successor law R ¯P πi,κ (· | x) d[( Xκi )#νπ ]( x), so modifying V on a μπi,κ -null set leaves R V d ¯P πi,κ (· | x) unchanged for (Xκi )#νπ -a.e. 7
+
+x. Consequently ¯T π is well defined on L∞(μπi,κ )-equivalence classes and is a γ-contraction in the μπi,κ -essential-supremum norm; the Banach fixed-point theorem is applied in that complete space, and a bounded measurable representative of the fixed point is selected once and used thereafter. The existence of regular conditional distributions follows since the state-action spaces are standard Borel; under the Gaussian transition structure of (A1), the relevant transition kernels also admit densities with respect to Lebesgue measure where needed. The auxiliary local Bellman operator 
+
+( ¯T π V )( sN κi ) := Ea∼πmarg  
+
+> Nκi
+
+h
+
+ri + γ
+
+Z
+
+V (y) ¯P πi,κ (dy | s, a)
+
+i
+
+acts on bounded measurable representatives V ∈ Bb(SN κi ),the space of bounded measurable functions on the local state neighborhood, where the integral R V (y) ¯P πi,κ (dy | s, a) is well-defined because ¯P πi,κ (· | s, a) admits a density with respect to Lebesgue measure (inherited from the Gaussian noise structure of (A1)). The operator ¯T π is a γ-contraction in the essential-supremum norm on this L∞ space (equivalently, on bounded measurable representatives in Bb(SN κi ) up to 
+
+μπi,κ -null modifications), and it maps the ball {V : ∥V ∥∞ ≤
+
+¯r/ (1 −γ)} to itself (since ¯T π V ∞ ≤ ¯r+γ ∥V ∥∞ ≤ ¯r/ (1 −γ)
+
+for ∥V ∥∞ ≤ ¯r/ (1 − γ)). Hence the unique fixed point ¯V π, aux 
+
+> i
+
+satisfies ¯V π, aux   
+
+> i∞
+
+≤ ¯r/ (1 − γ). All subsequent equalities involving ¯V π, aux  
+
+> i
+
+and ¯Qπi are interpreted νπ -a.s. on chosen bounded measurable representatives. The two objects ¯V πi and 
+
+¯V π, aux  
+
+> i
+
+are related via Proposition 1(b)’s residual. Convention. All suprema involving objects defined only νπ -a.e. are read as νπ -essential suprema on the relevant domain. For conditional objects defined as functions of Xκi , the rele-vant measure is the pushforward (Xκi )#νπ , and the essential supremum is taken under this pushforward; the two are related by tower, (Xκi )#νπ -ess sup |f | ≤ νπ -ess sup |f ◦Xκi |. Outside the confinement region, the deterministic bounds furnished by the weight projection of Algorithm 1 are used only in the failure-event budget. Phrases such as “uniformly in s” and any 
+
+∥·∥ ∞ applied to the conditional objects ¯V πi , ¯Qπi , and ¯P πi,κ are likewise read as essential-supremum bounds under the relevant local marginal or pushforward measure, evaluated for fixed bounded measurable representatives of the underlying regular conditional expectations. 
+
+Proposition 1 (Approximation and auxiliary residual) . Under (B2) and κ ≥ κπ + 1 :(a) Qπi (S, A) − ¯Qπi (Xκi ) ≤ cρ κ+1 νπ -a.s. (b) There exists a residual Rκ with 
+
+¯Qπi (x) = ri(x) + γ
+
+Z
+
+¯V π, aux  
+
+> i
+
+(y) ¯P πi,κ (dy | x) + Rκ(x),
+
+(17) 
+
+and ess sup |Rκ| ≤ γ˜cρ κ+1 /(1 − γ). Here ri(x) =
+
+ri(sNi , aNi ) is well-defined as a function of x = ( sN κi , aN κi )
+
+because Ni ⊆ N κi under the standing hypothesis κ ≥ 1.C. Linear representation 
+
+Definition 3 (Augmented features and weight) . For z =(sN κ+1 
+
+> i
+
+, aN κ+1 
+
+> i
+
+),
+
+˜ϕraw  
+
+> i,κ
+
+(z) :=  ri(sNi , aNi ), ˆϕi,κ (z)⊤ ∈ Rm+1 ,
+
+˜ϕπi,κ (x) := Eνπ [ ˜ϕraw  
+
+> i,κ
+
+(Z) | Xκi = x], (18) 
+
+and the within-bin fluctuation ηi(z) := ˜ϕraw  
+
+> i,κ
+
+(z) −
+
+˜ϕπi,κ (Xκi (z)) , which satisfies E[ηi | Xκi ] = 0 and ∥ηi∥ ≤ 2L
+
+pointwise, with L := √¯r2 + 2 . The representation weight is 
+
+wπi,κ := 
+
+
+
+1, γ 
+
+Z
+
+ˆμi,κ (y) ¯V π, aux  
+
+> i
+
+(y) dy
+
+⊤
+
+∈ Rm+1 . (19) 
+
+For any coefficient vector w ∈ Rm+1 , the associated 
+
+conditional-feature critic is 
+
+¯Qw 
+
+> i
+
+(x) := ⟨ ˜ϕπi,κ (x), w⟩, (20) 
+
+a function of the local variable x = Xκi ; this is the object whose error is controlled in Theorem 4. It is distinct from the critic implemented by Algorithm 1, which evaluates the raw 
+
+augmented feature ˜ϕraw  
+
+> i,κ
+
+directly, linearly and without value clipping, at the algorithm’s norm-projected coefficient; the two critics are compared in Lemma 7. 
+
+Theorem 2 (Linear representation) . Under Sets A–B with κ ≥
+
+κπ + 1 , on the favorable RFF event Erff of Theorem 1 at accuracy ϵP ,
+
+¯Qπi (x) = ⟨ ˜ϕπi,κ (x), wπi,κ ⟩ + ξi(x) (21) 
+
+(Xκi )#νπ -a.e. on the local neighborhood domain SN κi ×A N κi ,with 
+
+ess sup |ξi| ≤ γ¯rϵ P
+
+1 − γ + γ˜cρ κ+1 
+
+1 − γ =: ¯ξi. (22) The proof, in Appendix G, uses the global L1-uniformity from Theorem 1 together with Proposition 1. V. A LGORITHM AND LSTD A NALYSIS 
+
+A. Population TD matrix and stability assumptions 
+
+The raw-feature population objects at parameter θ are 
+
+Mθ 
+
+> i
+
+:= Hθ 
+
+> i
+
+− γCθ 
+
+> i
+
+, (23) with Hθ 
+
+> i
+
+:= E[ ˜ϕraw (Z) ˜ϕraw (Z)⊤], Cθ 
+
+> i
+
+:= 
+
+E[ ˜ϕraw (Z) ˜ϕraw (Z′)⊤], and bθ 
+
+> i
+
+:= E[ ˜ϕraw (Z)ri], where the expectations are under Z ∼ νπθ and Z′ drawn one transition forward. 
+
+Assumption 4 (Set C: TD stability) . Define the event 
+
+EM := σmin (Mθ 
+
+> i
+
+) ≥ μM (m) > 0, ∀i ∈ [n], ∀θ ∈ Θ0 ,
+
+(24) 
+
+where Mθ 
+
+> i
+
+is the raw-feature TD matrix (23) . There is a constant δM (m) ∈ (0 , 1) such that P(EM ) ≥ 1 − δM (m).
+
+Three remarks delimit the scope of Set C. First, EM is measurable: under (A1) and (A3), θ 7 → Mθ 
+
+> i
+
+is continuous on the compact Θ0 (Lemma 10, Appendix C), so the infimum over Θ0 reduces to one over a countable dense subset. Second, 8
+
+the notation suppresses dependencies: μM and δM may depend not only on m but also on n, κ, the graph, and the policy class 
+
+Θ0; in particular, with independent per-agent feature draws a per-agent failure probability δ(1)  
+
+> M
+
+compounds by a union bound to δM ≤ n δ (1)  
+
+> M
+
+. Third, the confidence 1−δM (m) is postulated ,not user-controllable: unlike δrff , it cannot be driven to zero by enlarging a sample size; a practical (not theoretical) control is to redraw the feature realization and re-test conditioning via the diagnostic of Proposition 3. Lemma 3 below reduces (C) to a symmetric feature-excitation condition. The m-dependence of μM is necessary: 
+
+Proposition 2 (Dimensional obstruction to dimension-free TD-stability) . For any TD matrix 
+
+Mθ 
+
+> i
+
+= E[ ˜ϕraw (Z)( ˜ϕraw (Z) − γ ˜ϕraw (Z′)) ⊤] generated by features with ˜ϕraw ≤ L a.s. and lying in Rm+1 ,
+
+σmin (Mθ 
+
+> i
+
+) ≤ Mθ 
+
+> iF
+
+√m + 1 ≤ (1 + γ)L2
+
+√m + 1 
+
+> m→∞
+
+−−−−→ 0, (25) 
+
+so no dimension-free lower bound μM exists; accordingly the analysis below operates in the fixed-m regime and treats m as a problem primitive. This is the only general upper bound on 
+
+σmin (Mθ 
+
+> i
+
+) established in this paper; no O(1 /m ) upper bound is proved. 
+
+Lemma 3 (Excitation implies TD stability) . Under (A1)– (A3) and the occupancy sampling of (D1), for every i ∈ [n],every θ ∈ Θ0, and every feature realization: whenever 
+
+Hθ 
+
+> i
+
+≻ 0, the whitened cross term obeys the unconditional 
+
+bound Hθ,−1/2 
+
+> i
+
+Cθ 
+
+> i
+
+Hθ,−1/2 
+
+> i2
+
+≤ γ−1/2, and consequently 
+
+σmin (Mθ 
+
+> i
+
+) ≥ (1 − √γ) λmin (Hθ 
+
+> i
+
+). (26) 
+
+Hence the symmetric feature-excitation condition λmin (Hθ 
+
+> i
+
+) ≥
+
+hM (m) > 0 for all i ∈ [n] and θ ∈ Θ0, on an event of probability ≥ 1 − δM (m) over the feature draw, implies Assumption (C) with μM (m) = (1 − √γ) hM (m).Proof. Fix i, θ and the feature realization, and abbreviate 
+
+H := Hθ 
+
+> i
+
+, C := Cθ 
+
+> i
+
+, M := Mθ 
+
+> i
+
+. Let ν := νπθ and let ν+ denote the law of the successor pair Z′ under the one-step law of (D1). The occupancy identity dπ = (1 −
+
+γ)μ0 + γ Pπ⊤dπ gives Pπ⊤dπ ≤ dπ /γ as measures, hence 
+
+ν+ = ( Pπ⊤dπ ) ⊗ πθ ≤ ν/γ , and therefore the successor fea-ture covariance H+ := Eν+ [ ˜ϕraw ˜ϕraw ⊤] satisfies u⊤H+u =R (u⊤ ˜ϕraw )2 dν + ≤ γ−1 R (u⊤ ˜ϕraw )2 dν = γ−1u⊤Hu for every u, i.e. H+ ⪯ H/γ . For unit vectors u, v, Cauchy– Schwarz under the joint one-step law gives 
+
+u⊤H−1/2CH −1/2v ≤  E(u⊤H−1/2 ˜ϕraw (Z)) 21/2
+
+×  E(v⊤H−1/2 ˜ϕraw (Z′)) 21/2
+
+=  v⊤H−1/2H+H−1/2v1/2 ≤ γ−1/2.
+
+Writing M = H1/2(I − γB)H1/2 with B := H−1/2CH −1/2
+
+and using σmin (XYZ ) ≥ σmin (X) σmin (Y) σmin (Z) for square matrices, σmin (M) ≥ λmin (H) σmin (I − γB) ≥
+
+λmin (H)(1 − γ ∥B∥) ≥ (1 − √γ)λmin (H). If λmin (H) = 0 
+
+the displayed bound holds trivially. Lemma 3 upgrades the classical excitation-versus-contraction heuristic to a theorem: the cross-term bound 
+
+β ≤ γ−1/2, which earlier formulations had to assume , is here derived from the discounted-occupancy identity, so TD stability reduces to excitation of a symmetric covariance, a persistence-of-excitation condition standard in adaptive control [21], monitorable through λmin of the empirical PSD matrix ˆH(k) 
+
+> i
+
+by the same matrix-Bernstein radius as in Proposition 3. The route remains a certificate with a dimensional cap: tr( Hθ 
+
+> i
+
+) = E ˜ϕraw 2
+
+≤ L2 forces 
+
+λmin (Hθ 
+
+> i
+
+) ≤ L2/(m + 1) , so the excitation certificate is at most (1 − √γ)L2/(m + 1) ; this is consistent with, and not an upper bound beyond, Proposition 2; the true σmin (Mθ 
+
+> i
+
+) may exceed it, and the only proved general upper bound on the true conditioning remains the O(m−1/2) of that proposition. Verifying the excitation bound hM (m) > 0 for a concrete continuous networked model class is left open; a uniform lower policy density on the compact action sets would be the natural tool for such a verification on a compact core, and is deliberately not imposed here because the present analysis assumes, rather than verifies, the bound. For some results we use the strictly weaker trajectory-conditional version of (C): 
+
+Assumption 5 (Set C ′: Trajectory-conditional stability) . There exists μtraj > 0 such that 
+
+inf  
+
+> 0≤k<K, i ∈[n]
+
+σmin (Mθ(k) 
+
+> i
+
+) ≥ μtraj (27) 
+
+holds with probability at least 1 − δtraj  
+
+> M
+
+, where the probability is over the random-feature realization at preprocessing and the realized algorithmic sample path {D (k) 
+
+> s
+
+, D(k) 
+
+> g
+
+}k<K jointly. 
+
+The empirical proxy σmin (M(k) 
+
+> i
+
+) (Theorem 3) controls (C ′) at high probability on the realized trajectory via matrix-Bernstein concentration in the false-certification sense (Propo-sition 3); it does not certify the uniform infimum (C). The paper provides both a (C)-based theorem and a (C ′)-based companion theorem. 
+
+B. Regularized LSTD 
+
+Definition 4 (LSTD matrices) . With z(j) = ( s(j) 
+
+> Nκ+1
+> i
+
+, a(j) 
+
+> Nκ+1
+> i
+
+)
+
+and the one-step successor z′(j) = ( s′(j) 
+
+> Nκ+1
+> i
+
+, a′(j) 
+
+> Nκ+1
+> i
+
+) from D(k) 
+
+> s
+
+,
+
+M(k) 
+
+> i
+
+:= 1
+
+> Ms
+> Ms
+
+X
+
+> j=1
+
+˜ϕraw  
+
+> i,κ
+
+(z(j))
+
+×   ˜ϕraw  
+
+> i,κ
+
+(z(j))−γ ˜ϕraw  
+
+> i,κ
+
+(z′(j))⊤
+
+,
+
+b(k) 
+
+> i
+
+:= 1
+
+> Ms
+> Ms
+
+X
+
+> j=1
+
+r(j) 
+
+> i
+
+˜ϕraw  
+
+> i,κ
+
+(z(j)).
+
+(28) 
+
+The regularized LSTD solution is ˆw(k),raw  
+
+> i
+
+:= (M(k) 
+
+> i
+
++
+
+λI)−1b(k) 
+
+> i
+
+whenever M(k) 
+
+> i
+
++ λI is non-singular, and 
+
+ˆw(k),raw  
+
+> i
+
+:= 0 in the degenerate (singular) case. This degen-erate fallback agrees with Algorithm 1, line 5. The analysis invokes the inverse only on favorable events, collected in the 9
+
+Randomness subsection below, where the singular-value lower bound σmin (M(k) 
+
+> i
+
++ λI) ≥ μM /2 holds, so the matrix is non-singular and the degenerate fallback is not triggered. Outside those events the implemented algorithm continues to produce an output via the norm projection (Algorithm 1, line 6), and the analysis invokes only the resulting deterministic bounds 
+
+ˆw(k) 
+
+> i
+
+≤ W ∗ and hence ˆQ(k) 
+
+> i
+
+≤ LW ∗, with W ∗ the deterministic projection radius fixed in Lemma 5 below. Be-cause the same zero fallback is used in both the definition and the algorithm, the estimator analyzed in the theorems below coincides exactly, on every sample path, with the estimator implemented in Algorithm 1. 
+
+Define the population-target ceiling U1 := 1+ √2γ˜gα ¯r/ (1 −
+
+γ); Appendix I (Step 1) shows wπi,κ ≤ U1.
+
+Lemma 4 (Conditional projection error) . Conditional on 
+
+EM ∩ Erff , the population LSTD solution w∗ 
+
+> i
+
+:= ( Mθ 
+
+> i
+
+)−1bθ
+
+> i
+
+satisfies 
+
+w∗ 
+
+> i
+
+− wπi,κ ≤ (1+ γ)L ¯ξaug   
+
+> i+Lγcρ κ+1
+> μM
+
++ Cη (1+2 γ)L2∥wπi,κ ∥ 
+
+> μM
+
+,
+
+(29) 
+
+where ¯ξaug  
+
+> i
+
+:= ¯ξi + Eout collects the on-confinement linear-representation residual and the outside-confinement contribu-tion Eout := ( Qmax + LU 1)(1 + 1 /γ )( δtraj + γT +1 ), with 
+
+U1 the population-target ceiling defined above, and Cη ≤ 4
+
+is universal. The explicit Bellman-defect term Lγcρ κ+1 /μ M
+
+is retained in the statement in weight units; in the proof of Theorem 4 it is multiplied by the feature norm L to convert it to Q-error units, and the resulting contribution L2γcρ κ+1 /μ M
+
+is absorbed into the C′Etrunc (κ) floor term, leaving the downstream constant C′ = (1 + γ)L2/μ M unchanged. On the confinement layer. Theorem 1 is global in Z
+
+(its kernel-argument domain is compact independently of the state, since ∥fi,κ ∥ ≤ √DκBf ), so the representation residual itself does not require confinement. The confinement region and the term Eout are retained, conservatively, be-cause the deterministic pointwise bounds used in the failure-event budget (Lemma 7 and the target-radius construction of Lemma 5) are stated with confinement-region control; all constants ( W ∗, δ ⋆, T ) are fixed from primitives before the run, so no circular dependency arises in Theorem 3’s use of 
+
+∥w∗ 
+
+> i
+
+∥ ≤ W ∗. Removing the layer, which would eliminate 
+
+δtraj , T , Eout , and the corresponding side condition in ϵ0, is a simplification that we flag but do not undertake here, as it would require re-deriving the budget bounds throughout. 
+
+Lemma 5 (Projection radius and no-circularity) . Define 
+
+W0 := Kbin U1 + 2Lγ ¯rϵ P
+
+(1 − γ)μM
+
++ 8L˜cρ κ+1 
+
+(1 − γ)μM
+
+,Kbin := 1 + Cη (1 + 2 γ)L2/μ M ,
+
+(30) 
+
+and fix the projection radius of Algorithm 1 as the determinis-tic constant W ∗ := 2 W0, which depends only on the primitives 
+
+(L, γ, ¯r, ˜gα, ˜c, ρ, κ, μ M , ϵ P ); in particular, it does not depend on the target tolerance ϵ, on δtraj or T , or on any random quantity. Conditional on EM ∩ Erff and under the side condi-tion δtraj +γT +1 ≤ μM W0/[(1+ γ)L(Qmax +LU 1)(1+1 /γ )] ,enforced by the parameter choices below, the population LSTD solution satisfies ∥w∗ 
+
+> i
+
+∥ ≤ W0 + (1 + γ)LE out /μ M ≤ 2W0 =
+
+W ∗.
+
+Off the favorable events, the analysis uses only the deter-ministic bounds ˆw(k) 
+
+> i
+
+≤ W ∗ (norm projection) and hence 
+
+ˆQ(k) 
+
+> i
+
+≤ LW ∗.
+
+Theorem 3 (LSTD concentration, fixed-(i, k )). Under Sets A– D, conditional on EM ∩ Erff , for fixed i ∈ [n] and k < K ,any δ ∈ (0 , 1) and λ ∈ [0 , μ M /4] , if Ms ≥ C0L4 log(( m +1) /δ )/μ 2 
+
+> M
+
+, then with probability ≥ 1 − δ over D(k) 
+
+> s
+
+,
+
+ˆw(k),raw  
+
+> i
+
+− w∗ 
+
+> i
+
+(θ(k))
+
+≤ 2Cv L(¯ r+(1+ γ)LW ∗)
+
+> μM
+
+q log(( m+1) /δ ) 
+
+> Ms
+
++ 2λW ∗ 
+
+> μM
+
+.
+
+The uniform version over all i ∈ [n], k < K holds with δ
+
+replaced by δ/ (nK ). Here C0, C v > 0 are universal con-stants arising from the matrix-Bernstein and vector Hoeffding inequalities used in the proof. 
+
+The proof (Appendix J) uses matrix-Bernstein on M(k) 
+
+> i
+
+−
+
+Mθ(k) 
+
+> i
+
+via Hermitian dilation, since the matrix is non-symmetric, and a finite-dimensional Hilbert-space Hoeffding-type inequality [20, Thm. 3.5] for the centered vector b(k) 
+
+> i
+
+−
+
+M(k) 
+
+> i
+
+w∗ 
+
+> i
+
+, which gives a dimension-free vector deviation; the displayed log( m + 1) factor is retained only as a harmless upper bound for compatibility with the matrix-Bernstein term. Since ∥w∗ 
+
+> i
+
+∥ ≤ W ∗ (Lemma 5), non-expansiveness of the norm projection gives ˆw(k) 
+
+> i
+
+− w∗ 
+
+> i
+
+≤ ˆw(k),raw  
+
+> i
+
+− w∗ 
+
+> i
+
+, so the bound transfers verbatim to the projected coefficient used by the algorithm. We write Ei,k  
+
+> lstd
+
+for the event of Theorem 3 at confidence δlstd .
+
+Remark 1 (Role of λI under non-symmetric Mθ 
+
+> i
+
+). The TD matrix Mθ 
+
+> i
+
+is generally non-symmetric, so the additive term λI does not act as a positive-definite ridge that would unambiguously improve conditioning. For non-self-adjoint M,
+
+σmin (M + λI) is not equal to σmin (M) + λ and may decrease with λ. In the derived bound of Theorem 3, λ
+
+contributes a pure additive bias with no compensating benefit: the statistical term does not improve with λ, and on the favorable events invertibility is supplied by concentration, not by regularization. Accordingly the parameter selection of Theorem 4 takes λ∗ = 0. A positive λ is retained in Algorithm 1 only as an implementation option whose additive bias 2λW ∗/μ M is retained explicitly in Theorem 3; it is not 
+
+a conditioning safeguard, since for a non-normal matrix the shift λI can decrease σmin ; near-singularity is instead handled by the singular-value threshold of Algorithm 1, line 5, whose numerical tolerance may be tied to the concentration radius 
+
+rM of Proposition 3. When λ > 0 is used, it is subject to the side condition λ ≤ μM /4 under which the singular-value lower bound used in the proof, the reverse-triangle bound 
+
+σmin (M(k) 
+
+> i
+
++ λI) ≥ σmin (Mθ(k) 
+
+> i
+
+) − M(k) 
+
+> i
+
+− Mθ(k) 
+
+> i
+
+− λ, 
+
+(31) 10 
+
+remains meaningful. Setting λ larger does not improve invert-ibility of the non-symmetric design matrix. C. Randomness and events 
+
+The analysis distinguishes three favorable events and one small-mass region : EM (TD-stability, Assumption 4, prob-ability ≥ 1 − δM (m) over the random-feature draw), Erff 
+
+(RFF uniform approximation, probability ≥ 1 − δrff ), Ei,k 
+
+> lstd
+
+(per-iteration LSTD concentration, probability ≥ 1 − δlstd 
+
+over D(k) 
+
+> s
+
+conditional on past randomness and EM ∩ Erff ;formalized after Theorem 3), and the confinement region Sδtraj 
+
+> T
+
+of Lemma 1, whose complement carries discounted-occupancy mass at most δtraj + γT +1 (a per-sample region membership entering only through expectations, not a global sample event; the symbol Eocc is used for it purely as bookkeeping). We use two filtrations to make conditional sampling claims precise. Let FRFF := σ {ωi,ℓ , b i,ℓ }i,ℓ 
+
+ collect the preprocessing randomness. Then 
+
+F− 
+
+> k
+
+:= σ FRFF , θ(0) , {D (j) 
+
+> s
+
+, D(j) 
+
+> g
+
+}j<k , θ(k),
+
+FQk := σ F− 
+
+> k
+
+, D(k) 
+
+> s
+
+, { ˆw(k) 
+
+> i
+
+}i∈[n]
+
+. (32) Under (D1), D(k) 
+
+> s
+
+is i.i.d. from the joint one-step law dπθ(k) ⊗
+
+πθ(k) ⊗ P ⊗ πθ(k) generating (s, a, s′, a′), conditional on F− 
+
+> k
+
+,and D(k) 
+
+> g
+
+is i.i.d. from dπθ(k) ⊗ πθ(k) conditional on FQk . The shorthand F(k) when used without superscript refers to F− 
+
+> k
+
+for LSTD-side statements and FQk for gradient-side statements; the context disambiguates. Theorems below are conditional on the preprocessing favorable events EM ∩ Erff ∈ F RFF , with total failure budget summed over the listed events. 
+
+D. Joint parameter selection 
+
+Define 
+
+Etrunc (κ) := ˜ cρ κ+1 
+
+1 + 21 − γ
+
+
+
+,Erff (m) := γ¯rϵ P (m, δ rff , n )1 − γ ,C′ := (1 + γ)L2/μ M ,Cbin := Cη (1 + 2 γ)L3U1/μ M .
+
+(33) The constant Cbin uses U1 (the population-target ceiling defined before Lemma 4) rather than W ∗ because the within-bin term in Lemma 4 multiplies wπi,κ ≤ U1, not the LSTD-solution norm. Using W ∗ ≥ U1 in place of U1 inflates the floor and is permissible but conservative; we adopt the sharper U1
+
+form. 
+
+Lemma 6 (Exact within-bin matrix gap) . Let ¯Mθ 
+
+> i
+
+:= 
+
+E[ ˜ϕπi,κ (X)( ˜ϕπi,κ (X) − γ ˜ϕπi,κ (X′)) ⊤] denote the conditional-feature TD matrix, with X := Xκi (Z), X′ := Xκi (Z′), and 
+
+η′ 
+
+> i
+
+:= ηi(Z′). Then, using E[ηi | X] = 0 and X-measurability of ˜ϕπi,κ (X),
+
+∆θ 
+
+> i,κ
+
+:= Mθ 
+
+> i
+
+− ¯Mθ 
+
+> i
+
+= E[ηiη⊤ 
+
+> i
+
+] − γ E[ηiη′⊤  
+
+> i
+
+]
+
+− γ E[ηi ˜ϕπi,κ (X′)⊤] − γ E[ ˜ϕπi,κ (X) η′⊤  
+
+> i
+
+],
+
+and, with v20 := sup i, θ Eνπθ ∥ηi∥2 and v2+ := sup i, θ E ∥η′
+
+> i
+
+∥2 ≤ v20 /γ (by the occupancy domination noted in Definition 2), 
+
+∆θ 
+
+> i,κ
+
+≤ (1 + √γ) v0 (v0 + √γ L ). (34) 
+
+This bound is O(L2) in general (since v0 ≤ 2L) and may replace the generic constant Cη (1 + 2 γ)L2 in the within-bin term of Lemma 4 whenever it is smaller, with Cbin correspond-ingly replaced by L U 1 sup i, θ ∆θ 
+
+> i,κ
+
+/μ M . When N κi = [ n]
+
+for all i (full locality), ηi ≡ 0, so ∆θ 
+
+> i,κ
+
+= 0 exactly and this floor contribution vanishes; the generic envelope used in the headline constants does not vanish there and is, in that regime, purely an upper-bound artifact. The same qualification applies to the truncation and aggregation contributions: at full locality the underlying errors are identically zero, while the exponen-tial envelopes remain positive as stated ( Etrunc (κ) above, and the aggregation envelope ϵagg (κ) defined in Lemma 8). Proof. Write ˜ϕraw (Z) = ˜ϕπi,κ (X) + ηi and 
+
+˜ϕraw (Z′) = ˜ϕπi,κ (X′) + η′ 
+
+> i
+
+and expand Mθ 
+
+> i
+
+; the two cross terms E[ηi ˜ϕπi,κ (X)⊤] and E[ ˜ϕπi,κ (X)η⊤ 
+
+> i
+
+]
+
+vanish by tower against σ(X), yielding the display. For the norm bound: E[ηiη⊤ 
+
+> i
+
+] ≤ E ∥ηi∥2 ≤ v20 ;
+
+u⊤E[ηiη′⊤  
+
+> i
+
+]v ≤ (E(u⊤ηi)2)1/2(E(v⊤η′
+
+> i
+
+)2)1/2 ≤ v0v+;and the two mixed terms are bounded by Lv 0 and Lv +
+
+using the pointwise bound ˜ϕπi,κ ≤ L. Since the successor law is dominated by νπθ /γ (Definition 2), v+ ≤ v0/√γ;collecting terms with γv + ≤ √γ v 0 gives ∆θ 
+
+> i,κ
+
+≤
+
+(1+ √γ)v20 +√γ(1+ √γ)Lv 0 = (1+ √γ) v0 (v0 +√γL ).
+
+Theorem 4 (Local parameter selection) . Under Sets A–D with 
+
+κ ≥ κπ +1 and m satisfying (13) at confidence δrff , fix i ∈ [n]
+
+and k < K ; choose ϵQ > 0, δ⋆ ∈ (0 , 1) , T ∈ N, δtraj ∈ (0 , 1) ,and suppose ϵQ ≤ LW ∗. With the parameter choices 
+
+λ∗ = 0 ,M ∗ 
+
+> s
+
+= eO(L6W ∗2/(μ2 
+
+> M
+
+ϵ2
+
+> Q
+
+)) , (35) 
+
+conditional on EM ∩Erff , with probability ≥ 1−δ⋆ over D(k) 
+
+> s
+
+,
+
+ess sup    
+
+> νπon Sδtraj T×A
+
+¯Q ˆw(k) 
+
+> i
+> i
+
+(Xκi (s, a)) − Qπi (s, a)
+
+≤ ϵQ + R(κ, m ) + C′Eout ,
+
+(36) 
+
+where R(κ, m ) := (1+ C′)( Etrunc (κ)+ Erff (m))+ Cbin , with the local-to-global lift handled via Proposition 1(a). The total unconditional failure probability is δM + δrff + δ⋆. A uniform version over i ∈ [n] and k < K follows by replacing δ⋆
+
+with δ⋆/(nK ). With λ∗ = 0 the regularization bias vanishes and the full budget is assigned to the statistical term, giving 
+
+Estat ≤ ϵQ; the standing hypothesis ϵQ ≤ LW ∗ ensures that any positive implementation value λ ≤ μM ϵQ/(4 LW ∗),which adds bias at most ϵQ/2, also satisfies the side condition 
+
+λ ≤ μM /4 of Remark 1. E. Distributed policy gradient 
+
+Recall from Section II the aggregation radius κc = κ +
+
+κπ and the standing inequality κ ≥ κπ + 1 . The gradient 11 
+
+estimator at agent i, derived from the per-agent policy-gradient identity (5), is 
+
+ˆg(k) 
+
+> i
+
+:= 1(1 −γ)Mg
+
+> Mg
+
+X
+
+> j=1
+
+ˆQ(k) 
+
+> i,κ c
+
+(s(j), a(j))
+
+· ∇ θi log πi(a(j) 
+
+> i
+
+| s(j) 
+
+> Nκπ i
+
+),
+
+(37) with ˆQ(k) 
+
+> i,κ c
+
+(s, a) := P 
+
+> ℓ∈N κc i
+
+ˆQ(k) 
+
+> ℓ
+
+(sN κ+1 
+
+> ℓ
+
+, aN κ+1 
+
+> ℓ
+
+) and 
+
+ˆQ(k) 
+
+> ℓ
+
+(z) := ˜ϕraw  
+
+> ℓ,κ
+
+(z)⊤ ˆw(k) 
+
+> ℓ
+
+, so that ˆQ(k) 
+
+> ℓ
+
+≤ LW ∗ determin-istically by the norm projection. No value clipping is applied: keeping the deployed critic linear in the raw feature is what validates the κπ = 0 tower cancellation of Lemma 8 and Corollary 2; a nonlinearity such as clipping would break the conditional-mean argument. Here and below, Ealg denotes expectation over the algorith-mic sampling randomness of the current iteration that produces the critic coefficient ˆw(k) 
+
+> i
+
+(the LSTD sample set D(k) 
+
+> s
+
+), taken conditional on the preprocessing favorable events EM ∩ Erff 
+
+and the current iterate θ(k).
+
+Lemma 7 (Critic L2 error) . Under the conditions of Theo-rem 4 with δ⋆ = δtraj = ϵ2
+
+> Q
+
+/(3( LW ∗ + Qmax )2) and the truncation horizon T = ⌈log(1 /δ ⋆)/ log(1 /γ )⌉ − 1 taken as the smallest integer with γT +1 ≤ δ⋆,
+
+Ealg Eνπ
+
+ ˆQ(k) 
+
+> i
+
+− Qπi
+
+> 2
+
+ ≤ 3ϵ2 
+
+> Q
+
++ 2 Rtot (κ, m )2, (38) 
+
+where Rtot (κ, m ) := √2[ R(κ, m ) + C′Eout ] + 2 LW ∗.
+
+Lemma 8 (Gradient bias) . Under the conditions of Lemma 7 (which inherit Theorem 4’s parameter choices 
+
+λ∗, M ∗ 
+
+> s
+
+, T, δ ⋆, δ traj , γ T +1 ) and the graph-tail assumption ˜δ := (∆ − 1) ρ < 1, conditional on EM ∩ Erff ,
+
+E[ˆ g(k) 
+
+> i
+
+] − ∇ θi J(θ(k))
+
+≤ GD κc (√3 ϵQ+√2 Rtot (κ,m )) 1−γ + ϵagg (κ),
+
+(39) 
+
+with the aggregation-bias term 
+
+ϵagg (κ) := Gc  
+
+> (1 −γ)(1 −˜δ)
+
+· ∆∆−1 ˜δκc+1 . (40) 
+
+When κπ = 0 , the within-bin route in the proof vanishes by tower against σ(Xκℓ ) conditional on FQk (since ˆw(k) 
+
+> ℓ
+
+is fixed and the gradient sample is independent given θ(k)), and the constant 2LW ∗ inside Rtot may be replaced by 0 as Rtot 
+
+enters this bias bound and Lemma 9 (the L2 bound of Lemma 7 retains it, since the fluctuation cancels only in score-weighted first moments); this step uses that the deployed critic is linear in ˜ϕraw (no value clipping). 
+
+Lemma 9 (Critic-conditional bias-squared) . Define ϵ2 
+
+> b
+
+:= sup k,i E ˆQ E[ˆ g(k) 
+
+> i
+
+| ˆQ, θ(k)] − ∇ θi J 2
+
+. Under the conditions of Lemma 8, 
+
+ϵ2 
+
+> b
+
+≤ 2ϵagg (κ)2
+
++ 2G2D2  
+
+> κc (6 ϵ2
+> Q+4 Rtot (κ,m )2)(1 −γ)2
+
+. (41) 
+
+When κπ = 0 , the bound holds with Rtot (κ, m ) replaced by √2 [ R(κ, m ) + C′Eout ] (equivalently, 2LW ∗ → 0): 
+
+Algorithm 1 CDCPG with projected updates 
+
+Input: {θ(0)  
+
+> i
+
+} ⊆ Θ0, κ, κc = κ + κπ , m, λ, η, Ms, Mg , K,projection radius W ∗ (Lemma 5). 
+
+Preprocessing: for each i ∈ [n], sample {(ωi,ℓ , b i,ℓ )}mℓ=1 
+
+independently.  
+
+> 1:
+
+for k = 0 , . . . , K − 1 do  
+
+> 2:
+
+Draw shared D(k) 
+
+> s
+
+, D(k) 
+
+> g
+
+under π(k). 
+
+> 3:
+
+for each i ∈ [n] in parallel do  
+
+> 4:
+
+Compute M(k) 
+
+> i
+
+, b(k) 
+
+> i
+
+as in Definition 4.  
+
+> 5:
+
+Set ˆw(k),raw  
+
+> i
+
+← (M(k) 
+
+> i
+
++ λI)−1b(k) 
+
+> i
+
+if 
+
+σmin (M(k) 
+
+> i
+
++ λI) > 0, in implementation above asmall numerical threshold, else 0. 
+
+> 6:
+
+Set ˆw(k) 
+
+> i
+
+← Π{w:∥w∥≤ W ∗}( ˆ w(k),raw  
+
+> i
+
+). 
+
+> 7:
+
+Set ˆQ(k) 
+
+> i
+
+(z) ← ˜ϕraw  
+
+> i,κ
+
+(z)⊤ ˆw(k) 
+
+> i
+
+. 
+
+> 8:
+
+Gather { ˆw(k) 
+
+> ℓ
+
+}ℓ∈N κc i . 
+
+> 9:
+
+Compute ˆg(k) 
+
+> i
+
+via (37).  
+
+> 10:
+
+θ(k+1)  
+
+> i
+
+← ΠΘ0,i (θ(k) 
+
+> i
+
++ ηˆg(k) 
+
+> i
+
+). 
+
+> 11:
+
+end for  
+
+> 12:
+
+end for Output: θ(R) with R ∼ Unif {0, . . . , K − 1}, so that the trajectory-average guarantees below bound n−1E Gη (θ(R)) 2
+
+directly; the final iterate θ(K) may be returned in practice. 
+
+conditioning on ( ˆQ, θ(k)) fixes ˆw(k) 
+
+> ℓ
+
+, the fluctuation cancels 
+
+inside the conditional bias, Eνπ [( η⊤ 
+
+> ℓ
+
+ˆw(k) 
+
+> ℓ
+
+) ∇θi log πi] = 0
+
+for every fixed ˆw(k) 
+
+> ℓ
+
+, and this cancellation occurs before any absolute values or Jensen step; the conditional-feature error is then bounded via Theorem 4 with the same failure budget (Appendix N). F. Algorithm 
+
+Per-agent computation is O(Ms(mD κdS + m2) + m3 +
+
+Mg Dκc mD κdS ), where the mD κdS factors account for eval-uating the random-feature maps at each sample; inter-agent algorithmic communication, excluding shared-oracle sample delivery, is O(Dκc m) scalars per iteration for weight ex-change; sample delivery additionally contributes O(( Ms +
+
+Mg )Dκc+κ+1 (dS + dA)) coordinates per agent per iteration, up to constant factors for current and successor tuples, af-ter a one-time preprocessing dissemination of feature seeds (with a public master seed and si = Hash( i, master ), no exchange is needed; otherwise each agent broadcasts one seed to its κc-neighborhood, so each agent receives O(Dκc ) seed words; explicit exchange of the maps would instead cost 
+
+O(mD κdS ) scalars per neighbor pair). Under the shared-sample model (D1), each agent needs only the coordinates of the shared samples within its (κc+κ+1) -neighborhood, that is, 
+
+O(Dκc+κ+1 (dS +dA)) scalars per sample, so the oracle admits a local-dissemination realization; with non-shared sampling, evaluating neighboring critics would additionally require coor-dinate exchange. Preprocessing stores O(nm ) random-feature pairs, corresponding to O(nmD κdS ) scalar frequency entries plus O(nm ) phase entries. 12 
+
+VI. C ONVERGENCE AND SAMPLE COMPLEXITY 
+
+A. Main convergence bound 
+
+Theorem 5 (Projected-gradient-mapping convergence) . Under Sets A–D, with η ≤ 1/(4 LJ ), Algorithm 1 satisfies, conditional on EM ∩ Erff ,
+
+1
+
+nK 
+
+> K−1
+
+X
+
+> k=0
+
+E Gη (θ(k)) 2
+
+≤ C1∆J
+
+nηK + C2σ2
+
+> g
+
+Mg
+
++ C3ϵ2 
+
+> b
+
+, (42) 
+
+for universal constants C1, C 2, C 3, where σ2 
+
+> g
+
+:= 
+
+G2D2 
+
+> κc
+
+(LW ∗)2/(1 − γ)2 (the per-sample gradient magnitude is bounded by GD κc LW ∗/(1 − γ) under the projected linear critic) and ϵ2 
+
+> b
+
+is as in Lemma 9. 
+
+Corollary 1 (Step-size choice) . With η = 1 /(4 LJ ), the right-hand side of (42) is 
+
+O
+
+ LJ ∆J
+
+> nK
+
+
+
++ O
+
+ σ2
+
+> g
+> Mg
+
+
+
++ O(ϵagg (κ)2) + O
+
+ G2D2 
+
+> κc (ϵ2
+> Q+R2tot )(1 −γ)2
+
+
+
+.
+
+With ∆J = O(n) (which suffices: ∆J ≤ 2nQ max ) and LJ
+
+assumed n-independent per (D2)–(D3) (Appendix B), the first term is O(LJ /K ), independent of n in its leading prefactor. B. Fixed-locality complexity 
+
+In this regime κ and m are problem primitives. Define the structural floor 
+
+ϵfloor (κ, m ) := Cfloor 
+
+ϵfloor bin + ϵfloor trunc (κ)+ ϵfloor rff (m) + ϵfloor graph (κ), (43) where 
+
+ϵfloor bin := G2D2 
+
+> κc
+
+Ctot 2 bin /(1 − γ)2,ϵfloor trunc (κ) := G2D2 
+
+> κc
+
+[(1 + C′)Etrunc (κ)] 2/(1 − γ)2,ϵfloor rff (m) := G2D2 
+
+> κc
+
+[(1 + C′)Erff (m)] 2/(1 − γ)2,ϵfloor graph (κ) := ϵagg (κ)2,
+
+(44) with Ctot bin := √2Cbin +2 LW ∗ and Cfloor a universal constant. 
+
+Theorem 6 (Sample complexity, uniform TD-stability) . Under Sets A–D with κ, m fixed problem primitives such that m
+
+satisfies the RFF feasibility relation (13) of Theorem 1 at confidence δrff and accuracy ϵP (m, δ rff , n ), ∆ ≥ 2, ˜δ =(∆ −1) ρ < 1, and δM +δrff < 1, there exists ϵ0 > 0 depending on primitives such that for any ϵ ∈ (0 , ϵ 0], Algorithm 1 with parameters 
+
+ϵQ = O((1 − γ)√ϵ/ (GD κc )) ,λ∗ = 0 ,M ∗ 
+
+> s
+
+= eO
+
+ L6W ∗2G2D2 
+
+> κc
+> μ2
+> M(1 −γ)2ϵ
+
+
+
+,M ∗ 
+
+> g
+
+= O(σ2 
+
+> g
+
+/ϵ ),K∗ = O(LJ /ϵ ),η∗ = 1 /(4 LJ ),δ⋆ = δtraj = Θ  ϵ2
+
+> Q
+
+/(LW ∗ + Qmax )2,
+
+(45) 
+
+satisfies the following guarantee. The truncation horizon is set to T = ⌈log(1 /δ ⋆)/ log(1 /γ )⌉ − 1, the smallest integer for which γT +1 ≤ δ⋆. With probability at least 1 − δM −
+
+δrff over the preprocessing random-feature draw, conditional on the resulting favorable events EM ∩ Erff , the expecta-tion over the subsequent algorithmic sampling randomness 
+
+({D (k) 
+
+> s
+
+, D(k) 
+
+> g
+
+}k<K ∗ ) satisfies 
+
+1
+
+nK ∗
+
+X
+
+> k
+
+E Gη (θ(k)) 2
+
+≤ ϵ + ϵfloor (κ, m ), (46) 
+
+where the per-iteration failure events (Ei,k 
+
+> lstd
+
+)c and confinement-failure mass δtraj + γT +1 are absorbed into the ϵ-budget through the parameter choices above. A stronger high-probability guarantee over all algorithmic samples would require a separate failure-budget accounting over K∗, n and the LSTD, confinement, and gradient events. The shared-oracle complexity is 
+
+Nglobal = K∗(M ∗ 
+
+> s
+
++ M ∗ 
+
+> g
+
+) = eO(1 /ϵ 2). (47) 
+
+Each shared global sample is observed by every agent un-der the shared-sample oracle (D1), so Nglobal also counts the number of local observations per agent under this or-acle; the quantity eO(1 /(nϵ 2)) is the same shared-oracle count amortized over the n agents as an accounting con-vention, not a physical per-agent trajectory count. Without shared samples, each agent’s local sampling cost would be counted separately. The prefactor depends polynomially on 
+
+LJ , D κ, D κc , ˜gα, W ∗, 1/μ M (m). The lower-bound compari-son invoked for the ϵ-exponent is with the smooth nonconvex benchmark of [23], whose oracle, namely unbiased bounded-variance stochastic gradients without constraints, differs from the present shared generative model with a biased localized estimator and projected updates; the agreement claimed is therefore at the exponent level only. Explicitly, the cited bound is Ω( ϵ−4 
+
+> g
+
+) for driving ∥∇ F ∥ ≤ ϵg , and becomes Ω( ϵ−2)
+
+under the reparameterization ϵ = ϵ2 
+
+> g
+
+matching the squared-stationarity convention here. 
+
+Excess-to-floor reading. Theorem 6 bounds the averaged stationarity by ϵ + ϵfloor (κ, m ) with ϵ the excess above the floor : for a total target τ with 0 < τ − ϵfloor (κ, m ) ≤ ϵ0,invoking it with ϵ = τ − ϵfloor (κ, m ) gives Nglobal = eO(( τ −
+
+ϵfloor (κ, m )) −2), and the eO(τ −2) reading is valid exactly in the regime ϵfloor (κ, m ) ≤ cτ for a fixed c < 1. The theorem is stated with the generic constant Cbin ; Lemma 6 licenses the refined gap-dependent floor, with Cη (1 + 2 γ)L2 replaced by 
+
+∆θ 
+
+> i,κ
+
+, whenever the latter is smaller. 
+
+The proof is in Appendix P. 
+
+Remark 2 (Network-size scaling of the prefactor) . Under fixed κ, Dκc ≤ CD ∆κc , with CD an absolute constant of bounded-degree neighborhood growth, is bounded indepen-dently of n, and no explicit polynomial factor in n appears in the leading prefactor of Nglobal provided that LJ , μ−1
+
+> M
+
+(hence W ∗, C′, Cbin ), the feature-scale constant ˜gα, and the preprocessing failure probabilities δM , δ rff are all uniform in 
+
+n; the simultaneous RFF feasibility relation (13) retains a logarithmic dependence on n, and each shared oracle sample carries O(n(dS + dA)) coordinates even though only local coordinates need be delivered per agent. Should any of these constants scale with n, for example LJ , whose descent factor 13 
+
+K∗ = O(LJ /ϵ ) transmits the scaling to Nglobal , or μM ,which the union-bound discussion of Assumption Set C allows to deteriorate with n, the prefactor inherits that dependence. The cap Dκc ≤ n becomes binding only when the realized 
+
+neighborhood growth reaches the network size, i.e. when κc
+
+is of the order of the graph diameter; the crude envelope 
+
+∆κc ≥ n does not by itself imply this (on a path graph 
+
+Dκ = 2 κ + 1 grows linearly while 2κ exceeds n already at κ = log 2 n). In that diameter-scale regime the prefactor carries an explicit factor of n2 through D2 
+
+> κc
+
+. The polynomial degree in 1/μ M is at most 4 in the saturating regime through 
+
+W ∗2/μ 2 
+
+> M
+
+. Moreover, under the present simultaneous union-bound RFF certificate, maintaining fixed approximation accu-racy ϵP , fixed confidence δrff , and fixed local primitives as 
+
+n grows requires m = Ω(log n) through (13) ; combined with Proposition 2, this gives μ−1 
+
+> M
+
+= Ω( √log n). Hence the present proof cannot maintain a fully n-uniform prefactor under these fixed-accuracy conditions, and at best polylogarithmic hidden 
+
+n-dependence should be expected. 
+
+Theorem 7 (Sample complexity, trajectory-conditional) . Un-der Sets A, B, D, fix a threshold μtraj > 0 and evaluate all parameters and constants of Theorem 6 with μM replaced by 
+
+μtraj throughout; the threshold enters statements (a)–(b) only through these constants, and Assumption 5 (at this μtraj ) is invoked only in statements (c)–(d) . Define the predictable per-iteration events 
+
+Ak :=  inf  
+
+> i∈[n]
+
+σmin (Mθ(k) 
+
+> i
+
+) ≥ μtraj , k = 0 , . . . , K ∗ − 1,
+
+(48) 
+
+each F− 
+
+> k
+
+-measurable, and the trajectory event Etraj := 
+
+TK∗−1 
+
+> k=0
+
+Ak. The following statements jointly characterize the guarantee: 
+
+(a) (Mass-weighted stopped-process inequality; no (C ′)premise.) The unconditional inequality 
+
+E
+
+h 1
+
+> nK ∗
+> K∗−1
+
+X
+
+> k=0
+
+Gη (θ(k)) 2
+
+1A0∩···∩ Ak 1Erff 
+
+i
+
+≤ ϵ + ϵfloor (κ, m )
+
+holds, the expectation being taken over the joint ran-domness of the random-feature preprocessing and the subsequent algorithmic sampling. Equivalently, writing 
+
+τ := inf {k : Ack} ∧ K∗ for the first-failure stopping time and noting that 1A0∩···∩ Ak = 1{τ >k },
+
+E
+
+h 1 
+
+> nK ∗
+> τ−1
+
+X
+
+> k=0
+
+Gη (θ(k)) 2
+
+1Erff 
+
+i
+
+≤ ϵ + ϵfloor (κ, m ).
+
+(49) 
+
+In particular, for the randomized output θ(R) of Algo-rithm 1 with R ∼ Unif {0, . . . , K ∗ − 1} drawn inde-pendently of the run, En−1 Gη (θ(R)) 2 1{R<τ } 1Erff 
+
+
+
+is bounded by the same right-hand side. Because the average is normalized by K∗ rather than by the realized prefix length, statement (a) is vacuously satisfiable under early stopping ( τ = 0 zeroes the left side): it is a mass-weighted stopped-process inequality, not, by itself, a convergence guarantee. The convergence content is supplied by statements (c)–(d), which invoke Assump-tion 5 prospectively; the selective-output clause below inherits the same qualification. 
+
+(b) (Global favorable-event bound.) Since Etraj ⊆ A0∩· · ·∩ 
+
+Ak for every k ≤ K∗ − 1, statement (a) implies 
+
+E
+
+h 1
+
+> nK ∗
+> K∗−1
+
+X
+
+> k=0
+
+Gη (θ(k)) 2
+
+1Etraj ∩Erff 
+
+i
+
+≤ ϵ + ϵfloor (κ, m ).
+
+(50) (c) (Event probability.) P(Etraj ∩ Erff ) ≥ 1 − δtraj  
+
+> M
+
+− δrff by Assumption 5 and the favorable RFF event. 
+
+(d) (Conditional consequence.) If δtraj  
+
+> M
+
++δrff ≤ 1/2, dividing the bound of statement (b) by P(Etraj ∩ Erff ) ≥ 1/2
+
+yields 
+
+E
+
+h 1
+
+> nK ∗
+> K∗−1
+
+X
+
+> k=0
+
+Gη (θ(k)) 2
+
+Etraj ∩ Erff 
+
+i
+
+≤ 2 ϵ + ϵfloor (κ, m ).
+
+Statement (a) is the rigorous core of the result: each per-iteration descent inequality is multiplied by the predictable indicator 1A0∩···∩ Ak 1Erff ∈ F − 
+
+> k
+
+before expectations are taken, so that the concentration step never conditions on the global future event Etraj , and the telescoped inequality coincides with the descent inequality summed over the stopped process 
+
+{θ(k)}k<τ on Erff . Statements (b) and (d) are derived con-sequences, the latter holding in the standard high-probability favorable-event regime. The shared-oracle complexity is 
+
+N traj global = K∗(M ∗ 
+
+> s
+
++ M ∗ 
+
+> g
+
+)= eO
+
+ LJ L6W ∗2G2D2 
+
+> κc
+> μ2traj (1 −γ)2ϵ2
+
++ LJ σ2
+
+> g
+> ϵ2
+
+
+
+,
+
+with W ∗ and all derived constants evaluated using μtraj in place of μM ; the factor LJ in the first term enters through 
+
+K∗ = O(LJ /ϵ ) multiplying M ∗ 
+
+> s
+
+. Per-iteration LSTD failure events (Ei,k 
+
+> lstd
+
+)c and confinement failure mass δtraj + γT +1 
+
+are absorbed into the ϵ-budget by the parameter choices of Theorem 6 (with δ⋆ included). Proof. The proof, which combines predictable-event factor-ization with a stopped-process descent telescoping and keeps the RFF favorable event Erff inside every per-step indicator, is deferred to Appendix Q. 
+
+Proposition 3 (Diagnostic for (C ′)) . Set rM (Ms, δ ) := 
+
+CM
+
+ L2plog(2 nK (m + 1) /δ )/M s + L2 log(2 nK (m +1) /δ )/M s
+
+ (matrix Bernstein with the variance and linear terms; one may take CM = 4: with Y := ˜ϕraw ( ˜ϕraw − γ ˜ϕraw ′)⊤ one has ∥Y∥ ≤ (1 + γ)L2 ≤ 2L2,the centered summand obeys ∥X∥ ≤ 4L2 with 
+
+max { EXX ⊤ , EX⊤X } ≤ 4L4, and rectangular matrix Bernstein, applied through the Hermitian dilation of dimension 2( m + 1) , yields 2√2 L2pℓ/M s + 83 L2ℓ/M s with 
+
+ℓ = log(2 nK (m + 1) /δ ) the dimension–union logarithm; both coefficients are dominated by CM = 4 ). Conditional on F− 
+
+> k
+
+, the transition samples (s, a, s′, a′) in D(k) 
+
+> s
+
+are i.i.d. from the joint one-step law dπθ(k) ⊗ πθ(k) ⊗ P ⊗ πθ(k) , so 14 
+
+matrix Bernstein applies conditionally and a union bound over i ∈ [n], k < K yields, with probability ≥ 1 − δ,
+
+sup 
+
+> i,k
+
+M(k) 
+
+> i
+
+− Mθ(k) 
+
+> i
+
+≤ rM (Ms, δ ). (51) 
+
+Consequently, the empirical test Tcert := 
+
+{inf i,k σmin (M(k) 
+
+> i
+
+) ≥ 2rM } has false-certification probability at most δ: with probability at least 1 − δ, whenever Tcert 
+
+passes, the population lower bound inf i,k σmin (Mθ(k) 
+
+> i
+
+) ≥ rM
+
+also holds, equivalently 
+
+P Tcert ∩ { inf  
+
+> i,k
+
+σmin (Mθ(k) 
+
+> i
+
+) < r M } ≤ δ. (52) 
+
+Inequality (52) is a simultaneous false-certification bound :it controls the joint probability of certifying while the pop-ulation condition fails. It does not by itself control the conditional probability P inf i,k σmin (Mθ(k) 
+
+> i
+
+) < r M Tcert 
+
+,an ordinary frequentist conditional in which no prior is involved, which additionally requires a lower bound on the test-passing probability P(Tcert ): a test that never passes satisfies (52) vacuously. A less conservative certificate uses 
+
+ˆμcert := inf i,k σmin (M(k) 
+
+> i
+
+) − rM ; whenever ˆμcert > 0,the executed run satisfied inf i,k σmin (Mθ(k) 
+
+> i
+
+) ≥ ˆμcert except on an event of probability at most δ; this is a post-hoc lower-confidence statement about the realized trajectory. It does not retroactively instantiate the parameter choices of Theorem 7, which require a threshold fixed before the run. Either form is post-hoc: rM depends on Ms, and the sample-complexity choice of Ms depends on 1/μ 2traj , so pre-run application requires a pilot-budget iteration, which calibrates parameters but does not certify the main run. The constants 
+
+W ∗, C ′, C bin , M ∗ 
+
+> s
+
+, ϵ floor in Theorem 7 are recomputed with 
+
+μM replaced by μtraj throughout. 
+
+The diagnostic proposition makes the empirical control of (C ′) precise in the false-certification sense: σmin (M(k) 
+
+> i
+
+) is computed online from M(k) 
+
+> i
+
+, and the test σmin (M(k) 
+
+> i
+
+) > 2rM
+
+carries simultaneous false-certification probability at most δ
+
+for the population lower bound via (52). Scope of certification. 
+
+Proposition 3 controls only the population TD-stability event (C ′); it does not by itself certify the vector-concentration events for b(k) 
+
+> i
+
+−M(k) 
+
+> i
+
+w∗ 
+
+> i
+
+used in Theorem 3, nor the confine-ment and gradient-sample events. Those events are absorbed in expectation through the bad-event budget of Theorem 7’s underlying parameter choices, exactly as in Theorem 6. When (C ′) is taken as an assumption , Theorem 7 has failure proba-bility δtraj  
+
+> M
+
++ δrff as stated. The certificate does not substitute for this assumption in statements (c)–(d): inequality (52) bounds a joint probability and supplies no lower bound on 
+
+P(Etraj ), so the theorem’s failure budget cannot be obtained by replacing δtraj  
+
+> M
+
+with δ. Prospective use therefore requires (C ′) (or a pre-run lower bound on μtraj ) as a premise; the certificate provides post-hoc validation of the executed run, and statements (a)–(b), which need no probability premise, remain the unconditional core. Prospective versus post-hoc use. For a prospective sample-complexity guarantee, μtraj 
+
+must be fixed before the algorithm runs, so that M ∗ 
+
+> s
+
+, λ ∗, W ∗
+
+and the structural-floor constants are chosen consistently with that lower bound. A post-hoc certificate validates that the realized trajectory satisfied the chosen μtraj ; it does not by itself retroactively determine the parameters. A pilot run, with a budget separate from the analyzed run, can calibrate the numerical scale of μtraj and Ms, but because the main run’s parameter sequence differs from the pilot’s, the pilot does not certify the main trajectory; prospective certification would require either a stability-on-a-tube argument (the continuity of 
+
+θ 7 → Mθ 
+
+> i
+
+, Lemma 10, provides a route) or an online stopping rule, which we leave to future work. 
+
+Remark 3 (Floor scaling) . By the definitions, ϵfloor trunc (κ) ∝
+
+[(1 + C′)˜ cρ κ+1 ]2 and ϵfloor rff (m) ∝ [(1 + C′)ϵP (m)] 2,with C′ = (1 + γ)L2/μ M and ϵP (m)2 = eO(˜ g2
+
+> α
+
+DκdS /m )
+
+(using CRFF (d) = 16( d + 2) from the proof of Theo-rem 1); ϵfloor graph (κ) decays as ˜δ2( κc+1) . The within-bin floor ϵfloor bin ∝ (Ctot bin )2 with Ctot bin = √2Cbin + 2 LW ∗
+
+contains two contributions: a matrix-perturbation term Cbin =Θ( L3U1/μ M ) (from Lemma 4, scaling with U1) and a direct pointwise within-bin term 2LW ∗ (from Lemma 7, scaling with 
+
+W ∗); Lemma 6 gives an exact matrix-gap form of the pertur-bation contribution that vanishes identically at full locality. The conditioning amplification is governed by μM (m), which the present analysis does not pin down beyond the upper bound μM ≤ O (m−1/2) of Proposition 2, while the RFF component also retains its explicit finite-feature approximation factor ϵP (m)2. We therefore record the floor behavior under two explicitly hypothesized conditioning scenarios. 
+
+A floor-level consequence of the obstruction. Since every admissible certificate obeys μM (m) ≤ (1 + γ)L2/√m + 1 
+
+(Proposition 2), the generic constant satisfies, at every m,
+
+Cbin = Cη (1 + 2 γ)L3U1
+
+μM
+
+≥ Cη (1 + 2 γ)1 + γ L U 1
+
+√m + 1 ,
+
+(53) 
+
+while 2LW ∗ obeys only the upper envelope W ∗ = O(1 /μ M )
+
+(no lower scaling is claimed for it; the generic Cbin component alone carries the certificate-level growth). Since L = √¯r2 + 2 
+
+and U1 = 1 + √2γ˜gα ¯r/ (1 − γ) are m-independent by defini-tion, the dimensional obstruction forces the certified generic within-bin term to grow at least linearly in m, in squared units and with the remaining primitive factors held fixed; 
+
+μM = Θ( m−1/2) is the best-case conditioning scaling, not merely one scenario. This is a statement about the certificate produced by the present upper-bound analysis, not a lower bound on the actual algorithmic error; the refined exact-gap form (Lemma 6), which replaces Cη (1 + 2 γ)L2 by ∆θ 
+
+> i,κ
+
+,avoids this conclusion whenever the gap vanishes or decays sufficiently; the gap vanishes identically at full locality. 
+
+Scenario 1 ( m fixed; μM (m) a fixed primitive). If the random-feature dimension m is fixed as a problem primitive, rather than sent to infinity, and the assumed or diagnosed lower bound μM (m) is treated as the fixed conditioning constant for that chosen m, then C′, W ∗, U 1 are O(1) relative to the stationarity tolerance ϵ, the RFF floor is the fixed quantity ϵfloor rff (m) = eO(˜ g2
+
+> α
+
+DκdS /m ), ϵfloor trunc (κ) decays as ρ2( κ+1) in κ, and the within-bin floor is bounded. Even at fixed m, however, the certificate-level bound above applies at that m (Cbin ≳ LU 1
+
+√m + 1 ); bounded here means bounded as ϵ → 0 at the chosen m, not numerically small. 15 
+
+Scenario 2 (saturating μM ≍ m−1/2). The dimensional obstruction (Proposition 2) is an upper bound, μM (m) ≤O(m−1/2): it excludes asymptotically slower decay (such as 
+
+m−1/4) and permits faster deterioration (such as m−1). In the saturating-conditioning scenario in which the obstruction upper bound is order-tight, i.e. μM = Θ( m−1/2), with the remaining primitive factors (including U1) held Θ(1) , one has 
+
+(1 + C′)2 = Θ( m), C2bin = Θ( m), and W ∗2 = O(m). Then:  
+
+> •
+
+The proved RFF certificate satisfies only ϵfloor rff (m) = 
+
+eO(1) (an upper envelope: Θ( m) · eO(1 /m )); no matching lower rate is claimed.  
+
+> •
+
+Cbin = Θ( √m) and 2LW ∗ = O(√m); thus (Ctot bin )2 =Θ( m) and the generic within-bin certificate is ϵfloor bin =Θ( m).
+
+A more pessimistic conditioning hypothesis. If, for a par-ticular model class, the available certificate is additionally known to satisfy μcert  
+
+> M
+
+= Θ(1 /m ), and the analysis substitutes that certificate for μM , then (1 + C′)2 = Θ( m2) and 
+
+W ∗ = O(m), giving ϵfloor bin = Θ( m2) and ϵfloor rff = eO(m).The trace cap of Lemma 3 supplies only the O(1 /m ) upper 
+
+limitation on that certificate, and the certificate may be smaller or vanish, so the Θ(1 /m ) premise is an additional hypothesis, not a consequence of the cap. This is a property of that certificate or problem class , not a general consequence of Lemma 3: the true σmin (Mθ 
+
+> i
+
+) may be considerably larger than the certificate, and the only proved general upper bound on the true conditioning remains the O(m−1/2) of Proposition 2. Under the generic within-bin envelope in each scenario above, increasing m inflates the certified within-bin compo-nent, while the proved envelope for ϵfloor rff does not shrink beyond the rates stated above. The dimensional obstruction proves only the upper bound μM ≤ O (m−1/2); a correspond-ing tight lower-bound example would convert the saturating scenario into an unavoidable obstruction. We therefore treat 
+
+m as a problem primitive rather than asserting an inevitable floor inflation. 
+
+Corollary 2 (Specialized within-bin floor at κπ = 0). If 
+
+κπ = 0 , then in the proof of Lemma 8 the raw/conditional decomposition ˆQ(k) 
+
+> ℓ
+
+− Qπℓ =  ⟨ ˜ϕπℓ,κ , ˆw(k) 
+
+> ℓ
+
+⟩ − Qπℓ
+
+ + η⊤ 
+
+> ℓ
+
+ˆw(k)
+
+> ℓ
+
+is performed before any application of Jensen or Cauchy– Schwarz, and the score-weighted expectation of the fluctuation term vanishes, E[η⊤ 
+
+> ℓ
+
+ˆw(k) 
+
+> ℓ
+
+∇θi log πi | F Qk ] = 0, by tower against σ(Xκℓ ): the score is σ(Xκℓ )-measurable when κπ = 0 ,
+
+ˆw(k) 
+
+> ℓ
+
+is FQk -measurable, the gradient sample is independent given θ(k), and the deployed critic is linear in ˜ϕraw . Only the conditional-feature error is then routed through the critic bound, so Ctot bin in ϵfloor bin may be replaced by √2 Cbin , and the saturating-conditioning inflation of Remark 3 continues to apply only through the matrix-perturbation contribution 
+
+Cbin = Θ( L3U1/μ M ); the squared-bias version of this substitution is the κπ = 0 clause of Lemma 9, proved by cancelling inside the conditional bias before absolute values. The simulation results in Section VII operate in this regime. C. Adaptive-locality diagnostic 
+
+Proposition 4 (Adaptive locality diagnostic) . Under the con-ditions of Theorem 6 with m fixed and the strictly stronger hypothesis ∆ρ < 1, suppose further that (i) m satisfies the RFF feasibility relation (13) at the selected radius κ∗, in the full form (13) ; the simplified ratio condition ˜gα(κ∗)2Dκ∗ dS /m ≤ 1 is a necessary scale, not a restatement of that relation; (ii) the deterministic Set-C thresholds admit the uniform lower envelope μM (m, κ ) ≥ μM (m) > 0 over the working range [[0 , κ max ]] ; only the selected-radius event is realized after the single feature draw. This envelope makes the implicit fixed-point definition of κ∗ below well-posed. Here κmax ∈ N is a fixed working-range bound; features are drawn once, at the selected radius 
+
+κ∗, after κ∗ has been determined from the (oracle) decay constants, so (ii) is a deterministic lower bound on the population constant μM (m, κ ) across the range, not a probabilistic event over multiple feature draws. With the graph-growth constant CD of Remark 2, so that 
+
+Dκc ≤ CD ∆κ+κπ (capped at n), define the constants 
+
+Cg := G2C2   
+
+> D∆2κπ c2
+> ((1 −γ)(1 −˜δ)) 2
+
+,Ct(κ) := G2C2   
+
+> D∆2κπ ((1+ C′(κ))(1+2 /(1 −γ))) 2
+> (1 −γ)2
+
+,
+
+(54) 
+
+where Cg is κ-independent and Ct(κ) = Ct(μM (m, κ )) 
+
+inherits κ-dependence through C′(κ) = (1+ γ)L2/μ M (m, κ ).The radius κ∗ is then defined implicitly as any positive integer in [[1 , κ max ]] satisfying both 
+
+κ∗ ≥ log( Cg Cfloor /ϵ )2 log(1 /∆ρ) ,κ∗ ≥ log( Ct(κ∗)˜ c2 Cfloor /ϵ )2 log(1 /∆ρ) ; (55) 
+
+under hypothesis (ii), the right-hand side of the second inequality is bounded by 
+
+log( Ct(μM (m))˜ c2 Cfloor /ϵ )/(2 log(1 /∆ρ)) , so the fixed point exists provided this value lies in [[1 , κ max ]] . A conservative explicit alternative replaces Ct(κ∗) by ¯Ct := sup 0≤r≤κmax Ct(r),finite under hypothesis (ii), after which κ∗ =
+
+⌈max {log( Cg Cfloor /ϵ ), log( ¯Ct ˜c2 Cfloor /ϵ )}/(2 log(1 /∆ρ)) ⌉
+
+is explicit. With κ∗ so chosen, ϵfloor trunc (κ∗) ≤ ϵ/C floor and 
+
+ϵfloor graph (κ∗) ≤ ϵ/C floor , and 
+
+E
+
+h 1
+
+> nK ∗
+
+X
+
+> k
+
+Gη (θ(k)) 2
+
+EM ∩ Erff 
+
+i
+
+≤ 3ϵ + Cfloor 
+
+ϵfloor bin (κ∗; m) + ϵfloor rff (m; κ∗),
+
+where, with κ∗ 
+
+> c
+
+:= κ∗ + κπ ,
+
+ϵfloor rff (m; κ∗)= eO
+
+ G2γ2 ¯r2 
+
+> (1 −γ)4
+
+D2 
+
+> κ∗
+> c
+
+(1 + C′(κ∗)) 2CRFF (Dκ∗ dS ) ˜gα(κ∗)2
+
+> m
+
+
+
+,
+
+an upper bound obtained from ϵfloor rff = G2D2 
+
+> κc
+
+[(1 + 
+
+C′)Erff (m)] 2/(1 − γ)2 with Erff (m) = γ¯rϵ P (m)/(1 − γ)
+
+and ϵP (m)2 = eO(CRFF (Dκ∗ dS )˜ g2
+
+> α
+
+/m ) (no matching lower inversion is claimed; suppressing only fixed primitive factors, this is eO(D2 
+
+> κ∗
+> c
+
+(1 + μM (m, κ ∗)−1)2 ˜gα(κ∗)2Dκ∗ dS /m )), and, exactly as in (43) ,
+
+ϵfloor bin (κ∗; m) = G2D2 
+
+> κ∗
+> c
+> (1 −γ)2
+
+Ctot bin (κ∗, m )2, (56) 16 
+
+with Ctot bin = √2 Cbin + 2 LW ∗ (at κπ = 0, Corollary 2 replaces Ctot bin by √2 Cbin ). Neither component is a univer-sal constant times its amplification factor: the κ∗-dependent prefactor D2 
+
+> κ∗
+> c
+
+is nonconstant, contributing at most a polylog-arithmic factor in 1/ϵ on linear-growth graphs, leaving the quasi-polynomial classification unchanged under polynomial growth, and contributing a polynomial factor dominated by the stretched-exponential envelope under exponential growth. Since ˜gα(κ) = exp( O(DκdS )) by its definition (it can grow exponentially in DκdS when 2πσ 2 > α 2, and the following are upper inflation envelopes) and κ∗ = O(log(1 /ϵ )) , the surviving-floor inflation is governed by the neighborhood growth v(κ) := Dκ: for linear growth ( v(κ) = O(κ), e.g. path graphs, Dκ = 2 κ + 1 ) the envelope is exp( O(log(1 /ϵ ))) ,i.e. polynomial in 1/ϵ ; for polynomial growth v(κ) = O(κp),
+
+p > 1, it is quasi-polynomial, exp( O(log p(1 /ϵ ))) ; and under exponential neighborhood growth v(κ) = O(∆ κ) it is of stretched-exponential type, exp( O((1 /ϵ )c)) for a constant 
+
+c > 0. In every case the inflation can violate (i) if m is held fixed. This proposition is an oracle bias-balancing diagnostic, not a rate improvement; it operates only in the regime where (i)–(ii) remain valid at the selected κ∗. When the realized growth Dκ∗ 
+
+> c
+
+reaches n (i.e. κ∗ 
+
+> c
+
+of the order of the graph diameter), the cap Dκ∗ 
+
+> c
+
+≤ n contributes an explicit factor of n2
+
+through D2 
+
+> κ∗
+> c
+
+in the surviving floor, consistent with Remark 2. 
+
+The proof is in Appendix R. True ϵ-stationarity requires the floor itself at most ϵ; a sufficient condition, explicit up to the universal proof constant Cfloor , is Ctot bin ≤ 1−γGD κc 
+
+pϵ/ (4 Cfloor ),
+
+(1 + C′)Erff (m) ≤ 1−γGD κc 
+
+pϵ/ (4 Cfloor ), (1 + C′)Etrunc (κ) ≤
+
+> 1−γGD κc
+
+pϵ/ (4 Cfloor ), and ϵagg (κ) ≤ pϵ/ (4 Cfloor ). The bind-ing constraint in practice is ϵfloor bin via W ∗/μ M . For a total stationarity target τ , the allocation is 3ϵopt + Cfloor [ϵfloor bin +
+
+ϵfloor rff ] ≤ τ ; for example, ϵopt = τ / 6 with the surviving floor at most τ / 2.VII. N UMERICAL EXPERIMENTS 
+
+We evaluate CDCPG on a Linear-Coupled-Quadratic (LCQ) benchmark, a structured networked-control stress test with a closed-form linear–quadratic-regulator (LQR) reference. Each of n = 9 agents on a path graph carries scalar state si ∈ R
+
+and action ai ∈ [−A, A ], with local dynamics 
+
+st+1  
+
+> i
+
+= ρdyn sti + βati + κdyn 
+
+X
+
+> j∈N i\{ i}
+
+(stj − sti) + εti, (57) 
+
+εti ∼ N (0 , σ 2
+
+> d
+
+), and quadratic neighbor-coupled rewards 
+
+ri = −s2 
+
+> i
+
+− λn
+
+P 
+
+> j∈N i\{ i}
+
+s2 
+
+> j
+
+− λaa2 
+
+> i
+
+. Parameters are listed in Table II; state and action are projected onto [−Smax , S max ]
+
+and [−A, A ] as a numerical safeguard. Let KLQR denote the gain solving the unconstrained discounted Riccati equation; because the implemented simulator clips states and actions, 
+
+KLQR is used as a reference controller and is not claimed to be optimal for the clipped MDP. The per-agent expected discounted return under the stochastic reference policy a =
+
+−KLQR s + N (0, σ 2 
+
+> π
+
+I) is V ref  
+
+> σ
+
+= −2.713 (verified by 5 × 10 3-episode Monte-Carlo). The averaged diagonal entry of KLQR 
+
+is KLQR = 0.350 . The LCQ benchmark is not a literal TABLE II: Parameters of the LCQ benchmark.                      
+
+> ρdyn = 0 .7β= 0 .5σd= 0 .10 κdyn = 0 .20
+> λn= 0 .5λa= 0 .5A= 5 .0Smax = 3 .0
+> σ0= 0 .5σπ= 0 .30 γ= 0 .95 n= 9
+
+instance of Sets A–D: linear dynamics and quadratic rewards are unbounded before clipping. The experiment serves as a structured regime-consistency check on the locality and finite-sample predictions, not a direct verification of the theorem assumptions. 
+
+A. Setup and baselines 
+
+CDCPG is instantiated with κ = 1 , κ π = 0 , λ = 10 −4, η =5 × 10 −2 (cosine decay), Ms = 2000 , M g = 1024 . The zero-radius actor matches the actor-locality regime of Corollary 2; the corollary’s exact raw-feature fluctuation cancellation ap-plies to the analyzed linear RFF critic and is not invoked for the structured quadratic critic used in this comparison. The main comparison uses a structured quadratic-basis state-value critic tailored to the LQR structure of the benchmark and should be viewed as an implementation-level demonstration of the locality predictions, not a direct verification of the theorem assumptions (which analyze the augmented RFF– LSTD critic of Definition 3). The separate rate-validation experiment in Section VII.C uses the augmented RFF–LSTD critic directly and isolates the critic-approximation behavior predicted by Theorem 1. Baselines: independent policy gradi-ent (IPG); Networked Actor–Critic (Networked AC) [7] with one-hop consensus; multi-actor attention-critic (MAAC) [27]; and centralized policy gradient with a global linear Gaussian policy. All methods share the exploration scale σπ , per-iteration sample budget, and learning-rate schedule. All runs use K = 200 outer iterations and 5 random seeds; curves report the mean ± one standard deviation across seeds, the Riccati reference V ref  
+
+> σ
+
+is verified by an independent 5 × 10 3-episode Monte-Carlo evaluation, and the conditioning proxy below is logged at every (i, k ) pair throughout training. The conditioning proxy σmin (M(k) 
+
+> i
+
+) is logged at every iteration with empirical median ˆμM = 0 .41 ± 0.05 across (i, k ); the median is reported as a summary statistic only; the certificate of Proposition 3 would report inf i,k σmin (M(k) 
+
+> i
+
+) net of the concentration radius rM , which these runs did not archive. This is the empirical singular-value scale of the implemented structured critic only; it neither certifies (C ′) nor estimates the population conditioning of the analyzed RFF critic. The implementation value λ = 10 −4 sits far below this scale; the observation is descriptive and is not a certification of the population side condition λ ≤ μM /4 of Remark 1. 
+
+B. Comparison with decentralized baselines 
+
+Figures 1–3 and Table III report the comparison. CDCPG and Centralized close the gap to within 0.55% of V ref  
+
+> σ
+
+and are numerically close with 5 random seeds; we do not claim statistical indistinguishability at this seed count. Local-policy baselines plateau at 1.6–5.5% gap. CDCPG uses a κπ = 0 
+
+actor (local policy) coupled with a κ = 1 neighbor-aware 17 0 50 100 150 200    
+
+> iteration k
+> −3.1
+> −3.0
+> −2.9
+> −2.8
+> −2.7
+> per-agent return̄  J (θk)
+> CDCPG
+> Centralized
+> Networked AC
+> MAAC
+> IPG
+> V⋆
+> σ= − 2.713
+
+Fig. 1: Per-agent discounted return ¯J(θk) versus iteration 
+
+k on LCQ ( n = 9, 5 seeds, mean ± one std). Dashed reference V ref  
+
+> σ
+
+= −2.713 . CDCPG matches the Centralized full-information baseline within 0.11 percentage points at 5
+
+seeds. The comparison uses the structured quadratic-basis critic of Section VII-A; the analyzed RFF–LSTD critic is exercised in Fig. 4. critic; the advantage over IPG is thus consistent with the credit-assignment information carried by the critic’s policy-gradient signal (cf. Lemma 8, which propagates value information across the κc-neighborhood), not from a richer policy class. The Networked AC and MAAC baselines have similar policy-class structure but use consensus- or attention-aggregated value rather than the spectral conditional-expectation trun-cation analyzed here; their plateau is consistent with value-aggregation bias being one possible limiting factor, although this experiment does not isolate that mechanism from other implementation differences. Define k0.9 := min {k : ¯Jk −
+
+¯J0 ≥ 0.9( V ref  
+
+> σ
+
+− ¯J0)}, the first iteration attaining 90% of the reference improvement. CDCPG reaches the k0.9 threshold in 
+
+13 iterations versus 25 for Centralized and 55 –133 for the local baselines; this is a descriptive iteration-count result, and no causal variance-reduction claim is made. In sample efficiency, CDCPG reaches the k0.9 threshold in roughly half the iterations of Centralized and in a small fraction of those of the local baselines; these are observed iteration-count ratios at the present seed count, not claimed asymptotic speed-up factors. 
+
+C. Feature-dimension trend 
+
+We fit the augmented RFF critic of Definition 3 at vary-ing m ∈ {50 , 100 , 250 , 500 , 1000 , 2000 } with κ and pol-icy held fixed; the closed-form Qref  
+
+> σ
+
+provides the analytic unconstrained-LQ reference. Figure 4 reports the relative critic error ˆQ − Qref  
+
+> σ
+
+/ Qref  
+
+> σ
+
+averaged over 10 4 test samples from 
+
+dπ . The log-log fit yields slope −0.46 (R2 = 0 .98 ). The observed trend is compatible with the eO(1 /√m) kernel-L1
+
+behavior of Theorem 1, but a direct finite-sample verification would require holding the conditioning σmin (M(k) 
+
+> i
+
+) fixed across m (it drifts with m; Remark 3) and measuring kernel-
+
+L1 error rather than relative Q-error (a norm-ratio metric 0 50 100 150 200    
+
+> iteration k
+> −0.3
+> −0.2
+> −0.1
+> 0.0
+> policy gain  W0, 0, 0
+> CDCPG
+> Centralized
+> Networked AC
+> MAAC
+> IPG
+> −̄ K⋆= − 0.350
+
+Fig. 2: Trajectory of the agent-0 diagonal policy weight on LCQ under each method; the dashed line is the network-average diagonal entry of the unconstrained Riccati gain, 
+
+−KLQR = −0.350 , a reference value rather than the exact agent-0 gain or the optimizer over the diagonal-policy class. CDCPG with the structured critic drives the diagonal entry of its κπ = 0 local feedback to the diagonal of KLQR ; the off-diagonal entries of KLQR are not representable in this policy class, so the comparison object is the best diagonal local feedback rather than the global LQR controller. CDCPG   
+
+> Central.
+> Net.\,AC
+> MAAC
+> IPG
+> −2.90
+> −2.85
+> −2.80
+> −2.75
+> −2.70
+> −2.65
+> final per-agent return
+> V⋆
+> σ= − 2.713
+
+Fig. 3: Final-iteration per-agent return on LCQ, mean ± one std over 5 seeds. Dashed reference: V ref  
+
+> σ
+
+.
+
+ˆQ − Qref   
+
+> σL2
+
+/ Qref   
+
+> σL2
+
+would additionally avoid instability of pointwise ratios near zeros of Qref  
+
+> σ
+
+and is noted for future reporting); the measured error additionally carries truncation error and any mismatch between the clipped simulator and the analytic unconstrained-LQ reference; the error drops from 
+
+42% at m = 50 to 7% at m = 2000 .
+
+D. Decay proxy and ablations 
+
+Figure 5 regresses log |Cov( ri, r j )| against graph distance; the fitted geometric rate is ˆρ = 0 .86 . With ∆ = 2 , ˜δ =(∆ − 1)ˆ ρ = 0 .86 < 1 is compatible with the fixed-locality regime of Theorem 6; reward-covariance decay is a proxy, neither necessary nor sufficient, and does not certify Assump-tion 2(B2), which is a Q-function sensitivity condition. The 18 
+
+TABLE III: LCQ benchmark, n = 9 path graph, K = 200 , 5 seeds, σπ = 0 .30 . Final per-agent return ¯J (mean and std), diagonal policy gain, signed gap to V ref  
+
+> σ
+
+= −2.713 , and median iteration k0.9 to reach 90% of available improvement. The CDCPG row uses the structured quadratic-basis critic; the augmented RFF–LSTD critic of Definition 3 is exercised separately in Section VII.C.                                  
+
+> Method ¯J(±std) Diag. gain Gap k0.9
+> CDCPG with the structured critic −2.728 (0 .018) −0.345 −0.55% 13
+> Centralized −2.725 (0 .015) −0.348 −0.44% 25
+> Networked AC −2.756 (0 .042) −0.252 −1.59% 55
+> MAAC −2.852 (0 .029) −0.135 −5.12% 113
+> IPG −2.863 (0 .025) −0.158 −5.53% 133 10 210 3
+> RFF dimension m
+> 10 −1
+> 2 × 10 −1
+> 3 × 10 −1
+> 4 × 10 −1
+> 6 × 10 −1
+> rel.\ Q-error  |̂ Q − Q ⋆ |/| Q ⋆ | OLS fit: slope = − 0.46 ( R2= 0.98)
+> theory: (1/√ m) + εfloor
+> empirical (mean±std, 5 seeds)
+
+Fig. 4: Relative Q-function approximation error 
+
+ˆQ − Qref  
+
+> σ
+
+/ Qref  
+
+> σ
+
+versus RFF dimension m on LCQ (Ms = 2000 , 5 seeds, log-log axes). Fitted slope −0.46 
+
+(R2 = 0 .98 ). 0 2 4 6 8      
+
+> graph distance d(i,j)
+> 10 0
+> 3 × 10 −1
+> 4 × 10 −1
+> 6 × 10 −1
+> |Cov( ri, rj)|
+> fit: ̂ ρ= 0.86
+> analytic: ρ= 0.86
+> empirical (mean ± std)
+
+Fig. 5: Empirical absolute cross-agent reward covariance 
+
+|Cov( ri, r j )| versus graph distance on LCQ ( 5 seeds, semi-log axes). Fitted geometric rate ˆρ = 0 .86 .stronger contraction ∆ˆ ρ = 1 .72 ̸ < 1 required in Proposition 4 is not certified. Figure 6 and Table IV sweep κ (Theorem 4) and λ (The-orem 3) at K = 150 , 3 seeds. The truncation sweep shows monotone gap reduction with consecutive-hop ratios ≈ 0.5,consistent with Lemma 2; the κ = 0 point is included as an empirical local-only baseline and lies outside the theo-rem condition κ ≥ max {1, κ π + 1 } for one-hop coupled rewards. The λ sweep is flat over λ ∈ { 10 −6, 10 −4, 10 −2}
+
+(gaps −0.70% , −0.63% , −0.55% ) and breaks at λ = 1 (gap TABLE IV: CDCPG ablation on LCQ ( K = 150 , 3 seeds). Final per-agent return ¯J (mean and std) and signed gap to 
+
+V ref  
+
+> σ
+
+. Each sweep varies one parameter with the other held fixed: the κ sweep fixes λ = 10 −4, and the λ sweep fixes 
+
+κ = 3 .                       
+
+> Sweep Setting ¯J(±std) Gap
+> κ0−2.852 (0 .040) −5.13% 1−2.778 (0 .030) −2.40% 2−2.748 (0 .025) −1.29% 3−2.732 (0 .028) −0.70%
+> λ10 −6−2.732 (0 .018) −0.70% 10 −4−2.730 (0 .018) −0.63% 10 −2−2.728 (0 .018) −0.55% 1−2.978 (0 .034) −9.77%
+
+−9.77% ), consistent with the side-condition scale ˆμM /4 ≈
+
+0.10 implied by the median conditioning proxy (Section VII-A) and with Remark 1. 
+
+E. Summary of empirical evidence 
+
+The four studies exercise complementary components of the theory. The baseline comparison (Figs. 1–3, Table III) probes the locality predictions: a κπ = 0 actor coupled with a κ = 1 
+
+neighbor-aware critic recovers centralized performance on a benchmark whose interactions are genuinely networked. The 
+
+m-sweep (Fig. 4) probes the feature-approximation compo-nent, with a fitted exponent compatible with Theorem 1 under the stated confounds. The covariance regression (Fig. 5) probes the plausibility of the decay regime, explicitly as a proxy. The λ-ablation (Fig. 6) probes the regularization analysis of Remark 1 and Theorem 4. None of these studies certifies an assumption; each is a consistency check against the specific mechanism the corresponding theorem isolates. Assumption-level certification via Proposition 3 and an end-to-end CDCPG row with the analyzed RFF–LSTD critic are the natural next experiments and lie outside the present study. VIII. C ONCLUSION 
+
+We have refined spectral localized policy-gradient analy-sis for continuous networked MDPs in four structural di-rections: conditional-expectation Q-truncation that avoids the continuation-kernel mismatch of naive Bellman truncation; a feature-dimension-aware TD-stability hypothesis, reducible by an unconditional excitation bound to a symmetric persistence-of-excitation condition, with a trajectory-conditional compan-ion theorem proved via predictable-event factorization and 19 0 25 50 75 100 125 150                        
+
+> iteration k
+> −3.0
+> −2.9
+> −2.8
+> −2.7
+> per-agent return̄  J (θk)
+> κ= 0
+> κ= 1
+> κ= 2
+> κ= 3
+> V⋆
+> σ= − 2.713
+> (a) Truncation radius κ.025 50 75 100 125 150
+> iteration k
+> −3.1
+> −3.0
+> −2.9
+> −2.8
+> −2.7
+> per-agent return̄  J (θk)
+> λ= 10 −6
+> λ= 10 −4
+> λ= 10 −2
+> λ= 1
+> V⋆
+> σ= − 2.713 (b) Regularization λ.
+
+Fig. 6: CDCPG ablation on LCQ ( K = 150 , 3 seeds; mean ± one std). Dashed reference: V ref  
+
+> σ
+
+= −2.713 . (a) Truncation-radius sweep with consecutive-hop ratios ≈ 0.5, consistent with Lemma 2. (b) Regularization sweep with flat regime over four decades and break at λ = 1 , consistent with the side-condition scale ˆμM /4 at the median conditioning proxy ˆμM ≈ 0.41 .a predictable-prefix, equivalently stopped-process, bound that implies the corresponding global favorable-event bound; an explicit four-component structural floor whose certified within-bin penalty grows at least linearly in m under the generic envelope; this is an upper-bound artifact of the present raw-feature LSTD certificate, with saturating conditioning ( μM ≍
+
+m−1/2) the best case, with a specialized reduction at κπ = 0 ;and an adaptive-locality bias-balancing diagnostic that selects the radius κ∗(ϵ) at which truncation and graph-decay resid-uals fall below ϵ. The matrix-Bernstein diagnostic bounds the simultaneous false-certification probability by δ for the population TD-stability component along realized iterates; it is a post-hoc certificate for the executed run rather than a prospective guarantee, and pilot runs serve only to calibrate parameters. Above the structural floor, the ϵ-dependence of the optimization and statistical terms in the fixed-(κ, m )
+
+shared-oracle complexity eO(1 /ϵ 2) matches, at the exponent level, the standard smooth nonconvex stochastic-optimization lower bound under a different oracle model; the adaptive-locality result is a diagnostic, not a rate improvement. Open questions include feature constructions suppressing the within-bin penalty, lower-bound examples for the within-bin term; such an example would convert the saturating-conditioning regime from an upper-bound artifact into a proved obstruc-tion, concrete policy-class conditions implying the trajectory-conditional hypothesis and the differentiated-decay regularity (D3), a fully worked coupled continuous model class verifying (A), (B2), the excitation bound of Lemma 3, and (D3) simul-taneously, and extensions to independent-trajectory sampling. APPENDIX AHEURISTIC CONTRACTION ROUTE TOWARD (B2) AND (D3) We give a heuristic contraction route toward regimes in which Assumption (B2) and the differentiated-decay part of (D3) are expected to hold; both are taken as standing primitives in the main analysis, and the following is intended only as intuition for when they are expected to hold. A fully rigorous proof requires a distance-indexed influence-cone recursion and is omitted. Define Dunc := 2( Bf + σ√dS ) and 
+
+˜Lf := Lf
+
+√D1
+
+p1 + L2 
+
+> π
+
+Dκπ , ˜Lr analogously. 
+
+a) Sufficient-condition sketch for (B2).: Under (A1)– (A3), if ˜Lf < 1, then (B2) is expected to hold with ρ =
+
+γ1/(κπ +1) and a constant c depending on ˜Lr , D unc , γ .
+
+Sketch of argument. Couple two trajectories with synchronous Gaussian noise and the optimal W2 coupling of actions. A distance-indexed influence recursion shows that discrepancies outside N κi at time 0 propagate inward at unit rate per step under the bounded-Lipschitz dynamics. Rewards at i agree until the front reaches N 1 
+
+> i
+
+, after which the residual is bounded by ˜Lr Dunc ˜Ltf in expectation. Summing with discount γt and front-propagation index τ ∗ = ⌊(κ − κπ − 1) /(κπ + 1) ⌋ yields (B2). A fully rigorous version requires a distance-indexed envelope er (t) = sup d(i,j )≤r
+
+q
+
+E sj − s′ 
+
+> j
+> 2
+
+in place of the global maximum; we treat (B2) as the primitive in the main analysis. 
+
+b) Heuristic route for (D3).: The differentiated-decay part of (D3) is expected to hold under the same contraction regime ˜Lf < 1, provided in addition that the score ∇θj log πj
+
+is uniformly bounded and Lipschitz in θj (which is (D3)(i)). The reason is structural: ∇θj Qπi and ∇θj dπ both satisfy influence recursions of the same distance-indexed form as the one used for (B2), but with the score derivative playing the role of the perturbation source. Differentiating the coupled-trajectory recursion in θj introduces one extra bounded factor (the score θ-derivative, bounded by G′) at the agent-j node and otherwise propagates the discrepancy through the same contraction ˜Lf < 1. The front therefore reaches agent i after 
+
+d(i, j ) steps with geometric attenuation, giving ∇θj Qπi ≲
+
+ρd(i,j ) and analogously for the occupancy sensitivity; the cross-parameter Hessian block ∂2 
+
+> θiθj
+
+J, which aggregates these component sensitivities (Appendix B, Step 1), then inherits the geometric decay postulated in (D3)(ii). We emphasize that this is a sketch: a rigorous derivation requires the differentiated influence-cone recursion, and we therefore state (D3) as a primitive assumption rather than a consequence of (B2). 20 
+
+APPENDIX BDERIVATION OF LJ = O(1) UNDER THE DIFFERENTIATED REGULARITY (D3) This appendix shows that, under Assumption (D3) , the Hessian ∇2J(θ) has operator norm bounded independently of the network size n on Θ0, which justifies treating LJ as an n-uniform primitive in (D2). We stress at the outset what is and is not proved here: the geometric decay of the cross-parameter Hessian block ∂2 
+
+> θiθj
+
+J in graph distance is assumed 
+
+as part of (D3)(ii); it does not follow from the exponential decay (B2) of Qπi itself, because differentiation in a policy parameter introduces score and occupancy sensitivities, and mixed second-order differences, that (B2) does not control. What this appendix establishes is the implication “(D3) ⇒
+
+LJ = O(1) ,” i.e. that the assumed per-block decay, once granted, sums to an n-uniform operator-norm bound on the Hessian. The argument follows the spatial-decay template of Qu et al. [3] adapted to the continuous-state policy-gradient setting. 
+
+Step 0: Twice-differentiability and block structure 
+
+By (D3)(i), each πi(· | sN κπ i ; θi) is twice continuously differentiable in θi on the compact convex Θ0,i , with score 
+
+∇θi log πi bounded by G (Assumption (A3)) and Lipschitz in θi with constant G′. Since J(θ) = Eμ0 [P 
+
+> i
+
+V πi (s(0) )] is a finite sum of discounted returns and the policy enters smoothly, dominated convergence (the integrands are uniformly bounded by Qmax and the relevant derivative families are uniformly bounded under (A3) and (D3)(i)) gives that J is twice con-tinuously differentiable on the interior of Θ0, and the second derivative extends continuously to the compact Θ0. Write the Hessian in block form 
+
+∇2J(θ) ∈ Rnd θ ×nd θ , [∇2J]ij := ∂2 
+
+> θiθj
+
+J ∈ Rdθ ×dθ .
+
+(58) 
+
+Step 1: Differentiating the per-agent policy-gradient identity 
+
+Fix agents i, j . Starting from the per-agent policy-gradient identity (5), 
+
+∇θi J(θ) = 11 − γ Eνπ
+
+h nX
+
+> ℓ=1
+
+Qπℓ (s, a) ψi(s, a)
+
+i
+
+, (59) where ψi := ∇θi log πi(ai | sN κπ i ) is the agent-i score. Differentiating once more in θj and using the product rule on the three θj -dependent factors, namely the occupancy-times-policy measure νπ , the value Qπℓ , and, only when j = i, the score ψi, gives 
+
+[∇2J]ij = 11 − γ
+
+
+
+Eνπ
+
+hP
+
+> ℓ
+
+(∇θj Qπℓ ) ψ⊤
+
+> i
+
+i| {z }
+
+> =: T Qij
+
++ P 
+
+> ℓ
+
+Eνπ
+
+Qπℓ ψi (∇θj log νπ )⊤| {z }
+
+> =: T νij
+
++ Eνπ
+
+P  
+
+> ℓ
+
+Qπℓ (∂θj ψi)| {z }
+
+> =: T ψij
+
+
+
+,
+
+where the score-derivative block Tψij is non-zero only when 
+
+j = i (since ψi depends on θj only through j = i), and 
+
+∇θj log νπ denotes the score of the occupancy-policy measure with respect to θj . These three terms are formal motivation for the mechanisms through which agents i and j couple in the curvature of J; the occupancy score ∇θj log νπ is shorthand for the signed-measure derivative ∂θj νπ since the discounted occupancy may carry a singular t = 0 component, the display is not used quantitatively, and the theorem below relies only on (D3)(ii); throughout, the standing graph-tail hypothesis ˜δ := (∆ − 1) ρ < 1 of (D3)(iii) is in force. 
+
+Step 2: Per-block geometric decay 
+
+The differentiation under the expectation in Step 1 is justi-fied as follows: ∇θj log νπ denotes the score of the discounted occupancy, defined through its finite-horizon truncations νπT := (1 − γ) P 
+
+> t≤T
+
+γt Pt ⊗ π (whose densities are finite products of 
+
+θ-differentiable policy factors along the trajectory, with scores bounded by tG ), the limit T → ∞ being exchanged with the expectation by dominated convergence against the geometric weights under the uniform bounds of (A3) and (D3)(i); the resulting object is used in the sequel only through the assumed decay (60) below, never through an explicit formula. Assumption (D3)(ii) postulates the cross-block geometric decay directly, 
+
+[∇2J(θ)] ij ≤ c′′ ρ d(i,j ), c′′ := c∂ , (60) uniformly in θ ∈ Θ0. We record why this is the natural curvature analogue of (B2) for the three terms identified in Step 1, rather than an unrelated hypothesis. In TQij the score 
+
+ψi is conditionally mean-zero given the state and supported on N κπ 
+
+> i
+
+, while ∇θj Qπℓ carries a value sensitivity localized at agent j; the block thus couples i and j only through value sensitivities propagating along the graph. In Tνij the measure score ∇θj log νπ = ∇θj log dπ + ψj localizes a second sensitivity at j while ψi localizes at i, with Qπℓ coupling the two through (B2). In Tψij , by (D3)(i), ∂θj ψi is non-zero only for j = i and has operator norm at most G′, so this term contributes only a bounded constant to the diagonal block and does not affect off-diagonal decay. A first-principles derivation of (60) from the primitive sensitivities of (A3) and (B2) would require controlling mixed second-order differences, namely the variation of an already-differentiated value in a second, distant agent’s action, which (B2) does not provide; we therefore take the cross-block decay (60) as the primitive content of (D3)(ii), with constant c′′ = c∂ independent of n.The number of agents at exact graph distance r from a fixed agent is at most ∆(∆ −1) r−1 for r ≥ 1 (and 1 for r = 0 ) on a graph of maximum degree ∆. Hence, for any fixed agent i, the operator norm of ∇2J is bounded by its maximum block-row 21 
+
+sum: 
+
+> n
+
+X
+
+> j=1
+
+[∇2J]ij ≤ c′′ 
+
+> n
+
+X
+
+> j=1
+
+ρd(i,j )
+
+≤ c′′ 
+
+1 + X
+
+> r≥1
+
+∆(∆ − 1) r−1ρr 
+
+= c′′ 
+
+1 + ∆∆ − 1 · ˜δ
+
+1 − ˜δ
+
+
+
+.
+
+The right-hand side is finite under the standing graph-tail hypothesis ˜δ = (∆ − 1) ρ < 1 of (D3)(iii) and, crucially, is 
+
+independent of n, because both the per-block decay constant 
+
+c′′ and the geometric block-row sum depend only on (∆ , ρ, c ∂ )
+
+and not on the network size. 
+
+Step 3: Conclusion 
+
+A symmetric block matrix has operator norm bounded by its maximum block-row sum (a block-matrix Gershgorin/Schur bound). Therefore 
+
+LJ := sup 
+
+> θ∈Θ0
+
+∇2J(θ) op ≤ c′′ 
+
+1 + ∆∆ − 1 · ˜δ
+
+1 − ˜δ
+
+
+
+= O(1) ,
+
+(61) independent of n. This is exactly the n-uniformity invoked in (D2) and used in Corollary 1 and Theorem 6. The constant 
+
+c′′ = c∂ is the cross-block curvature-decay constant of (D3)(ii), and the block-row sum depends only on the graph parameters (∆ , ˜δ) of (D3)(iii); neither depends on n.
+
+Remark on the role of (D3). The single step that genuinely requires (D3) rather than (B2) is the per-block decay (60), which (D3)(ii) postulates directly. Assumption (B2) controls only Qπℓ itself and would not, on its own, yield the geometric decay of the cross-parameter Hessian block, since that block aggregates mixed second-order parameter sensitivities; this is precisely why (D3)(ii) is stated as a separate primitive, and why this appendix establishes the implication ((D3) ⇒ LJ =
+
+O(1) ) by graph summation rather than deriving LJ = O(1) 
+
+from (B2) alone. APPENDIX CCONTINUITY OF THE POPULATION TD MATRIX AND MEASURABILITY OF EM
+
+Lemma 10. Under (A1) and (A3), for each fixed feature realization the map θ 7 → Mθ 
+
+> i
+
+is continuous on Θ0 for every 
+
+i; consequently θ 7 → σmin (Mθ 
+
+> i
+
+) is continuous, the infimum in (24) over the compact Θ0 is attained, and the event EM is measurable with respect to the preprocessing σ-algebra. Proof. Fix the feature realization and i. By (A3) the score is bounded by G, so for θ, θ′ ∈ Θ0, every 
+
+s, and a.e. ai on the common support Asupp  
+
+> i
+
+of (A3), 
+
+|log πi(ai | · ; θi) − log πi(ai | · ; θ′
+
+> i
+
+)| ≤ G ∥θi − θ′
+
+> i
+
+∥, whence 
+
+R |πi(·; θi) − πi(·; θ′
+
+> i
+
+)| dai ≤ eG∥θi−θ′
+
+> i
+
+∥ − 1, and by subaddi-tivity of total variation over the product policy, TV( πθ (· | 
+
+s), π θ′ (· | s)) ≤ P 
+
+> j
+
+(eG∥θj −θ′ 
+
+> j
+
+∥ − 1) ≤ n (eG∥θ−θ′∥ −
+
+1) =: ζ. The transition kernel does not depend on θ, so a coupling of the two chains started from the same μ0
+
+gives TV( Pθ 
+
+> t
+
+, Pθ′ 
+
+> t
+
+) ≤ t ζ for the time-t state laws; hence 
+
+TV( νπθ , ν πθ′ ) ≤ (1 − γ) P 
+
+> t≥0
+
+γt (t + 1) ζ = ζ/ (1 − γ),and the law generating (Z, Z′) (one further policy factor for 
+
+a′) satisfies the same bound with ζ/ (1 − γ) replaced by 
+
+ζ/ (1 −γ)+ ζ ≤ 2ζ/ (1 −γ). Each entry of Mθ 
+
+> i
+
+is an expectation of a function bounded by (1 + γ)L2 under this law, so 
+
+Mθ 
+
+> i
+
+− Mθ′ 
+
+> i
+
+≤ Mθ 
+
+> i
+
+− Mθ′ 
+
+> iF
+
+≤ (m + 1) · 2(1 + γ)L2 · 2ζ
+
+1 − γ −−−→ 
+
+> θ′→θ
+
+0,
+
+proving continuity; the same argument (with the reward factor bounded by ¯r) covers bθ 
+
+> i
+
+. Since σmin is 1-Lipschitz in the operator norm and Θ0 is compact, inf θ∈Θ0 σmin (Mθ 
+
+> i
+
+) is attained and equals the infimum over any countable dense subset Θd0 ⊂ Θ0; as each ω 7 → Mθ 
+
+> i
+
+(ω) is measurable in the feature randomness for fixed θ, the event EM =T
+
+> i
+
+T
+
+> θ∈Θd0
+
+{σmin (Mθ 
+
+> i
+
+) ≥ μM (m)} is measurable. APPENDIX DPROOF OF THEOREM 1 (RFF APPROXIMATION )Fix an agent i and abbreviate d := di,κ ≤ DκdS , g := g(i) 
+
+> α
+
+,
+
+p := p(i) 
+
+> α
+
+, and u(Z) := fi,κ (Z)/√1 − α2. Writing Aℓ := 
+
+ω⊤
+
+> i,ℓ
+
+u(Z) + bi,ℓ and Bℓ(y) := √1 − α2 ω⊤
+
+> i,ℓ
+
+y + bi,ℓ , the raw feature inner product is 
+
+⟨ϕraw  
+
+> i,κ
+
+(Z), μ raw  
+
+> i,κ
+
+(y)⟩ = g(Z) p(y) ˆkm(Z, y),
+
+ˆkm := 2
+
+m
+
+> m
+
+X
+
+> ℓ=1
+
+cos Aℓ cos Bℓ,
+
+with ˆkm ≤ 2 pointwise. By the product-to-sum identity, 
+
+cos Aℓ cos Bℓ = 12 cos( Aℓ − Bℓ) + 12 cos( Aℓ + Bℓ); the sum-frequency term carries the phase 2bi,ℓ and averages to zero, while the difference term averages, by the Gaussian characteristic function of ω ∼ N (0, σ −2Id), to 12 k0(u(Z) −√1 − α2 y). Hence E ˆkm = k0(u(Z) − √1 − α2 y) and, by the splitting identity (10), the estimator is pointwise unbiased for Pi,κ (y | Z).
+
+Step 1 (uniform random-phase bound on the compact core). 
+
+Define M := {u(Z) : Z} ∪ { √1 − α2 y : ∥y∥ ≤ R2(ϵP )} ⊂ 
+
+Rd. By (A1), ∥u(Z)∥ ≤ √DκBf /√1 − α2 for every Z, so 
+
+M is bounded with diam( M) ≤ 2( √DκBf /√1 − α2 +
+
+R2(ϵP )) ≤ 2Dint  
+
+> R
+
+(ϵP ); we apply the random-feature bound on the closure M, which is compact in Rd with the same diameter, and restrict the resulting uniform bound to M. The estimator ˆkm(x, x′′ ) = 2
+
+> m
+
+P 
+
+> ℓ
+
+cos( ω⊤ 
+
+> ℓ
+
+x + bℓ) cos( ω⊤ 
+
+> ℓ
+
+x′′ + bℓ)
+
+is exactly the random-phase Rahimi–Recht estimator of the shift-invariant kernel k0 with spectral law N (0, σ −2Id), whose second moment is σ2 
+
+> p
+
+:= E ∥ω∥2 = d/σ 2. Claim 1 of [11] gives, for every t > 0,
+
+P
+
+
+
+sup 
+
+> x,x′′ ∈M
+
+ˆkm(x, x′′ ) − k0(x − x′′ ) ≥ t
+
+
+
+≤
+
+28 σp diam( M)
+
+t
+
+2
+
+× exp 
+
+
+
+− m t 2
+
+4( d + 2) 
+
+
+
+.22 
+
+Set t := ϵP /(2˜ gα) and require the right-hand side to be at most δrff /n ; solving for m gives the sufficient condition 
+
+m ≥ 16( d + 2) ˜g2
+
+> α
+
+ϵ2
+
+> P
+
+× log 
+
+ 28 n  4 σp Dint  
+
+> R
+
+(ϵP ) ˜ gα/ϵ P
+
+2
+
+δrff 
+
+
+
+,
+
+which is (13) with CRFF (d) = 16( d + 2) , after substituting 
+
+σ2 
+
+> p
+
+= DκdS /σ 2 (the factor 42σ2 
+
+> p
+
+contributes 24DκdS /σ 2, and 
+
+28 · 24 = 2 12 ). Call the resulting event E(i)rff .
+
+Step 2 (weighted core error). On E(i)rff , for every Z (since 
+
+u(Z) ∈ M always, and √1 − α2 y ∈ M for ∥y∥ ≤ R2), 
+
+Z
+
+> ∥y∥≤ R2
+
+g p k0 − ˆkm dy ≤ t ¯gα(κ)
+
+ 2πσ 2
+
+α2
+
+d/ 2
+
+≤ t ˜gα ≤ ϵP
+
+2 ,
+
+using R p(i) 
+
+> α
+
+= (2 πσ 2/α 2)d/ 2, the derived bound (11), and 
+
+¯gα(2 πσ 2/α 2)d/ 2 ≤ ˜gα (both cases of the maximum in the definition of ˜gα, since d ≤ DκdS ). 
+
+Step 3 (true-kernel tail). Under Pi,κ (· | Z) the successor is 
+
+y = fi,κ (Z) + ε with ε ∼ N (0, σ 2Id). Since α ∈ (0 , 1) and 
+
+d ≤ DκdS , R2(ϵP ) ≥ √DκBf +σ(√d+p2 log(8˜ gα/ϵ P )) , so Gaussian norm concentration gives R 
+
+> ∥y∥>R 2
+
+Pi,κ (y | Z) dy ≤
+
+ϵP /(8˜ gα) ≤ ϵP /8, using ˜gα ≥ 1.
+
+Step 4 (signed-approximant tail). Pointwise, 
+
+|⟨ ϕraw , μ raw ⟩| ≤ 2 g(Z) p(y) ≤ 2 ¯ gα p(i) 
+
+> α
+
+(y): the approximant is signed and need not integrate to one, but it is dominated by twice the Gaussian envelope. As p(i) 
+
+> α
+
+is the unnormalized density of N (0, (σ2/α 2)Id) with total mass (2 πσ 2/α 2)d/ 2,and R2(ϵP ) ≥ (σ/α )( √d + p2 log(8˜ gα/ϵ P )) , writing 
+
+ξ ∼ N (0, (σ2/α 2)Id),
+
+Z
+
+> ∥y∥>R 2
+
+|⟨ ϕraw , μ raw ⟩| dy ≤ 2 ¯ gα
+
+ 2πσ 2
+
+α2
+
+d/ 2
+
+Pξ
+
+ ∥ξ∥ > R 2
+
+
+
+≤ 2 ˜ gα · ϵP
+
+8 ˜ gα
+
+= ϵP
+
+4 ,
+
+Combining Steps 2–4 by the triangle inequal-ity on {∥ y∥ > R2}, for every Z on E(i)rff ,
+
+Pi,κ (· | Z) − ⟨ ϕraw  
+
+> i,κ
+
+(Z), μ raw  
+
+> i,κ
+
+(·)⟩ L1 ≤ ϵP 
+
+> 2
+
++ ϵP 
+
+> 8
+
++ ϵP 
+
+> 4
+
+< ϵ P .
+
+Step 5 (agents, heterogeneous dimensions, normalization). 
+
+A union bound over i ∈ [n] at confidence δrff /n each gives 
+
+P(T 
+
+> i
+
+E(i)rff ) ≥ 1−δrff ; the feasibility relation (13), evaluated at the worst case d = DκdS with the global constants ˜gα, D int  
+
+> R
+
+,dominates each agent’s requirement because 16( d+2) and the logarithm’s argument are nondecreasing in d. The normaliza-tion of Definition 1 preserves the inner product ( ˆϕ = ϕraw /¯gα,
+
+ˆμ = μraw ¯gα), so the same bound holds for ⟨ ˆϕi,κ , ˆμi,κ ⟩, which is the event Erff . □
+
+APPENDIX EPROOF OF LEMMA 2 ( VALUE DECAY )Let s, s′ agree on N κi . Couple two action draws a ∼ π(· | 
+
+s), a′ ∼ π(· | s′) so that aj = a′ 
+
+> j
+
+for every j with N κπ 
+
+> j
+
+⊆ N κi ;this is possible because π factorizes and each πj depends only on sN κπ j , which coincide for such j. The set of agents j with 
+
+N κπ 
+
+> j
+
+⊆ N κi contains N κ−κπ 
+
+> i
+
+. Hence (s, a) and (s′, a′) agree on N κ−κπ 
+
+> i
+
+at the state-action level. By the V -to-Q relation 
+
+V πi (s) = Ea∼π(·| s)[Qπi (s, a)] and (B2) applied at radius κ −
+
+κπ ,
+
+|V πi (s) − V πi (s′)| ≤ cρ (κ−κπ )+1 = cρ −κπ ρκ+1 . (62) The derivation above holds without the factor 2; we retain it as harmless slack (any constant ≥ 1 suffices), so that 
+
+˜c := 2 cρ −κπ also absorbs minor variants of the coupling con-struction, affecting only the constant in (B2)-derived bounds. 
+
+□
+
+APPENDIX FPROOF OF PROPOSITION 1
+
+Part (a) 
+
+By Definition 2, ¯Qπi (x) = Eνπ [Qπi (S, A) | Xκi = x].Conditional on Xκi = x, any two realizations (S, A), (S′, A′)
+
+in the conditioning event agree on N κi at the state-action level, so (B2) gives |Qπi (S, A) − Qπi (S′, A′)| ≤ cρ κ+1 a.s. Since 
+
+¯Qπi (x) is a conditional average of Qπi over exactly this event, 
+
+Qπi (S, A) − ¯Qπi (Xκi ) ≤ cρ κ+1 νπ -a.s. □
+
+Part (b): auxiliary residual 
+
+The argument has two error sub-steps, E1 and E2, followed by a Banach perturbation. 
+
+a) Step E1 (replacing V πi by ¯V πi ).: Starting from the genuine Bellman equation Qπi (S, A) = ri(SNi , ANi ) + 
+
+γE[V πi (S′) | S, A] and taking Eνπ [· | Xκi = x] on both sides, 
+
+¯Qπi (x) = E[ri | Xκi = x]+ γ Eνπ
+
+V πi (S′) Xκi = x. (63) Since κ ≥ 1, Ni ⊆ N κi , so ri(SNi , ANi ) is a deterministic function of x and E[ri | Xκi = x] = ri(x). For the continua-tion term, write S′N κi
+
+for the restriction of the successor state to N κi and decompose 
+
+E[V πi (S′) | Xκi = x] = E ¯V πi (S′N κi ) Xκi = x
+
++ EV πi (S′) − ¯V πi (S′N κi ) Xκi = x.
+
+By Definition 2, ¯V πi (s) = Edπ [V πi (S) | SN κi = s] is a convex average of V πi over completions of the local component s. The successor S′ here is distributed under the one-step pushforward of νπ , which need not coincide with dπ ; the discounted occupancy is not one-step invariant in general; we therefore do not assert that the second summand has conditional mean zero. Instead we use the oscillation envelope directly: for any full state s′ with local component s′N κi
+
+, both V πi (s′) and 
+
+¯V πi (s′N κi
+
+) are values of V πi , respectively a pointwise value and a convex average of values, over completions sharing the local component s′N κi
+
+, and by Lemma 2 the spread of V πi over any such set of completions is at most ˜cρ κ+1 . Hence the second summand is bounded in absolute value, νπ -a.s., by ˜cρ κ+1 ,with no appeal to invariance of dπ . Although ¯V πi is defined only (Xκi )#dπ -a.e., its evaluation at the successor argument 
+
+S′N κi
+
+is unambiguous for the chosen bounded measurable representative: from dπ = (1 − γ)μ0 + γP ⊤ 
+
+> π
+
+dπ one has 23 
+
+P ⊤ 
+
+> π
+
+dπ ≪ dπ , so the successor local marginal is absolutely continuous with respect to the dπ -local marginal. Hence 
+
+E[V πi (S′) | Xκi = x] − E[ ¯V πi (S′N κi ) | Xκi = x]
+
+≤ ˜cρ κ+1 .
+
+(64) Writing ¯P πi,κ (dy | x) for the conditional law of S′N κi
+
+given 
+
+Xκi = x (Definition 2), (63)–(64) give 
+
+¯Qπi (x) − ri(x) − γ
+
+Z
+
+¯V πi (y) ¯P πi,κ (dy | x)
+
+≤ γ˜cρ κ+1 .
+
+(65) 
+
+b) Step E2 (explicit Bellman-defect of ¯V πi under the auxiliary operator).: We now show that ¯V πi is an approximate fixed point of the auxiliary local Bellman operator ¯T π of Definition 2, with an explicitly derived defect. This step replaces the compressed “tower plus E1” assertion of earlier drafts with a full derivation. Fix s ∈ S N κi . By definition, ¯V πi (s) = E[V πi (S) | SN κi = s].Apply the genuine Bellman equation for the value function, 
+
+V πi (S) = EA∼π(·| S)[ri(SNi , ANi ) + γES′ [V πi (S′) | S, A]] ,inside the conditional expectation and use the tower property over the conditioning σ-algebra σ(SN κi ):
+
+¯V πi (s) = Eri(SNi , ANi ) SN κi = s
+
++ γ EV πi (S′) SN κi = s. (66) We compare (66) term-by-term with the auxiliary operator applied to ¯V πi ,
+
+( ¯T π ¯V πi )( s) = Ea∼πmarg  
+
+> Nκi
+
+h
+
+ri(s, a)+ γ
+
+Z
+
+¯V πi (y) ¯P πi,κ (dy | s, a)
+
+i
+
+.
+
+(67) 
+
+Reward terms cancel exactly. The marginal policy 
+
+πmarg  
+
+> Nκi
+
+(da | s) and the conditional reward expectation E[ri |
+
+SN κi = s] are, by Definition 2, defined as conditional expec-tations under the same measure νπ and the same conditioning 
+
+σ-algebra σ(SN κi ). Since ri depends only on (SNi , ANi ) and 
+
+Ni ⊆ N κi , the reward term of (67) equals E[ri(SNi , ANi ) |
+
+SN κi = s], which is exactly the reward term of (66). 
+
+Continuation terms differ only by a truncation substitution. 
+
+The continuation term of (66) is γE[V πi (S′) | SN κi = s],the full-state value of the successor. The continuation term of (67), by the definition of ¯P πi,κ as the conditional law of 
+
+S′N κi
+
+, equals γE[ ¯V πi (S′N κi
+
+) | SN κi = s]. The two continuation terms therefore differ only in that V πi (S′) is replaced by 
+
+¯V πi (S′N κi
+
+). Since ¯V πi (S′N κi
+
+) is a convex average of V πi over completions agreeing on N κi and V πi (S′) is the value at one such completion, the difference V πi (S′) − ¯V πi (S′N κi
+
+) is bounded in absolute value, νπ -a.s., by the oscillation of V πi
+
+over completions agreeing on N κi , which by Lemma 2 is at most ˜cρ κ+1 . This uses only the oscillation envelope and not a conditional-mean-zero property (which would require one-step invariance of dπ and need not hold). Hence 
+
+¯V πi (s) − ( ¯T π ¯V πi )( s) = γ E[V πi (S′) − ¯V πi (S′N κi ) | SN κi = s]
+
+≤ γ˜cρ κ+1 ,
+
+(68) uniformly in s, i.e. ¯V πi − ¯T π ¯V πi ∞ ≤ γ˜cρ κ+1 .
+
+c) Step E3 (Banach perturbation).: The operator ¯T π
+
+is a γ-contraction in the essential-supremum norm on the 
+
+L∞ space of Definition 2, evaluated on bounded measurable representatives, with unique fixed point ¯V π, aux  
+
+> i
+
+. The standard Banach perturbation estimate for a γ-contraction T states that if ∥v − T v∥∞ ≤ ϵ then ∥v − v∗∥∞ ≤ ϵ/ (1 − γ), where 
+
+v∗ is the fixed point. Indeed, ∥v − v∗∥∞ ≤ ∥ v − T v∥∞ +
+
+∥T v − T v∗∥∞ ≤ ϵ + γ ∥v − v∗∥∞, and rearranging gives the bound. Applying this with v = ¯V πi , T = ¯T π , and ϵ = γ˜cρ κ+1 
+
+from (68), 
+
+¯V πi − ¯V π, aux   
+
+> i∞
+
+≤ γ˜cρ κ+1 
+
+1 − γ . (69) 
+
+d) Conclusion of Part (b).: Define the residual Rκ(x) by 
+
+Rκ(x) := ¯Qπi (x) − ri(x) − γ
+
+Z
+
+¯V π, aux  
+
+> i
+
+(y) ¯P πi,κ (dy | x),
+
+(70) so that the displayed identity of Proposition 1(b) holds by con-struction. To bound Rκ, add and subtract the ¯V πi -continuation term and apply the triangle inequality: 
+
+|Rκ(x)| ≤ ¯Qπi (x) − ri(x) − γ
+
+Z
+
+¯V πi (y) ¯P πi,κ (dy | x)
+
++ γ
+
+Z
+
+( ¯V πi − ¯V π, aux  
+
+> i
+
+)( y) ¯P πi,κ (dy | x) .
+
+The first term is at most γ˜cρ κ+1 by (65). The second term is at most γ ¯V πi − ¯V π, aux   
+
+> i∞
+
+≤ γ2 ˜cρ κ+1 /(1 − γ) by (69). Summing, 
+
+ess sup |Rκ| ≤ γ˜cρ κ+1 
+
+1 + γ
+
+1 − γ
+
+
+
+= γ˜cρ κ+1 
+
+1 − γ , (71) which is the bound stated in Proposition 1(b). □
+
+APPENDIX GPROOF OF THEOREM 2 ( LINEAR REPRESENTATION )On the favorable event Erff at accuracy ϵP , the RFF inner product approximates the neighborhood kernel within ϵP in L1
+
+uniformly in Z (Theorem 1). Applying this to the continuation integral in Proposition 1(b), 
+
+γ
+
+Z
+
+¯V π, aux  
+
+> i
+
+(y) ¯P πi,κ (dy | x) − γ⟨ ˜ϕπi,κ (x), wπi,κ ⟩2: m+1 
+
+≤ γ ¯V π, aux   
+
+> i∞
+
+ϵP ≤ γ¯r ϵ P
+
+1 − γ ,
+
+where the subscript 2: m+1 denotes the RFF block of the augmented feature and weight, the first coordinate carries the reward, and we used ¯V π, aux   
+
+> i∞
+
+≤ ¯r/ (1 − γ) from Definition 2. The first coordinate of ˜ϕπi,κ is E[ri | Xκi =
+
+x] = ri(x) and the first coordinate of wπi,κ is 1, so 
+
+⟨ ˜ϕπi,κ (x), wπi,κ ⟩ = ri(x) + γ⟨ ˜ϕπi,κ (x), wπi,κ ⟩2: m+1 . Combining with Proposition 1(b), 
+
+¯Qπi (x) = ⟨ ˜ϕπi,κ (x), wπi,κ ⟩ + ξi(x), (72) where ξi collects the RFF residual and Rκ, hence 
+
+ess sup |ξi| ≤ γ¯rϵ P
+
+1 − γ + ess sup |Rκ| ≤ γ¯rϵ P
+
+1 − γ + γ˜cρ κ+1 
+
+1 − γ = ¯ξi,
+
+(73) which is (22). □24 
+
+APPENDIX HPROOF OF LEMMA 4 ( CONDITIONAL PROJECTION ERROR )Work throughout on the favorable event EM ∩ Erff , so 
+
+σmin (Mθ 
+
+> i
+
+) ≥ μM and the linear representation of Theorem 2 is in force. 
+
+a) Step 1: the Bellman defect ρX .: By Proposition 1(a), 
+
+¯Qπi differs from Qπi by at most cρ κ+1 a.s. The genuine Bellman equation for Qπi , conditioned to the neighborhood variables, yields 
+
+¯Qπi (Xκi ) = ri(Xκi ) + γ E[ ¯Qπi (Xκ′ 
+
+> i
+
+) | Xκi ] + ρX , (74) where Xκ′ 
+
+> i
+
+is the one-step successor neighborhood variable and the Bellman defect ρX is the error of replacing Qπi (S′, A′)
+
+by ¯Qπi (Xκ′ 
+
+> i
+
+) in the successor term; the present-time identity 
+
+¯Qπi (Xκi ) = E[Qπi | Xκi ] holds exactly by Definition 2and contributes no error. By Proposition 1(a) applied to the successor term, |ρX | ≤ γcρ κ+1 νπ -a.s. where the bound is unconditional and does not require the confinement event, because Proposition 1(a) is an almost-sure statement. 
+
+b) Step 2: the population normal equations and the error vector E∗.: Substitute the linear representation ¯Qπi (x) =
+
+⟨ ˜ϕπi,κ (x), wπi,κ ⟩ + ξi(x) of Theorem 2 into the Step-1 identity. Rearrange so that wπi,κ multiplies ˜ϕπi,κ (Xκi ) − γ E[ ˜ϕπi,κ (Xκ′ 
+
+> i
+
+) |
+
+Xκi ], then multiply by the raw augmented feature ˜ϕraw  
+
+> i,κ
+
+(Z) and take Eνπ . Using E[ ˜ϕraw  
+
+> i,κ
+
+| Xκi ] = ˜ϕπi,κ and the tower property, every raw feature collapses to its conditional counterpart, so the matrix multiplying wπi,κ is the conditional-feature TD matrix 
+
+Mπi := Eνπ
+
+ ˜ϕπi,κ ( ˜ϕπi,κ − γ ˜ϕπ′
+
+> i,κ
+
+)⊤, (75) while the reward term reproduces the raw target bθ 
+
+> i
+
+(as ri is 
+
+Xκi -measurable, E[ ˜ϕraw  
+
+> i,κ
+
+ri] = E[ ˜ϕπi,κ ri] = bθ 
+
+> i
+
+): 
+
+Mπi wπi,κ = bθ 
+
+> i
+
++ E∗,
+
+E∗ := Eνπ
+
+ ˜ϕraw  
+
+> i,κ
+
+(Z) e(Z), (76) where the scalar error integrand is 
+
+e(Z) := ρX(Z) − ξi(Xκi (Z)) + γ E[ξi(Xκ′ 
+
+> i
+
+) | Xκi (Z)] . (77) Here the three contributions to e are, respectively, the Bellman defect of Step 1, the present-time linear-representation resid-ual, and the discounted successor-time linear-representation residual. By the tower property, the successor term may be evaluated either before or after multiplication by ˜ϕraw  
+
+> i,κ
+
+; we keep the conditional form. 
+
+Bounding E∗. The error vector E∗ = Eνπ [ ˜ϕraw  
+
+> i,κ
+
+(Z) e(Z)] 
+
+is an integral, so by Jensen’s inequality for Bochner integrals together with ˜ϕraw  
+
+> i,κ
+
+≤ L pointwise, 
+
+∥E∗∥ = Eνπ
+
+ ˜ϕraw  
+
+> i,κ
+
+e ≤ Eνπ
+
+ ˜ϕraw  
+
+> i,κ
+
+|e| ≤ L Eνπ |e| .
+
+(78) We bound the expectation Eνπ |e|, rather than the essential supremum, by the triangle inequality, treating the three contri-butions to e separately. The expectation route is essential here: the off-confinement contribution is controlled only through the small probability mass of the failure region, and a small-probability event reduces an expectation but cannot reduce an essential supremum. (We do not absorb the Bellman defect into the linear-representation residual: ρX and ξi are distinct ob-jects and the off-confinement contribution is not proportional to ¯ξi.)  
+
+> •
+
+Bellman-defect contribution. By Step 1, |ρX | ≤ γcρ κ+1 
+
+νπ -a.s., hence Eνπ |ρX | ≤ γcρ κ+1 , unconditionally.  
+
+> •
+
+Linear-representation residual, on confinement. On the confinement region Sδtraj  
+
+> T
+
+, Theorem 2 gives ess sup |ξi| ≤ 
+
+¯ξi. Restricted to this region the present-time and discounted-successor residual terms together contribute, in expectation, at most (1 + γ) ¯ξi (the confinement prob-ability is at most 1).  
+
+> •
+
+Linear-representation residual, off confinement. Outside 
+
+Sδtraj  
+
+> T
+
+, boundedness of the truncated value, ¯Qπi ≤ Qmax ,together with the population-target ceiling wπi,κ ≤
+
+U1 (Lemma 5, Step 1) and ˜ϕπi,κ ≤ L bounds the linear-representation residual ξi = ¯Qπi − ⟨ ˜ϕπi,κ , wπi,κ ⟩
+
+pointwise by |ξi| ≤ Qmax + LU 1; this is a population bound, not a statement about the implemented critic. Because the quantity being bounded is the expectation 
+
+Eνπ |e|, the off-confinement contribution is this pointwise bound weighted by the off-confinement probability mass 
+
+δtraj + γT +1 ; the discounted-successor term carries the additional absolute-continuity factor 1 + 1 /γ relating the one-step pushforward of νπ to dπ (from dπ ≥
+
+γ P ⊤ 
+
+> π
+
+dπ ). Collecting the present-time and discounted-successor off-confinement parts gives a contribution at most (1 + γ)Eout , with Eout = (Qmax + LU 1)(1 + 1/γ )( δtraj + γT +1 ) exactly as in the lemma statement. This probability-weighting is legitimate precisely because the bounded quantity is an expectation. Collecting the three contributions, 
+
+Eνπ |e| ≤ (1 + γ) ¯ξi + (1 + γ)Eout + γcρ κ+1 
+
+= (1 + γ) ¯ξaug  
+
+> i
+
++ γcρ κ+1 , (79) with ¯ξaug  
+
+> i
+
+:= ¯ξi + Eout . Crucially , the Bellman-defect term 
+
+γcρ κ+1 is kept as an explicit additive term and is not merged into the (1 + γ) ¯ξaug  
+
+> i
+
+term: by Theorem 2, ¯ξi ≥ γ˜cρ κ+1 /(1 −
+
+γ) ≥ 2γcρ κ+1 /(1 − γ) (using ˜c = 2 cρ −κπ ≥ 2c), so the Bellman-defect term satisfies γcρ κ+1 ≤ 1−γ 
+
+> 2
+
+¯ξi ≤ 12 ¯ξi; we record this comparison for use in Step 4 but do not use it to inflate the coefficient of ¯ξaug  
+
+> i
+
+. Hence 
+
+∥E∗∥ ≤ (1 + γ)L ¯ξaug  
+
+> i
+
++ Lγcρ κ+1 . (80) 
+
+c) Step 3: cross-covariance perturbation.: The popula-tion LSTD solution is w∗ 
+
+> i
+
+= ( Mθ 
+
+> i
+
+)−1bθ 
+
+> i
+
+. Subtracting (76), 
+
+w∗ 
+
+> i
+
+− wπi,κ = −(Mθ 
+
+> i
+
+)−1E∗ + ( Mθ 
+
+> i
+
+)−1∆M wπi,κ , (81) where ∆M := Mπi − Mθ 
+
+> i
+
+is the gap between the conditional-feature and raw-feature TD matrices. Expanding ˜ϕraw  
+
+> i,κ
+
+=˜ϕπi,κ + ηi and ˜ϕraw ′ 
+
+> i,κ
+
+= ˜ϕπ′ 
+
+> i,κ
+
++ η′ 
+
+> i
+
+in Mθ 
+
+> i
+
+and subtracting Mπi
+
+produces six cross terms; the two equal-time terms E[ηi ˜ϕπ⊤ 
+
+> i,κ
+
+]
+
+and E[ ˜ϕπi,κ η⊤ 
+
+> i
+
+] vanish, since ˜ϕπi,κ is Xκi -measurable and 25 
+
+E[ηi | Xκi ] = 0, leaving the four within-bin cross-covariance terms 
+
+∆M = −E[ηiη⊤ 
+
+> i
+
+] + γE[ηiη′⊤  
+
+> i
+
+] + γE[ηi ˜ϕπ′⊤  
+
+> i,κ
+
+] + γE[ ˜ϕπi,κ η′⊤  
+
+> i
+
+].
+
+(82) By Jensen and the pointwise bounds ∥ηi∥ ≤ 2L, ˜ϕπi,κ ≤ L,the four terms have operator norm at most 4L2, 4γL 2, 2γL 2,and 2γL 2 respectively; summing, ∥∆M ∥ ≤ 4L2 + 8 γL 2 =
+
+Cη (1 + 2 γ)L2 with Cη = 4 .
+
+d) Step 4: assembling the bound.: Using σmin (Mθ 
+
+> i
+
+) ≥
+
+μM so that (Mθ 
+
+> i
+
+)−1 ≤ 1/μ M , the triangle inequality and (80) give 
+
+w∗ 
+
+> i
+
+− wπi,κ ≤ ∥E∗∥
+
+μM
+
++ ∥∆M ∥ wπi,κ 
+
+μM
+
+≤ (1 + γ)L ¯ξaug  
+
+> i
+
++ Lγcρ κ+1 
+
+μM
+
++ Cη (1 + 2 γ)L2 wπi,κ 
+
+μM
+
+.
+
+(83) The displayed bound (83) is exactly the statement of Lemma 4: the explicit Bellman-defect term Lγcρ κ+1 /μ M is kept in the lemma rather than silently absorbed into the ¯ξaug  
+
+> i
+
+term. The Step-2 comparison γcρ κ+1 ≤ 12 ¯ξi ≤ 12 ¯ξaug  
+
+> i
+
+records that the bare Bellman-defect term is dominated by the linear-representation residual. In Appendix K the weight-unit bound (83) is converted to Q-error units by the fac-tor L (see (93) below), and the resulting Q-unit Bellman-defect contribution L2γcρ κ+1 /μ M is absorbed there into the 
+
+C′Etrunc (κ) floor term, keeping the downstream constant 
+
+C′ = (1 + γ)L2/μ M unchanged. This completes the proof of Lemma 4. □
+
+APPENDIX IPROOF OF LEMMA 5
+
+a) Step 1: population-target ceiling U1.: By Defini-tion 3 and (19), wπi,κ =  1, γ R ˆμi,κ (y) ¯V π, aux  
+
+> i
+
+(y) dy.The first coordinate contributes 1. The passage from the raw to the conditional kernel uses conditional Jensen, 
+
+E[Pi,κ (· | Z) − ˆPi,κ (· | Z) | X] 1
+
+≤ E[ Pi,κ − ˆPi,κ 1
+
+|
+
+X] ≤ ϵP on the random-feature event. The RFF block is a vector-valued Lebesgue integral over the unbounded domain 
+
+y ∈ Rdi,κ , so it must be controlled through the L1-mass of 
+
+ˆμi,κ , since a pointwise supremum alone does not bound an integral over an infinite-measure domain: 
+
+γ
+
+Z
+
+ˆμi,κ (y) ¯V π, aux  
+
+> i
+
+(y) dy ≤ γ ¯V π, aux  
+
+> i∞
+
+Z
+
+∥ ˆμi,κ (y)∥ dy.
+
+(84) We bound the L1-mass explicitly. By Definition 1, ˆμi,κ (y) = ¯gα p(i) 
+
+> α
+
+(y)p2/m {cos( √1 − α2 ω⊤
+
+> i,ℓ
+
+y + bi,ℓ )}mℓ=1 ; since each of the m cosines lies in [−1, 1] , the cosine vector has Euclidean norm at most √m, so ∥ ˆμi,κ (y)∥ ≤ √2 ¯ gα p(i) 
+
+> α
+
+(y) point-wise. The damping factor p(i) 
+
+> α
+
+(y) = exp( −α2 ∥y∥2 /(2 σ2)) 
+
+of (9) is Lebesgue-integrable, with R 
+
+> Rdi,κ
+
+p(i) 
+
+> α
+
+(y) dy =(2 πσ 2/α 2)di,κ /2. Hence, using di,κ = |N κi | dS ≤ DκdS
+
+and the definition ˜gα = ¯gα max {1, (2 πσ 2/α 2)}DκdS /2 of Theorem 1, 
+
+Z
+
+∥ ˆμi,κ (y)∥ dy ≤ √2 ¯ gα (2 πσ 2/α 2)di,κ /2 ≤ √2 ˜ gα, (85) the last step using that max {1, x }a is non-decreasing in 
+
+a ≥ 0 and di,κ ≤ DκdS . Combining the two displays with ¯V π, aux   
+
+> i∞
+
+≤ ¯r/ (1 − γ) from Definition 2, and using 
+
+∥(1 , v)∥ ≤ 1 + ∥v∥ for the augmented vector, 
+
+wπi,κ ≤ 1 + 
+
+√2 γ˜gα ¯r
+
+1 − γ = U1. (86) 
+
+b) Step 2: from projection error to ∥w∗ 
+
+> i
+
+∥.: By the triangle inequality and Lemma 4, 
+
+∥w∗ 
+
+> i
+
+∥ ≤ wπi,κ + w∗ 
+
+> i
+
+− wπi,κ 
+
+≤ U1 + (1 + γ)L ¯ξaug  
+
+> i
+
++ Lγcρ κ+1 
+
+μM
+
++ Cη (1 + 2 γ)L2U1
+
+μM
+
+,
+
+where we used wπi,κ ≤ U1 in the within-bin term and retained the explicit Bellman-defect term from (83). Collecting the U1-proportional terms into Kbin U1 with Kbin = 1+ Cη (1+ 2γ)L2/μ M , and splitting ¯ξaug  
+
+> i
+
+= ¯ξi + Eout ,
+
+∥w∗ 
+
+> i
+
+∥ ≤ Kbin U1 + (1 + γ)L ¯ξi + Lγcρ κ+1 
+
+μM
+
++ (1 + γ)LE out 
+
+μM
+
+.
+
+(87) 
+
+c) Step 3: bounding the ¯ξi-term into W0.: Substitute ¯ξi =
+
+γ¯rϵ P /(1 − γ) + γ˜cρ κ+1 /(1 − γ) from Theorem 2 and use 
+
+1 + γ ≤ 2:
+
+(1 + γ)L ¯ξi
+
+μM
+
+≤ 2Lγ ¯rϵ P
+
+(1 − γ)μM
+
++ 2Lγ ˜cρ κ+1 
+
+(1 − γ)μM
+
+. (88) The explicit Bellman-defect term Lγcρ κ+1 /μ M is combined with the truncation part of the previous display. Using c ≤ ˜c/ 2
+
+(from ˜c = 2 cρ −κπ ≥ 2c), 
+
+2Lγ ˜cρ κ+1 
+
+(1 − γ)μM
+
++ Lγcρ κ+1 
+
+μM
+
+≤ 2Lγ ˜cρ κ+1 
+
+(1 − γ)μM
+
++ Lγ ˜cρ κ+1 
+
+2μM
+
+≤ 8L˜cρ κ+1 
+
+(1 − γ)μM
+
+,
+
+since 2γ/ (1 −γ)+ γ/ 2 ≤ 8/(1 −γ) for all γ ∈ (0 , 1) (the factor 
+
+8 leaves margin). Hence the U1-, ϵP -, and ρκ+1 -contributions assemble exactly into W0 as defined in (30), and 
+
+∥w∗ 
+
+> i
+
+∥ ≤ W0 + (1 + γ)LE out 
+
+μM
+
+. (89) 
+
+d) Step 4: no-circularity and containment in the radius 
+
+W ∗ = 2 W0.: The constant W0 depends only on the prim-itives (L, γ, ¯r, ˜gα, ˜c, ρ, κ, μ M , ϵ P ) and not on W ∗; the only remaining term in the bound on ∥w∗ 
+
+> i
+
+∥ not already included in W0 is the additive Eout -term, which is a fixed small quantity proportional to δtraj +γT +1 . Under the side condition 
+
+δtraj + γT +1 ≤ μM W0/[(1 + γ)L(Qmax + LU 1)(1 + 1 /γ )] 
+
+stated in the lemma, the Eout -term is at most W0, so ∥w∗ 
+
+> i
+
+∥ ≤ 
+
+2W0 = W ∗: the deterministic projection radius W ∗ = 2 W0,fixed from primitives alone, contains the population target, and there is no circular dependence between the radius and the parameter choices ( W ∗ carries no ϵ-, δtraj -, or T -dependence). 
+
+□26 
+
+APPENDIX JPROOF OF THEOREM 3 (LSTD CONCENTRATION )Work on EM ∩Erff and fix (i, k ); write θ = θ(k), M = Mθ 
+
+> i
+
+,
+
+M(k) = M(k) 
+
+> i
+
+, b(k) = b(k) 
+
+> i
+
+, w∗ = w∗ 
+
+> i
+
+. Conditional on F− 
+
+> k
+
+,the Ms transitions in D(k) 
+
+> s
+
+are i.i.d. from the one-step law of (D1). 
+
+a) Step 1: matrix-Bernstein for M(k) − M.: Each sum-mand ˜ϕraw (z(j))( ˜ϕraw (z(j)) − γ ˜ϕraw (z′(j))) ⊤ is a (generally non-symmetric) (m+1) × (m+1) matrix bounded in operator norm by (1 + γ)L2, with the conditional mean M. Apply the matrix-Bernstein inequality [18, Thm. 6.1.1] to the centered i.i.d. sum via the Hermitian dilation H(X) :=   0 XX⊤ 0
+
+, which is required because the summands are non-symmetric and converts the operator-norm deviation of X into the spectral-norm deviation of the symmetric H(X). The dilation has dimension 2( m + 1) , contributing a log(2( m + 1)) factor, absorbed into log( m + 1) up to constants. With probability 
+
+≥ 1 − δ/ 2 over D(k) 
+
+> s
+
+,
+
+M(k) − M ≤ C′ 
+
+> M
+
+L2
+
+s
+
+log(( m + 1) /δ )
+
+Ms
+
+, (90) for Ms ≥ C0L4 log(( m + 1) /δ )/μ 2 
+
+> M
+
+chosen so that the linear matrix-Bernstein term is dominated by the sub-Gaussian term and the right-hand side is at most μM /4.
+
+b) Step 2: dimension-free vector concentration for the centered target.: Define the centered vector ζ(k) 
+
+> i
+
+:= b(k) −
+
+M(k)w∗, whose conditional mean is bθ 
+
+> i
+
+− Mw ∗ = 0 by the definition of w∗. Each i.i.d. summand of ζ(k) 
+
+> i
+
+is a mean-zero random vector in the finite-dimensional Hilbert space 
+
+Rm+1 , bounded in norm by B := L(¯ r + (1 + γ)LW ∗)
+
+(using ˜ϕraw ≤ L, |ri| ≤ ¯r, ∥w∗∥ ≤ W ∗). The Hilbert-space Hoeffding-type inequality of Pinelis [20, Thm. 3.5] for bounded mean-zero vectors (a Hilbert space is (2 , 1) -smooth, so D = 1) gives a dimension-free deviation bound: with probability ≥ 1 − δ/ 2 over D(k) 
+
+> s
+
+,
+
+ζ(k) 
+
+> i
+
+≤ Cv B
+
+s
+
+log(1 /δ )
+
+Ms
+
+. (91) We emphasize that this bound carries no √m or log( m + 1) 
+
+dimensional factor: Pinelis’s inequality for vectors in a sep-arable Hilbert space is proved by a martingale/ 2-smoothness argument, not by a dilation or trace device, and its constant is genuinely dimension-free. The displayed bound of Theorem 3 writes log(( m + 1) /δ ) in place of log(1 /δ ) in this term; this is a harmless upper bound, since log(1 /δ ) ≤ log(( m + 1) /δ ),and is retained only so that the two terms of the theorem can be displayed under a common logarithmic factor for compatibility with the matrix-Bernstein term of Step 1. No genuine dimensional dependence is introduced; the vector-concentration term remains dimension-free in substance. 
+
+c) Step 3: assembling the LSTD error.: On the inter-section of the two favorable events of Steps 1–2 (prob-ability ≥ 1 − δ), the reverse-triangle bound (Remark 1) gives σmin (M(k) + λI) ≥ μM − μM /4 − λ ≥ μM /2
+
+under λ ≤ μM /4, so M(k) + λI is non-singular and the degenerate fallback of Definition 4 is not triggered. Writing 
+
+ˆw(k),raw  
+
+> i
+
+− w∗ = ( M(k) + λI)−1(ζ(k) 
+
+> i
+
+− λw∗) and bounding, 
+
+ˆw(k),raw  
+
+> i
+
+− w∗ ≤ 2
+
+μM
+
+  ζ(k) 
+
+> i
+
++ λ ∥w∗∥
+
+≤ 2Cv BμM
+
+s
+
+log(( m + 1) /δ )
+
+Ms
+
++ 2λW ∗
+
+μM
+
+,
+
+which is the stated bound with B = L(¯ r + (1 + γ)LW ∗).The uniform version follows by replacing δ with δ/ (nK ) and union-bounding over i ∈ [n], k < K . □
+
+APPENDIX KPROOF OF THEOREM 4 ( LOCAL PARAMETER SELECTION )Fix (i, k ) and work on EM ∩Erff . The pointwise error of the critic decomposes, via Theorem 2 and the triangle inequality, into a statistical part Estat (from the LSTD concentration of Theorem 3), a projection part Eproj (from Lemma 4), and the linear-representation residual ¯ξi, with the local-to-global lift handled by Proposition 1(a). 
+
+a) Statistical part and the choice of λ∗, M ∗ 
+
+> s
+
+.: By Theo-rem 3, with τ := plog(( m + 1) /δ ⋆)/M s and Bδ := ¯ r + (1 + 
+
+γ)LW ∗,
+
+Estat ≤ 2Cv L2Bδ τμM
+
++ 2λLW ∗
+
+μM
+
+, (92) where the second term is the regularization bias 2λLW ∗/μ M
+
+(the factor L converting weight error to Q-error). Since the derived bound contains no term that improves with λ,it is minimized at λ∗ = 0; the variance allocation τ =
+
+μM ϵQ/(2 Cv L2Bδ ), i.e. M ∗ 
+
+> s
+
+= eO(L6W ∗2/(μ2 
+
+> M
+
+ϵ2
+
+> Q
+
+)) , then gives Estat ≤ ϵQ. If a positive implementation value is used instead (Remark 1), any λ ≤ μM ϵQ/(4 LW ∗) contributes additional bias at most ϵQ/2 and satisfies the side condition 
+
+λ ≤ μM /4 because ϵQ ≤ LW ∗, the standing hypothesis of the theorem; the conclusion then holds with ϵQ replaced by  
+
+> 32
+
+ϵQ, absorbed into the suppressed constants. 
+
+b) Projection part and the floor constants.: By Lemma 4 and the explicit Bellman-defect bookkeeping of Appendix H, the projection error in Q-units (multiplying the weight error by ˜ϕraw ≤ L) is 
+
+Eproj ≤ (1 + γ)L2 ¯ξaug  
+
+> i
+
++ L2γcρ κ+1 
+
+μM
+
++ Cη (1 + 2 γ)L3U1
+
+μM
+
+.
+
+(93) We now show (93) is bounded by C′(Etrunc (κ) + Erff (m) + 
+
+Eout ) + Cbin with C′ = (1 + γ)L2/μ M and Cbin =
+
+Cη (1 + 2 γ)L3U1/μ M unchanged . First, ¯ξaug  
+
+> i
+
+= ¯ξi + Eout 
+
+and, by Theorem 2, ¯ξi ≤ Erff (m) + 12 Etrunc (κ): indeed 
+
+γ¯rϵ P /(1 − γ) = Erff (m) and γ˜cρ κ+1 /(1 − γ) ≤ 12 Etrunc (κ)
+
+since Etrunc (κ) = ˜ cρ κ+1 (1 + 2 /(1 − γ)) and γ/ (1 − γ) ≤ 
+
+> 12
+
+(1 + 2 /(1 − γ)) for γ ∈ (0 , 1) . Hence the first term of (93) satisfies 
+
+(1 + γ)L2 ¯ξaug 
+
+> i
+
+μM
+
+≤ C′ Erff (m) + 12 Etrunc (κ) + Eout 
+
+. (94) 27 
+
+Second, the explicit Bellman-defect term: γcρ κ+1 ≤ 
+
+> 12
+
+˜cρ κ+1 ≤ 12 Etrunc (κ) (using c ≤ ˜c/ 2 and Etrunc (κ) ≥
+
+˜cρ κ+1 ), so L2γcρ κ+1 /μ M ≤ C′ · 12 Etrunc (κ)/(1 + γ) ≤
+
+C′ · 12 Etrunc (κ). Adding the two truncation half-contributions yields the full C′Etrunc (κ), and the third term of (93) is exactly Cbin . Therefore 
+
+Eproj ≤ C′ Etrunc (κ) + Erff (m) + Eout 
+
+ + Cbin , (95) with C′ and Cbin exactly as defined in Section V. The explicit Bellman-defect term has been absorbed into the truncation floor without changing C′, as anticipated in Appendix H, Step 4. 
+
+c) Assembling the bound.: The linear-representation residual contributes ¯ξi ≤ (1 + C′)−1(1 + C′)( Etrunc + Erff ),and combining Estat ≤ ϵQ with Eproj and the lift of Propo-sition 1(a) gives 
+
+ess sup ¯Q ˆw(k) 
+
+> i
+> i
+
+− Qπi ≤ ϵQ + (1 + C′)( Etrunc + Erff )+ Cbin + C′Eout ,
+
+(96) which is (36) with R(κ, m ) = (1+ C′)( Etrunc (κ)+ Erff (m))+ 
+
+Cbin . The total failure probability δM + δrff + δ⋆ accounts for the two preprocessing events and the per-iteration LSTD event; the uniform version replaces δ⋆ by δ⋆/(nK ). □
+
+APPENDIX LPROOF OF LEMMA 7 ( CRITIC L2 ERROR )By Theorem 4, on the favorable events the conditional-feature critic obeys ess sup ¯Q ˆw(k) 
+
+> i
+> i
+
+− Qπi ≤ ϵQ + R(κ, m ) + 
+
+C′Eout on the confinement region. The deployed critic 
+
+ˆQ(k) 
+
+> i
+
+(z) = ˜ϕraw  
+
+> i,κ
+
+(z)⊤ ˆw(k) 
+
+> i
+
+evaluates the raw augmented fea-ture, whereas ¯Q ˆw(k) 
+
+> i
+> i
+
+= ⟨ ˜ϕπi,κ , ˆw(k) 
+
+> i
+
+⟩ uses the conditional feature; by ˜ϕraw  
+
+> i,κ
+
+= ˜ϕπi,κ + ηi the two differ by the within-bin fluctuation η⊤ 
+
+> i
+
+ˆw(k) 
+
+> i
+
+, of magnitude at most ∥ηi∥ ˆw(k) 
+
+> i
+
+≤
+
+2LW ∗ pointwise. Hence on the favorable events the deployed critic satisfies the pointwise bound 
+
+ˆQ(k) 
+
+> i
+
+− Qπi ≤ ϵQ + R(κ, m ) + C′Eout 
+
+ + 2 LW ∗. (97) We convert this into an L2-in-expectation bound. Let E
+
+denote the intersection of the LSTD favorable event and the confinement event; by the parameter choices δ⋆ = δtraj =
+
+ϵ2
+
+> Q
+
+/(3( LW ∗ + Qmax )2) and γT +1 ≤ δ⋆, the three failure con-tributions, namely LSTD, trajectory confinement, and horizon truncation, sum to at most 3δ⋆, so the complement Ec has probability at most 3δ⋆. On E the squared error is at most 
+
+(ϵQ + [ R(κ, m ) + C′Eout ] + 2 LW ∗)2 by (97); on Ec the deterministic projection bound ˆQ(k) 
+
+> i
+
+≤ LW ∗ together with 
+
+|Qπi | ≤ Qmax gives squared error at most (LW ∗ + Qmax )2.Hence 
+
+Ealg Eνπ
+
+ ˆQ(k) 
+
+> i
+
+− Qπi
+
+> 2
+
+ ≤  ϵQ + [ R + C′Eout ] + 2 LW ∗2
+
++ 3 δ⋆(LW ∗ + Qmax )2.
+
+The second term equals ϵ2 
+
+> Q
+
+by the choice of δ⋆. Applying 
+
+(a + b)2 ≤ 2a2 + 2 b2 to the first term with a = ϵQ and 
+
+b = [ R + C′Eout ] + 2 LW ∗ gives 2ϵ2 
+
+> Q
+
++ 2([ R + C′Eout ] + 2LW ∗)2. With Rtot (κ, m ) := √2[ R(κ, m )+ C′Eout ]+2 LW ∗
+
+one has Rtot ≥ [R + C′Eout ] + 2 LW ∗ (since √2 ≥ 1 and all terms are non-negative), so 2([ R + C′Eout ] + 2 LW ∗)2 ≤
+
+2Rtot (κ, m )2. Collecting terms yields the stated bound 3ϵ2 
+
+> Q
+
++2Rtot (κ, m )2; the additive 2LW ∗ inside Rtot is exactly the direct pointwise within-bin contribution carried through (97), rather than being inserted by fiat. The truncation horizon T =
+
+⌈log(1 /δ ⋆)/ log(1 /γ )⌉ − 1 specified in the lemma statement is the smallest integer ensuring γT +1 ≤ δ⋆. □
+
+APPENDIX MPROOF OF LEMMA 8 ( GRADIENT BIAS )Work conditional on FQk , so the critics { ˆw(k) 
+
+> ℓ
+
+} are fixed and D(k) 
+
+> g
+
+is i.i.d. from dπ(k)
+
+⊗ π(k). The bias of ˆg(k) 
+
+> i
+
+relative to ∇θi J(θ(k)) decomposes into two sources: (i) the critic-approximation error within the κc-neighborhood, and (ii) the aggregation error from truncating the global value sum P 
+
+> ℓ
+
+Qπℓ
+
+to the neighborhood sum P 
+
+> ℓ∈N κc i
+
+ˆQ(k) 
+
+> ℓ
+
+.
+
+a) Critic-approximation route.: The per-agent policy-gradient identity (5) and the estimator (37) differ, on the 
+
+κc-neighborhood, by the score-weighted critic error. Using 
+
+∥∇ θi log πi∥ ≤ G, |N κc 
+
+> i
+
+| ≤ Dκc , and the L2-critic bound of Lemma 7 together with Jensen ( E |·| ≤ (E |·| 2)1/2), (i) ≤ GD κc
+
+1 − γ
+
+ √3 ϵQ + √2 Rtot (κ, m ). (98) 
+
+b) Aggregation route.: The truncated value sum omits the agents ℓ /∈ N κc 
+
+> i
+
+, so route (ii) equals  
+
+> 11−γ
+
+Eνπ [P 
+
+> ℓ / ∈N κc i
+
+Qπℓ ∇θi log πi] . We first establish a single-coordinate score-decoupling bound . Fix ℓ with 
+
+d(i, ℓ ) > κ c. Under νπ = dπ ⊗ π the joint policy factorizes, so conditional on S the actions are independent across agents and the score satisfies E[∇θi log πi(Ai | SN κπ i ) | S, A−i] = 
+
+EAi∼πi [∇θi log πi] = 0, the score identity. Hence, for any 
+
+function ˜Qℓ of (S, A) that does not depend on the single coordinate Ai,
+
+∥Eνπ [Qπℓ ∇θi log πi]∥ = Eνπ [( Qπℓ − ˜Qℓ) ∇θi log πi]
+
+≤ G ess sup Qπℓ − ˜Qℓ .
+
+Take ˜Qℓ to be Qπℓ with the coordinate ai frozen at an arbitrary fixed value. The tuple (S, A) and its ai-frozen counterpart agree on N d(i,ℓ )−1 
+
+> ℓ
+
+, since agent i lies outside that neighborhood; the exponential decay (B2) at radius 
+
+d(i, ℓ ) − 1 therefore gives ess sup Qπℓ − ˜Qℓ ≤ cρ d(i,ℓ ). Thus 
+
+∥Eνπ [Qπℓ ∇θi log πi]∥ ≤ Gc ρ d(i,ℓ ), with no κπ -dependent shift in the exponent: the zero-mean cancellation is taken over the single coordinate Ai, not over the score-support neighbor-hood N κπ 
+
+> i
+
+. Summing over the omitted agents, with at most 
+
+∆(∆ −1) r−1 agents at graph distance r and ˜δ := (∆ −1) ρ < 1,(ii) ≤ G
+
+1 − γ
+
+X 
+
+> ℓ:d(i,ℓ )>κ c
+
+c ρ d(i,ℓ ) ≤ Gc 
+
+1 − γ
+
+X
+
+> r>κ c
+
+∆(∆ − 1) r−1ρr
+
+= Gc 
+
+(1 − γ)(1 − ˜δ) · ∆∆ − 1 ˜δκc+1 =: ϵagg (κ),
+
+which is (40). Summing (i) and (ii) gives (39). 28 
+
+c) The κπ = 0 specialization.: When κπ = 0 , the score 
+
+∇θi log πi(ai | si) depends only on agent i’s own state and action. Conditioning on FQk and on σ(Xκℓ ), the within-bin fluctuation route in the critic-approximation term vanishes by tower (the fixed critic ˆw(k) 
+
+> ℓ
+
+and the conditional-mean property E[ηℓ | Xκℓ ] = 0), so the direct pointwise within-bin contribution 2LW ∗ inside Rtot may be replaced by 0; the argument uses that the deployed critic is linear in ˜ϕraw (no value clipping) and that the raw/conditional split is performed 
+
+before any application of Jensen or Cauchy–Schwarz, so the within-bin route is exactly E[η⊤ 
+
+> ℓ
+
+ˆw(k) 
+
+> ℓ
+
+∇θi log πi | F Qk ] and the tower argument applies verbatim. □
+
+APPENDIX NPROOF OF LEMMA 9We bound ϵ2 
+
+> b
+
+= sup k,i E ˆQ E[ˆ g(k) 
+
+> i
+
+| ˆQ, θ(k)] − ∇ θi J 2
+
+,i.e. the expectation over the critic randomness ˆQ of the ˆQ-conditional squared bias. We do not square the fully-averaged bound of Lemma 8 directly; instead we use the ˆQ-conditional decomposition that underlies it. Conditional on FQk the critics 
+
+{ ˆw(k) 
+
+> ℓ
+
+} are fixed, and the two routes of Appendix M give 
+
+E[ˆ g(k) 
+
+> i
+
+| ˆQ, θ(k)] − ∇ θi J
+
+≤ G
+
+1 − γ
+
+X 
+
+> ℓ∈N κc i
+
+Eνπ
+
+ ˆQ(k) 
+
+> ℓ
+
+− Qπℓ ˆQ + ϵagg (κ),
+
+the first term being the critic-approximation route (score bounded by G, neighborhood size |N κc 
+
+> i
+
+| ≤ Dκc , triangle inequality) and the second the aggregation route, which is deterministic. The bound holds ˆQ-conditionally because, given 
+
+FQk , the gradient sample D(k) 
+
+> g
+
+is i.i.d. from νπ and each ˆQ(k)
+
+> ℓ
+
+is a fixed function. Applying (a+b)2 ≤ 2a2 +2 b2 and then the Cauchy–Schwarz inequality over the at most Dκc summands, 
+
+E ˆQ E[ˆ g(k) 
+
+> i
+
+| ˆQ, θ(k)] − ∇ θi J 2
+
+≤ 2ϵagg (κ)2 + 2G2Dκc
+
+(1 − γ)2
+
+X 
+
+> ℓ∈N κc i
+
+E ˆQ Eνπ
+
+ ˆQ(k) 
+
+> ℓ
+
+− Qπℓ ˆQ2.
+
+By conditional Jensen, Eνπ [ ˆQ(k) 
+
+> ℓ
+
+− Qπℓ | ˆQ]2 ≤
+
+Eνπ [ ˆQ(k) 
+
+> ℓ
+
+− Qπℓ
+
+> 2
+
+| ˆQ]; taking E ˆQ and invoking the L2-critic bound of Lemma 7, namely Ealg Eνπ ˆQ(k) 
+
+> ℓ
+
+− Qπℓ
+
+> 2
+
+≤
+
+3ϵ2
+
+> Q
+
++2 Rtot (κ, m )2 for each ℓ, the sum over the Dκc neighbors is at most Dκc (3 ϵ2 
+
+> Q
+
++ 2 Rtot (κ, m )2). Substituting, 
+
+ϵ2 
+
+> b
+
+≤ 2ϵagg (κ)2 + 2G2D2
+
+> κc
+
+ 3ϵ2 
+
+> Q
+
++ 2 Rtot (κ, m )2
+
+(1 − γ)2 . (99) This is sharper than the displayed bound (41), which carries 
+
+6ϵ2 
+
+> Q
+
++ 4 R2tot in place of 3ϵ2 
+
+> Q
+
++ 2 R2tot ; the displayed form is a factor-2 relaxation, retained as stated, and is therefore also valid. □
+
+a) The κπ = 0 reduction.: When κπ = 0 , do not pass to ˆQ(k) 
+
+> ℓ
+
+− Qπℓ . Instead, decompose inside the conditional expectation, ˆQ(k) 
+
+> ℓ
+
+− Qπℓ = ( ⟨ ˜ϕπℓ,κ , ˆw(k) 
+
+> ℓ
+
+⟩ − Qπℓ ) + η⊤ 
+
+> ℓ
+
+ˆw(k) 
+
+> ℓ
+
+.Given FQk the coefficient ˆw(k) 
+
+> ℓ
+
+is fixed, ∇θi log πi is σ(Xκℓ )-measurable (as κc = κ and i ∈ N κℓ ), and Eνπ [ηℓ |
+
+Xκℓ ] = 0, so Eνπ [( η⊤ 
+
+> ℓ
+
+ˆw(k) 
+
+> ℓ
+
+) ∇θi log πi] = 0, and the ˆQ-conditional bias involves only the conditional-feature errors 
+
+⟨ ˜ϕπℓ,κ , ˆw(k) 
+
+> ℓ
+
+⟩ − Qπℓ . Repeating the failure-budget accounting of the proof of Lemma 7 for this critic, whose favorable-event essential-supremum bound is ϵQ + R(κ, m ) + C′Eout 
+
+directly from Theorem 4, and whose off-event deterministic bound is ⟨ ˜ϕπℓ,κ , ˆw(k) 
+
+> ℓ
+
+⟩ ≤ L ˆw(k) 
+
+> ℓ
+
+≤ LW ∗ together with 
+
+|Qπℓ | ≤ Qmax , gives Ealg Eνπ ⟨ ˜ϕπℓ,κ , ˆw(k) 
+
+> ℓ
+
+⟩ − Qπℓ
+
+> 2
+
+≤ 3ϵ2 
+
+> Q
+
++2( √2 [ R(κ, m )+ C′Eout ]) 2. Substituting this bound in place of Lemma 7’s in the display above yields (41) with Rtot replaced by √2 [ R(κ, m ) + C′Eout ], i.e. with 2LW ∗ deleted. □
+
+APPENDIX OPROOF OF THEOREM 5 ( CONVERGENCE )By (D2), J is LJ -smooth on Θ0. Write ˆg(k) = ∇J(θ(k)) + 
+
+e(k) with total error e(k) := b(k) + n(k), where b(k) := 
+
+E[ˆ g(k) | F Qk ] − ∇ J(θ(k)) is the conditional bias and n(k)
+
+the conditionally mean-zero noise, and define the stochastic 
+
+projected-gradient mapping ˜G(k) 
+
+> η
+
+:= η−1(Π Θ0 (θ(k) + ηˆg(k)) −
+
+θ(k)), so that θ(k+1) = θ(k) + η ˜G(k) 
+
+> η
+
+.
+
+Why the classical noise accounting fails under projec-tion. No inequality of the form EJ(θ(k+1) ) ≥ EJ(θ(k)) + 
+
+c η E Gη (θ(k)) 2 − Cη 2LJ E n(k) 2 can hold on a con-strained set: mean-zero noise can produce an expected ob-jective decrease of order Θ( η) at a point where Gη = 0. A one-dimensional witness: Θ0 = [0 , 1] , J(x) = −x − x2/2
+
+(so LJ = 1 ), x = 0 , noise ξ = +2 with probability 1/3
+
+and ξ = −1 with probability 2/3; then Gη (0) = 0 yet 
+
+E[J(x+)] − J(0) = −η/ 3 − η2/6. We therefore argue through the stochastic mapping, following the composite-optimization route of Ghadimi, Lan, and Zhang [33] (see also [34] for the unconstrained analogue). 
+
+Step 1 (pathwise one-step inequality). The projection opti-mality condition for θ(k+1) = Π Θ0 (θ(k) + ηˆg(k)), tested at the feasible point θ(k), (using that Θ0 is closed and convex, as each Θ0,i is compact convex by (A4)) reads ⟨θ(k) +ηˆg(k) −
+
+θ(k+1) , θ(k) − θ(k+1) ⟩ ≤ 0, i.e. ⟨ˆg(k), ˜G(k) 
+
+> η
+
+⟩ ≥ ˜G(k)
+
+> η
+> 2
+
+.Combining with the LJ -smoothness lower bound and Young’s inequality ⟨e(k), ˜G(k) 
+
+> η
+
+⟩ ≤ 12 e(k) 2 + 12 ˜G(k)
+
+> η
+> 2
+
+,
+
+J(θ(k+1) ) ≥ J(θ(k)) + η⟨∇ J(θ(k)), ˜G(k) 
+
+> η
+
+⟩ − LJ η2 
+
+> 2
+
+˜G(k)
+
+> η
+> 2
+
+≥ J(θ(k)) + η
+
+> 2
+
+ 1 − LJ η ˜G(k)
+
+> η
+> 2
+
+− η 
+
+> 2
+
+e(k) 2
+
+,
+
+and with η ≤ 1/(4 LJ ) the coefficient of ˜G(k)
+
+> η
+> 2
+
+is at least 
+
+3η/ 8.
+
+Step 2 (from the stochastic to the true mapping). Non-expansiveness of ΠΘ0 gives Gη (θ(k)) − ˜G(k) 
+
+> η
+
+≤ e(k) ,29 
+
+hence ˜G(k)
+
+> η
+> 2
+
+≥ 12 Gη (θ(k)) 2 − e(k) 2. Substituting into Step 1 yields the pathwise inequality 
+
+J(θ(k+1) ) ≥ J(θ(k)) + 3η 
+
+> 16
+
+Gη (θ(k)) 2
+
+− 7η 
+
+> 8
+
+e(k) 2
+
+,
+
+(100) in which the error now enters, correctly, at order η per step. This inequality holds on every sample path before any expec-tation is taken; it is exactly the inequality that the predictable-prefix argument of Appendix Q multiplies by the indicator 
+
+1A0∩···∩ Ak 1Erff .
+
+Step 3 (bias–variance and aggregation). Taking expecta-tions and using that b(k) is FQk -measurable while E[n(k) |FQk ] = 0 gives E e(k) 2 = E b(k) 2 + E n(k) 2. All norms are aggregate quantities; under the product structure (A4), ∥v∥2 = Pni=1 ∥vi∥2 and the projection acts blockwise, so the analyzed update equals the global projected step. Since 
+
+b(k) = ( b(k) 
+
+> i
+
+)ni=1 stacks the per-agent biases, E b(k) 2 =
+
+P 
+
+> i
+
+E b(k)
+
+> i
+> 2
+
+≤ n ϵ 2 
+
+> b
+
+by Lemma 9; and since n(k) stacks the per-agent mean-zero noises, E n(k) 2 ≤ n σ 2 
+
+> g
+
+/M g , where 
+
+σ2 
+
+> g
+
+= G2D2 
+
+> κc
+
+(LW ∗)2/(1 − γ)2 bounds the per-agent per-sample gradient-noise variance (the per-sample gradient mag-nitude is at most GD κc LW ∗/(1 −γ) under the projected linear critic) and the division by Mg reflects the average over Mg
+
+i.i.d. samples. 
+
+Step 4 (telescoping). Summing Step 2 over k = 0 , . . . , K −
+
+1, using ∆J = J∗ − J(θ(0) ), dividing by 3ηK/ 16 and then by n: the explicit factor n in the error terms cancels against the division by n, while the descent term retains the factor 
+
+1/n . This yields (42) with universal constants C1, C 2, C 3 (one may take C1 = 16 /3 and C2 = C3 = 14 /3). The per-agent normalization is a consequence of the product structure, not an assumed scaling. □
+
+APPENDIX PPROOF OF THEOREM 6Substitute the parameter choices into Corollary 1. The descent term is O(LJ ∆J /(nK )) = O(LJ /K ) using ∆J =
+
+O(n) (i.e. ∆J ≤ 2nQ max ); setting K∗ = O(LJ /ϵ )
+
+makes it O(ϵ). The gradient-noise term O(σ2 
+
+> g
+
+/M g ) is 
+
+O(ϵ) for M ∗ 
+
+> g
+
+= O(σ2 
+
+> g
+
+/ϵ ). The bias-squared term, by Lemma 9, splits into O(ϵagg (κ)2), O(G2D2 
+
+> κc
+
+ϵ2
+
+> Q
+
+/(1 − γ)2),and O(G2D2 
+
+> κc
+
+R2tot /(1 − γ)2). The choice ϵQ = O((1 −
+
+γ)√ϵ/ (GD κc )) makes the second contribution O(ϵ) and forces M ∗ 
+
+> s
+
+= eO(L6W ∗2G2D2 
+
+> κc
+
+/(μ2 
+
+> M
+
+(1 − γ)2ϵ)) through Theorem 4. The remaining contributions, namely ϵagg (κ)2 and the Rtot -part, which decomposes into within-bin, truncation, and RFF pieces, are, after absorbing the C′Eout contribution, exactly the four components of the structural floor ϵfloor (κ, m )
+
+of (43). The absorption is explicit: with A := LW ∗ + Qmax 
+
+and B := Qmax + LU 1 ≤ A (since W ∗ ≥ U1), the choices δ⋆ = δtraj = ϵ2
+
+> Q
+
+/(3 A2) and γT +1 ≤ δ⋆ give 
+
+Eout = B(1+1 /γ )( δtraj +γT +1 ) ≤ 2(1+1 /γ )3 ϵ2
+
+> Q
+
+/A = O(ϵ2
+
+> Q
+
+),hence (C′Eout )2 = O(ϵ4
+
+> Q
+
+) = O(ϵ2) ⊆ O (ϵ) for ϵ ≤ ϵ0; the elementary inequality (a + b + c + d)2 ≤ 4( a2 + b2 + c2 + d2)
+
+applied to Rtot routes this piece into the ϵ-budget without cross terms against the floor components. Hence 
+
+1
+
+nK ∗
+
+X
+
+> k
+
+E Gη (θ(k)) 2
+
+≤ ϵ + ϵfloor (κ, m ). (101) The total shared-oracle count is Nglobal = K∗(M ∗ 
+
+> s
+
++ M ∗ 
+
+> g
+
+);with K∗ = O(LJ /ϵ ) and M ∗ 
+
+> s
+
+, M ∗ 
+
+> g
+
+= eO(1 /ϵ ) this is eO(1 /ϵ 2).The per-iteration LSTD failure events and the confinement-failure mass are absorbed into the ϵ-budget via δ⋆ = δtraj =
+
+ϵ2
+
+> Q
+
+/(3( LW ∗ + Qmax )2) with γT +1 ≤ δ⋆, exactly as in Lemma 7. □
+
+APPENDIX QPROOF OF THEOREM 7The only structural difference from Appendix P is that the TD-stability lower bound μM is replaced by μtraj and holds only on the trajectory event Etraj = T 
+
+> k<K ∗
+
+Ak, with each Ak = {inf i σmin (Mθ(k) 
+
+> i
+
+) ≥ μtraj } being F− 
+
+> k
+
+-measurable (predictable). 
+
+a) Predictable-event factorization.: The per-step descent inequality of Appendix O (Step 2 there, established pathwise before expectations) requires the LSTD bound only at the cur-rent iterate θ(k), which is controlled by Ak. Multiply the per-step inequality by the predictable indicator 1A0∩···∩ Ak 1Erff ∈F− 
+
+> k
+
+before taking expectations. Because the indicator is F− 
+
+> k
+
+-measurable, it commutes with the conditional expectation in the concentration step (Theorem 3 applied conditional on F− 
+
+> k
+
+), so the conditional matrix-Bernstein and Hilbert-space vector-concentration (Pinelis) bounds hold verbatim on Ak ∩Erff . No conditioning on the global future event Etraj is used. 
+
+b) Stopped-process telescoping.: Define the stopping time τ := inf {k : Ack} ∧ K∗, which is a valid stopping time for the filtration (F− 
+
+> k
+
+) since {τ > k } = A0 ∩ · · · ∩ Ak ∈ F − 
+
+> k
+
+.Telescoping the predictable-prefix-weighted per-step inequal-ity over k = 0 , . . . , K ∗ − 1 is equivalent to telescoping the descent inequality over the stopped process {θ(k)}k<τ on Erff ;the telescoped objective increments satisfy the pathwise iden-tity P 
+
+> k<τ
+
+[J(θ(k+1) ) − J(θ(k))] = J(θ(τ )) − J(θ(0) ) ≤ ∆J ,which is the only property of the stopped sum the argument uses; no sign condition on any boundary term is needed. This yields the unconditional predictable-prefix bound 
+
+E
+
+h 1
+
+> nK ∗
+> K∗−1
+
+X
+
+> k=0
+
+Gη (θ(k)) 2
+
+1A0∩···∩ Ak 1Erff 
+
+i
+
+≤ ϵ + ϵfloor (κ, m ),
+
+(102) which is statement (a); the equivalent stopped-process form follows from 1A0∩···∩ Ak = 1{τ >k }. Statement (b) follows because Etraj ⊆ A0 ∩ · · · ∩ Ak for every k, whence 1Etraj ≤
+
+1A0∩···∩ Ak . Statement (c) is Assumption 5 together with 
+
+P(Erff ) ≥ 1−δrff and a union bound, and statement (d) follows by dividing the bound of statement (b) by P(Etraj ∩ Erff ) ≥
+
+1/2. The complexity count N traj global = K∗(M ∗ 
+
+> s
+
++ M ∗ 
+
+> g
+
+) carries the factor LJ in both terms through K∗ = O(LJ /ϵ ), with all derived constants ( W ∗, C ′, C bin , ϵ floor ) recomputed using 
+
+μtraj in place of μM . □30 
+
+APPENDIX RPROOF OF PROPOSITION 4 ( ADAPTIVE LOCALITY )Under the strengthened hypothesis ∆ρ < 1, the graph-tail base satisfies ˜δ = (∆ −1) ρ < ∆ρ < 1 with margin. By the def-initions of ϵfloor trunc and ϵfloor graph in (43), ϵfloor trunc (κ) ∝
+
+ρ2( κ+1) and ϵfloor graph (κ) ∝ ˜δ2( κc+1) ; both decay geomet-rically in κ. The two implicit inequalities defining κ∗ are sufficient conditions, up to the displayed universal constants, for ϵfloor trunc (κ∗) ≤ ϵ/C floor and ϵfloor graph (κ∗) ≤ ϵ/C floor 
+
+after taking logarithms, with the κ-dependent constant Ct(κ)
+
+entering the truncation condition through C′(κ). Hypothesis (ii) bounds Ct(κ∗) ≤ Ct(μM (m)) uniformly, so the fixed-point inequality has a solution in [[1 , κ max ]] whenever the displayed value lies in that range; the conservative explicit alternative replaces Ct(κ∗) by the finite supremum ¯Ct. With 
+
+κ∗ so chosen, the convergence bound of Theorem 6 gives 
+
+ϵ from the optimization and statistical terms and, through the outer constant in (43), Cfloor · (ϵ/C floor ) = ϵ from each of ϵfloor trunc (κ∗) and ϵfloor graph (κ∗), leaving the surviving floor Cfloor [ϵfloor bin (κ∗; m)+ ϵfloor rff (m; κ∗)] , hence the stated bound. Since ˜gα(κ) = exp( O(DκdS )) and κ∗ = O(log(1 /ϵ )) ,substituting the relevant upper bound on Dκ∗ (O(κ∗), O(κ∗p),or O(∆ κ∗
+
+)) yields the polynomial, quasi-polynomial, and stretched-exponential upper envelopes of the statement, re-spectively; when the realized Dκ∗ 
+
+> c
+
+reaches n, the cap Dκ∗ 
+
+> c
+
+≤ n
+
+contributes the explicit n2 factor of Remark 2. □
+
+REFERENCES [1] K. Zhang, Z. Yang, and T. Bas ¸ar, “Multi-agent reinforcement learning: A selective overview of theories and algorithms,” Handbook of rein-forcement learning and control , pp. 321–384, 2021. [2] J. Feng, Y. Shi, G. Qu, S. H. Low, A. Anandkumar, and A. Wierman, “Stability constrained reinforcement learning for decentralized real-time voltage control,” IEEE Transactions on Control of Network Systems ,vol. 11, no. 3, pp. 1370–1381, 2023. [3] G. Qu, A. Wierman, and N. Li, “Scalable reinforcement learning of localized policies for multi-agent networked systems,” in Learning for Dynamics and Control . PMLR, 2020, pp. 256–266. [4] ——, “Scalable reinforcement learning for multiagent networked sys-tems,” Operations Research , vol. 70, no. 6, pp. 3601–3628, 2022. [5] Y. Lin, G. Qu, L. Huang, and A. Wierman, “Multi-agent reinforcement learning in stochastic networked systems,” Advances in neural informa-tion processing systems , vol. 34, pp. 7825–7837, 2021. [6] Y. Zhang, G. Qu, P. Xu, Y. Lin, Z. Chen, and A. Wierman, “Global convergence of localized policy iteration in networked multi-agent reinforcement learning,” Proceedings of the ACM on Measurement and Analysis of Computing Systems , vol. 7, no. 1, pp. 1–51, 2023. [7] K. Zhang, Z. Yang, H. Liu, T. Zhang, and T. Basar, “Fully decentralized multi-agent reinforcement learning with networked agents,” in Interna-tional conference on machine learning . PMLR, 2018, pp. 5872–5881. [8] T. Doan, S. Maguluri, and J. Romberg, “Finite-time analysis of dis-tributed td (0) with linear function approximation on multi-agent rein-forcement learning,” in International Conference on Machine Learning .PMLR, 2019, pp. 1626–1635. [9] Y. Lin, J. Gan, G. Qu, Y. Kanoria, and A. Wierman, “Decentralized online convex optimization in networked systems,” in International Conference on Machine Learning . PMLR, 2022, pp. 13 356–13 393. [10] T. Chu, S. Chinchali, and S. Katti, “Multi-agent reinforcement learning for networked system control,” arXiv preprint arXiv:2004.01339 , 2020. [11] A. Rahimi and B. Recht, “Random features for large-scale kernel machines,” Advances in neural information processing systems , vol. 20, 2007. [12] F. Liu, X. Huang, Y. Chen, and J. A. Suykens, “Random features for ker-nel approximation: A survey on algorithms, theory, and beyond,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 44, no. 10, pp. 7128–7148, 2021. [13] Z. Ren, R. Zhang, B. Dai, and N. Li, “Scalable spectral representations for multi-agent reinforcement learning in network mdps,” arXiv preprint arXiv:2410.17221 , 2024. [14] S. J. Bradtke and A. G. Barto, “Linear least-squares algorithms for temporal difference learning,” Machine learning , vol. 22, no. 1, pp. 33– 57, 1996. [15] J. A. Boyan, “Technical update: Least-squares temporal difference learning,” Machine learning , vol. 49, no. 2, pp. 233–246, 2002. [16] A. Lazaric, M. Ghavamzadeh, and R. Munos, “Finite-sample analysis of least-squares policy iteration,” The Journal of Machine Learning Research , vol. 13, no. 1, pp. 3041–3074, 2012. [17] J. Bhandari, D. Russo, and R. Singal, “A finite time analysis of temporal difference learning with linear function approximation,” in Conference on Learning Theory (COLT) . PMLR, 2018, pp. 1691–1692. [18] J. A. Tropp, “An introduction to matrix concentration inequalities,” 
+
+Foundations and trends® in machine learning , vol. 8, no. 1-2, pp. 1–230, 2015. [19] R. Vershynin, High-dimensional probability: An introduction with ap-plications in data science . Cambridge university press, 2018, vol. 47. [20] I. Pinelis, “Optimum bounds for the distributions of martingales in banach spaces,” The Annals of Probability , pp. 1679–1706, 1994. [21] K. S. Narendra and A. M. Annaswamy, Stable adaptive systems . Courier Corporation, 2012. [22] R. S. Sutton, D. McAllester, S. Singh, and Y. Mansour, “Policy gradi-ent methods for reinforcement learning with function approximation,” 
+
+Advances in neural information processing systems , vol. 12, 1999. [23] Y. Arjevani, Y. Carmon, J. C. Duchi, D. J. Foster, N. Srebro, and B. Woodworth, “Lower bounds for non-convex stochastic optimization,” 
+
+Mathematical Programming , vol. 199, no. 1, pp. 165–214, 2023. [24] A. Agarwal, S. M. Kakade, J. D. Lee, and G. Mahajan, “On the theory of policy gradient methods: Optimality, approximation, and distribution shift,” Journal of Machine Learning Research , vol. 22, no. 98, pp. 1–76, 2021. [25] R. Lowe, Y. I. Wu, A. Tamar, J. Harb, O. Pieter Abbeel, and I. Mordatch, “Multi-agent actor-critic for mixed cooperative-competitive environ-ments,” Advances in neural information processing systems , vol. 30, 2017. [26] J. Foerster, G. Farquhar, T. Afouras, N. Nardelli, and S. Whiteson, “Counterfactual multi-agent policy gradients,” in Proceedings of the AAAI conference on artificial intelligence , vol. 32, no. 1, 2018. [27] S. Iqbal and F. Sha, “Actor-attention-critic for multi-agent reinforcement learning,” in International conference on machine learning . PMLR, 2019, pp. 2961–2970. [28] C. Yu, A. Velu, E. Vinitsky, J. Gao, Y. Wang, A. Bayen, and Y. Wu, “The surprising effectiveness of ppo in cooperative multi-agent games,” 
+
+Advances in neural information processing systems , vol. 35, pp. 24 611– 24 624, 2022. [29] S. Shin, Y. Lin, G. Qu, A. Wierman, and M. Anitescu, “Near-optimal distributed linear-quadratic regulator for networked systems,” SIAM Journal on Control and Optimization , vol. 61, no. 3, pp. 1113–1135, 2023. [30] M. E. Baran and F. F. Wu, “Network reconfiguration in distribution systems for loss reduction and load balancing,” IEEE Transactions on Power delivery , vol. 4, no. 2, pp. 1401–1407, 1989. [31] P. Dobruschin, “The description of a random field by means of conditional probabilities and conditions of its regularity,” Theory of Probability & Its Applications , vol. 13, no. 2, pp. 197–224, 1968. [32] P. Rebeschini and R. van Handel, “Can local particle filters beat the curse of dimensionality?” The Annals of Applied Probability , vol. 25, no. 5, pp. 2809–2866, 2015. [33] S. Ghadimi, G. Lan, and H. Zhang, “Mini-batch stochastic approx-imation methods for nonconvex stochastic composite optimization,” 
+
+Mathematical Programming , vol. 155, no. 1, pp. 267–305, 2016. [34] S. Ghadimi and G. Lan, “Stochastic first-and zeroth-order methods for nonconvex stochastic programming,” SIAM journal on optimization ,vol. 23, no. 4, pp. 2341–2368, 2013.

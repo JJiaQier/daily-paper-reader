@@ -1,0 +1,748 @@
+Title: Token-Wise Latent Streaming from Slow Reasoners to Fast Planners for Dynamic Vision Language Navigation
+
+URL Source: https://arxiv.org/pdf/2607.16806v1
+
+Published Time: Tue, 21 Jul 2026 00:37:26 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Token-Wise Latent Streaming from Slow Reasoners to Fast Planners for Dynamic Vision Language Navigation 
+
+Tianshuai Hu 1, Yangyi Zhong 2, Zeying Gong 2, Lingdong Kong 3, Xiaodong Mei 1,Guoyang Zhao 2, Xiaolu Liu 4, Song Wang 4, Rong Li 2, and Junwei Liang 1,2∗
+
+Vision-Language Navigation in dynamic, human-centric environments exposes a fundamental tension: linguistic rea-soning is slow and deliberative, whereas safe, socially com-pliant planning should be instant and reactive. The resulting observation staleness is safety-critical: a maneuver chosen during inference can already be unsafe by the time it executes. We observe that, long before a VLM finishes its inference, its intermediate hidden states already encode action-relevant intent. We propose SPARK-VLN , a dual-system framework for dynamic social VLN that streams the slow VLM reasoner’s knowledge to a fast flow-matching expert planner throughout token generation, providing fresh and evolving guidance during inference. This design is realized by three modules: a Token-Wise Hidden Streamer that extracts intermediate hidden states along the token generation process, a Sequence-to-Slot Latent Bridge that projects them into fixed-size latent slots, and an Evolving Latent Conditioner that infuses them into the expert planner. We also introduce a human-centric benchmark suite for dynamic social vision-language navigation that keeps pedes-trians and the robot active throughout inference and reports navigation success, social compliance, human collisions, and explicit staleness statistics. Across these settings, SPARK-VLN improves navigation success and social compliance while sustaining inference efficiency. Webpage: https: //hutslib.github.io/SPARK-VLN/ .I. I NTRODUCTION 
+
+Robots deployed in human-centric spaces are increas-ingly required to follow natural-language instructions while moving safely among dynamic pedestrians, reasoning over task semantics, scene context, and social norms. Vision-Language-Navigation (VLN) models are a promising route to instruction following [1], [2], [3], [4], [5]. Deploying them in dynamic social spaces, however, exposes a fundamental tension: semantic reasoning is deliberative and slow, whereas safe social navigation demands instant reactions [6], [7], [8]. The reasoning of multimodal large language models (MLLMs) [9], [10], [11], [12], [13] is inherently slow, and  
+
+> 1
+
+The Hong Kong University of Science and Technology. {thuaj, xmeiab }@connect.ust.hk  
+
+> 2
+
+The Hong Kong University of Science and Technology (Guangzhou). {yzhong123, zgong313, rli335 }@connect.hkust-gz.edu.cn, junweiliang@hkust-gz.edu.cn  
+
+> 3
+
+National University of Singapore. lingdong.kong@u.nus.edu  
+
+> 4
+
+Zhejiang University {xiaoluliu, songw }@zju.edu.cn 
+
+* Corresponding author. (a)Single -System: Reason -Then -Act (RTA)   
+
+> Input
+> Obs.
+> M odel
+> Infer.
+> Action
+> Exec.
+> 0H
+> 𝐚 𝟎 𝐚 𝟏
+
+…Tim e   
+
+> VLM VLM
+> (b) Dual -System: Blocking Update
+> Expert Planner
+> Slow
+> System
+> Action
+> Exec.
+> Fast
+> System
+> 0
+
+…          
+
+> 𝐚 𝟎 𝐚 𝟏 𝐚 𝟐 𝐚 𝟑 𝐚 𝟒 𝐚 𝟓
+> Input
+> Obs.
+> Tim e
+> VLM VLM
+> 00000
+> (c) Ours Dual -System : Token Streaming
+> Slow
+> System
+> Action
+> Exec.
+> Fast
+> System
+> 0
+
+…        
+
+> Input
+> Obs.
+> Tim e
+> VLM VLM
+> 00000
+> Expert Planner
+> 𝐚 𝟎 𝐚 𝟏 𝐚 𝟐 𝐚 𝟑 𝐚 𝟒 𝐚 𝟓
+
+Fig. 1: Comparison of VLN execution paradigms. (a) Single-System (Reason-Then-Act): the VLM must finish full inference before emitting an action; the agent idles while the environment advances. (b) Dual-System (Blocking Update): the expert planner acts continuously, but receives guidance (yellow arrows) only after the VLM finishes, yielding a stale conditioning signal. (c) Ours (Token Streaming): SPARK-VLN streams hidden states to the planner throughout inference (blue arrows), providing progressively refined guidance. 
+
+while the model deliberates, the environment keeps evolving. The result is a perception-action gap we term observation staleness . While static benchmarks hide it, dynamic envi-ronments make it severe: an action is computed from an observation that the world has already outrun, so a maneuver that was socially appropriate when inference began can be-come a proxemic violation, or even a collision, by the time it executes. Existing methods do not fully resolve this problem. Reason-then-act systems [1], [2], [3] ignore latency entirely and pause between actions. Real-Time Chunking (RTC) arXiv:2607.16806v1 [cs.RO] 18 Jul 2026 and continuous-inference pipelines [14], [15], [16] overlap inference with execution to preserve motion smoothness, yet each chunk is computed from an observation the environment has already outrun [17], [18]. Dual-system designs [5], [4], [19] decouple a slow reasoner from a fast planner to recover reactivity, but guidance is handed over only after the slow Vision-Language Model (VLM) finishes reasoning, and is already outdated by the time it steers the fast planner. Compounding the issue, this failure mode is largely in-visible under current evaluation. Mainstream VLN bench-marks [20], [21], [22] are static and synchronous: the sim-ulator freezes while the model thinks and advances only after an action is emitted, so inference latency never alters the outcome. As a result, observation staleness is neither penalized nor even measured, and methods that would fail in a live dynamic scene appear indistinguishable from methods that would not. In this work, we revisit the dual-system paradigm, which preserves large-model reasoning while restoring reactivity. Our key observation is that autoregressive inference is incre-mental: long before a VLM finishes its answer, the hidden states of its intermediate tokens already encode cues such as directional intent and pedestrian context. Existing dual-system designs [5], [4], [19] ignore this. They treat reasoning as a blocking call: they extract guidance only from a finished chain, project it into a single final latent for the downstream fast planner, and infuse that into the planner once per slow cycle. As a result, throughout the long inference window the planner receives no fresh guidance at all, and by the time the guidance lands, the scene it was reasoned from has already changed. The bottleneck, then, lies not in the reasoning process but in its delivery: guidance is withheld until reasoning completes, even though usable knowledge emerges token by token along the way. We therefore propose SPARK-VLN , a dual-system frame-work for dynamic social VLN in which a slow VLM rea-soner Streams Progressively Aggregated latent Reasoning 
+
+Knowledge to a fast flow-matching expert planner through-out inference. Concretely, SPARK-VLN rebuilds the extract– project–infuse pipeline into a token-wise streaming process. (i) Instead of extracting guidance only from a finished chain, the Token-Wise Hidden Streamer extracts hidden states at intermediate tokens, so guidance becomes available while the VLM is still reasoning. (ii) The extracted hidden states, however, form an ever-growing sequence in the VLM’s high-dimensional space, whereas the planner demands afixed-size, low-dimensional condition: the Sequence-to-Slot Latent Bridge therefore projects these hidden states into a compact set of latent slots via progressive aggregation with learnable queries, decoupling the planner’s input from the VLM output length. (iii) To plan with both the evolving guidance and the current observation, the Evolving Latent Conditioner infuses the up-to-date slots into the expert planner, which generates trajectories from the real-time ob-servation together with the streamed guidance. As a result, the planner is steered by fresh semantic intent throughout the VLM’s reasoning rather than only at its end. To close the evaluation gap identified above, we further introduce a human-centric benchmark suite for dynamic social VLN that keeps both pedestrians and the robot ac-tive throughout model inference. The suite features: (1) two evaluation stages, an Idealized Dynamic Environment that pauses the simulator during inference and a Realistic Dynamic Environment where pedestrians keep moving as the model computes; (2) realistic trajectories, where goal-driven pedestrians avoid one another via Optimal Reciprocal Collision Avoidance (ORCA) [23]; (3) reasonable density and diverse social scenarios, with pedestrian counts scaled to scene area and safety-critical encounter patterns such as intersection, following, and corner; and (4) comprehensive metrics covering task completion, social compliance, and inference speed statistics. On the proposed benchmark, we first evaluate SPARK-VLN against mainstream VLN methods under both the Idealized and Realistic Dynamic Environments. All meth-ods degrade once the simulator no longer pauses during inference, confirming observation staleness as a real threat. Besides, SPARK-VLN attains the best success rate and social compliance in both stages. We further evaluate our fast planner alone on the point-goal social navigation (PointNav) task under the same two stages, where it outperforms other learning-based planners. Ablations verify that token-wise streaming surpasses wait-then-act transfer by 10.0 points in SR, and runtime profiling shows that streaming cuts the per-update latency from 0.788 s to 0.185 s. Our main contributions are as follows:  
+
+> •
+
+We propose SPARK-VLN , a dual-system framework for dynamic social VLN that streams hidden states in a token-wise manner from the slow VLM reasoner to the fast expert planner, so that the planner acts on fresh guidance throughout inference.  
+
+> •
+
+We instantiate it with three coupling modules: a Token-Wise Hidden Streamer that extracts intermediate hid-den states during generation, a Sequence-to-Slot Latent Bridge that projects them into fixed-size slots, and an Evolving Latent Conditioner that infuses them into the flow-matching expert planner.  
+
+> •
+
+We introduce a human-centric benchmark suite for dynamic social VLN that keeps pedestrians moving throughout model inference, with goal-directed pedes-trians and social-compliance metrics, on which SPARK-VLN cuts latency and improves navigation performance compared with SOTA algorithms. II. R ELATED WORK 
+
+A. Vision-Language Navigation 
+
+Vision-and-Language Navigation (VLN) has moved from discrete graph-based formulations [22], [21], [24], [25] to continuous, end-to-end policies driven by large pretrained backbones [26], [10], [11]. Early VLN systems such as NaVid [1], MapNav [27], and NaVILA [2] couple video-language pretraining with action decoding, while later sys-tems tackle streaming history [3], [4], [28], and a parallel line Sequence -to -Slot Latent Bridge      
+
+> Layer 𝑳 −𝒍
+> Multi -Head
+> Cross -Attention
+> Condition
+> Source Point
+> Guidance
+> Action
+> Head
+> Critic
+> Head
+> Critic
+> Score
+> Candidate
+> Trajectories
+> Noise Action
+> Flow Matching
+> Image Tokenizer
+> Ego -Frame
+> RGB -D
+> Instruction
+
+Slow VLM Reasoner 
+
+VLM Backbone   
+
+> Transformer
+> Decoder Layers
+> …
+> Text Tokenizer
+> 𝑡 !𝑡 "𝑡 #𝑡 $
+> ℎ!
+> %&!
+> ℎ!
+> %
+> ℎ!
+> %&'
+> ℎ#
+> %&!
+> ℎ#
+> %
+> ℎ#
+> %&'
+> ℎ"
+> %&!
+> ℎ"
+> %
+> ℎ"
+> %&'
+> ℎ$
+> %&!
+> ℎ$
+> %
+> ℎ(
+> %&'
+
+Token Wise Hidden Streamer  
+
+> 𝐻 $!(𝑙 ×𝑘 )×𝐷 )
+> Evolving Reasoning Stream
+> …
+
+Input        
+
+> ………
+> …Layer 𝑳
+> −𝟏
+> Layer 𝑳
+> Layer
+> PE
+> Time PE
+> Projection
+> Slot Queries
+> K,V Latent Slot
+> Guidance
+
+Fast Planner and Evolving Condition Injector     
+
+> Obs emd Guidance emd
+> Latent Slot
+> Guidance
+> Take a left
+> into the
+> bedroom and
+> stop next to
+> the white bed.
+> OR
+> Robot Takes
+> Action
+> Policy Transformer
+> Decoder
+
+Fig. 2: Overview of the SPARK-VLN framework. Top: The VLM backbone processes egocentric RGB and instruction tokens; the 
+
+Token-Wise Hidden Streamer extracts hidden states from designated layers during autoregressive generation, producing an evolving stream 
+
+Hkt ∈ Rl×kt×D . Middle: The Sequence-to-Slot Latent Bridge augments the stream with layer and time positional encodings, projects it into the planner’s embedding space, and compresses it into fixed-size latent slots via cross-attention with learnable queries. Bottom: The expert planner fuses observation and latent slot embeddings, generates candidate trajectories via rectified flow matching, and selects the action through a safety critic. As the VLM continues generating, the latent slots are re-computed and the planner re-plans. 
+
+scales toward general, cross-embodiment navigation mod-els and unified training paradigms [29], [30], while others build explicit world models for visual navigation [31], [32] (see [33] for a broader survey of 3D/4D world modeling) or pursue LLM-driven zero-shot exploration [34]. These gains, however, come from ever-larger VLMs, whose slow inference becomes a liability in dynamic scenes. The scene evolves during inference, so an action selected by the slow VLM is outdated by the time it executes, undermining its validity and safety. 
+
+B. Real-Time and Latency-Aware VLAs 
+
+From the standpoint of system design and latency, prior work falls into three categories (see [35] for a broader survey of Vision-Language-Action (VLA) models). Early systems follow a reason-then-act schedule [1], [2], [3], [36]: they emit an action chunk and then stall while the next is rea-soned, so latency compounds into visible inter-chunk pauses. 
+
+Real-time execution frameworks instead overlap inference with execution through asynchronous pipelining, issuing the next inference before the current chunk is exhausted [14], [16], [37], [38]; this preserves motion continuity but not semantic freshness, since each chunk stays anchored to observations from the start of a long inference cycle. Dual-system designs decouple a slow reasoning module from a fast action policy and run them at different frequencies, recover-ing reactivity while keeping large-model reasoning [39], [40], [41], [42], [43], [44], [45], [46], [47], [48], [49], [5], [4], [19]; yet the two still communicate only through completed reasoning chains or finished action commands. Across all three, the unit passed from reasoning to action waits for a 
+
+complete output, a full action chunk or a single latent emitted only at the end of VLM inference. The policy therefore acts on stale guidance, blind to changes while the VLM reasons. SPARK-VLN dissolves this inference blocking by refreshing the conditioning from the slow VLM to the fast planner at the token level, so fresh guidance is available while the VLM is reasoning rather than only at the end. 
+
+C. Social and Dynamic Navigation Benchmarks 
+
+Standard VLN benchmarks evaluate instruction following in static scenes: R2R and RxR [20], [21] on discrete graphs and VLN-CE [22] in continuous motion. A parallel line of work studies social navigation, focusing on goal reaching and pedestrian avoidance [50], [51], [8], [52], [53], [54]. While recent efforts attempt to bridge this gap by introducing dynamic human agents into language-guided tasks [55], [56], [19], [57], existing platforms still fall short of aholistic evaluation. Existing benchmarks decouple linguistic reasoning from social compliance, evaluating the two in isolation. Even when dynamic agents are present in the VLN task, they lack temporal realism: the environment is frozen during inference, leaving latency risks and the lag between observation and execution unquantified. To address these limitations, we introduce an asynchronous benchmark suite for dynamic social VLN that unifies instruction-guided and social-compliant navigation under realistic inference-time dynamics. By keeping pedestrians moving throughout inference, it exposes inference latency and connects high-level language understanding with real-time, safety-critical planning. III. P ROBLEM FORMULATION 
+
+A. Vision-Language Navigation 
+
+Given a natural-language instruction I, an agent navigates toward a goal region G(I). At each discrete time step t, the agent receives an egocentric observation and pose: 
+
+xt = ( ot, p t), ot = ( Irgb  
+
+> t
+
+, I depth  
+
+> t
+
+). (1) A policy π maps the instruction and observation history to a navigation command ut = π(I, x ≤t), inducing a rollout 
+
+Γπ = {(xt, ut)}Tt=0 . The VLN objective is: 
+
+π⋆ = arg max  
+
+> π
+
+EM (Γ π , G(I)) , (2) where M aggregates standard navigation metrics such as Success Rate and Success weighted by Path Length. 
+
+B. Dual-System VLN 
+
+A dual-system VLN policy consists of a slow vision-language reasoner fvlm and a fast expert planner fplan :
+
+fvlm 
+
+ I, x t′
+
+ 7 → zt′ , ct = ϕ(zt′ ), fplan 
+
+ xt, ct
+
+ 7 → ut,
+
+(3) where t′ denotes the time at which the VLM starts its inference, zt′ is the semantic reasoning state extracted from the VLM, and ϕ projects it into a planner-compatible con-ditioning signal ct that is infused into the expert planner. In conventional dual-system designs, the planner receives 
+
+ct only after the VLM completes inference from the earlier observation xt′ . It therefore uses a stale semantic signal with lag t − t′. In dynamic, human-centric environments where pedestrians move continuously, this gap is safety-critical: a maneuver deemed safe at t′ may already be unsafe at t.
+
+C. Streaming Knowledge Transfer 
+
+SPARK-VLN lets the slow VLM reasoner stream its knowledge to the fast expert planner throughout the VLM’s generation. The VLM autoregressively produces intermediate hidden states 
+
+Ht′ = {h(1)  
+
+> t′
+
+, h(2)  
+
+> t′
+
+, . . . , h(K) 
+
+> t′
+
+}, (4) where K is the total token count and h(k) 
+
+> t′
+
+is the hidden state at the k-th token. Rather than waiting for the full output, 
+
+ϕstream extracts hidden states from an intermediate layer in a token-wise manner, projects the variable-length sequence into a fixed-dimensional representation, and infuses it into the planner: 
+
+ct = ϕstream 
+
+ H(1: kt)
+
+> t′
+
+, ut = fplan 
+
+ xt, ct
+
+, (5) where kt is the latest token emitted by time t. This en-ables the planner to receive progressively refined semantic guidance from intermediate generated tokens, rather than remaining blind throughout the entire inference period. IV. M ETHOD 
+
+SPARK-VLN, as shown in Fig. 2, is a dual-system frame-work in which a slow VLM reasoner and a fast expert planner run concurrently, connected by a streaming knowl-edge transfer pipeline that delivers guidance in a token-wise manner. At each timestep, the robot receives an egocentric RGB-D observation and a natural-language instruction. The VLM reasoner (VILA-8B [11]) processes the visual input together with the instruction and begins autoregressive gen-eration. The Token-Wise Hidden Streamer (IV-A) extracts 
+
+intermediate hidden states h(k) 
+
+> L
+
+during generation, producing a growing prefix of latent representations. The Sequence-to-Slot Latent Bridge (IV-B) projects this variable-length, high-dimensional prefix into a fixed set of compact latent slots that lie in the expert planner’s conditioning space. The 
+
+Evolving Latent Conditioner (IV-C) infuses these slots into the rectified-flow-matching expert planner, which generates a continuous trajectory. As the VLM continues generating, the prefix grows, the slots are re-computed, and the planner re-plans. 
+
+A. Token-Wise Hidden Streamer 
+
+Given the multimodal input xt′ , the VLM backbone [11] autoregressively generates a sequence of K tokens. At each decoding step k ∈ { 1, . . . , K }, the hidden state of the l-th transformer layer is updated based on the historical context as: 
+
+h(k) 
+
+> l
+
+= F xt′ | l, k, θ  ∈ RD , (6) where D denotes the VLM hidden dimension, θ denotes the frozen VLM parameters, and F(· | l, k, θ ) extracts the feature of the l-th layer at decoding step k. Standard frameworks block downstream execution until the entire sequence of 
+
+K tokens is generated, leading to information latency. To circumvent this bottleneck, the Token-Wise Hidden Streamer 
+
+ϕstream extracts these internal representations on the fly. Specifically, we define a designated subset of decoder layers 
+
+L = {l1, . . . , l L}. For the token generated at step k, the streamer collects its hidden states across all layers in L to form a per-token multi-layer representation: 
+
+h(k) 
+
+> L
+
+= h(k) 
+
+> l1
+
+; h(k) 
+
+> l2
+
+; . . . ; h(k)
+
+> lL
+
+ ∈ RL×D , (7) As decoding progresses up to time step t, the VLM has emitted kt tokens ( kt ≤ K). The cumulative hidden stream available to the downstream architecture is formalized as: 
+
+H(kt) 
+
+> t′
+
+= h(1)  
+
+> L
+
+, h(2)  
+
+> L
+
+, . . . , h(kt)
+
+> L
+
+ ∈ RL×kt×D . (8) Slow VLM Reasoner (VILA -8B)                   
+
+> 8×history egocentric RGB frame s
+> Vision Inputs
+> Prompt Inputs
+> Token -Wise Hidden Streamer :
+> …
+> layer L
+> The next action is move forward 75 cm.
+> Latent
+> Bridge
+> latent slots
+> Streaming Latent Outputs
+> Token -Wise Latent Streaming
+> Fast Expert Planner (Flow Matching)
+> current egocentric RGB -DVision Inputs
+> obs tokens ⊕
+> streamed latent slot s
+> Rectified Flow Matching
+> τ₀∼𝒩 (0, I) → τ
+> ESDF + candidate
+> trajectories
+> Planning Outputs
+> Critic trained with esdf score
+> Instruction:
+> "Walk straight into the kitchen area. Turn left and exit the
+> kitchen and stop there."
+
+Fig. 3: Data flow of SPARK-VLN. The slow VLM reasoner receives the language instruction together with 8 recent egocentric RGB frames. As it autoregressively generates the answer (e.g., “The next action is move forward 75 cm.”), the Token-Wise Hidden Streamer extracts intermediate-layer hidden states during generation, and the Sequence-to-Slot Latent Bridge compresses the evolving hidden stream into N =8 fixed-size latent slots that are streamed to the planner. The fast expert planner conditions on the current egocentric RGB-D observation fused with the streamed latent slots, and generates multiple candidate trajectories via rectified flow matching. A safety critic supervised by the Euclidean Signed Distance Field (ESDF) scores the candidates and selects the executed trajectory. 
+
+By aggregating these per-token multi-layer representations step by step, H(kt) 
+
+> t′
+
+provides immediate, progressively refined semantic guidance for the expert planner throughout the VLM’s inference process, mitigating observation staleness before generation completes. 
+
+B. Sequence-to-Slot Latent Bridge 
+
+The cumulative hidden stream H(kt) 
+
+> t′
+
+possesses a dy-namically expanding temporal dimension kt and resides in the high-dimensional reasoning space of the VLM. To seamlessly condition the downstream expert planner, which requires a fixed-size input and operates on a lower dimension, 
+
+ϕstream introduces the Sequence-to-Slot Latent Bridge. This module serves as a cross-modal translator, distilling the variable-length, multi-layer features into a compact, fixed-dimensional set of latent tokens. Because the raw hidden states extracted from the streamer lack explicit structural markers regarding their layer origin and generation step, we first augment the tensor with factorized spatio-temporal positional encodings: 
+
+ml,k = h(k) 
+
+> l
+
++ elayer (l) + etime (k), (9) where elayer (l), etime (k) ∈ RD are learnable positional encodings for the layer index and the decoding step, re-spectively. We collect and flatten the enriched tokens into a unified memory tensor M(kt) 
+
+> t′
+
+∈ R(L·kt)×D . To bridge the cross-modal manifold gap and squeeze this memory into a fixed-capacity representation, we instantiate N learnable query vectors Q = [q1, . . . , qN ]⊤ ∈ RN ×d to define our latent slots, following a Perceiver-style cross-attention bottleneck [58], where d is the planner’s input dimension. We first project the high-dimensional enriched memory into the low-dimensional planning space via: 
+
+fM(kt) 
+
+> t′
+
+= M(kt) 
+
+> t′
+
+Wp ∈ R(L·kt)×d, (10) where Wp ∈ RD×d is a learnable projection matrix. The latent slots then adaptively harvest relevant contextual abstractions across the spatio-temporal memory via multi-head cross-attention. The update for the i-th latent slot is formulated as: 
+
+zi = qi + CrossAttn  qi, fM(kt)
+
+> t′
+
+, (11) followed by a standard feed-forward network to yield the finalized slots. We stack these slots to compose the fixed-dimensional conditioning matrix: 
+
+Rt = z1, z2, . . . , zN
+
+⊤ ∈ RN ×d. (12) Unlike naive pooling operations that collapse structural token-level granularity, this cross-attention bridge dynami-cally routes the most informative spatio-temporal features into a fixed, expressive communication channel tailored for real-time planner infusion. C. Evolving Latent Conditioner and Expert Planner 
+
+We model reactive navigation as sampling a future trajec-tory τ ∈ RH×3 of H waypoints from a conditional generator: 
+
+τ1 = Gψ
+
+ τ0, ct
+
+, τ0 ∼ N (0 , I), (13) where τ1 denotes the generated trajectory, and the noise realization τ0 preserves the multi-modality of viable paths in dense social spaces. This expert planner is driven by a unified conditioning matrix ct =  zobs ; z(m)g
+
+, which pairs egocentric spatial tokens zobs with a flexible goal token z(m)g
+
+across task modalities m:
+
+z(m)g =
+
+
+
+∅, m = no-goal ,
+
+Wg g, m = point-goal ,
+
+Rt, m = language-goal .
+
+(14) This unified formulation enables the planner to learn foundational navigation policies and obstacle avoidance from abundant basic navigation data and seamlessly transfer to the VLN task. Under the language-goal setting, the streamed guidance slots Rt are dynamically re-computed as genera-tion proceeds, allowing the conditioning context to evolve smoothly within a single VLM reasoning pass. We param-eterize the trajectory generator Gψ via conditional rectified flow matching [59], [60], following recent flow-based VLA policies such as π0 [61] rather than a diffusion-based formu-lation [62], defining a linear interpolant between noise and the expert trajectory over flow time s ∈ [0 , 1] :
+
+τs = (1 − s) τ0 + s τ 1, (15) whose theoretical target velocity τ1 − τ0 remains constant across s. A transformer-based vector field network vψ is op-timized to regress this velocity by minimizing the empirical rectifying loss: 
+
+LRF = Es∼U [0 ,1] , τ 0, τ 1
+
+h
+
+vψ (s, τ s, ct)−(τ1 −τ0) 2 i
+
+. (16) The straight transport path admits accurate few-step integra-tion. At deployment, each candidate is decoded by J-step Euler integration with the latest ct:
+
+τ (j+1) = τ (j) + 1 
+
+> J
+
+vψ
+
+ jJ , τ (j), ct
+
+
+
+, (17) where the superscript (j) indexes the integration step. Sam-pling multiple noise realizations yields a set of Nc candidate trajectories {τ [n]}Nc
+
+> n=1
+
+, from which a goal-agnostic safety critic selects the executed one: 
+
+τ ∗ = arg max  
+
+> τ[n]
+
+Cω
+
+ τ [n], zobs 
+
+, (18) which evaluates only collision-freeness and kinematic smoothness from zobs , isolating reactive safety filtering from high-level intent generation. V. E XPERIMENTS 
+
+We first describe the evaluation setup (V-A), then present quantitative comparisons on vision-language navigation and point-goal social navigation (V-B). A series of ablation studies validates the contributions of the latent-extraction strategy, the bridge design, and the runtime behavior (V-C). 
+
+A. Experimental Setup 
+
+Dynamic Social VLN Benchmark. Most VLN benchmarks run synchronous evaluation loops that pause the simulator during model inference, freezing all pedestrians and sup-pressing observation staleness entirely, which hides whether inference latency changes navigation outcomes at all. To measure this effect directly, we introduce a benchmark suite with two evaluation stages.  
+
+> •
+
+Idealized Dynamic Environment. Pedestrians are present and move according to ORCA [23], but the simulator pauses during each inference step. The agent therefore always acts on fresh observations, and this stage serves as the latency-free setting.  
+
+> •
+
+Realistic Dynamic Environment. The simulator runs continuously, so pedestrians advance while the model computes and inference delay affects the results. Con-trasting this stage against the idealized setting quantifies how well a method handles observation staleness gap. As illustrated in Fig. 4, the benchmark spans diverse indoor scenes and covers both PointNav and VLN tasks under the Idealized and Realistic Dynamic Environments. For VLN tasks, the accompanying instruction vocabulary covers action, direction, place, and object roles, and the spatial statistics report a median pedestrian patrol path of 
+
+17 .4 m against an 8.2 m median agent start-to-goal dis-tance. Pedestrian density is scaled to scene area to avoid artificial overcrowding, and the scenes contain diverse social interaction patterns, such as frontal approach, intersection, following, and corner. Goal-directed pedestrians avoid one another via ORCA [23]. 
+
+Metrics. In contrast to static VLN evaluation, where a single optimal reference path can be precomputed, our dynamic social benchmark features continuously moving pedestrians that reshape traversable space throughout inference. We therefore center evaluation on task completion and social interaction quality, adopting community guidelines for VLN evaluation [20], [65] and social navigation evaluation [66]. Task-completion metrics comprise Success Rate (SR), Nav-igation Error (NE), and Success weighted by Path Length (SPL). Social-interaction metrics comprise Personal Space Compliance (PSC), Human Collision rate (Col), and Average Distance to the nearest pedestrian (AvgD). 
+
+Baselines. For VLN, we compare against five single-system methods and one dual-system baseline. Seq2Seq [22] is a recurrent instruction-to-action policy, and CMA [22] aug-ments it with cross-modal attention between language and vision. NaVid [1] is a video-based VLM that predicts the next action from egocentric history, Uni-NaVid [3] extends it into a unified model across embodied navigation tasks, and NaVILA [2] couples a VILA backbone with an action decoder for legged navigation. The dual-system baseline DualVLN [5] pairs a slow reasoner with a fast policy but hands over guidance only after the reasoner finishes. For PointNav, we compare against two classical methods with oracle access to the environment mesh and mesh-derived reference paths, namely PathFollower, a waypoint tracker Scene            
+
+> Bedroom Hall Corridor
+> Encounter
+> Intersection Following Frontal Approach
+> Mode
+> PointNav Ideal Dyna PointNav Real Dyna VLN Ideal Dyna
+
+(a) Benchmark Overview   
+
+> Action Direction
+> Place Object
+
+(b) Instruction Vocabulary (c) Spatial Statistics  
+
+> Office
+> Corner
+> VLN Real Dyna
+
+Fig. 4: Overview of our dynamic social VLN benchmark. (a) Benchmark Overview. The benchmark spans diverse indoor scenes (such as bedroom, office, hall, and corridor) and covers several human encounter patterns, including frontal approach, intersection, following, and corner, with the robot path in green and the pedestrian path in red. It supports both the PointNav and VLN tasks under two evaluation modes ,the Idealized Dynamic Environment (with pedestrians, blocking simulation) and the Realistic Dynamic Environment (with pedestrians, non-blocking simulation). (b) Instruction Vocabulary. Word cloud of navigation instructions, colored by semantic role, namely action, direction, place, and object. (c) Spatial Statistics. Distributions of start-to-goal geodesic distance (blue, median 8.2 m) and per-pedestrian patrol path length (orange, median 17 .4 m), showing that pedestrian trajectories are long enough to repeatedly intersect the agent’s route. SR       
+
+> NE (inv.)
+> SPL
+> PSC
+> Col (inv.)
+> AvgD
+> (a) VLN
+> Idealized
+> 41.6
+> 5.95
+> 34.7
+> 96.2
+> 24.8
+> 4.45
+> SR
+> NE (inv.)
+> SPL
+> PSC
+> Col (inv.)
+> AvgD
+> (b) VLN
+> Realistic
+> 34.8
+> 6.21
+> 28.7 93.9
+> 29.3
+> 5.13
+> SR
+> SPL
+> PSC Col (inv.)
+> AvgD
+> (c) PointNav
+> Idealized
+> 70.7
+> 70.1
+> 97.2 5.9
+> 4.55
+> SR
+> SPL
+> PSC Col (inv.)
+> AvgD
+> (d) PointNav
+> Realistic
+> 61.2
+> 60.8
+> 95.8 17.5
+> 4.63
+> CMA NaVid NaVILA DUAL-VLN iPlanner NavDP SPARK-VLN
+
+Fig. 5: Radar comparison across tasks and dynamic environments. (a,b) Vision-Language Navigation (VLN) and (c,d) point-goal navigation, each evaluated under the Idealized and Realistic dynamic environments. SPARK-VLN achieves the largest coverage in each setting, with annotated raw values. The performance gap between the Idealized and Realistic panels, i.e., (a) vs. (b) and (c) vs. (d), reflects each method’s robustness to observation staleness induced by inference latency. 
+
+that follows a precomputed reference path, and ORCA [23], a reciprocal velocity-based collision-avoidance controller, as well as two learning-based planners, iPlanner [63], an imperative path planner, and NavDP [64], a diffusion-based navigation policy trained with privileged guidance. 
+
+Implementation Details. The VLM reasoner uses aVILA [11] backbone with 8B parameters. The Token-Wise Hidden Streamer extracts hidden states from a designated subset of decoder layers at every generated token (layers 16– 23). The Sequence-to-Slot Latent Bridge uses N =8 learnable queries with multi-head cross-attention to produce fixed-size slots. The expert planner is a rectified flow-matching network that generates continuous trajectories with 5-step Euler integration, followed by a goal-agnostic safety critic for trajectory selection. The expert planner is trained on point-goal navigation and natively supports the PointNav task. To adapt it to VLN, we add the streamed latent slot guidance as an additional conditioning input, so at VLN evaluation time the planner is given no goal coordinate (set to zero) and is driven purely by the language instruction through the streamed slots. Fig. 3 illustrates the full VLN pipeline of SPARK-VLN. 
+
+B. Quantitative Results 
+
+Vision-language navigation. Tab. I reports our main results on the dynamic social VLN benchmark. In the Idealized Dynamic Environment, our model achieves the highest SR 
+
+41 .60% and SPL 34 .67% among all methods, while also attaining the best PSC 96 .2% and the lowest NE 5.95 m. Compared to the strongest single-system baseline NaVILA, SPARK-VLN improves SR by 4.4 points. Compared to the dual-system baseline DualVLN, the gap widens to 15 .4
+
+points, demonstrating the benefit of streaming knowledge transfer over the paradigm in which the fast planner receives guidance only after VLM reasoning completes. Moving from the Idealized to the Realistic Dynamic Environment, every method degrades once observations go TABLE I: Evaluation of VLN methods on the dynamic social VLN benchmark. Idealized Dynamic Environment : pedestrians move but the simulator pauses during inference; Realistic Dynamic Environment : the simulator runs continuously during inference, so pedestrians advance during model inference. ↑ higher is better; ↓ lower is better. Bold denotes best; underline denotes second-best within each mode. 
+
+Method Venue MLLM Params Task Completion Social Interaction 
+
+SR ↑ NE ↓ SPL ↑ PSC ↑ Col ↓ AvgD ↑
+
+● Idealized Dynamic Environment (With Pedestrians, Blocking Simulation) 
+
+VLN (Single-system) 
+
+Seq2Seq [22] ECCV’20 – – 17.60 8.32 16.61 94.4 17.3 4.28 CMA [22] ECCV’20 – – 26.00 7.27 24.25 94.2 13.8 4.26 NaVid [1] RSS’24 LLaMA-VID [10] 7B 36.40 5.96 31.19 96.1 11.8 4.25 Uni-NaVid [3] RSS’25 LLaMA-VID [10] 7B 36.00 5.98 31.97 94.5 21.6 4.15 NaVILA [2] RSS’25 VILA [11] 8B 37.20 5.99 34.47 93.6 25.4 4.31 
+
+VLN (Dual-system) 
+
+DualVLN [5] ICLR’26 Qwen-VL-2.5 [9] 7B 26.20 5.96 24.33 93.3 42.0 4.43 
+
+SPARK-VLN – VILA [11] 8B 41.60 5.95 34.67 96.2 24.8 4.45 
+
+● Realistic Dynamic Environment (With Pedestrians, Non-Blocking Simulation) 
+
+VLN (Single-system) 
+
+Seq2Seq [22] ECCV’20 – – 15.50 8.31 14.16 93.0 29.4 4.24 CMA [22] ECCV’20 – – 22.10 7.16 20.81 92.9 29.4 4.17 NaVid [1] RSS’24 LLaMA-VID [10] 7B 25.40 6.24 22.35 93.2 32.1 4.24 Uni-NaVid [3] RSS’25 LLaMA-VID [10] 7B 30.20 6.23 26.93 92.9 34.6 4.10 NaVILA [2] RSS’25 VILA [11] 8B 29.00 6.22 26.63 92.5 39.3 4.32 
+
+VLN (Dual-system) 
+
+DualVLN [5] ICLR’26 Qwen-VL-2.5 [9] 7B 22.90 6.23 21.23 92.6 46.6 4.66 
+
+SPARK-VLN – VILA [11] 8B 34.80 6.21 28.68 93.9 29.3 5.13 
+
+stale, confirming that observation staleness is a real problem in dynamic social navigation. Tab. V makes the mecha-nism explicit, and the heavier reasoners suffer most, with video-based VLMs such as NaVid losing close to a third of their SR. By contrast, our model relies on token-wise latent guidance to keep its effective latency low, and is among the most robust, shedding only about one-sixth of its SR while remaining the top performer in both stages. Crucially, conventional VLN benchmarks miss this entirely, since their blocking protocol freezes the environment during inference. Our asynchronous benchmark exposes this gap and is therefore essential for faithfully evaluating navigation in dynamic social environments. In the Realistic Dynamic Environment, the advantage of SPARK-VLN becomes more pronounced. Our model achieves 34 .80% SR and 28 .68% SPL, outperforming NaV-ILA ( 29 .00% SR, 26 .63% SPL) and DualVLN ( 22 .90% SR, 
+
+21 .23% SPL). Crucially, SPARK-VLN also leads on the social metrics, attaining the best PSC 93 .9% , the lowest collision rate 29 .3% , and the highest AvgD 5.13 m. These re-sults confirm that streaming intermediate reasoning latents to the planner mitigates the observation staleness that degrades competing methods under realistic conditions. 
+
+Point-goal social navigation. We also evaluate the PointNav-pretrained fast planner (Ours-S1) in isolation on the point-goal task. As shown in Tab. II, Ours-S1 achieves the highest SR 70 .7% and SPL 70 .1% among all learning-based methods in the Idealized Dynamic Environment, surpassing NavDP by 9.6 points in SR and 9.9 points in SPL. Social compliance is also the best, with the collision rate dropping to 5.9% , nearly half that of NavDP ( 9.8% ). In the Realistic Dynamic Environment, all methods de-grade, yet our planner retains a clear lead, reaching 61 .2% 
+
+SR and 60 .8% SPL versus 53 .2% and 52 .6% for NavDP. No-tably, the oracle PathFollower, which has privileged access to the environment mesh, drops from 60 .0% to 56 .7% SR, while our learning-based planner exceeds it in both environments. This confirms that the flow-matching expert planner provides strong navigation and robust social compliance on its own, giving SPARK-VLN a solid foundation for the streamed language guidance to build on. 
+
+C. Ablation Studies 
+
+We conduct ablation studies to validate two design de-cisions. First, whether streaming per-token hidden states improves over waiting for the full VLM output. Second, how to compress the streamed tokens into fixed-size planner conditioning, for which we compare a mean-pooling and a cross-attention bridge. All ablations are run on the Realistic Dynamic Environment, the setting in which latency actually matters. 
+
+Knowledge-transfer strategy. We compare two knowledge-transfer strategies between the slow reasoner and the fast planner. Wait-then-Act (W-t-A) blocks the planner until the VLM produces its full output and then infuses a single conditioning signal once per slow cycle, mirroring the con-TABLE II: Evaluation of point-goal social navigation on the dynamic social benchmark. Idealized Dynamic Environment : the simulator pauses during inference, so the agent acts on fresh observations; Realistic Dynamic Environment : the simulator runs continuously, so pedestrians advance and observations become stale at action time. Methods in gray use a privileged environment mesh and mesh-derived reference path (oracle, not direct competitors). ↑
+
+higher is better; ↓ lower is better. Bold best; underline second-best (excluding oracles). 
+
+Method Task Completion Social Interaction 
+
+SR ↑ SPL ↑ PSC ↑ Col ↓ AvgD ↑
+
+● Idealized Dynamic Environment 
+
+Classical / Rule-based (Oracle) 
+
+PathFollower 60.0 55.9 93.6 33.9 4.05 ORCA [23] 33.2 32.9 96.2 16.4 4.08 
+
+Learning-based 
+
+iPlanner [63] 49.1 49.1 96.7 10.7 4.53 NavDP [64] 61.1 60.2 97.1 9.8 4.54 
+
+Ours-S1 70.7 70.1 97.2 5.9 4.55 
+
+● Realistic Dynamic Environment 
+
+Classical / Rule-based (Oracle) 
+
+PathFollower 56.7 52.8 93.0 37.6 4.05 ORCA [23] 30.0 29.7 95.4 21.5 4.11 
+
+Learning-based 
+
+iPlanner [63] 43.8 43.8 95.6 20.9 4.64 
+
+NavDP [64] 53.2 52.6 95.5 21.9 4.60 
+
+Ours-S1 61.2 60.8 95.8 17.5 4.63 
+
+ventional dual-system design. Stream (Ours) instead updates the conditioning via the Token-Wise Hidden Streamer and the Sequence-to-Slot Latent Bridge, letting the planner act on progressively refined guidance while the VLM is still reasoning. As shown in Tab. III, Stream improves SR from 
+
+24 .80% to 34 .80% (+10 .00 points) and SPL from 21 .64% to 
+
+28 .68% (+7 .04 points) over W-t-A, while reducing NE from 
+
+7.45 m to 6.21 m. The social metrics improve consistently, with PSC rising to 93 .9% , the collision rate falling to 29 .3% ,and AvgD increasing to 5.13 m. A single end-of-generation signal leaves the planner blind for most of the inference cycle, whereas the progressively aggregated latent keeps it steered by up-to-date intent, driving the consistent gains in both task completion and social interaction. 
+
+Bridge design. The Sequence-to-Slot Latent Bridge must compress a variable-length, high-dimensional hidden stream into a fixed-size conditioning matrix for the expert planner. We compare two aggregation strategies. Mean-Pool collapses all streamed tokens into a single vector via global average pooling, discarding token-level granularity. Cross-Attn (Ours) lets N =8 learnable queries attend to the projected stream via multi-head cross-attention, adaptively routing the most informative features into fixed-size latent slots. As shown in Tab. IV, Cross-Attn improves SR from 25 .20% to 34 .80% 
+
+(+9 .60 points) and SPL from 21 .17% to 28 .68% (+7 .51 
+
+points) over Mean-Pool, lowers NE from 7.36 m to 6.21 m, and improves every social metric (PSC 92 .7% to 93 .9% , Col 
+
+36 .5% to 29 .3% , AvgD 5.05 m to 5.13 m). This validates that naive pooling discards token-level structure, whereas our 
+
+TABLE III: Knowledge transfer strategy ablation on the Realistic Dynamic Environment. Both methods share the same slow VLM reasoner and fast expert planner; only the knowledge transfer mechanism differs. W-t-A (Wait-then-Act): the fast planner blocks until the slow VLM completes full autoregressive generation, then receives a single conditioning signal from the final output; Stream 
+
+(Ours): the Token-Wise Hidden Streamer extracts intermediate hidden states as tokens are generated, and the Sequence-to-Slot Latent Bridge continuously updates the fast planner’s conditioning, enabling it to act on progressively refined guidance while the slow VLM is still reasoning. ↑ higher is better; ↓ lower is better.                          
+
+> Task Completion Social Interaction Method SR ↑NE ↓SPL ↑PSC ↑Col ↓AvgD ↑
+> W-t-A 24.80 7.45 21.64 90.9 29.7 4.97
+> Stream 34.80 6.21 28.68 93.9 29.3 5.13
+> ∆+10.0 −1.24 +7.04 +3.0 −0.4 +0.16
+
+TABLE IV: Sequence-to-Slot Latent Bridge ablation on the Realistic Dynamic Environment. We compare two strategies for compressing the variable-length hidden stream into fixed-size plan-ner conditioning. Mean-Pool : collapse all streamed tokens into a single vector via global average pooling; Cross-Attn (Ours): learnable queries attend to the projected stream via multi-head cross-attention, adaptively routing informative features into fixed-size latent slots. ↑ higher is better; ↓ lower is better.                          
+
+> Task Completion Social Interaction Aggregation SR ↑NE ↓SPL ↑PSC ↑Col ↓AvgD ↑
+> Mean-Pool 25.20 7.36 21.17 92.7 36.5 5.05
+> Cross-Attn 34.80 6.21 28.68 93.9 29.3 5.13
+> ∆+9.60 −1.15 +7.51 +1.2 −7.2 +0.08
+
+cross-attention bridge preserves and selectively aggregates it into a compact yet expressive conditioning signal for the fast expert planner. 
+
+Qualitative results. Fig. 6 and Fig. 7 visualize representative episodes in the Realistic Dynamic Environment, where the simulator keeps running during inference and pedestrians advance while the model reasons. In Fig. 6, SPARK-VLN faithfully follows the instruction and proactively yields to the moving pedestrian, reaching the target specified by the language, whereas the single-system NaVILA drifts off the instructed route and eventually collides with a pedestrian. Against the dual-system baseline DualVLN, which must complete full VLM inference before issuing guidance to its planner, our model benefits from token-wise streaming and updates its plan far more frequently, negotiating both pedestrians smoothly instead of stalling and colliding. Fig. 7 further compares the two transfer strategies. The Wait-then-Act baseline stalls during inference and then reacts abruptly, colliding with an oncoming pedestrian, while SPARK-VLN anticipates the pedestrian from progressively refined guid-ance and reaches the goal. These cases mirror the quantitative gains in Tab. I, showing that streaming translates directly into safer, more compliant behavior under realistic latency. 
+
+Runtime and staleness profile. Tab. V profiles per-update latency and the pedestrian displacement accrued during in-ference on a single RTX 4090 (batch size = 1 ). Because Scene 1  Instruction: Walk straight toward the bar with the chairs/stool. Turn left and go 
+
+straight until you get to three tables with chairs. Turn left and wait near the couch.   
+
+> NaVILA SparkVLN (Ours)
+> Scene 2
+
+Instruction: Exit the study, walk through the living room to the kitchen doorway, wait 
+
+at the kitchen doorway to the left of the lamp under the stairs.  
+
+> DualVLN SparkVLN (Ours)
+
+Fig. 6: Qualitative comparison in dynamic environments. Each row shows the egocentric RGB view, the third-person view, and the top-down occupancy map, where the blue curve is the executed trajectory toward the goal (red pin) and the orange curve is the reference ground-truth path (computed without pedestrians). All episodes are run in the Realistic Dynamic Environment , where the simulator keeps running during inference and pedestrians advance while the model reasons. Scene 1 (vs. NaVILA): SPARK-VLN faithfully follows the instruction and proactively avoids the moving pedestrian, reaching the target near the couch, whereas NaVILA both deviates from the instructed route and eventually collides with a pedestrian. Scene 2 (vs. DualVLN): the dual-system baseline DualVLN must finish full VLM inference before transferring guidance to its fast planner, so the robot reacts late, colliding with the pedestrian in gray. SPARK-VLN instead streams guidance during VLM decoding, smoothly negotiating both pedestrians and adhering to the instruction. Scene  Instruction: Walk towards the desk in the office area. Stop next to the desk. 
+
+Wait-then-Act  SparkVLN (Ours) Fig. 7: Qualitative comparison on a human-populated navigation episode. Given the same instruction ( “Walk towards the desk in the office area. Stop next to the desk.” ), we compare the Wait-then-Act baseline (Left) with our SPARK-VLN (Right). Each row shows the egocentric RGB view, the third-person view, and the top-down occupancy map, where the blue curve is the executed trajectory toward the goal (red pin) and the orange curve is the reference ground-truth path (computed without pedestrians). All episodes are run in the 
+
+Realistic Dynamic Environment , where the simulator keeps running during inference and pedestrians advance while the model reasons. The baseline stalls and then reacts abruptly, colliding with a moving pedestrian, whereas our method anticipates the human and follows the instruction to reach the target. 
+
+streaming exposes usable guidance from the first token rather than only at end-of-generation, SPARK-VLN (Stream) cuts the effective per-update latency from 0.788 s (W-t-A) to 
+
+0.185 s on average, the fastest among all VLM-based meth-ods. Lower latency translates directly into less observation staleness, as the average pedestrian displacement during one inference drops from 0.213 m (W-t-A) to 0.050 m (Stream) and the worst case from 0.893 m to 0.694 m. In other words, low latency keeps the planner acting on up-to-date guidance, underpinning the safety and success gains reported above. VI. C ONCLUSION 
+
+We presented SPARK-VLN , a dual-system framework for dynamic social VLN in which a slow VLM reasoner streams progressively aggregated reasoning latents to a fast flow-matching expert planner. Three coupling modules turn reasoning from a blocking call into a continuous signal: a Token-Wise Hidden Streamer extracts intermediate hidden states, a Sequence-to-Slot Latent Bridge projects them into fixed-size latent slots, and an Evolving Latent Conditioner infuses those slots into the fast planner, making fresh guid-ance available during reasoning rather than only at the end of inference. We also introduced an asynchronous, human-centric benchmark suite that keeps pedestrians and the robot 
+
+TABLE V: Runtime profile in the Realistic Dynamic Environment. We report per-inference latency and pedestrian motion during inference on a single RTX 4090 (batch size = 1 ). Lat. is the wall-clock time of one model forward (observation →action); Disp. is the pedestrian displacement (m) during that interval. For both we report per-inference average ( Avg ) and worst-case maximum ( Max ). The bottom block contrasts Wait-then-Act (full-output blocking) with 
+
+Streaming (token-wise streaming).                                              
+
+> Method Backbone Params Lat. (s) Disp. (m)
+> Avg ↓Max ↓Avg ↓Max ↓
+> NaVid [1] LLaMA-VID [10] 7B 0.741 2.864 0.394 1.864 Uni-NaVid [3] LLaMA-VID [10] 7B 0.193 0.795 0.202 0.773 NaVILA [2] VILA [11] 8B 0.603 1.140 0.483 1.514 DualVLN [5] Qwen-VL-2.5 [9] 7B 0.637 2.427 0.269 2.801
+> SPARK-VLN (W-t-A) VILA [11] 8B 0.788 1.325 0.213 0.893
+> SPARK-VLN (Stream) VILA [11] 8B 0.185 1.030 0.050 0.694
+
+active during inference and reports task-completion, social-interaction, and inference speed statistics. Across both the Idealized and Realistic Dynamic Environments, SPARK-VLN improves navigation success and social compliance while cutting inference latency. Future work includes extend-ing to longer-horizon instructions with multiple sub-goals and incorporating pedestrian intent prediction for anticipa-tory, rather than reactive, social planning. REFERENCES [1] J. Zhang, K. Wang, R. Xu, G. Zhou, Y. Hong, X. Fang, Q. Wu, Z. Zhang, and H. Wang, “NaVid: Video-based VLM plans the next step for vision-and-language navigation,” arXiv preprint arXiv:2402.15852 ,2024. [2] A.-C. Cheng, Y. Ji, Z. Yang, Z. Gongye, X. Zou, J. Kautz, E. Bıyık, H. Yin, S. Liu, and X. Wang, “NaVILA: Legged robot vision-language-action model for navigation,” in Robot. Sci. Syst. , 2025. [3] J. Zhang, K. Wang, S. Wang, M. Li, H. Liu, S. Wei, Z. Wang, Z. Zhang, and H. Wang, “Uni-NaVid: A video-based vision-language-action model for unifying embodied navigation tasks,” arXiv preprint arXiv:2412.06224 , 2024. [4] M. Wei, C. Wan, X. Yu, T. Wang, Y. Yang, X. Mao, C. Zhu, W. Cai, H. Wang, Y. Chen et al. , “StreamVLN: Streaming vision-and-language navigation via SlowFast context modeling,” arXiv preprint arXiv:2507.05240 , 2025. [5] M. Wei, C. Wan, J. Peng, X. Yu, Y. Yang, D. Feng, W. Cai, C. Zhu, T. Wang, J. Pang, and X. Liu, “Ground slow, move fast: A dual-system foundation model for generalizable vision-language navigation,” in Int. Conf. Learn. Represent. , 2026. [6] T. Hu, Z. Gong, L. Kong, X. Mei, Y. Ding, Q. Zeng, A. Liang, R. Li, Y. Zhong, and J. Liang, “NavThinker: Action-conditioned world models for coupled prediction and planning in social navigation,” 
+
+arXiv preprint arXiv:2603.15359 , 2026. [7] Z. Gong, Y. Zhong, Y. Ding, T. Hu, G. Zhao, L. Kong, R. Li, J. You, and J. Liang, “FLUX: Accelerating cross-embodiment generative navigation policies via rectified flow and static-to-dynamic learning,” 
+
+arXiv preprint arXiv:2603.12806 , 2026. [8] Z. Gong, T. Hu, R. Qiu, and J. Liang, “From cognition to precognition: A future-aware framework for social navigation,” in IEEE Int. Conf. Robot. Autom. , 2025, pp. 9122–9129. [9] S. Bai, K. Chen, X. Liu, J. Wang, W. Ge, S. Song, K. Dang, P. Wang, S. Wang, J. Tang, H. Zhong, Y. Zhu, M. Yang, Z. Li, J. Wan, P. Wang, W. Ding, Z. Fu, Y. Xu, J. Ye, X. Zhang, T. Xie, Z. Cheng, H. Zhang, Z. Yang, H. Xu, and J. Lin, “Qwen2.5-VL technical report,” arXiv preprint arXiv:2502.13923 , 2025. [10] Y. Li, C. Wang, and J. Jia, “LLaMA-VID: An image is worth 2 tokens in large language models,” in Eur. Conf. Comput. Vis. Springer, 2024, pp. 323–340. [11] J. Lin, H. Yin, W. Ping, P. Molchanov, M. Shoeybi, and S. Han, “VILA: On pre-training for visual language models,” in IEEE/CVF Conf. Comput. Vis. Pattern Recog. , 2024, pp. 26 689–26 699. [12] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman 
+
+et al. , “GPT-4 technical report,” arXiv preprint arXiv:2303.08774 ,2023. [13] Z. Chen, J. Wu, W. Wang, W. Su, G. Chen, S. Xing, M. Zhong, Q. Zhang, X. Zhu, L. Lu, B. Li, P. Luo, T. Lu, Y. Qiao, and J. Dai, “InternVL: Scaling up vision foundation models and aligning for generic visual-linguistic tasks,” in IEEE/CVF Conf. Comput. Vis. Pattern Recog. , 2024, pp. 24 185–24 198. [14] K. Black, M. Galliker, and S. Levine, “Real-time execution of action chunking flow policies,” in Adv. Neural Inf. Process. Syst. , vol. 38, 2025, pp. 33 383–33 407. [15] K. Black, A. Z. Ren, M. Equi, and S. Levine, “Training-time ac-tion conditioning for efficient real-time chunking,” arXiv preprint arXiv:2512.05964 , 2025. [16] H. Xie, B. Wen, J. Zheng, Z. Chen, F. Hong, H. Diao, and Z. Liu, “DynamicVLA: A vision-language-action model for dynamic object manipulation,” arXiv preprint arXiv:2601.22153 , 2026. [17] J. Tang, Y. Sun, Y. Zhao, S. Yang, Y. Lin, Z. Zhang, J. Hou, Y. Lu, Z. Liu, and S. Han, “VLASH: Real-time VLAs via future-state-aware asynchronous inference,” arXiv preprint arXiv:2512.01031 , 2025. [18] Y. Lu, Z. Liu, X. Fan, Z. Yang, J. Hou, J. Li, K. Ding, and H. Zhao, “Faster: Rethinking real-time flow VLAs,” arXiv preprint arXiv:2603.19199 , 2026. [19] Z. Huang, Y. Zhang, J. Liu, R. Song, C. Tang, and J. Ma, “TIC-VLA: A think-in-control vision-language-action model for robot navigation in dynamic environments,” arXiv preprint arXiv:2602.02459 , 2026. [20] P. Anderson, Q. Wu, D. Teney, J. Bruce, M. Johnson, N. S¨ underhauf, I. Reid, S. Gould, and A. Van Den Hengel, “Vision-and-language navigation: Interpreting visually-grounded navigation instructions in real environments,” in IEEE/CVF Conf. Comput. Vis. Pattern Recog. ,2018, pp. 3674–3683. [21] A. Ku, P. Anderson, R. Patel, E. Ie, and J. Baldridge, “Room-across-room: Multilingual vision-and-language navigation with dense spatiotemporal grounding,” in Proc. Conf. Empir. Methods Nat. Lang. Process. , 2020, pp. 4392–4412. [22] J. Krantz, E. Wijmans, A. Majumdar, D. Batra, and S. Lee, “Beyond the nav-graph: Vision-and-language navigation in continuous environ-ments,” in Eur. Conf. Comput. Vis. Springer, 2020, pp. 104–120. [23] J. van den Berg, S. J. Guy, M. Lin, and D. Manocha, “Reciprocal n-body collision avoidance,” in Int. Sym. Robot. Research . Springer, 2011, vol. 70, pp. 3–19. [24] D. Fried, R. Hu, V. Cirik, A. Rohrbach, J. Andreas, L.-P. Morency, T. Berg-Kirkpatrick, K. Saenko, D. Klein, and T. Darrell, “Speaker-follower models for vision-and-language navigation,” in Adv. Neural Inf. Process. Syst. , vol. 31, 2018. [25] Y. Hong, Q. Wu, Y. Qi, C. Rodriguez-Opazo, and S. Gould, “VLN BERT: A recurrent vision-and-language BERT for navigation,” in 
+
+IEEE/CVF Conf. Comput. Vis. Pattern Recog. , 2021, pp. 1643–1653. [26] S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge et al. , “Qwen3-VL technical report,” arXiv preprint arXiv:2511.21631 , 2025. [27] L. Zhang, X. Hao, Q. Xu, Q. Zhang, X. Zhang, P. Wang, J. Zhang, Z. Wang, S. Zhang, and R. Xu, “MapNav: A novel memory repre-sentation via annotated semantic maps for VLM-based vision-and-language navigation,” in Annu. Meet. Assoc. Comput. Linguist. , 2025, pp. 13 032–13 056. [28] S. Zeng, D. Qi, X. Chang, F. Xiong, S. Xie, X. Wu, S. Liang, M. Xu, X. Wei, and N. Guo, “JanusVLN: Decoupling semantics and spatiality with dual implicit memory for vision-language navigation,” arXiv preprint arXiv:2509.22548 , 2025. [29] J. Zhang, A. Li, Y. Qi, M. Li, J. Liu, S. Wang, H. Liu, G. Zhou, Y. Wu, X. Li et al. , “Embodied navigation foundation model,” arXiv preprint arXiv:2509.12129 , 2025. [30] X. Li, X. Zhang, Y. Huang, J. Dong, T. Wang, S. Zhou, Y. Wu, C. Sun, Y. Ge, Q. Weng et al. , “GN0: Toward a unified paradigm for generation, evaluation, and policy learning in visual-language navigation,” arXiv preprint arXiv:2606.03682 , 2026. [31] Y. Dong, F. Wu, G. Chen, L. Kong, X. Zhu, Q. Hu, Y. Zhou, J. Sun, J.-Y. He, Q. Dai, A. G. Hauptmann, and Z.-Q. Cheng, “Towards unified world models for visual navigation via memory-augmented planning and foresight,” arXiv preprint arXiv:2510.08713 , 2025. [32] Y. Dong, F. Wu, Y. Dai, L. Kong, G. Chen, X. Zhu, Q. Hu, T. Wang, J. Garnica, F. Liu, S. Huang, Q. Dai, and Z.-Q. Cheng, “Language-conditioned world modeling for visual navigation,” arXiv preprint arXiv:2603.26741 , 2026. [33] L. Kong, W. Yang, J. Mei, Y. Liu, A. Liang, D. Zhu, D. Lu, W. Yin, X. Hu, M. Jia, J. Deng, K. Zhang, Y. Wu, T. Yan, S. Gao, S. Wang, L. Li, L. Pan, Y. Liu, J. Zhu, W. T. Ooi, S. C. H. Hoi, and Z. Liu, “3D and 4D world modeling: A survey,” arXiv preprint arXiv:2509.07996 ,2025. [34] Z. Gong, R. Li, T. Hu, R. Qiu, L. Kong, L. Zhang, G. Zhao, Y. Ding, and J. Liang, “Stairway to success: An online floor-aware zero-shot object-goal navigation framework via LLM-driven coarse-to-fine exploration,” IEEE Robot. Autom. Lett. , 2025. [35] T. Hu, X. Liu, S. Wang, Y. Zhu, A. Liang, L. Kong, G. Zhao, Z. Gong, J. Cen, Z. Huang et al. , “Vision-language-action models for autonomous driving: Past, present, and future,” arXiv preprint arXiv:2512.16760 , 2025. [36] D. Peng, F. Ma, and J. Ma, “Structured observation language for efficient and generalizable vision-language navigation,” arXiv preprint arXiv:2603.27577 , 2026. [37] Y. Hu, J.-N. Zaech, N. Nikolov, Y. Yao, S. Dey, G. Albanese, R. Detry, L. Van Gool, and D. Paudel, “AR-VLA: True autoregres-sive action expert for vision-language-action models,” arXiv preprint arXiv:2603.10126 , 2026. [38] K. Sendai, M. Alvarez, T. Matsushima, Y. Matsuo, and Y. Iwasawa, “Leave no observation behind: Real-time correction for VLA action chunks,” arXiv preprint arXiv:2509.23224 , 2025. [39] M. Zhu, Y. Zhu, J. Li, J. Wen, Z. Xu, Z. Che, C. Shen, Y. Peng, D. Liu, F. Feng, and J. Tang, “Language-conditioned robotic manipulation with fast and slow thinking,” in IEEE Int. Conf. Robot. Autom. , 2024. [40] J. Zhang, Y. Guo, X. Chen, Y.-J. Wang, Y. Hu, C. Shi, and J. Chen, “HiRT: Enhancing robotic control with hierarchical robot transform-ers,” in Conf. Robot Learn. , 2024. [41] B. Han, J. Kim, and J. Jang, “A dual process VLA: Efficient robotic manipulation leveraging VLM,” arXiv preprint arXiv:2410.15549 ,2024. [42] C. Li, J. Liu, G. Wang, X. Li, S. Chen, L. Heng, C. Xiong, J. Ge, R. Zhang, K. Zhou, and S. Zhang, “A self-correcting vision-language-action model for fast and slow system manipulation,” arXiv preprint arXiv:2405.17418 , 2024. [43] C. Cui, P. Ding, W. Song, S. Bai, X. Tong, Z. Ge, R. Suo, W. Zhou, Y. Liu, B. Jia, H. Zhao, S. Huang, and D. Wang, “OpenHelix: A short survey, empirical analysis, and open-source dual-system VLA model for robotic manipulation,” arXiv preprint arXiv:2505.03912 , 2025. [44] F. Lin, R. Nai, Y. Hu, J. You, J. Zhao, and Y. Gao, “OneTwoVLA: A unified vision-language-action model with adaptive reasoning,” arXiv preprint arXiv:2505.11917 , 2025. [45] H. Song, D. Qu, Y. Yao, Q. Chen, Q. Lv, Y. Tang, M. Shi, G. Ren, M. Yao, B. Zhao, D. Wang, and X. Li, “Hume: Introducing system-2 thinking in visual-language-action model,” arXiv preprint arXiv:2505.21432 , 2025. [46] H. Chen, J. Liu, C. Gu, Z. Liu, R. Zhang, X. Li, X. He, Y. Guo, C.-W. Fu, S. Zhang, and P.-A. Heng, “Fast-in-slow: A dual-system foundation model unifying fast manipulation within slow reasoning,” 
+
+arXiv preprint arXiv:2506.01953 , 2025. [47] W. Song, J. Chen, W. Li, X. He, H. Zhao, C. Cui, P. Ding, S. Su, F. Tang, X. Cheng, D. Wang, Z. Ge, X. Zheng, Z. Liu, H. Wang, and H. Li, “RationalVLA: A rational vision-language-action model with dual system,” arXiv preprint arXiv:2506.10826 , 2025. [48] C.-P. Huang, Y.-H. Wu, M.-H. Chen, Y.-C. F. Wang, and F.-E. Yang, “ThinkAct: Vision-language-action reasoning via reinforced visual latent planning,” in Adv. Neural Inf. Process. Syst. , 2025. [49] J. Lu, J. Guan, Z. Huang, J. Li, G. Li, L. Kong et al. , “Xiaomi OneVL: One-step latent reasoning and planning with vision-language explanation,” arXiv preprint arXiv:2604.18486 , 2026. [50] A. Biswas, A. Wang, G. Silvera, A. Steinfeld, and H. Admoni, “Soc-NavBench: A grounded simulation testing framework for evaluating social navigation,” ACM Trans. Hum.-Robot Interact. , vol. 11, no. 3, pp. 1–24, 2022. [51] A. Vuong, T. Nguyen, M. N. Vu, B. Huang, H. T. T. Binh, T. Vo, and A. Nguyen, “HabiCrowd: A high-performance simulator for crowd-aware visual navigation,” in IEEE/RSJ Int. Conf. Intell. Robots Syst. ,2024, pp. 5821–5827. [52] N. Hirose, D. Shah, A. Sridhar, and S. Levine, “SACSoN: Scal-able autonomous control for social navigation,” arXiv preprint arXiv:2306.01874 , 2023. [53] X. Puig, E. Undersander, A. Szot, M. D. Cote, T.-Y. Yang et al. ,“Habitat 3.0: A co-habitat for humans, avatars and robots,” arXiv preprint arXiv:2310.13724 , 2023. [54] N. P´ erez-Higueras, R. Otero, F. Caballero, and L. Merino, “Hu-NavSim: A ROS 2 human navigation simulator for benchmarking human-aware robot navigation,” IEEE Robot. Autom. Lett. , 2023. [55] Y. Dong, F. Wu, Q. He, L. Kong, H. Li, M. Li, Z. Cheng, Y. Zhou, J. Sun, Q. Dai et al. , “HA-VLN 2.0: An open benchmark and leaderboard for human-aware navigation in discrete and continuous environments with dynamic multi-human interactions,” arXiv preprint arXiv:2503.14229 , 2025. [56] J. Chen, Y. Li, P. Jiang, J. Du, Z. Chen, C. Tie, J. Deng, and L. Shao, “LISN: Language-instructed social navigation with VLM-based controller modulating,” arXiv preprint arXiv:2512.09920 , 2025. [57] Y. Peng, Y. Pan, X. He, J. Yang, X. Yin, H. Wang, X. Zheng, C. Gao, and J. Gong, “FreeAskWorld: An interactive and closed-loop simulator for human-centric embodied AI,” in AAAI Conf. Artif. Intell. , 2026. [58] A. Jaegle, F. Gimeno, A. Brock, A. Zisserman, O. Vinyals, and J. Carreira, “Perceiver: General perception with iterative attention,” in Int. Conf. Mach. Learn. , 2021. [59] X. Liu, C. Gong, and Q. Liu, “Flow straight and fast: Learning to generate and transfer data with rectified flow,” in Int. Conf. Learn. Represent. , 2023. [60] Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” in Int. Conf. Learn. Represent. ,2023. [61] K. Black, N. Brown, D. Driess, A. Esmail, M. Equi, C. Finn et al. ,“π0: A vision-language-action flow model for general robot control,” in Robot. Sci. Syst. , 2025. [62] C. Chi, Z. Xu, S. Feng, E. Cousineau, Y. Du, B. Burchfiel, R. Tedrake, and S. Song, “Diffusion policy: Visuomotor policy learning via action diffusion,” in Robot. Sci. Syst. , 2023. [63] F. Yang, C. Wang, C. Cadena, and M. Hutter, “iPlanner: Imperative path planning,” arXiv preprint arXiv:2302.11434 , 2023. [64] W. Cai, J. Peng, Y. Yang, Y. Zhang, M. Wei, H. Wang, Y. Chen, T. Wang, and J. Pang, “NavDP: Learning sim-to-real navigation diffusion policy with privileged information guidance,” arXiv preprint arXiv:2505.08712 , 2025. [65] P. Anderson, A. Chang, D. S. Chaplot, A. Dosovitskiy, S. Gupta, V. Koltun, J. Kosecka, J. Malik, R. Mottaghi, M. Savva et al. ,“On evaluation of embodied navigation agents,” arXiv preprint arXiv:1807.06757 , 2018. [66] A. Francis, C. P´ erez-D’Arpino, C. Li, F. Xia, A. Alahi et al. , “Princi-ples and guidelines for evaluating social robot navigation algorithms,” 
+
+arXiv preprint arXiv:2306.16740 , 2023.

@@ -1,0 +1,530 @@
+Title: RRPO: Reference-Relative Policy Optimization with Stratified Conditional Rollouts
+
+URL Source: https://arxiv.org/pdf/2607.18470v1
+
+Published Time: Wed, 22 Jul 2026 00:17:26 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# RRPO: Reference-Relative Policy Optimization with Stratified Conditional Rollouts 
+
+Yuxin Xiong 1* Xunyi Jiang 1* Rohan Surana 1* Xintong Li 1
+
+Sheldon Yu 1 Nikki Lijing Kuang 1 Ryan A. Rossi 2 Jingbo Shang 1
+
+Tong Yu 2 Julian McAuley 1 Junda Wu 11University of California San Diego 2Adobe Research 
+
+{y7xiong, xuj003, rsurana, xil240, ziy040, l1kuang, jshang, jmcauley, juw069}@ucsd.edu {ryrossi, tyu}@adobe.com 
+
+Abstract 
+
+Group Relative Policy Optimization (GRPO) has shown strong effectiveness in reinforce-ment learning from verifiable feedback, where sampled rollouts can be compared within a group using task-provided correctness signals. However, extending group-relative optimiza-tion beyond verifiable settings is challenging because success in many tasks is not cap-tured by a single correctness criterion. We propose Reference-Relative Policy Optimiza-tion (RRPO) , which generalizes GRPO by replacing direct correctness-based advantage construction with reference-relative contrastive comparisons. RRPO first uses stratified condi-tional rollouts to construct positive and nega-tive anchor sets, and then trains a metric pro-jection head with a set-contrastive objective to compare candidate rollouts against these an-chors. The resulting alignment scores directly define contrastive advantages: during policy optimization, the projection head is frozen, and the scores are centered within each rollout group in a standard group-relative objective. We evaluate RRPO using anchor-based con-trastive advantages throughout policy optimiza-tion, without relying on task ground-truth veri-fiers. Across verifiable reasoning, open-ended generation, and post-SFT settings, RRPO re-mains competitive with verifier-based optimiza-tion, improves over weakly supervised base-lines, and provides additional gains after super-vised fine-tuning. 
+
+1 Introduction 
+
+Group Relative Policy Optimization (GRPO) (Shao et al., 2024; Guo et al., 2025; Lin et al., 2026; Mundada et al., 2026; Surana et al., 2026c,b; Mroueh, 2025; Yu et al., 2026a) has become a practical policy-optimization tool in reinforcement learning from verifiable feedback, comlimenting the static preference optimization (Rafailov et al.,  
+
+> *Equal contribution.
+
+2023; Huang et al., 2026; Wang et al., 2026a; Huang et al., 2025; Li et al., 2026; Wu et al.). It is closely related to broader REINFORCE/PPO-style post-training methods for language models (Schul-man et al., 2017; Yu et al., 2026b; Ahmadian et al., 2024; Surana et al., 2026a; Ouyang et al., 2022; Lambert et al., 2024), but is particularly well suited to settings where multiple sampled rollouts for the same input can be compared using task-provided correctness signals. Examples include exact-answer matching for mathematical reasoning benchmarks such as GSM8K (Cobbe et al., 2021), symbolic or rule-based checking in mathematical reasoning (Shao et al., 2024; Guo et al., 2025), and execution-based tests for program-like tasks. GRPO leverages this structure by sampling multi-ple rollouts per input and normalizing their scalar feedback within the group, producing relative ad-vantages that stabilize policy updates (Shao et al., 2024; Liu et al., 2025; Mroueh, 2025; Yu et al., 2026a). However, many useful generative tasks do not define success through explicit verification. Long-form explanation, open-ended question an-swering, dialogue summarization, and evidence-grounded generation often admit many valid out-puts whose quality depends on context, coverage, style, and task intent, as reflected in datasets such as ELI5 (Fan et al., 2019) and SAMSum (Gliwa et al., 2019). This challenge is also central to RLHF and preference-based alignment, where supervision is typically provided through human or learned preferences rather than deterministic correctness la-bels (Christiano et al., 2017; Stiennon et al., 2020; Ouyang et al., 2022; Rafailov et al., 2023; Etha-yarajh et al., 2024). Even when references are avail-able for evaluation, they do not naturally provide reliable per-rollout supervision for policy optimiza-tion: overlap-based metrics can be noisy, multiple distinct outputs may be valid, and absolute scores may not induce stable comparisons among rollouts arXiv:2607.18470v1 [cs.LG] 20 Jul 2026 for the same input (Stiennon et al., 2020; Fan et al., 2019; Gliwa et al., 2019; Tang et al., 2026). Recent work has therefore begun to study re-inforcement learning and self-improvement be-yond strictly verifiable rewards, including self-rewarding or self-training approaches (Zelikman et al., 2022; Gulcehre et al., 2023; Yuan et al., 2024), RL on unverifiable data (Tang et al., 2026; Wang et al., 2026b), ranked or relative reward for-mulations (Choi et al., 2026), and self-verification or clustering-based feedback construction (Zhang et al., 2026; Jiang et al., 2025). This creates a gap for group-relative methods: the relative update is still attractive, but the key question becomes how to construct advantages that preserve within-group comparison when correctness is not directly verifi-able. We propose Reference-Relative Policy Optimiza-tion (RRPO) as in Figure 1, a weakly supervised method that computes advantages through con-trastive comparison rather than task-provided ver-ification. Rather than assigning rollout quality in isolation, RRPO frames advantage estimation as an instance-conditioned comparison against refer-ence behaviors. For each input, we construct posi-tive and negative anchor sets using stratified condi-tional rollouts . These anchors are generated from weak task-specific conditions that induce more de-sirable or less desirable behaviors, but they define only relative reference structure rather than scalar supervision. RRPO learns to compare rollouts relative to these anchor sets. We train a metric projection head offline with a set-contrastive objective: can-didate rollouts are compared against positive and negative anchors, and the projection space is opti-mized so that desirable rollouts align more strongly with positive anchors than with negative anchors. During policy optimization, the projection head is frozen. Each newly sampled policy rollout is as-signed a reference-relative alignment score based on its aggregate contrastive alignment to the two anchor sets. These alignment scores directly define RRPO ad-vantages. For each input, RRPO samples a group of policy rollouts, computes their reference-relative alignment scores, and centers the scores within the group to obtain group-relative advantages. The pol-icy is then updated with a standard clipped group-relative objective. In this way, RRPO preserves the core optimization structure of GRPO while chang-ing the source of the advantage: advantages are induced by contrastive comparison to weakly con-structed anchors rather than by task-provided veri-fiers. We evaluate RRPO in both verifiable and open-ended settings. On GSM8K, RRPO is competi-tive with verifier-based Dr.GRPO, showing that reference-relative contrastive advantages can re-main effective even when exact verification is avail-able. On open-ended benchmarks, where training-time verification is unavailable or unnatural, RRPO provides a more stable weak-supervision signal than pseudo-target fine-tuning and improves ag-gregate metrics across ELI5 and SAMSum. We further show that RRPO can be applied after super-vised fine-tuning, yielding additional gains on top of a strong SFT initialization. These results sug-gest that contrastively computed reference-relative advantages provide a practical training signal for group-relative policy optimization beyond strictly verifiable tasks. Our contributions are as follows. 
+
+• We propose RRPO, a weakly supervised exten-sion of group-relative policy optimization that replaces verifier-based rewards with reference-relative contrastive advantages. • We introduce stratified conditional rollouts to construct instance-specific positive and nega-tive anchor sets from weak task conditions. • We develop a set-contrastive metric objective that scores policy rollouts by their relative alignment to positive versus negative anchors, and use the resulting scores as centered group-relative advantages. • We evaluate RRPO across verifiable reasoning, open-ended generation, and post-SFT settings, showing that it is competitive with verifier-based optimization, more stable than pseudo-target fine-tuning, and complementary to super-vised fine-tuning. 
+
+2 Preliminaries 
+
+2.1 Group-Relative Policy Optimization (GRPO) 
+
+Let x ∈ X denote an input instance and πθ a pol-icy over trajectories y ∈ Y . GRPO samples a 
+
+group of G rollouts {yi}Gi=1 from a snapshot policy 
+
+πθold and constructs group-relative advantages by normalizing scalar scores within the group. For any scalar signal R(y; x), define the standardized Jeremy : Maybe you've a crush  
+
+> on some chick.
+> Focus on the main outcome of the
+> conversation.
+> Capture the concrete decision,
+> commitment, or next action, and keep
+> specific names or timing when
+> present.
+> Focus on reactions, setup, or side
+> details rather than the final
+> outcome.
+> Keep the summary background -
+> oriented and avoid the decisive
+> action.
+> Positive Negative
+> Irwin: Damnit, I left my backpack
+> at your place. Can I come and get
+> it tomorrow afternoon?
+> Jeremy: No problem homie,
+> it's safe here
+> Irwin: Sweet, thanks! I don't know
+> what's wrong with me, dude. This is
+> not the first time I forget my stuff
+> Conversation from SAMSum
+> Stratified conditional rollouts
+> …
+
+Figure 1: Stratified conditional rollouts in RRPO. For each input, weak positive and negative conditions generate instance-specific anchor sets that emphasize desirable and undesirable reference behaviors. In the SAMSum example, positive anchors focus on the main outcome of the conversation, while negative anchors emphasize peripheral or unresolved details. An offline-trained metric head then compares policy rollouts against these anchors to produce reference-relative alignment scores. 
+
+group-relative advantage 
+
+Ai = R(yi; x) − 1
+
+G
+
+PGj=1 R(yj ; x)std 
+
+
+
+{R(yj ; x)}Gj=1 
+
+
+
++ δ. (1) In RLVR, R is usually supplied by task-provided verification. In RRPO, this score is replaced by a learned reference-relative contrastive score. We use a GRPO-style clipped objective with Dr.GRPO aggregation. Let Y = {yi}Gi=1 ,with yi ∼ πθold (· | x), and define ci,t (θ) =clip( ri,t (θ), 1 − ϵ, 1 + ϵ).
+
+max 
+
+θ Ex,Y 
+
+"
+
+1
+
+GL max 
+
+GX
+
+i=1 
+
+|yi|
+
+X
+
+t=1 
+
+min( ri,t (θ)Ai, c i,t (θ)Ai)
+
+#
+
+− β KL( πθ∥πref ).
+
+(2) where ri,t (θ) = πθ (yi,t |x,y i,<t )
+
+πθold (yi,t |x,y i,<t ) , π ref is a fixed reference policy, and Lmax is a fixed completion-length cap set before training and used as the Dr.GRPO normalizer. This differs from standard GRPO aggregation, which normalizes each rollout by its own length |yi|. Thus, our implementation uses Dr.GRPO-style fixed-length loss normaliza-tion together with group-standardized advantages; in RRPO, the key change is how the scalar signal 
+
+R(y; x) is constructed. 
+
+2.2 Metric and Contrastive Learning 
+
+Contrastive metric learning builds an embedding space in which related samples are close and unre-lated samples are separated. Given an anchor u, a positive sample v+, and negative samples {v−}, a canonical objective is InfoNCE: 
+
+LInfoNCE (u) = − log exp( s(u, v +)/τ )
+
+Z(u) ,Z(u) = exp  s(u, v +)/τ  + X
+
+v−
+
+exp  s(u, v −)/τ  .
+
+(3) where s(·, ·) is a similarity function and τ > 0
+
+is a temperature. RRPO uses the same contrastive principle, but with sets of positive and negative anchor rollouts rather than individual samples. The resulting set-contrastive loss aggregates similarity over positive and negative anchor sets, yielding a learned met-ric that compares a policy rollout against instance-specific positive and negative reference behaviors. 
+
+3 Method 
+
+RRPO is a weakly supervised approach for con-structing group-relative advantages when task suc-cess is not directly verifiable. The central idea is to replace direct correctness-based advantage con-struction with reference-relative contrastive com-parison. As shown in Figure 2, RRPO first builds positive and negative anchor sets for each input using stratified conditional rollouts. It then trains a metric projection head offline to compare pol-icy rollouts against these anchors. During policy optimization, the metric head is frozen, and its reference-relative alignment scores are standard-ized within each rollout group to produce advan-tages for a Dr.GRPO-style update. Importantly, RRPO does not use task ground-truth verifiers to compute scalar rewards during policy optimization. The learned metric is only used to compare rollouts relative to weakly con-structed anchor sets. This makes the supervision comparative and instance-conditional: a rollout is preferred when it is closer to positive reference behaviors than to negative ones for the same input. 
+
+3.1 Stratified Conditional Rollouts 
+
+For an input x, RRPO uses weak task-specific con-ditions to generate two strata of reference behaviors. Let c+(x) denote a positive condition that steers generation toward desirable task behavior, and let 
+
+c−(x) denote a negative condition that steers gener-ation toward less desirable behavior. We call these conditions weak because they provide only direc-tional, task-level guidance: they are not calibrated quality scores, are not converted into scalar labels, and are not used as task verifiers. Using a frozen anchor-generation policy πanc 
+
+initialized from the same base model as πθ0 , RRPO samples K positive and K negative anchor rollouts: 
+
+A+(x) = {y+,k }Kk=1 , y+,k ∼ πanc (· | x, c +(x)) ,
+
+A−(x) = {y−,k }Kk=1 , y−,k ∼ πanc (· | x, c −(x)) .
+
+(4) The trainable policy produces unconditional roll-outs y ∼ πθ(· | x), which are scored by compar-ison to these anchor sets. In our implementation, anchors are sampled and cached during Stage 1 metric-data construction, then reused throughout Stage 2 policy optimization. Equivalently, the anchor-generation process is fixed with respect to policy-gradient updates, so the reference structure remains stable while the policy changes. 
+
+3.2 Offline Set-Contrastive Metric Learning 
+
+RRPO learns a metric space in which candidate rollouts can be compared to the positive and neg-ative anchor sets. Let hθ(y; x) denote the mean-pooled hidden representation over completion to-kens for the prompt-completion pair (x, y ), and let gψ be an MLP projection head. The metric is trained on rollouts from the initialization pol-icy and then used during a KL-regularized policy-optimization stage, which keeps the scored rollout distribution close to the metric-training distribution. We define the normalized trajectory embedding 
+
+fψ(y; x) = gψ (hθ (y;x))    
+
+> ∥gψ(hθ(y;x)) ∥2
+
+. For readability, we omit 
+
+x when clear from context. Similarity is cosine similarity: 
+
+sψ(y, y ′) = fψ(y; x)⊤fψ(y′; x).
+
+The projection head is trained offline using un-conditional query rollouts and stratified anchor sets generated from the same initialization pol-icy. For each input x, we sample query rollouts 
+
+{ym}Gmetric  
+
+> m=1
+
+∼ πθ0 (· | x), together with A+(x)
+
+and A−(x). For a query rollout ym, define its ag-gregate alignment to each anchor set: 
+
+S+ 
+
+> ψ
+
+(ym; x) = log 
+
+> K
+
+X
+
+> k=1
+
+exp  sψ(ym, y +,k )/τ ,S− 
+
+> ψ
+
+(ym; x) = log 
+
+> K
+
+X
+
+> k=1
+
+exp  sψ(ym, y −,k )/τ .
+
+(5) where τ > 0 is the same temperature used below in the set-contrastive loss. The set-contrastive loss is defined over the positive-negative alignment margin. Let S± 
+
+> m
+
+=
+
+S± 
+
+> ψ
+
+(ym; x). Then 
+
+Lsc (x, y m) = − log σ S+ 
+
+> m
+
+− S−
+
+> m
+
+ . (6) This objective encourages query rollouts to align more strongly with positive anchors than with neg-ative anchors. The offline metric-learning objective aggregates this loss over query rollouts and aver-ages over training inputs: 
+
+min  
+
+> ψ
+
+Lmetric = Ex
+
+"Gmetric X
+
+> m=1
+
+Lsc (x, y m)
+
+#
+
+. (7) After training, the projection parameters ψ are frozen. 
+
+3.3 Reference-Relative Contrastive Advantages 
+
+During policy optimization, RRPO uses the frozen metric head to compute a reference-relative alignment score for each rollout: Rψ(y; x) =
+
+S+ 
+
+> ψ
+
+(y; x) − S− 
+
+> ψ
+
+(y; x). This score does not assign rollout quality in isolation; it is defined by con-trastive comparison to the positive and negative anchor sets for the same input. A rollout receives a higher score when it is closer to positive anchors and farther from negative anchors in the learned metric space. For each input x, the snapshot policy samples a rollout group {yi}Gi=1 ∼ πθold (· | x). RRPO constructs standardized group-relative advantages from the alignment scores: 
+
+Ai = Rψ(yi; x) − 1
+
+> G
+
+PGj=1 Rψ(yj ; x)std 
+
+
+
+{Rψ(yj ; x)}Gj=1 
+
+
+
++ δ. (8) Figure 2: Loss function calculation during training process 
+
+This step preserves the key group-relative principle: the update depends on how a rollout compares to other rollouts for the same input, rather than on an absolute scalar label. 
+
+3.4 Policy Optimization 
+
+RRPO updates the policy using the Dr.GRPO-style clipped objective described in Section 2.1, with the advantages defined above. The anchor-generation policy πanc and metric projection head 
+
+gψ remain frozen during this stage, and only the trainable policy is updated. Thus, RRPO keeps the policy optimization backbone fixed while replac-ing correctness-based advantage construction with weakly supervised reference-relative contrastive advantages. Algorithm 1 in Appendix A summarizes the full two-stage procedure. 
+
+4 Experiments 
+
+Our experiments are designed to assess whether reference-relative contrastive advantages can serve as a general optimization signal for group-relative policy learning. We consider three complemen-tary regimes. The first regime examines tasks with explicit verification, testing whether RRPO can recover the benefits of group-relative policy im-provement without using task verifiers as the scalar training signal. The second regime studies open-ended generation, where task success is contextual and not naturally reducible to exact pass/fail feed-back, and examines whether reference-relative ad-vantages remain effective under weak supervision. The third regime evaluates whether RRPO is com-plementary to supervised fine-tuning by applying reference-relative policy optimization after an SFT initialization. Across experiments, RRPO uses the same two-stage pipeline: offline set-contrastive metric learn-ing over cached positive and negative anchor rep-resentations, followed by Dr.GRPO-style policy optimization using standardized reference-relative scores as advantages. 
+
+4.1 Experimental Setup Tasks and models. We choose tasks to cover both verifiable and open-ended settings. GSM8K (Cobbe et al., 2021) serves as a verifi-able math reasoning benchmark with exact-answer checking. SAMSum (Gliwa et al., 2019) and ELI5 (Fan et al., 2019)represent open-ended gener-ation tasks, covering dialogue summarization and long-form explanation generation, where outputs are not naturally reducible to exact pass/fail veri-fication during policy optimization. We evaluate Qwen2.5-1.5B-Instruct (Yang et al., 2024), Qwen3-1.7B (Yang et al., 2025), and Qwen3-4B-Instruct-2507 (Yang et al., 2025) to test RRPO across mul-tiple instruction-tuned model scales. 
+
+RRPO configuration. For RRPO, G denotes the number of unconditional rollouts per prompt and K denotes the number of positive and negative anchors per input. In the main reported runs, we use G = 8 and K = 4 unless otherwise speci-fied. The metric temperature is typically 0.1, and the projection dimension is typically 512 . GSM8K uses CoT-style weak conditions, SAMSum uses structural summarization conditions, and ELI5 uses 0 100 200 300 400     
+
+> Training step
+> 28.5
+> 29.0
+> 29.5
+> 30.0
+> 30.5
+> 31.0
+> 31.5
+> 32.0
+> 32.5
+> ROUGE-L F1 %
+> SAMSum
+> Qwen3-4B
+> 200 400 600 800 1000
+> Training step
+> 65
+> 70
+> 75
+> 80
+> Accuracy %
+> GSM8K
+> Qwen3-1.7B
+> RRPO improves the in-training evaluation metric
+
+Figure 3: Learning curves during RRPO training. Evalu-ation performance improves over training steps on both SAMSum and GSM8K, indicating that the reference-relative training signal provides useful optimization feedback for open-ended generation and verifiable rea-soning tasks. 
+
+explanation-style conditions. During policy opti-mization, RRPO does not use task verifiers or exact correctness labels as scalar rewards; instead, it con-structs advantages from frozen reference-relative metric scores. Additional run-specific details are provided in Appendix B. 
+
+Evaluation. For GSM8K, we report Pass@1/2/4/8 using the standard unbiased pass@k estimator with normalized exact-answer evaluation. For SAMSum, we report ROUGE-1/2/L, mean ROUGE F1, BLEU, and BERTScore-F1. For ELI5, we report ROUGE-1/2/L and mean ROUGE F1. Full evaluation details are provided in Appendix B.3. 
+
+Baselines. Base evaluates the original instruc-tion model before policy optimization. Dr.GRPO 
+
+is included on GSM8K as a verifier-based policy optimization baseline; it uses exact-answer correct-ness feedback and does not use RRPO’s metric encoder or anchor cache. PSEUDO -SFT is the weakly supervised baseline for open-ended tasks: it generates one greedy pseudo target per training input and fine-tunes on the resulting pseudo dataset, without anchors, metric learning, or group-relative advantages. SFT is a stronger supervised baseline and is reported separately in Section 4.4 to distin-guish fully supervised fine-tuning from the weakly supervised comparison. 
+
+4.2 Verifiable Reasoning: GSM8K 
+
+GSM8K allows a direct comparison between verifier-based and reference-relative advantage con-struction. Dr.GRPO uses ground-truth final an-swers to form sparse exact-match correctness sig-nals, whereas RRPO does not use ground-truth final answers as policy-optimization supervision and in-stead derives advantages from stratified contrastive anchors. Table 1 shows that RRPO improves over the base model across all scales. On Qwen2.5-1.5B-Instruct, RRPO raises Pass@1/8 from 0.665/0.902 to 0.691/0.934 and outperforms Dr.GRPO across all Pass@ k metrics. On Qwen3-1.7B, RRPO again achieves the best results, reaching 0.768 Pass@1 and 0.938 Pass@8. On Qwen3-4B-Instruct-2507, RRPO remains competitive with verifier-based Dr.GRPO and matches its Pass@8 at 0.958. These results indicate that weakly supervised reference-relative advantages can be more informative than sparse 0/1 exact-match signals for smaller mod-els, while remaining competitive on stronger back-bones. Figure 3 further shows that RRPO’s GSM8K accuracy improves steadily during policy optimiza-tion, indicating that the reference-relative advan-tage signal provides a usable training signal rather than only improving final evaluation by chance. 
+
+4.3 Open-Ended Generation: ELI5 and SAMSum 
+
+We next evaluate RRPO on ELI5 (Fan et al., 2019) and SAMSum (Gliwa et al., 2019), where training-time quality is not naturally available as an ex-act pass/fail verifier. This setting tests whether group-relative policy optimization can remain ef-fective when verifier rewards are replaced by weak reference-relative comparisons. Table 2 compares Base, PSEUDO -SFT, and RRPO. P SEUDO -SFT is a natural weak-supervision baseline that fine-tunes on one model-generated pseudo target per input. RRPO uses the same weak-supervision regime differently: instead of imitating a single target, it samples multiple rollouts and constructs group-relative advantages from their contrastive alignment to positive and negative anchor sets. RRPO is more stable than P SEUDO -SFT across both tasks. On SAMSum, RRPO achieves the best or tied-best results for nearly all metrics and model sizes, while P SEUDO -SFT substantially degrades the 1.5B model and gives mixed gains for larger models. The SAMSum curve in Figure 3 shows the same trend during policy optimization, with ROUGE-L F1 increasing as RRPO updates pro-ceed. On ELI5, RRPO improves Mean ROUGE over Base for all three model families, whereas PSEUDO -SFT improves only Qwen3-1.7B and de-grades the other two. These results suggest that RRPO extends group-relative optimization to un-verifiable open-ended settings: weak anchors pro-Model Method GSM8K                                                 
+
+> Pass@1 Pass@2 Pass@4 Pass@8 Qwen2.5-1.5B Base 0.665 0.781 0.854 0.902 Qwen2.5-1.5B Dr.GRPO 0.609 0.747 0.844 0.912 Qwen2.5-1.5B RRPO 0.691 0.807 0.884 0.934
+> Qwen3-1.7B Base 0.746 0.836 0.891 0.928 Qwen3-1.7B Dr.GRPO 0.765 0.848 0.895 0.924 Qwen3-1.7B RRPO 0.768 0.849 0.900 0.938
+> Qwen3-4B Base 0.868 0.913 0.936 0.944 Qwen3-4B Dr.GRPO 0.903 0.934 0.950 0.958
+> Qwen3-4B RRPO 0.870 0.918 0.945 0.958
+
+Table 1: GSM8K results. Dr.GRPO uses exact-answer rewards, while RRPO constructs reference-relative advantages without using ground-truth answers for policy optimization.                                                                                                                
+
+> Model Method ELI5 SAMSum
+> R-1 R-2 R-L Mean-R R-1 R-2 R-L Mean-R BLEU BERT Qwen2.5-1.5B Base 0.215 0.036 0.124 0.125 0.408 0.151 0.317 0.292 0.079 0.829 Qwen2.5-1.5B PSEUDO -SFT 0.210 0.025 0.102 0.112 0.295 0.074 0.214 0.194 0.030 0.800 Qwen2.5-1.5B RRPO 0.219 0.040 0.131 0.130 0.412 0.151 0.318 0.294 0.083 0.830
+> Qwen3-1.7B Base 0.198 0.038 0.116 0.117 0.382 0.119 0.293 0.264 0.065 0.817
+> Qwen3-1.7B PSEUDO -SFT 0.201 0.038 0.118 0.119 0.382 0.119 0.292 0.264 0.066 0.816 Qwen3-1.7B RRPO 0.200 0.038 0.116 0.118 0.383 0.120 0.293 0.265 0.067 0.817
+> Qwen3-4B Base 0.222 0.034 0.117 0.124 0.392 0.133 0.278 0.274 0.070 0.822 Qwen3-4B PSEUDO -SFT 0.185 0.034 0.102 0.107 0.393 0.135 0.299 0.276 0.069 0.822 Qwen3-4B RRPO 0.227 0.039 0.123 0.129 0.402 0.158 0.319 0.293 0.088 0.829
+
+Table 2: Open-ended generation results under weak supervision. Model names are abbreviated in the table. P SEUDO -SFT fine-tunes on model-generated pseudo targets, while RRPO constructs reference-relative advantages from positive and negative anchors. 
+
+vide a useful relative advantage signal, while direct pseudo-target imitation is more brittle. 
+
+4.4 RRPO after Supervised Fine-Tuning 
+
+Finally, we test whether RRPO can further improve policies after conventional supervised fine-tuning. This setting is stronger than Table 2, since SFT already trains directly on task references. Starting from each SFT checkpoint, we apply RRPO with the same reference-relative contrastive advantage construction. Table 3 shows that SFT+RRPO improves or matches SFT across all reported metrics. The gains are modest but consistent: Mean ROUGE improves on both ELI5 and SAMSum for both model fam-ilies, and SAMSum also improves on BLEU and BERTScore. These results suggest that RRPO is complemen-tary to supervised fine-tuning rather than only a weak-supervision substitute. After SFT learns from reference imitation, RRPO can still provide an ad-ditional group-relative policy-improvement signal for open-ended generation. 
+
+Summary. Together, the experiments show that RRPO broadens the applicability of group-relative policy optimization beyond verifier-based training. On GSM8K, RRPO remains competi-tive with verifier-based Dr.GRPO without using exact-answer rewards for policy optimization. On ELI5 and SAMSum, it provides a more stable weak-supervision signal than pseudo-target fine-tuning in open-ended settings. Finally, RRPO also improves SFT-initialized policies, suggesting that reference-relative advantages can serve as a complementary policy-improvement signal beyond supervised imi-tation. 
+
+5 Related Work 
+
+RL from verifiable rewards and GRPO. Rein-forcement learning from verifiable rewards (RLVR) has become a central paradigm for improving language-model reasoning in domains where task outcomes can be automatically checked. Prior work introduced GRPO as a memory-efficient alternative to PPO that replaces value-function estimation with within-group reward normalization (Shao et al., Model Method ELI5 SAMSum                                                      
+
+> R-1 R-2 R-L Mean-R R-1 R-2 R-L Mean-R BLEU BERT Qwen2.5-1.5B SFT 0.220 0.0280 0.124 0.124 0.456 0.190 0.361 0.336 0.129 0.853 Qwen2.5-1.5B SFT+RRPO 0.222 0.0283 0.126 0.125 0.456 0.193 0.363 0.337 0.131 0.853 Qwen3-4B SFT 0.198 0.038 0.136 0.124 0.529 0.285 0.450 0.421 0.206 0.871 Qwen3-4B SFT+RRPO 0.200 0.038 0.137 0.125 0.533 0.287 0.452 0.424 0.208 0.872
+> Table 3: Post-SFT results on open-ended benchmarks. RRPO is applied after supervised fine-tuning using the same reference-relative advantage construction.
+
+2024), and later work scaled this training recipe to elicit emergent reasoning from correctness-based feedback (Guo et al., 2025). Subsequent work has refined GRPO along several axes, including sta-bilization at scale (Yu et al., 2026a), removal of length and standard-deviation biases (Liu et al., 2025), and theoretical analyses that recast GRPO as a contrastive or process-reward objective (Mroueh, 2025; Sullivan and Koller, 2025). RLOO offers a closely related leave-one-out baseline within the same group-relative family (Ahmadian et al., 2024). 
+
+Verifier-free and relative reward signals. Re-cent work has begun extending RL-style post-training beyond domains with reliable automatic verifiers. JEPO optimizes a Jensen evidence lower bound by treating chain-of-thought as a latent vari-able for unverifiable or semi-verifiable data (Tang et al., 2026), while Native Reasoning Training re-wards latent reasoning paths that increase answer likelihood (Wang et al., 2026b). SemanticVoting replaces exact majority voting with semantic simi-larity voting for self-improvement on open-ended tasks (Jiang et al., 2025). Other methods address unreliable scalar rewards by relying on relative or ordinal feedback: RLHF learns reward mod-els from human preferences (Ouyang et al., 2022), DPO directly optimizes preferred over dispreferred responses (Rafailov et al., 2023), and GOPO uses within-group reward rankings rather than reward magnitudes (Choi et al., 2026). RRPO is also rela-tive, but does not require preference labels, reward-model scores, or likelihood-based pseudo-rewards; it constructs positive and negative anchor sets from weak conditions and derives a scalar score from their learned metric geometry. 
+
+Contrastive and latent-space reward con-struction. Contrastive and metric learning pro-vide a general mechanism for learning from rela-tive structure rather than absolute labels. Objec-tives such as InfoNCE and supervised contrastive learning learn representations by pulling related examples together and separating unrelated exam-ples (Oord et al., 2018; Khosla et al., 2020). Recent verifier-free RL work also explores latent-space reward construction; for example, Latent-GRPO derives intrinsic rewards from geometric cluster-ing properties of terminal token representations, replacing external verifiers with latent-space struc-ture (Zhang et al., 2026). RRPO similarly uses representation geometry, but its reward is explic-itly reference-relative: an offline metric head com-pares each policy rollout to positive and negative anchor sets, producing the potential used for group-centered GRPO advantages. 
+
+6 Conclusion 
+
+We introduced Reference-Relative Policy Opti-mization (RRPO), a weakly supervised extension of group-relative policy optimization for tasks without exact training-time verifiers. RRPO con-structs instance-specific positive and negative an-chors with stratified conditional rollouts, learns an offline set-contrastive metric over these anchors, and uses the resulting reference-relative scores as group-centered advantages for Dr.GRPO-style policy optimization. This design preserves the relative-update structure of GRPO while replac-ing verifier-derived rewards with comparisons to weakly constructed reference behaviors. Across verifiable reasoning, open-ended generation, and post-SFT settings, RRPO remains competitive with verifier-based optimization, provides a more stable signal than pseudo-target fine-tuning, and further improves SFT-initialized policies. These results suggest that reference-relative advantages offer a practical route for applying GRPO-style reinforce-ment learning to broader generative tasks beyond strictly verifiable settings. 7 Limitations 
+
+RRPO relies on weak task-specific conditions to produce useful positive and negative anchor sets, so performance may depend on how well these con-ditions separate desirable from undesirable behav-iors. Designing such conditions is less demanding than building task verifiers, but it remains dataset-dependent and may require task knowledge. The metric head is trained offline and frozen during policy optimization; although KL regularization helps limit policy drift, large shifts could make the reference-relative scores less reliable. Finally, our evaluation covers a limited set of model families and tasks and relies mainly on automatic metrics for open-ended generation. These choices limit the extent to which the results establish robustness across broader benchmarks, human preferences, random seeds, and alternative design choices. 
+
+LLM usage disclosure: AI tools were used for minor writing, formatting, and visual editing assis-tance for generating illustrative figures 
+
+References 
+
+Arash Ahmadian, Chris Cremer, Matthias Gallé, Marzieh Fadaee, Julia Kreutzer, Olivier Pietquin, Ah-met Üstün, and Sara Hooker. 2024. Back to basics: Revisiting reinforce-style optimization for learning from human feedback in llms. In Proceedings of the 62nd Annual Meeting of the Association for Compu-tational Linguistics (Volume 1: Long Papers) , pages 12248–12267. Kyuseong Choi, Dwaipayan Saha, Woojeong Kim, An-ish Agarwal, and Raaz Dwivedi. 2026. Gopo: Policy optimization using ranked rewards. arXiv preprint arXiv:2602.03876 .Paul F Christiano, Jan Leike, Tom Brown, Miljan Mar-tic, Shane Legg, and Dario Amodei. 2017. Deep reinforcement learning from human preferences. Ad-vances in neural information processing systems , 30. Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, and 1 others. 2021. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 .Kawin Ethayarajh, Winnie Xu, Niklas Muennighoff, Dan Jurafsky, and Douwe Kiela. 2024. Kto: Model alignment as prospect theoretic optimization. arXiv preprint arXiv:2402.01306 .Angela Fan, Yacine Jernite, Ethan Perez, David Grang-ier, Jason Weston, and Michael Auli. 2019. Eli5: Long form question answering. In Proceedings of the 57th annual meeting of the association for com-putational linguistics , pages 3558–3567. Bogdan Gliwa, Iwona Mochol, Maciej Biesek, and Alek-sander Wawer. 2019. Samsum corpus: A human-annotated dialogue dataset for abstractive summa-rization. In Proceedings of the 2nd Workshop on New Frontiers in Summarization , pages 70–79. Caglar Gulcehre, Tom Le Paine, Srivatsan Srini-vasan, Ksenia Konyushkova, Lotte Weerts, Abhishek Sharma, Aditya Siddhant, Alex Ahern, Miaosen Wang, Chenjie Gu, and 1 others. 2023. Reinforced self-training (rest) for language modeling. arXiv preprint arXiv:2308.08998 .Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, and 1 others. 2025. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 .Hongtao Huang, Chengkai Huang, Junda Wu, Tong Yu, Julian McAuley, and Lina Yao. 2026. Listwise preference diffusion optimization for user behavior trajectories prediction. Advances in Neural Informa-tion Processing Systems , 38:159383–159408. Zihan Huang, Junda Wu, Rohan Surana, Tong Yu, David Arbour, Ritwik Sinha, and Julian McAuley. 2025. Im-age difference captioning via adversarial preference optimization. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Process-ing , pages 33746–33758. Chunyang Jiang, Yonggang Zhang, Yiyang Cai, Chi-Min Chan, Yulong Liu, Mingming Chen, Wei Xue, and Yike Guo. 2025. Semantic voting: A self-evaluation-free approach for efficient llm self-improvement on unverifiable open-ended tasks. 
+
+arXiv preprint arXiv:2509.23067 .Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna, Yonglong Tian, Phillip Isola, Aaron Maschinot, Ce Liu, and Dilip Krishnan. 2020. Su-pervised contrastive learning. Advances in neural information processing systems , 33:18661–18673. Nathan Lambert, Jacob Morrison, Valentina Pyatkin, Shengyi Huang, Hamish Ivison, Faeze Brahman, Lester James V Miranda, Alisa Liu, Nouha Dziri, Shane Lyu, and 1 others. 2024. Tulu 3: Pushing fron-tiers in open language model post-training. arXiv preprint arXiv:2411.15124 .Xintong Li, Chuhan Wang, Junda Wu, Rohan Surana, Tong Yu, Julian McAuley, and Jingbo Shang. 2026. Importance sampling for multi-negative multimodal direct preference optimization. In The Fourteenth In-ternational Conference on Learning Representations .Zhihang Lin, Mingbao Lin, Yuan Xie, and Rongrong Ji. 2026. Cppo: Accelerating the training of group relative policy optimization-based reasoning models. 
+
+Advances in Neural Information Processing Systems ,38:61043–61068. Zichen Liu, Changyu Chen, Wenjun Li, Penghui Qi, Tianyu Pang, Chao Du, Wee Sun Lee, and Min Lin. 2025. Understanding r1-zero-like training: A critical perspective. arXiv preprint arXiv:2503.20783 .Youssef Mroueh. 2025. Reinforcement learning with verifiable rewards: Grpo’s effective loss, dynam-ics, and success amplification. arXiv preprint arXiv:2503.06639 .Gagan Mundada, Zihan Huang, Rohan Surana, Sheldon Yu, Jennifer Yuntong Zhang, Xintong Li, Tong Yu, Lina Yao, Jingbo Shang, Julian McAuley, and Junda Wu. 2026. Ws-grpo: Weakly-supervised group-relative policy optimization for rollout-efficient rea-soning. Preprint , arXiv:2602.17025. Aaron van den Oord, Yazhe Li, and Oriol Vinyals. 2018. Representation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 .Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, and 1 others. 2022. Training language models to follow in-structions with human feedback. Advances in neural information processing systems , 35:27730–27744. Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-pher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741. John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. 2017. Proxi-mal policy optimization algorithms. arXiv preprint arXiv:1707.06347 .Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, and 1 others. 2024. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 .Nisan Stiennon, Long Ouyang, Jeffrey Wu, Daniel Ziegler, Ryan Lowe, Chelsea Voss, Alec Radford, Dario Amodei, and Paul F Christiano. 2020. Learn-ing to summarize with human feedback. Advances in neural information processing systems , 33:3008– 3021. Michael Sullivan and Alexander Koller. 2025. Grpo is secretly a process reward model. arXiv preprint arXiv:2509.21154 .Rohan Surana, Xintong Li, Sheldon Yu, Yiran Jenny Shen, Chuhan Wang, Tong Yu, Prithviraj Am-manabrolu, Jingbo Shang, Julian McAuley, and Junda Wu. 2026a. Mass-dpo: Multi-negative ac-tive sample selection for direct policy optimization. 
+
+Preprint , arXiv:2605.10784. Rohan Surana, Gagan Mundada, Xunyi Jiang, Chuhan Wang, Zhenwei Tang, Difan Jiao, Zihan Huang, Yuxin Xiong, Junda Wu, Sheldon Yu, and 1 others. 2026b. Generate, filter, control, replay: A compre-hensive survey of rollout strategies for llm reinforce-ment learning. arXiv preprint arXiv:2605.02913 .Rohan Surana, Gagan Mundada, Junda Wu, Xintong Li, Yizhu Jiao, Bowen Jin, Sizhe Zhou, Tong Yu, Ritwik Sinha, Jiawei Han, and 1 others. 2026c. F-grpo: Factorized group-relative policy optimization for unified candidate generation and ranking. arXiv preprint arXiv:2605.12995 .Yunhao Tang, Sid Wang, Lovish Madaan, and Rémi Munos. 2026. Beyond verifiable rewards: Scaling reinforcement learning in language models to unveri-fiable data. Advances in Neural Information Process-ing Systems , 38:74421–74448. Chuhan Wang, Xintong Li, Jennifer Yuntong Zhang, Junda Wu, Chengkai Huang, Lina Yao, Ju-lian McAuley, and Jingbo Shang. 2026a. Sce-nealign: Aligning multimodal reasoning to scene graphs in complex visual scenes. arXiv preprint arXiv:2601.05600 .Yuanfu Wang, Zhixuan Liu, Xiangtian Li, Chaochao Lu, and Chao Yang. 2026b. Native reasoning models: Training language models to reason on unverifiable data. arXiv preprint arXiv:2602.11549 .Junda Wu, Rohan Surana, Zhouhang Xie, Yiran Shen, Yu Xia, Tong Yu, Ryan A Rossi, Prithviraj Am-manabrolu, and Julian McAuley. In-context ranking preference optimization. In Second Conference on Language Modeling .An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, and 1 others. 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 .An Yang, Beichen Zhang, Binyuan Hui, Bofei Gao, Bowen Yu, Chengpeng Li, Dayiheng Liu, Jianhong Tu, Jingren Zhou, Junyang Lin, and 1 others. 2024. Qwen2. 5-math technical report: Toward mathe-matical expert model via self-improvement. arXiv preprint arXiv:2409.12122 .Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xi-aochen Zuo, Yu Yue, Weinan Dai, Tiantian Fan, Gao-hong Liu, Lingjun Liu, and 1 others. 2026a. Dapo: An open-source llm reinforcement learning system at scale. Advances in Neural Information Processing Systems , 38:113222–113244. Sheldon Yu, Junda Wu, Xintong Li, Nikki Lijing Kuang, Sizhe Zhou, Tong Yu, Jiawei Han, Jingbo Shang, and Julian McAuley. 2026b. Olivia: Online learning via inference-time action adaptation for decision making in llm react agents. arXiv preprint arXiv:2605.11169 .Weizhe Yuan, Richard Yuanzhe Pang, Kyunghyun Cho, Xian Li, Sainbayar Sukhbaatar, Jing Xu, and Ja-son Weston. 2024. Self-rewarding language models. 
+
+arXiv preprint arXiv:2401.10020 .Eric Zelikman, Yuhuai Wu, Jesse Mu, and Noah Good-man. 2022. Star: Bootstrapping reasoning with rea-soning. Advances in Neural Information Processing Systems , 35:15476–15488. Nonghai Zhang, Weitao Ma, Zhanyu Ma, Jun Xu, Jiu-chong Gao, Jinghua Hao, Renqing He, and Jingwen Xu. 2026. Silence the judge: Reinforcement learn-ing with self-verifier via latent geometric clustering. 
+
+arXiv preprint arXiv:2601.08427 .A Algorithm 
+
+Algorithm 1 summarizes the full two-stage proce-dure. 
+
+Algorithm 1 Reference-Relative Policy Optimiza-tion 
+
+Require: Dataset D; metric query count Gmetric ;rollout group size G; anchor size K; tempera-ture τ ; clip parameter ϵ; KL coefficient β. 
+
+> 1:
+
+Initialize trainable policy πθ0 , frozen anchor policy πanc from the same base model, metric head gψ, and reference policy πref . 
+
+> 2:
+
+Stage 1: Offline set-contrastive metric learn-ing  
+
+> 3:
+
+for all x ∈ D do  
+
+> 4:
+
+Sample query rollouts {ym}Gmetric  
+
+> m=1
+
+∼
+
+πθ0 (· | x). 
+
+> 5:
+
+Sample anchors A+(x) = {y+,k }Kk=1 ∼
+
+πanc (· | x, c +(x)) and A−(x) =
+
+{y−,k }Kk=1 ∼ πanc (· | x, c −(x)) . 
+
+> 6:
+
+Cache anchor representations and update ψ
+
+using P 
+
+> m
+
+Lsc (x, y m). 
+
+> 7:
+
+end for  
+
+> 8:
+
+Freeze metric projection head gψ. 
+
+> 9:
+
+Stage 2: Policy optimization with frozen ref-erence comparison  
+
+> 10:
+
+for each update step do  
+
+> 11:
+
+Sample minibatch B ⊂ D and set θold ← θ. 
+
+> 12:
+
+for all x ∈ B do  
+
+> 13:
+
+Sample rollout group {yi}Gi=1 ∼ πθold (· | 
+
+x) and retrieve cached anchor representa-tions.  
+
+> 14:
+
+Compute Rψ(yi; x) = S+ 
+
+> ψ
+
+(yi; x) −
+
+S− 
+
+> ψ
+
+(yi; x) for all i with frozen gψ. 
+
+> 15:
+
+Standardize {Rψ(yi; x)}Gi=1 within the group to obtain advantages {Ai}Gi=1 . 
+
+> 16:
+
+end for  
+
+> 17:
+
+Update θ with the Dr.GRPO-style clipped objective using {Ai}. 
+
+> 18:
+
+end for 
+
+B Experiment Details 
+
+B.1 Condition Construction 
+
+RRPO constructs positive and negative anchor roll-outs from weak task-specific conditions. Across datasets, the positive condition c+ is designed to bias the anchor-generation policy toward more task-aligned behavior, while the negative condition c−
+
+biases it toward less useful or less task-aligned be-havior. These conditions are used only to generate anchor rollouts. During policy optimization, RRPO does not convert hints, references, or exact-answer checks into scalar verifier rewards. Table 4 sum-marizes the dataset-specific positive and negative conditions used to construct anchor rollouts. 
+
+B.2 Training Details 
+
+RRPO follows a two-stage offline pipeline. In Stage 1, the base policy is frozen and only the metric projection head is trained using uncondi-tional query rollouts and positive/negative anchor rollouts. Stage 1 saves the learned projection head and cached anchor representations. In Stage 2, the metric head and anchor representations are frozen, and the policy is updated with Dr.GRPO using stan-dardized reference-relative scores as advantages. Table 5 reports the main training configuration used for each dataset. For open-ended tasks, we additionally compare against Pseudo-SFT. Pseudo-SFT first generates one greedy pseudo target per training input using the base model, then fine-tunes the same model on these generated targets with standard supervised learning. It does not use anchor sets, metric learn-ing, group-relative advantages, or Dr.GRPO up-dates. Pseudo-SFT uses one epoch, learning rate 
+
+2 × 10 −5, greedy test decoding, and the same task-specific evaluation pipeline as other methods. For the SFT baseline, we fine-tune the base model on the same task-specific training split used by RRPO with standard supervised learning, then evaluate using the same decoding and evalua-tion pipeline as the other methods. SFT+RRPO initializes RRPO policy optimization from the SFT checkpoint while keeping the RRPO anchor construction and metric-learning procedure un-changed. 
+
+B.3 Evaluation Details 
+
+For GSM8K, we evaluate generated solutions using normalized exact-answer matching. The answer extractor prioritizes GSM8K-style final answers marked by #### , supports boxed answers, and nor-malizes extracted answers before comparison. We report the standard unbiased pass@ k estimator: 
+
+Pass@ k = 1 −
+
+ n−ck
+
+ nk
+
+ ,
+
+where n is the number of generated samples for a prompt and c is the number of correct samples. Dataset Positive condition c+ Negative condition c−
+
+GSM8K CoT-style weak condition that encourages step-by-step mathematical reasoning, such as partial or masked reference reasoning. Perturbed CoT-style condition, such as corrupted in-termediate reasoning or misleading answer guidance. ELI5 Explanation-style partial condition that encour-ages faithful, helpful long-form explanation be-havior. Corrupted or less faithful explanation-style condition, such as perturbed reasoning or generic incorrect causal framing. SAMSum Structure-focused summarization condition em-phasizing salient dialogue content, including the main issue, decision, commitment, outcome, or next action. Structure-focused negative condition emphasizing less useful context, such as setup, reactions, unresolved framing, or peripheral details. 
+
+Table 4: Dataset-specific weak conditions used for anchor generation. Conditions are used only to induce positive and negative anchor rollouts. 
+
+Field GSM8K ELI5 SAMSum 
+
+Training samples 4k 4k 5k Rollout group size G 8 8 8Anchors per stratum K 4 4 4Condition mode CoT ELI5-CoT Structure Metric temperature τ 0.1 0.1 0.1 Projection dimension 512 512 512 Max prompt length 512 640 768 Max completion length 1024 384 256 Policy loss Dr.GRPO Dr.GRPO Dr.GRPO 
+
+Table 5: Main RRPO training configuration used in the reported experiments. 
+
+We report Pass@1, Pass@2, Pass@4, and Pass@8, averaged over test prompts. For SAMSum, model completions are post-processed with a fixed summary extractor before evaluation. If a completion contains an explicit summary marker, the text after the marker is re-tained; otherwise, the first non-empty paragraph is used, with boilerplate and extra whitespace re-moved. We report ROUGE-1, ROUGE-2, ROUGE-L, mean ROUGE F1, BLEU, and BERTScore-F1. For ELI5, we evaluate generated explanations against references using ROUGE-1, ROUGE-2, ROUGE-L, and mean ROUGE F1. We do not re-port pass@ k for ELI5 because exact binary correct-ness is not a natural evaluation signal for long-form explanation generation.

@@ -1,0 +1,1025 @@
+Title: Group boarding for airplanes: benchmarking static policies and optimizing dynamic assignment with deep reinforcement learning
+
+URL Source: https://arxiv.org/pdf/2607.21512v1
+
+Published Time: Fri, 24 Jul 2026 01:17:49 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# Group boarding for airplanes: benchmarking static policies and optimizing dynamic assignment with deep reinforcement learning 
+
+Minyu Shen a, Weihua Gu b, Junqi Ma c, Boqian Song a, Li Zhen ‗b, and Gang Kou caSchool of Management Science and Engineering, Southwestern University of Finance and Economics, China 
+
+> b
+
+Department of Electrical and Electronic Engineering, The Hong Kong Polytechnic University 
+
+> c
+
+School of Business Administration, Southwestern University of Finance and Economics, China 
+
+# Abstract 
+
+Improving boarding efficiency reduces airplane turnaround time and improves passenger experience. Airlines typically assign passengers to a few sequential boarding groups using static seat-based rules. Yet arrivals, seat choices, and luggage are sequential and random, and a static rule ignores the seats earlier passengers have already taken. We propose the first dynamic formulation of boarding group assignment. As each passenger checks in, we observe earlier passengers’ seats and groups, the current passenger’s seat, and optional luggage information, then assign a group while keeping companions together. We formulate dynamic group assignment as a Markov decision process and solve it with reinforcement learning (RL). The policy uses a convolutional neural network to encode the checked-in seat-assignment state and is trained by proximal policy optimization. The reward balances total boarding time and average individual boarding time. We benchmark the proposed RL policy against three companion-compatible static policies (back-to-front, modified Steffen, and alternating block) in an in-house simulator covering six single- and double-aisle layouts. Back-to-front with optimized group sizes achieves the shortest total boarding time and average individual boarding time among the static benchmarks across all layouts. The dynamic RL policy further outperforms it on both metrics in every layout. On a representative case, the RL policy outperforms the optimal back-to-front by up to 9.8% in total boarding time and 22.8% in average individual time. Sweeping the reward weight yields an approximate Pareto frontier for operator choice. Trained policies remain robust under out-of-distribution operating conditions, including varying load factors, companion sizes, and luggage loads. 
+
+Keywords: Airplane boarding; Boarding group; Travel companion; Group assignment; Deep rein-forcement learning. 
+
+# 1 Introduction 
+
+Turnaround time, the time an airplane spends on the ground between two consecutive flights, includes cleaning, refueling, maintenance, baggage handling, and passenger boarding (Jaehn and Neumann, 2015). A Boeing study found that for flights averaging 500 nautical miles, cutting turnaround time by 
+
+> ‗Corresponding author. Email: l-i.zhen@connect.polyu.hk
+
+1arXiv:2607.21512v1 [econ.GN] 23 Jul 2026 10 minutes raises airplane utilization by 8 percent (Mirza, 2008). Among these activities, passenger boarding is a major bottleneck (Neumann, 2019), and unlike operations such as refueling, it offers substantial room for improvement. Boarding matters for two reasons, captured by two metrics. The total boarding time , from the first passenger’s entry until the last passenger is seated, measures operational efficiency and feeds directly into turnaround time. The average individual boarding time , the mean time from the start of boarding until a passenger is seated, measures the passenger experience. The two can conflict: a boarding policy that shortens one may lengthen the other (Bachmat et al., 2023). Boarding policies should therefore be judged on both, not on total boarding time alone, as most prior work has done. Two types of interference impede the boarding process: aisle interference and seat interference 
+
+(Bazargan, 2007; Jaehn and Neumann, 2015; Willamowski and Tillmann, 2022; Erland et al., 2024). Aisle interference occurs when a passenger blocks the aisle while stowing luggage in the narrow cabin, so passengers behind cannot reach their rows. Seat interference occurs when seated passengers must leave their seats to let another passenger reach an inner seat, for example when a window-seat passenger passes others already seated in the aisle and middle seats. The passengers who stand up wait in the aisle until the new passenger sits down, which blocks the row and the aisle and can delay passengers behind. Airlines reduce these interferences by sorting passengers into boarding groups that board in sequence. The group should be decided at check-in and printed on the boarding pass. It can be determined using the information received by the airline, including the passenger’s chosen seat, carry-on luggage declaration, and whether the passenger travels with companions. Check-in is also sequential: passengers arrive one at a time in no fixed order, and their assigned group must be set on arrival, before information about later passengers is known. In practice, though, the boarding group is set by a rule fixed in advance, the same no matter who checks in or when. The companion-compatible static benchmarks considered in this paper are adapted from back-to-front (Bachmat et al., 2013), modified-Steffen (Steffen, 2008), and alternating-block (Van Landeghem and Beuselinck, 2002); they group passengers by row and, at most, by cabin side. This design keeps adjacent companions together, but it leaves unused the seat column, which sets seat interference, and the luggage, which sets how long the aisle stays blocked (Coppens et al., 2018; Erland et al., 2024). The methods that do exploit the column, such as outside-in and reverse-pyramid, cut seat interference sharply but only by separating companions. Optimization-based work goes beyond fixed row rules by exploiting richer seat and passenger information, including row, column, carry-on luggage, and, in some cases, companion constraints (Van Den Briel et al., 2005; Bazargan, 2007; Soolaki et al., 2012; Milne and Salari, 2016; Salari et al., 2019), yet it solves an offline boarding or seating problem after the relevant passenger set is known, too late to tell each passenger at check-in. The closest online-adaptive work is Notomista et al. (2016), which assigns seats online based on passenger classification; in contrast, our setting keeps seat assignments fixed and determines boarding groups dynamically at check-in. No method, then, combines all three: optimizing state-dependent group assignment at check-in, using seat-column and luggage information, and keeping companion groups intact (see Table 1). 2Table 1: Summary of the Literature Review 
+
+> Authors (year)  Methodology  Airplane layout a Interference Additional assignment considerations b Policies evaluated Single-aisle Double-aisle Aisle Seat  Com-panions  Luggage Check-in-time group assignment Van Landeghem and Beuselinck (2002) Simulation  (3+3)*23  ✓ ✓ BF, AB, OI, OTHERS, PRECISE Van Den Briel et al. (2005) Optimization (3+3)*23  ✓ ✓ ✓ BF, RP, group policy by MINLP Ferrari and Nagel (2005) Simulation  (3+3)*23  ✓ ✓ BF, AB, OI, SG, RP, OTHERS, PRECISE Bachmat et al. (2005)  Physics model generic  ✓ BF, OI, SG Bachmat et al. (2006)  Physics model generic  ✓ BF, OI Bazargan (2007)  Optimization (3+3)*23  ✓ ✓ ✓ BF, OI, RP, group policy by MILP Steffen (2008)  Simulation  (3+3)*20  ✓ BF, FB, Steffen, OI, PRECISE Schultz et al. (2008)  Simulation  (3+3)*29  ✓ ✓ BF, AB, OI Bachmat et al. (2009)  Physics model generic  ✓ BF, AB, OI, OTHERS Steiner and Philipp (2009) Simulation  (3+3)*33  ✓ ✓ BF Audenaert et al. (2009) Simulation  (3+3)*23  ✓ ✓ ✓ BF, AB, OI, RP, OTHERS, PRECISE
+
+3Table 1 – continued from previous page Authors (year)  Methodology  Airplane layout a Interference Additional assignment considerations b Policies evaluated Single-aisle Double-aisle Aisle Seat  Com-panions  Luggage Check-in-time group assignment Steffen and Hotchkiss (2012) Field experiment (3+3)*12  ✓ ✓ BF, AB, Steffen, OI, PRECISE Tang et al. (2012)  Simulation  (3+3)*25  ✓ ✓ ✓ OTHERS, PRECISE Soolaki et al. (2012)  Optimization (3+3)*23  ✓ ✓ RP, group policy by MILP Bachmat et al. (2013)  Physics model generic  ✓ BF Budesca et al. (2014)  Simulation  (3+3)*30  ✓ ✓ ✓ BF, FB, OTHERS Milne and Kelly (2014) Simulation  (3+3)*20  ✓ ✓ ✓ BF, Steffen, OTHERS, PRECISE Milne and Salari (2016) Optimization (3+3)*20  ✓ ✓ Steffen, PRECISE Notomista et al. (2016) Simulation  (3+3)*30  ✓ ✓ ✓ ✓ OTHERS Giitsidis and Sirakoulis (2016) Simulation  (3+3)*23  12 seats/row 
+
+> ∗48  ✓ ✓ BF, AB, OI, SG, RP Zeineddine (2017)  Simulation  (3+3)*20  ✓ ✓ ✓ BF, Steffen, OI, OTHERS, PRECISE Jafer and Mi (2017)  Simulation  (3+3)*23  ✓ ✓ BF, AB, Steffen, OI, RP, OTHERS, PRECISE Ren and Xu (2018)  Field experiment (3+3)*8  ✓ ✓ BF, OI, RP, OTHERS
+
+4Table 1 – continued from previous page Authors (year)  Methodology  Airplane layout a Interference Additional assignment considerations b Policies evaluated Single-aisle Double-aisle Aisle Seat  Com-panions  Luggage Check-in-time group assignment Delcea et al. (2018)  Simulation  (3+3)*29  ✓ ✓ BF, OI, RP, OTHERS, PRECISE Milne et al. (2018)  Optimization (3+3)*20  ✓ ✓ Steffen, PRECISE Tang et al. (2018)  Simulation  (3+3)*25  ✓ ✓ OTHERS Schultz (2018b)  Simulation  (3+3)*29  ✓ ✓ ✓ BF, AB, OI, RP, PRECISE Schultz and Schmidt (2018) Simulation  (3+3)*29  ✓ ✓ ✓ ✓ BF, OI Schultz (2018a)  Field experiment (3+3)*29  ✓ ✓ BF, OI Bachmat (2019)  Physics model generic  ✓ ✓ slow-/fast-first, OTHERS Erland et al. (2019)  Physics model generic  ✓ ✓ slow-/fast-first Cotfas et al. (2019)  Simulation  (3+3)*30  ✓ ✓ BF, RP, OTHERS Milne et al. (2019)  Simulation  (3+3)*30  ✓ ✓ BF, RP, OTHERS Salari et al. (2019)  Optimization (3+3)*20  ✓ ✓ ✓ Steffen, PRECISE Kisiel (2020)  Simulation  (3+3)*30  ✓ ✓ BF, Steffen, OI, OTHERS Erland et al. (2021)  Physics model generic  ✓ ✓ slow-/fast-first Willamowski and Tillmann (2022) Optimization  various single-aisle  ✓ ✓ ✓ ✓ PRECISE by MIP 
+
+5Table 1 – continued from previous page Authors (year)  Methodology  Airplane layout a Interference Additional assignment considerations b Policies evaluated Single-aisle Double-aisle Aisle Seat  Com-panions  Luggage Check-in-time group assignment Bachmat et al. (2023)  Physics model generic  ✓ ✓ BF, slow-/fast-first, slow-back-first Erland et al. (2024)  Physics model generic  ✓ ✓ ✓ slow-/fast-first Jaehn et al. (2026)  Optimization (3+3)*30  ✓ BF, OI, RP, group policy by constraint programming 
+
+> This paper  Deep RL  ✓ ✓ ✓ ✓ ✓ ✓ ✓ Learned dynamic policy
+> a Layout gives the nominal economy-class seating per row over  𝑅  rows (e.g.  (3+3): single aisle, three seats per side;  (3+4+3): double aisle). A few studies use layouts that deviate slightly, e.g. a shorter first or last row, or a small separate first-class section.
+> b A checkmark indicates that the factor is explicitly used in the assignment decision. For example, companion groups are marked only when the method assigns companions together, not when companions are merely simulated under a companion-compatible policy.
+> Policy abbreviations:  BF, back-to-front; FB, front-to-back; AB, alternating-block; OI, outside-in (i.e., window–middle–aisle); SG, seat-group; RP, reverse-pyramid; PRECISE, per-passenger sequencing that assigns each passenger an exact position in the boarding queue; MILP, mixed-integer linear programming; MINLP, mixed-integer nonlinear programming; MIP, mixed-integer programming; OTHERS, policies not falling into the above categories.
+
+6We develop a dynamic policy that does all three at once. We formulate the boarding group assignment as a Markov decision process (MDP): as each passenger checks in, the airline observes the seats and group assignments of previously checked-in passengers, together with the current passenger’s seat and any luggage declaration, and assigns the boarding group, with travel companions always sharing a group. We parameterize the policy with a convolutional neural network (CNN) that reads the cabin as a grid, and optimize it by reinforcement learning (RL), specifically proximal policy optimization (PPO). To our knowledge, this is the first time the boarding problem has been formulated as an MDP and solved by RL. We evaluate the dynamic policy against the static policies in a simulation model that captures aisle and seat interference, stochastic luggage handling, and passenger movement, across six representative single- and double-aisle commercial layouts, beyond the single-aisle focus of most prior work (Table 1). Unlike most studies, which target total boarding time alone, we optimize total and average individual boarding time jointly. Among the static policies, back-to-front with optimized group sizes is the strongest on both metrics. The dynamic RL policy beats it on both in every layout we test, and further outperforms the slow-first and fast-first luggage-ordering benchmarks (Bachmat et al., 2023; Erland et al., 2024). On a representative narrow-body airplane, the four-group RL frontier improves on the four-group optimal back-to-front benchmark by up to 9.8% in total boarding time and up to 22.8% in average individual boarding time, at opposite ends of the tradeoff between them. Sweeping a weight on the two metrics produces an approximate Pareto frontier, allowing the operator to select a preferred balance between operational efficiency and passenger experience. It also generalizes: a single trained policy continues to outperform the static policies under load factors, travel-companion distributions, and luggage distributions far from those used in training. The remainder of this paper is organized as follows. Section 2 reviews the related literature on boarding policies and research methods. Section 3 formulates the boarding group assignment as an MDP and distinguishes the static and dynamic policies evaluated within this framework. Section 4 models the airplane boarding process, including detailed descriptions of various airplane layouts and passenger movement dynamics. Section 5 describes the three static policies: back-to-front, modified-Steffen, and alternating-block. Section 6 develops the dynamic RL policy, including its CNN-based state embedding, the actor-critic networks, and the PPO training algorithm. Section 7 reports the numerical experiments: the static benchmarks, the Pareto tradeoff achieved by the RL policy, and robustness tests under shifted operating conditions. Section 8 summarizes the findings and discusses future work. Appendix A lists the notations used in this paper. 
+
+# 2 Literature Review 
+
+This section reviews boarding policies proposed to improve boarding efficiency across the academic literature and industry practice, followed by an examination of the research methods used to study the boarding process. Table 1 summarizes the key works along the following dimensions: methodology (simulation, optimization, physics model, and field experiment), airplane layout (single- or double-aisle), the interference types modeled (aisle and seat), whether travel companions can board together, whether luggage information is used in the assignment decision, and the boarding policies evaluated. Across these works, the group assignment is always fixed in advance; none determines it dynamically as passengers check in, which is the direction this paper pursues. 72.1 Boarding Policies 
+
+A boarding policy divides passengers into distinct groups and specifies the sequence for these groups to board the airplane; passengers within each boarding group may board in any order (Jaehn and Neumann, 2015). At its most granular, a boarding policy could assign each passenger to an individual group, thereby determining a specific position in the boarding sequence (see e.g., Van Landeghem and Beuselinck, 2002; Steffen, 2008; Steffen and Hotchkiss, 2012; Willamowski and Tillmann, 2022); related seating-assignment models also operate at seat-level resolution by assigning passengers to seats under a prescribed boarding order (Milne and Salari, 2016; Salari et al., 2019). This precise sequencing enables developing boarding orders that minimize the total boarding time (Jaehn and Neumann, 2015). However, real-world implementation of precise sequencing is difficult because passengers cannot reliably follow precise timing and positioning requirements in the queue, may arrive late, or need to board together with their companions. In practice, airlines usually rely on a limited number of boarding groups, substantially fewer than the total passenger count, to support gate management. Many seat-based boarding policies use seat assignments as their primary criterion and fall into three main categories: row-based, column-based, or a combination of both. Row-based policies merit particular attention because they accommodate travel companions who board together. The most widely adopted row-based approach is the back-to-front policy, which divides passengers into blocks according to row numbers and then passengers seated in the rear blocks board first, followed by those seated progressively toward the front (Van Den Briel et al., 2005; Steffen, 2008; Bazargan, 2007; Bachmat et al., 2013). The back-to-front policy has been adopted by carriers such as Alaska Airlines, and was used by Delta Air Lines during the COVID-19 pandemic. Some Chinese airlines like Sichuan Airlines have recently started implementing lighter versions of back-to-front boarding, by offering rear-seated passengers a 5-minute priority boarding window before the general boarding process. The front-to-back policy operates in reverse, where passengers in the front rows board earlier than those in the back rows (Bachmat et al., 2009; Budesca et al., 2014). A more nuanced approach, the alternating-block policy, segments the airplane into distinct row-based blocks but arranges them in an alternating sequence rather than following a strict directional order (Van Landeghem and Beuselinck, 2002). This policy was once used by the airline Ryanair. Column-based approaches could potentially mitigate the seat interference but separate travel companions during boarding. The outside-in policy exemplifies this approach, as previously imple-mented by United Airlines. This policy separates passengers into three sequential groups: window seat passengers board first, followed by middle seat passengers, then aisle seat passengers. This arrangement aims to eliminate the seat interference. Other policies combine row and column information. The seat-group policy merges outside-in and back-to-front, with each outside-in group further divided into blocks that board from back to front (Ferrari and Nagel, 2005; Giitsidis and Sirakoulis, 2016). In the reverse-pyramid policy, boarding groups form diagonal waves that move from back to front and from window to aisle simultaneously, which smooths the transition between groups. America West Airlines reduced boarding times by about 20% with this policy (Van Den Briel et al., 2005). 
+
+2.2 Research Methods 
+
+The airplane boarding problem can be viewed as a queuing problem. Classical analytical tools for queueing and traffic-service systems, including Markovian queueing models (Gu et al., 2011, 2015; 8Pacheco et al., 2017), renewal or regenerative-cycle arguments (Heidemann and Wegmann, 1997; Gu et al., 2012; Gu and Cassidy, 2013), and approximation or bounding methods (Newell, 1982; Shen et al., 2019), are difficult to apply directly to this problem. The difficulty stems from the diversity of airplane layouts, each with its own seating configuration, and from the stochastic and dynamic blockages and interferences between boarding passengers. The large passenger count, often exceeding 100 on commercial flights, together with the many possible boarding group configurations, further expands the solution space. Previous works therefore turned to other approaches, which fall into four categories: simulation, mathematical optimization, physics models, and field experiments. Simulation has been widely used to examine queueing systems (e.g., Yang et al., 2020; Hu et al., 2023; Shen et al., 2023). It also stands as the predominant method in analyzing boarding processes. The approaches include agent-based models (Audenaert et al., 2009; Coppens et al., 2018; Budesca et al., 2014; Delcea et al., 2018), stochastic discrete event simulations (Van Landeghem and Beuselinck, 2002; Schultz, 2018a,b), cellular automata models (Giitsidis and Sirakoulis, 2016), and cellular discrete event simulation (Jafer and Mi, 2017). These methods examine various aspects such as passenger characteristics (Tang et al., 2012; Ferrari, 2005), infrastructure elements like pre-boarding areas (Steiner and Philipp, 2009) and apron bus operations (Milne et al., 2019; Cotfas et al., 2019), and disruption scenarios (Delcea et al., 2018). Related work also examines how group behavior affects passenger motion, seat conflict, luggage handling, and boarding time (Tang et al., 2018). Zeineddine (2017) proposes a dynamically optimized boarding queue that keeps traveling companions together, but the queue is generated only after the last passenger has checked in. Simulations excel at incorporating realistic passenger behaviors, aisle and seat interference patterns, and various operational constraints with greater flexibility. However, they face computational challenges, particularly when modeling large airplanes or conducting extensive policy comparisons, making it difficult to explore a wide range of operating conditions efficiently. Mathematical optimization uses exact models to search over either seat-level or group-level de-cisions. Milne and Salari (2016), Milne et al. (2018), and Salari et al. (2019) optimize seating assign-ments, mainly using carry-on luggage information and then applying a prescribed boarding order, while Willamowski and Tillmann (2022) formulates total boarding time minimization directly and considers passenger-specific boarding positions. These models use mathematical programming for-mulations that can incorporate additional operational constraints, including companion constraints in some cases. Because passenger-level sequencing is difficult to enforce in practice, a second stream (Van Den Briel et al., 2005; Bazargan, 2007; Soolaki et al., 2012; Jaehn et al., 2026) optimizes assignments to a limited number of boarding groups rather than assigning every passenger an individual board-ing position. Group-level optimization is less flexible than passenger-level sequencing or seating optimization, but it is more compatible with airport boarding operations. Physics models, pioneered by Bachmat and colleagues (Bachmat et al., 2006; Bachmat and Elkin, 2008; Bachmat et al., 2009, 2013, 2023) and extended by Erland and colleagues (Erland et al., 2019, 2021, 2024), interpret airplane boarding through the lens of Lorentzian geometry — the same mathematical framework used in relativity theory. These models represent boarding as wave propagation in a two-dimensional spacetime domain defined by queue position and row designation, where the boarding time corresponds to the longest causal path through this domain. The approach provides analytical formulas for boarding times as the number of passengers approaches infinity and is computationally efficient. The models also yield general insights, such as how boarding time scales with congestion level (Bachmat et al., 2013) and why slow-first boarding universally outperforms fast-first under 9the Lorentzian framework (Erland et al., 2024). However, analytical tractability demands model simplifications: passengers are assumed to move at infinite speed when unobstructed, and the boarding time formulas are asymptotic estimates that become exact only as the number of passengers tends to infinity. These simplifications amplify the differences in boarding time between policies relative to more realistic simulations that account for finite walking speed (Erland et al., 2024). Field experiments complement theoretical and simulation studies with empirical data. Steffen and Hotchkiss (2012) conducted controlled experiments comparing five different boarding strategies with a mock airplane interior. Schultz (2018a) used field measurements to validate stochastic boarding models, achieving calibration errors within 2%. Various studies examined specific boarding aspects: Kierzkowski and Kisiel (2017) observed human factors and passenger behavior patterns, Coppens et al. (2018) tested hand luggage stowing methods, and Ren and Xu (2018) measured interference classifications during boarding. Vendel et al. (2019) and Hiemstra-Van Mastrigt et al. (2019) explored potential improvements through a hand luggage guiding system and passenger experience modifi-cations respectively. Gwynne et al. (2018) documented detailed passenger micro-behaviors during boarding and deplaning. Field experiments provide empirical validation of theoretical models and identify practical operational constraints, but are limited by site-specific data collection, making them applicable only to a narrow range of operating conditions. 
+
+# 3 Sequential Boarding Group Assignment Problem 
+
+A boarding process involves two stages: passengers first select their seats and receive boarding group assignments during check-in, and then board the airplane in the designated group order. Check-in, whether at a physical counter or through a mobile application, is a natural point for implementing group-based boarding policies, as the assigned group number can be printed on or embedded in the boarding pass for clear reference at the boarding gate. In this section, we formulate the group assignment task as a sequential decision problem and cast it as a Markov Decision Process (MDP). The formulation is policy-agnostic: any deterministic function that maps the operator’s observation at check-in to a group assignment is a feasible policy. Both the existing static policies from the literature and the dynamic policy we develop in this paper can be evaluated within the same MDP-based decision framework; they differ in which state components they use and in whether the mapping is hand-designed or learned. 
+
+3.1 Problem Description 
+
+Passengers arrive sequentially at the check-in counter. Let 𝐽 denote the complete set of passengers and index them by arrival order, so that passenger 𝑗 + 1 arrives after passenger 𝑗 . Each passenger selects a seat (row and column) and is then assigned to one of 𝑁 boarding groups by the airline operator. Within each group, passengers board in random order. The passenger set 𝐽 need not fill every seat; the formulation and all policies apply at any load factor. The assignment decision for passenger 𝑗 depends on four factors: the selected seat, optional luggage declaration, travel companion group, and the check-in status of all previous passengers 
+
+{1, . . . , 𝑗 − 1}. The inclusion of luggage information is motivated by recent findings that the boarding order of passengers with different luggage-handling times affects both total boarding time and av-erage individual boarding time, but in opposite directions (Bachmat et al., 2023; Erland et al., 2024). Although actual handling time is unknown before boarding, it correlates positively with the number of luggage items (Steiner and Philipp, 2009; Erland et al., 2024). We therefore allow passengers to op-10 tionally declare their carry-on luggage quantity during check-in, and investigate how this information can be exploited by the assignment policy. Regarding travel companions, passengers who sit in adjacent seats may self-identify as a com-panion group during check-in and request to board together. All members of a companion group receive the same boarding group assignment. We model companion-group sizes up to a maximum of 𝑀 travelers with a distribution (𝑞 1 , 𝑞 2 , . . . , 𝑞 𝑀 ), where 𝑞 𝑘 is the proportion of passengers traveling in groups of size 𝑘 and Í𝑀 𝑘 =1 𝑞 𝑘 = 1; in particular, 𝑞 1 denotes solo passengers. Fig. 1 summarizes the assignment problem and its input information. 
+
+Figure 1: Illustration of the sequential boarding group assignment problem. 
+
+3.2 Markov Decision Process Formulation 
+
+We formulate the above sequential group assignment problem as a |𝐽 |-step finite-horizon MDP, where 
+
+|𝐽 | denotes the total number of boarding passengers. The MDP consists of a 4-tuple (𝒮 , 𝒜 , 𝒫 , ℛ) ,where 𝒮 represents the state space, 𝒜 denotes the action space, 𝒫 specifies the state transition dynamics, and ℛ defines the reward function. The following sections detail each MDP element. 
+
+3.2.1 State 
+
+When the 𝑗 -th passenger selects a seat, the agent (i.e., airline operator) observes a state 𝑠 𝑗 ∈ 𝒮 consisting of three components: 1. Checked-in state of previous passengers, 𝑥 𝑗 : We represent the cabin layout as an 𝑅 × 𝐶 grid, where 𝑅 represents the number of rows and 𝐶 the number of columns, one entry per seat. The checked-in passengers {1, 2, . . . , 𝑗 −1} form a tensor 𝑥 𝑗 ∈ R𝑅 ×𝐶 ×𝐷 , where 𝐷 is the per-seat feature dimension. Each seat carries a 𝐷 -dimensional feature vector with the following components: 
+
+• An (𝑁 + 1)-dimensional one-hot encoding vector where the first 𝑁 dimensions correspond to boarding groups 1 through 𝑁 , and the (𝑁 + 1)-th dimension indicates an unselected seat; 
+
+• A 3-dimensional one-hot encoding vector specifying the seat location (window, middle, or aisle); 
+
+• The number of declared luggage items (if available) for the checked-in passenger. The feature dimension 𝐷 therefore equals (𝑁 + 1) + ( 3) + ( 1) = 𝑁 + 5.11 2. Current passenger state, 𝑦 𝑗 : A vector 𝑦 𝑗 ∈ R7 that encodes the passenger 𝑗 ’s selected row and column, the declared luggage count (if any), a 3-dimensional one-hot encoding vector for seat location (window, middle, or aisle), and the size of the passenger’s companion group. 3. Global state, 𝑧 𝑗 : A vector 𝑧 𝑗 ∈ R𝑁 +1 that records the total number of checked-in passengers and the per-group count. For undeclared luggage quantities, we use −1 as a default value. 1
+
+The complete state observation is: 
+
+𝑠 𝑗 ≡ ( 𝑥 𝑗 , 𝑦 𝑗 , 𝑧 𝑗 ), 𝑥 𝑗 ∈ R𝑅 ×𝐶 ×( 𝑁 +5) , 𝑦 𝑗 ∈ R7 , 𝑧 𝑗 ∈ R𝑁 +1. (1) 
+
+3.2.2 Action 
+
+Given state 𝑠 𝑗 , a policy 𝜋 selects a boarding group 𝑎 𝑗 = 𝜋 (𝑠 𝑗 ) ∈ 𝒜 ≡ { 1, 2, . . . , 𝑁 }. The action space is therefore small and discrete. When passenger 𝑗 belongs to a companion group, only the first member receives a policy-computed assignment; all subsequent members of the same group inherit this assignment, so that travel companions always share a boarding group. 
+
+3.2.3 Transition Dynamics 
+
+Once the group is assigned, the process advances to the next check-in decision, where a new state 𝑠 𝑗 +1
+
+is observed. This system state evolution is characterized by a transition probability 𝒫  𝑠 𝑗 +1|𝑠 𝑗 , 𝑎 𝑗 . The randomness in this process stems from the uncertainty regarding the next passenger’s seat location and luggage count. Passenger 𝑗 + 1 is then assigned to a group determined by 𝑎 𝑗 +1 = 𝜋 (𝑠 𝑗 +1), and this process continues for each subsequent passenger. Note that each state 𝑠 𝑗 encapsulates previous allocation decisions, making this decision process a sequential decision problem where past actions influence future states. 
+
+3.2.4 Reward 
+
+Intermediate transitions yield zero reward: 𝑟 𝑗 = 0 for 𝑗 = 1, . . . , |𝐽 | − 1. After the final assignment has been made, the actual boarding process commences and the boarding outcome is revealed. We consider two performance metrics: total boarding time 𝑇 total , measured from the first passenger’s entry until the last passenger is seated, and average individual boarding time 𝑇 avg , defined as the mean time each passenger spends from the start of boarding to being seated. Bachmat et al. (2023) show that under different luggage-based ordering rules (slow-first and fast-first), these two metrics can move in opposite directions. To account for this potential tradeoff, we combine both metrics in the terminal reward: 
+
+𝑟 |𝐽 | = −
+
+"
+
+(1 − 𝜆 ) 𝑇 total 
+
+𝑇 rand total 
+
++ 𝜆 𝑇 avg 
+
+𝑇 rand avg 
+
+#
+
+, (2) where 𝑇 rand total and 𝑇 rand avg are the corresponding mean metrics under random boarding for the same layout and operating setting. The parameter 𝜆 ∈ [ 0, 1] controls the tradeoff, with 𝜆 = 0 targeting normalized total boarding time alone and 𝜆 = 1 targeting normalized average individual boarding time alone. This normalization makes the two terms comparable in scale. 
+
+> 1While a one-hot encoding might enhance representation capability, our current treatment delivers satisfactory perfor-mance. We defer investigation of advanced encoding schemes to future work.
+
+12 3.2.5 Objective 
+
+The goal is to find a policy 𝜋 that maximizes the expected episodic return: 
+
+max  
+
+> 𝜋
+
+E[𝐺 ] = E
+
+
+
+> |𝐽 |
+
+Õ
+
+> 𝑗 =1
+
+𝑟 𝑗 
+
+
+
+, (3) where 𝐺 sums rewards over all |𝐽 | passengers in an episode. Since only the terminal reward is nonzero, maximizing E[𝐺 ] minimizes the normalized weighted combination in Eq. (2). This sparse-reward structure is standard in finite-horizon MDPs; each group assignment alters the checked-in assignment state observed by subsequent decisions and thus affects the terminal boarding outcome. 
+
+3.3 Two Policy Classes 
+
+The MDP formulated above is agnostic to the form of the policy: any deterministic function 𝜋 : 𝒮 → 𝒜 
+
+that respects the co-traveler constraint in Section 3.2 is a candidate solution. In the remainder of the paper we examine two distinct policy classes within this MDP-based framework. 
+
+Static policies. A static policy follows a fixed, predetermined rule that maps seat location to a group label, without observing the check-in history or adapting to the evolving checked-in assignment state. Depending on the design, such a rule may or may not guarantee that co-travelers in adjacent seats board within the same group. The three static policies examined in this paper (back-to-front, modified-Steffen, and alternating-block, presented in Section 5) all keep co-travelers together. 
+
+Dynamic policies. In contrast, a dynamic policy operates on the full state 𝑠 𝑗 = (𝑥 𝑗 , 𝑦 𝑗 , 𝑧 𝑗 ) and adapts its group assignment to the evolving checked-in assignment state as each passenger checks in. We develop such a policy in Section 6, parameterized by deep neural networks and trained via RL. 
+
+# 4 Modeling Airplane Boarding Process 
+
+This section details a simulation model that, given any sequence of boarding-group assignments produced by a policy on the MDP of Section 3, generates the total boarding time 𝑇 total and average individual boarding time 𝑇 avg used in the terminal reward. Section 4.1 specifies the full range of airplane layouts studied, Section 4.2 models passenger kinetics in the aisle and at the seat, and Section 4.3 describes the simulation implementation. 
+
+4.1 Airplane Layouts 
+
+We focus on the most prevalent boarding setting found in real-world practice. This setting involves a single entrance at the front of the passenger cabin, typically accessed via a jet-bridge (Giitsidis and Sirakoulis, 2016; Willamowski and Tillmann, 2022). All passengers form a single queue before this entrance prior to entering the cabin (Zeineddine, 2017). The cabin itself consists of either one or two aisles with seats on both sides (Airbus, 2024). In the case of a double-aisle layout, the queue bifurcates as passengers enter the cabin, with individuals proceeding to their respective aisles (see Fig. 2 for an illustration of the double-aisle case). Data from Airbus (2024) indicate that wide-body airplanes with double-aisle layouts constitute 21% of the total global airplane fleet. Our study employs the commonly-used “economy-class boarding” assumption, focusing on op-timizing the boarding process for economy class passengers, as they constitute the majority of pas-sengers and have the most significant impact on overall boarding times. This assumption excludes priority boarding (e.g., first class) and other pre-boarding procedures from our analysis (Steffen, 2008; Willamowski and Tillmann, 2022), since they have fewer passengers and are unlikely to substantially affect the boarding performance. 13 Figure 2: Schematic representation of a double-aisle airplane layout and its boarding process. We classify representative economy-class cabin layouts based on the number of seats per row and the presence of either a single aisle or double aisles. We denote the total number of rows as 𝑅 and the number of seats per row (column number) as 𝐶 . Our study examines the following economy-class cabin layouts (data sourced from SeatMaps, 2024): 1. (2 + 2) ∗ 𝑅 (𝐶 = 4): A single-aisle layout with two seats on each side. This layout appears in smaller airplanes like the Bombardier CRJ series. 2. (3 + 3) ∗ 𝑅 (𝐶 = 6): A single-aisle layout with three seats on each side. This layout characterizes popular narrow-body airplanes, such as the Airbus A320 and A321, and Boeing 737 series. 3. (2+3+2)∗ 𝑅 (𝐶 = 7): A double-aisle layout with seven seats per row. The middle section contains three seats, while each side section has two seats. This layout typifies wide-body airplanes like the Boeing 767 series. 4. (2 + 4 + 2) ∗ 𝑅 (𝐶 = 8): A double-aisle layout with eight seats per row. The middle section contains four seats, while each side section has two seats. This layout appears in wide-body airplanes such as the Airbus A330 and A340 series. 5. (3 + 3 + 3) ∗ 𝑅 (𝐶 = 9): A double-aisle layout with nine seats per row, evenly distributed across three sections. This layout exists in larger wide-body airplanes, including the Boeing 787 and Airbus A350 series. 6. (3 + 4 + 3) ∗ 𝑅 (𝐶 = 10 ): A double-aisle layout with ten seats per row, representing the widest passenger planes currently in service. The Boeing 777 and Airbus A380 series exemplify this layout. These layouts span a broad set of widely used commercial airplane designs, from regional jets to large wide-body airplanes. By varying the number of rows ( 𝑅 ), we can represent a wide range of economy-class cabin sizes. This flexibility in row numbers also reflects real-world variations, where budget airline companies may opt to increase seating density by adding more rows, while other carriers might choose a more spacious layout with fewer rows. 14 Figure 3: Illustration of passengers’ forward movements in an aisle: (a) When the passenger spacing is ≥ 3 cells, movement is allowed. (b) When the spacing is < 3 cells, the passenger stops. 
+
+4.2 Passenger Kinetics 
+
+To simulate passenger movements, we discretize time with step size Δ𝑡 = 1.2 seconds and divide the space along an aisle into cells. Each row occupies two cells. Passengers can move at most one cell per Δ𝑡 . We consider the boarding process that spans from the moment the first passenger enters the airplane until the last passenger is seated. 
+
+4.2.1 Forward Movement in Aisles 
+
+The forward progression of each passenger depends on their spacing to the passenger ahead, consis-tent with grid-based boarding models in which aisle movement is forward-directed and constrained by local cell occupancy (Schultz, 2018b). The movement rules follow two distinct scenarios: 1. A passenger can advance one cell (equivalent to half a row) per time step if the distance to the passenger ahead equals or exceeds three cells (1.5 rows); 2. A passenger must maintain their current position if the distance to the passenger ahead is less than three cells. Fig. 3 provides a visual representation of these two movement scenarios. 
+
+4.2.2 Luggage Stowing 
+
+Upon reaching the destination row, a passenger stores luggage before entering their seat. The narrow cabin aisle forces this passenger to block the aisle during luggage handling, so other passengers behind cannot proceed to their assigned rows. Note that the spacing rules in Section 4.2.1 allow enough space for a passenger to handle luggage. We model the luggage-handling time as follows: 1. The number of luggage items per passenger, 𝑲 , follows a categorical distribution on support 
+
+𝑘 = {0, 1, 2, 3}, with probabilities {𝑝 𝑘 }𝑘 =0,1,2,3;2. For a given realization 𝑘 of 𝑲 , the total luggage-handling time, 𝑶 𝑘 , follows a distribution with mean 𝜇 𝑘 and standard deviation 𝜎 𝑘 .A realized total luggage-handling time 𝐿 for a passenger is thus given by: 
+
+𝐿 = 𝑜 𝑘 , 𝑘 ∼ 𝑲 , 𝑜 𝑘 ∼ 𝑶 𝑘 . (4) The choice of a categorical distribution for luggage items and the associated time distributions is based on observed passenger behaviors (Steiner and Philipp, 2009). This formulation captures 15 Figure 4: Examples of seat interference scenarios: (a) A passenger accessing a middle seat with the aisle seat occupied. (b) A passenger accessing a window seat with both aisle and middle seats occupied. variability in both the number of items and the time to store them, and is flexible enough to represent the complex empirical distributions reported in the literature (e.g., Erland et al., 2024). As a special case, the constant luggage-handling time used in Ferrari (2005) can be modeled by setting 𝑲 to a single value 𝑘 and 𝜎 𝑘 = 0.
+
+4.2.3 Seat Interferences 
+
+Seat taking occurs after the luggage storing process. Seat interference refers to the situation where, upon arrival at the designated row, an incoming passenger is blocked from reaching her designated seat by other passengers already seated in the aisle and middle seats of the row. This results in an extended aisle blockage. To account for seat interference, we model the seating time as a function of the number of occupied seats between a passenger and her seat (Ferrari and Nagel, 2005): 
+
+𝑆 (𝑛 (𝑡 )) = (2𝑛 (𝑡 ) + 1) · 𝜉 , (5) where 𝑛 (𝑡 ) is the number of occupied seats between the aisle and the passenger’s designated seat at the moment 𝑡 when she reaches her row, evaluated independently for each passenger, and 𝜉 represents the basic time unit required for a single passenger movement. The term 2𝑛 (𝑡 ) accounts for the time needed for seated passengers to stand up and sit back, while the additional time unit (+1) represents the fixed time for the incoming passenger to move to her seat. Fig. 4 illustrates two possible scenarios of determining the 𝑛 (𝑡 ).
+
+4.2.4 Boarding Process of Double-Aisle Layouts 
+
+The presence of two aisles divides the cabin into three sections: left, middle, and right; see again Fig. 2. Passengers with seats in the left section use aisle-1, while those with seats in the right section use aisle-2. The middle section requires a more nuanced approach depending on its seat layout. In layouts with four columns in the middle section, we assume that passengers seated in the two columns on the left will use aisle-1 for boarding, while those in the two right columns will use aisle-2. For middle sections with three columns, we make the following assumption for simplicity of simulation (see Fig. 2). Passengers seated in the leftmost column use aisle-1, and those in the rightmost column use aisle-2. For the central column, we alternate the aisle usage based on row numbers: passengers in odd-numbered rows use aisle-1, while those in even-numbered rows use aisle-2. This alternating pattern provides a balanced and tractable approximation for distributing the central-column passenger flow between the two aisles. In reality, passengers might choose either aisle 16 based on various factors such as personal preference, perceived congestion, or airline instructions. While it is challenging to capture all these nuances, our alternating approach provides a balanced and tractable way to simulate passenger flows in these layouts. 2
+
+4.3 Simulation 
+
+We developed a parsimonious, discrete-time simulation program in-house using Python. It encap-sulates the dynamics of passenger movements, luggage handling, and aisle and seat interferences described in the previous sections. All simulations were executed on a Mac Studio equipped with an M3 Ultra processor and 512 GB memory. The average runtime for one boarding simulation was approximately 0.1 seconds. 
+
+# 5 Static Boarding Policies 
+
+This section presents three static boarding policies from the literature: back-to-front, modified-Steffen, and alternating-block. Each follows a fixed rule that maps a passenger’s seat location to a boarding group, without observing the check-in history or checked-in assignment state. All three allow travel companions with adjacent seats to board together. 
+
+5.1 Back-to-Front Policy 
+
+The back-to-front policy categorizes passengers into 𝑁 groups of consecutive rows. The group com-bination is defined by an array [𝑚 1 , 𝑚 2 , . . . , 𝑚 𝑁 ], where the group number 𝑖 ∈ { 1, 2, . . . , 𝑁 } is indexed from back to front, and 𝑚 𝑖 is the number of rows assigned to group 𝑖 , with Í𝑁 𝑖 =1 𝑚 𝑖 = 𝑅 . Specifically, the boarding process occurs in stages: the first group consists of rows 𝑅, 𝑅 − 1, . . . , 𝑅 − 𝑚 1 + 1; the second group comprises rows 𝑅 − 𝑚 1 , 𝑅 − 𝑚 1 − 1, . . . , 𝑅 − 𝑚 1 − 𝑚 2 + 1; and so on. Within each group, passengers queue up in random order. Fig. 5 illustrates a back-to-front plan with three groups. 
+
+Figure 5: Back-to-front policy with 3 boarding groups: (a) Single-aisle layout; (b) Double-aisle layout. Many previous studies have suggested that back-to-front boarding with multiple groups is less effective than random boarding (Ferrari, 2005; Audenaert et al., 2009; Bachmat et al., 2009; Milne and Kelly, 2014; Jafer and Mi, 2017; Delcea et al., 2018). However, these studies generally assumed equal group sizes (i.e., 𝑚 1 = 𝑚 2 = . . . = 𝑚 𝑁 ). The elegant analytical model presented by Bachmat et al. (2013) was the first to challenge this assumption, showing that unequal group sizes can make back-to-front outperform random boarding. However, their model did not account for seat interferences 
+
+> 2We have conducted numerical experiments in which the passenger’s aisle choice of the central column is randomized, and found that the findings presented in this paper are not affected.
+
+17 or model double-aisle layouts precisely. Therefore, the exact performance of optimized back-to-front policies against other prevailing companion-compatible policies, especially under double-aisle layouts, remains an open question. 
+
+5.2 Modified-Steffen Policy 
+
+The modified-Steffen policy uses four boarding groups, as illustrated by Fig. 6. The original modified-Steffen rule was developed for single-aisle airplanes (Steffen, 2008). We extend it to double-aisle layouts as follows. Recall from Section 4 that a section denotes the seats on one side of an aisle, so a single-aisle cabin has two sections and a double-aisle cabin has three (left, middle, and right). Within each section, the groups occupy alternating rows, so adjacent rows belong to different groups; on any given row, seats in adjacent sections also belong to different groups. Boarding proceeds in the order of groups 1, 2, 3, and 4, with random passenger queueing within each group. 
+
+Figure 6: Modified-Steffen policy with 4 boarding groups: (a) Single-aisle layout; (b) Double-aisle layout. 
+
+5.3 Alternating-Block Policy 
+
+The alternating-block policy segments the airplane into row-based blocks, each a set of consecutive rows. It boards these blocks in an alternating rather than sequential order (see Fig. 7). Alternating-block boarding in Van Landeghem and Beuselinck (2002) can be implemented with different block sequences and numbers of blocks. We fix a four-block alternating order and optimize only the block sizes. This keeps the benchmark comparable to the four-group modified-Steffen policy while limiting operational complexity for airport staff. Group-1 passengers are assigned to the rearmost block, group-2 passengers to the third block from the rear, group-3 passengers to the second block from the rear, and group-4 passengers to the frontmost block. We index each block by the group assigned to it, so block 𝑖 contains group 𝑖 and comprises 𝑛 𝑖 rows, 𝑖 ∈ { 1, 2, 3, 4}.This design intends to reduce the blockage between consecutive boarding groups, but it brings two problems in practice. First, a later group can be held up by the group just ahead of it in the boarding order. In the second phase, group-3 passengers sit behind group 2 and must walk through block 2 to reach their own. But group 2 might still be stowing luggage and taking seats in block 2 when group 3 is boarding. Second, a large leading group spills into the blocks ahead of it. A large group 1, for instance, may reach forward through block 3 into block 2 and interfere with group 2’s boarding. Both effects undermine the parallel boarding the design assumes. 18 Figure 7: Alternating-block policy with 4 boarding groups. (a) Single-aisle layout; (b) Double-aisle layout. 
+
+# 6 Dynamic Boarding Policy via Deep Reinforcement Learning 
+
+We solve the MDP in Section 3.2 with PPO (Schulman et al., 2017) under the actor-critic framework. The actor outputs a probability distribution over boarding groups for each arriving passenger; the critic estimates the state-value function and provides the advantage baseline for policy updates. Section 6.1 presents the state embedding, Section 6.2 defines the actor and critic networks, and Section 6.3 details the training procedure. 
+
+6.1 State Embedding 
+
+The state 𝑠 𝑗 = (𝑥 𝑗 , 𝑦 𝑗 , 𝑧 𝑗 ) defined in Section 3.2.1 has three components that capture different aspects of the assignment problem: the cabin-wide checked-in assignment pattern ( 𝑥 𝑗 ), the current passenger’s characteristics ( 𝑦 𝑗 ), and the aggregate group counts ( 𝑧 𝑗 ). We first embed each component through a dedicated neural network module and then concatenate the results into a unified state representation that serves as input to both the actor and critic networks in Section 6.2. 
+
+6.1.1 Embedding of Checked-In Passenger States 
+
+The checked-in passenger state 𝑥 𝑗 ∈ R𝑅 ×𝐶 ×𝐷 is passed through three 2D convolutional layers with activation function 𝜙 : Conv2D 1 with 𝐹 1 filters, Conv2D 2 with 𝐹 2 filters, and Conv2D 3 with 𝐹 3 filters, all using 3 × 3 kernels and padding = 1:
+
+ℎ1 = 𝜙 (Conv2D 1(𝑥 𝑗 )) , ℎ2 = 𝜙 (Conv2D 2(ℎ1)) , ℎ3 = 𝜙 (Conv2D 3(ℎ2)) , (6) where ℎ1 ∈ R𝑅 ×𝐶 ×𝐹 1 , ℎ2 ∈ R𝑅 ×𝐶 ×𝐹 2 , and ℎ3 ∈ R𝑅 ×𝐶 ×𝐹 3 .To reduce spatial dimensions and capture global features, we then apply Global Average Pooling (GAP). The GAP operation computes the average of each feature map: 
+
+𝑔 𝑖 = 1
+
+𝑅 · 𝐶 
+
+> 𝑅
+
+Õ
+
+> 𝑘 =1
+> 𝐶
+
+Õ
+
+> 𝑙 =1
+
+[ℎ3]𝑘,𝑙,𝑖 , (7) where 𝑔 𝑖 is the 𝑖 -th element of the output vector 𝑔 ∈ R𝐹 3 and [ℎ3]𝑘,𝑙,𝑖 represents the element at position 
+
+(𝑘, 𝑙, 𝑖 ) in the tensor ℎ3. The complete vector output by the GAP operation can be written as: 
+
+𝑔 =
+
+"
+
+1
+
+𝑅 · 𝐶 
+
+> 𝑅
+
+Õ
+
+> 𝑘 =1
+> 𝐶
+
+Õ
+
+> 𝑙 =1
+
+[ℎ3]𝑘,𝑙, 1 , . . . , 1
+
+𝑅 · 𝐶 
+
+> 𝑅
+
+Õ
+
+> 𝑘 =1
+> 𝐶
+
+Õ
+
+> 𝑙 =1
+
+[ℎ3]𝑘,𝑙,𝐹 3
+
+#
+
+. (8) Finally, a dense (i.e., fully connected) layer reduces the pooled features to a 𝐺 𝑥 -dimensional vector: 
+
+𝑒 𝑥 = 𝜙 (𝑊 𝑥 · 𝑔 + 𝑏 𝑥 ), (9) 19 where 𝑊 𝑥 ∈ R𝐺 𝑥 ×𝐹 3 and 𝑏 𝑥 ∈ R𝐺 𝑥 are the weight matrix and bias vector of the dense layer, respectively, and 𝑒 𝑥 ∈ R𝐺 𝑥 is the embedded representation of 𝑥 𝑗 .
+
+6.1.2 Embedding of Current Passenger State 
+
+The current passenger state 𝑦 𝑗 ∈ R7 passes through a single dense layer: 
+
+𝑒 𝑦 = 𝜙 (𝑊 𝑦 · 𝑦 𝑗 + 𝑏 𝑦 ), (10) where 𝑊 𝑦 ∈ R𝐺 𝑦 ×7 and 𝑏 𝑦 ∈ R𝐺 𝑦 are the weight matrix and bias vector respectively, and 𝑒 𝑦 ∈ R𝐺 𝑦 is the resulting 𝐺 𝑦 -dimensional embedding of the passenger’s characteristics. 
+
+6.1.3 Embedding of Global State 
+
+The global state 𝑧 𝑗 ∈ R𝑁 +1 is embedded using another single dense layer: 
+
+𝑒 𝑧 = 𝜙 (𝑊 𝑧 · 𝑧 𝑗 + 𝑏 𝑧 ), (11) where 𝑊 𝑧 ∈ R𝐺 𝑧 ×( 𝑁 +1) and 𝑏 𝑧 ∈ R𝐺 𝑧 are the weight matrix and bias vector respectively, and 𝑒 𝑧 ∈ R𝐺 𝑧 
+
+is the resulting 𝐺 𝑧 -dimensional embedding of the global state. 
+
+6.1.4 Final State Embedding 
+
+The embeddings from the above three components (Sections 6.1.1-6.1.3) are concatenated and fed into a dense layer to create the final state representation with dimension 𝐻 :
+
+ℎ𝑗 = 𝜙 ( ¯ 𝑊 · ¯ 𝑒 + ¯𝑏 ), (12) where ¯𝑒 = [𝑒 𝑥 ; 𝑒 𝑦 ; 𝑒 𝑧 ] ∈ R𝐺 𝑥 +𝐺 𝑦 +𝐺 𝑧 , ¯𝑊 ∈ R𝐻 ×( 𝐺 𝑥 +𝐺 𝑦 +𝐺 𝑧 ), ¯𝑏 ∈ R𝐻 , and ℎ𝑗 ∈ R𝐻 .In summary, we can express the entire embedding process Ξ(·) symbolically as: 
+
+ℎ𝑗 = Ξ  𝑠 𝑗  , where 𝑠 𝑗 ≡ ( 𝑥 𝑗 ∈ R𝑅 ×𝐶 ×( 𝑁 +5) , 𝑦 𝑗 ∈ R7 , 𝑧 𝑗 ∈ R𝑁 +1), and ℎ𝑗 ∈ R𝐻 . (13) 
+
+6.2 Actor and Critic Networks 
+
+Both the actor and the critic use the embedding architecture from Section 6.1, but each maintains its own copy of the parameters, producing ℎ𝑗  
+
+> 𝜃
+
+= Ξ 𝜃 (𝑠 𝑗 ) and ℎ𝑗  
+
+> 𝜔
+
+= Ξ 𝜔 (𝑠 𝑗 ) respectively. The actor’s policy function 𝜋 𝜃 , parameterized by 𝜃 , receives the state observation 𝑠 𝑗 and produces the probability of selecting action 𝑎 𝑗 . The actor network begins with the aforementioned embeddings and processes them as follows: 
+
+𝜋 𝜃 (𝑎 𝑗 |𝑠 𝑗 ) =
+
+h
+
+Softmax 
+
+
+
+𝑊 actor · ℎ𝑗  
+
+> 𝜃
+
++ 𝑏 actor 
+
+i   
+
+> 𝑎 𝑗
+
+, 𝑎 𝑗 ∈ { 1, 2, . . . , 𝑁 }, (14) where 𝑊 actor ∈ R𝑁 ×𝐻 and 𝑏 actor ∈ R𝑁 are the weight matrix and bias vector of the dense layer, respectively. A softmax activation is applied to output a probability distribution over the boarding groups. Note that 𝜃 also includes the parameters used for state embedding. The critic reduces the variance of policy-gradient estimates by providing a state-dependent base-line. It learns a state-value function 𝑉 𝜔 , parameterized by 𝜔 , which takes the state observation 𝑠 𝑗 as input and outputs an estimate 𝑉 𝜔 (𝑠 𝑗 ):
+
+𝑉 𝜔 (𝑠 𝑗 ) = 𝑊 critic · ℎ𝑗  
+
+> 𝜔
+
++ 𝑏 critic , (15) where 𝑊 critic ∈ R1×𝐻 and 𝑏 critic ∈ R1 are the weight matrix and bias vector, respectively. 20 6.3 Training Algorithm 
+
+The training procedure collects complete check-in trajectories and updates the actor and critic using PPO. For episode 𝑏 , let 𝜏 𝑏 = {( 𝑠 𝑗 𝑏 , 𝑎 𝑗 𝑏 )} |𝐽 | 
+
+> 𝑗 =1
+
+denote the sequence of assignment decisions produced by the current policy. After all passengers have received group assignments, the boarding simulation is run once to obtain the terminal reward 𝑟 |𝐽 | defined in Eq. (2). Since intermediate rewards are zero, every decision in the episode shares the same return 𝐺 𝑏 = 𝑟 |𝐽 | 
+
+> 𝑏
+
+.Let 𝜃 old denote the actor parameters that generated the collected trajectories. For each decision 
+
+(𝑠 𝑗 𝑏 , 𝑎 𝑗 𝑏 ) in episode 𝑏 , PPO uses the probability ratio: 
+
+𝜌 𝑗 𝑏 (𝜃 ) = 𝜋 𝜃 (𝑎 𝑗 𝑏 |𝑠 𝑗 𝑏 )
+
+𝜋 𝜃 old (𝑎 𝑗 𝑏 |𝑠 𝑗 𝑏 )
+
+. (16) The advantage estimate is computed from the return and the critic baseline: 
+
+𝐴 𝑗 𝑏 = 𝐺 𝑏 − 𝑉 𝜔 (𝑠 𝑗 𝑏 ). (17) The actor is trained with the clipped PPO surrogate objective: 
+
+𝐿 clip (𝜃 ) = 1
+
+|𝒟| 
+
+Õ
+
+> (𝑏,𝑗 )∈𝒟
+
+min 
+
+
+
+𝜌 𝑗 𝑏 (𝜃 )𝐴 𝑗 𝑏 , clip 
+
+
+
+𝜌 𝑗 𝑏 (𝜃 ), 1 − 𝜖 , 1 + 𝜖 
+
+
+
+𝐴 𝑗 𝑏 
+
+
+
+, (18) where 𝒟 is a mini-batch of assignment decisions and 𝜖 is the clipping parameter. The clipped ratio limits the size of each policy update, which is important in this problem because each trajectory contains many assignment decisions but only one terminal simulation outcome. An entropy bonus 
+
+𝜂 ℋ ( 𝜋 𝜃 ) is added to the actor objective to encourage exploration over boarding groups, where 𝜂 is the entropy coefficient. The critic is trained to fit the terminal return: 
+
+𝐿 𝑉 (𝜔 ) = 1
+
+|𝒟| 
+
+Õ
+
+> (𝑏,𝑗 )∈𝒟
+
+
+
+𝐺 𝑏 − 𝑉 𝜔 (𝑠 𝑗 𝑏 )
+
+2
+
+. (19) In each training round, the collected trajectories are reused for multiple PPO epochs with shuffled mini-batches. The formulas above use raw episode returns for clarity; in the implementation, returns are normalized across each rollout batch before computing advantages and critic targets, and gradient clipping is applied when updating both networks. Algorithm 1 summarizes the PPO training procedure used to optimize the dynamic boarding policy. 21 Algorithm 1: PPO Training for Dynamic Boarding Policy  
+
+> 1
+
+Initialize actor parameters 𝜃 and critic parameters 𝜔 ; 
+
+> 2
+
+Set PPO clipping parameter 𝜖 , entropy coefficient 𝜂 , and number of PPO epochs 𝐾 PPO ; 
+
+> 3
+
+while not converged do  
+
+> 4
+
+Collect an empty rollout buffer ℬ; 
+
+> 5
+
+for 𝑏 = 1 to 𝐵 do  
+
+> 6
+
+Initialize an empty trajectory 𝜏 𝑏 ; 
+
+> 7
+
+for 𝑗 = 1 to |𝐽 | do  
+
+> 8
+
+Observe state 𝑠 𝑗 𝑏 = (𝑥 𝑗 𝑏 , 𝑦 𝑗 𝑏 , 𝑧 𝑗 𝑏 ); 
+
+> 9
+
+Sample action 𝑎 𝑗 𝑏 ∼ 𝜋 𝜃 (·| 𝑠 𝑗 𝑏 ); 
+
+> 10
+
+Store (𝑠 𝑗 𝑏 , 𝑎 𝑗 𝑏 , log 𝜋 𝜃 (𝑎 𝑗 𝑏 |𝑠 𝑗 𝑏 )) in 𝜏 𝑏 ; 
+
+> 11
+
+Execute 𝑎 𝑗 𝑏 and observe the next state 𝑠 𝑗 +1 
+
+> 𝑏
+
+; 
+
+> 12
+
+end  
+
+> 13
+
+Simulate the boarding process and compute the normalized terminal reward 𝑟 |𝐽 | 
+
+> 𝑏
+
+via the reward equation above;  
+
+> 14
+
+Set the episode return 𝐺 𝑏 = 𝑟 |𝐽 | 
+
+> 𝑏
+
+and attach 𝐺 𝑏 to all decisions in 𝜏 𝑏 ; 
+
+> 15
+
+Add 𝜏 𝑏 to ℬ; 
+
+> 16
+
+end  
+
+> 17
+
+Normalize returns in ℬ: b𝐺 𝑏 ← ( 𝐺 𝑏 − 𝜇 𝐺 )/ 𝜎 𝐺 , where 𝜇 𝐺 and 𝜎 𝐺 are the mean and standard deviation of {𝐺 𝑏 } in ℬ; 
+
+> 18
+
+Compute old log-probabilities, critic values, and advantages 𝐴 𝑗 𝑏 = b𝐺 𝑏 − 𝑉 𝜔 (𝑠 𝑗 𝑏 ) for all decisions in ℬ; 
+
+> 19
+
+for 𝑘 = 1 to 𝐾 PPO do  
+
+> 20
+
+Shuffle ℬ and split it into mini-batches 𝒟 ; 
+
+> 21
+
+for each mini-batch 𝒟 do  
+
+> 22
+
+Compute probability ratios 𝜌 𝑗 𝑏 (𝜃 ) for all (𝑏, 𝑗 ) ∈ 𝒟 ; 
+
+> 23
+
+Update 𝜃 by maximizing 𝐿 clip (𝜃 ) + 𝜂 ℋ ( 𝜋 𝜃 ); 
+
+> 24
+
+Update 𝜔 by minimizing 𝐿 𝑉 (𝜔 ); 
+
+> 25
+
+end  
+
+> 26
+
+end  
+
+> 27
+
+end 
+
+# 7 Numerical Experiments 
+
+This section evaluates the proposed dynamic RL policy against the static policies. Section 7.1 specifies the evaluation environment. Section 7.2 benchmarks the three static policies from Section 5 across all six airplane layouts and identifies the strongest static competitor. Section 7.3 compares the RL policy against that strongest competitor and two luggage-ordering benchmarks (slow-first and fast-first) through a Pareto analysis of total boarding time and average individual boarding time. Section 7.4 tests whether the learned policy generalizes beyond the training setting. Section 7.5 confirms that the RL policy remains the leading policy across all six cabin layouts. 22 7.1 Experimental Setup 
+
+Travel-companion groups follow (𝑞 1 , 𝑞 2 , 𝑞 3) = (0.55 , 0.38 , 0.07 ), calibrated from the empirical boarding data in Steiner and Philipp (2009). For carry-on luggage, we use a three-bin parameter set from the same source: 𝑘 ∈ { 0, 1, 2} with probabilities 𝑝 0 = 0.45 , 𝑝 1 = 0.40 , and 𝑝 2 = 0.15 ; mean handling times 
+
+𝜇 0 = 0, 𝜇 1 = 12 .1, and 𝜇 2 = 25 .3 sec; and standard deviations 𝜎 0 = 0, 𝜎 1 = 12 .4, and 𝜎 2 = 15 .4 sec. 3
+
+The seat-interference parameter is 𝜉 = 3.6 sec. We report total boarding time and average individual boarding time as the two performance metrics, each as the mean over 1000 simulation replications. All policies are evaluated under common random seeds to ensure a fair comparison across policies. Regarding cabin layouts, the static policy benchmarks in Section 7.2 cover all six cabin layouts in Section 4.1. The RL experiments in Sections 7.3 and 7.4 use the (3 + 3) × 32 single-aisle layout at full passenger load; Section 7.5 then extends the RL evaluation to all six layouts. 
+
+7.2 Static Policy Benchmarks 
+
+Section 7.2.1 first studies the two-group back-to-front policy on two representative layouts, and Section 7.2.2 then compares all three static policies across all six layouts. All scenarios assume full passenger load, consistent with previous studies (Van Landeghem and Beuselinck, 2002; Steffen, 2008; Erland et al., 2024). 
+
+7.2.1 Benchmarking the Two-Group Back-to-Front Policy 
+
+On the (3 + 3) × 32 (single-aisle) and (2 + 4 + 2) × 32 (double-aisle) layouts, we enumerate all possible row splits [𝑚 1 , 32 − 𝑚 1] and report total boarding time and average individual boarding time in Fig. 8. In each panel, the bars give the mean boarding time over the 1000 replications for each split candidate, and the dashed line marks the random boarding baseline. Error bars and the shaded band around the baseline show 95% confidence intervals for the mean. First, we look at the total boarding time. Note that in both layouts, equal or near-equal splits produce particularly high total boarding time (Fig. 8a and c). For the single-aisle case, these splits even exceed the random baseline, consistent with several previous studies that tested only equal splits (Ferrari, 2005; Bachmat et al., 2009; Milne and Kelly, 2014). The poor performance can be understood as follows. In the first stage, about half of all passengers head for the rear half of the cabin, and all luggage stowing and seat taking is confined to that half while the front half of the aisle carries only passengers walking through. In the second stage, the majority of the first group has already been seated and the second group occupies the front half, while the rear half of the aisle is now empty. Each stage therefore uses only about half of the cabin for parallel luggage stowing and seat taking. Random boarding avoids this problem by spreading passengers across the full cabin throughout the process. However, highly unequal splits reverse the picture. The smaller group, whether it is the first or second one, has so few passengers and occupies so few rows that its members rarely interfere with the large group’s boarding. This facilitates parallel boarding of the two groups. The total boarding time is therefore dominated by the large group, whose passengers are randomly ordered and spread across nearly the full cabin. The process is effectively a random boarding over a slightly smaller cabin with fewer rows and fewer passengers, which naturally takes less time. This finding is consistent with Bachmat et al. (2013), who proved that two-group back-to-front outperforms random boarding 
+
+> 3The original three-piece luggage category is merged into the two-piece category.
+
+23 only when the group sizes are sufficiently unequal. In the simulated double-aisle layout, back-to-front outperforms random boarding across all row splits, including equal ones. The two aisles split the passenger flow, so each aisle serves fewer seats per row than the single aisle does. This lower congestion may let rear-bound passengers reach their rows faster and may shorten the unproductive occupation of the front aisle. Moreover, when one aisle is blocked by a passenger stowing luggage, the entry queue may continue feeding passengers into the other aisle, so the entry throughput is not completely interrupted. For total boarding time, the double-aisle layout favors a large first group with a small second group (the large-first split), unlike the single-aisle layout, where the two extreme splits perform similarly and neither holds a clear advantage. To see why, it helps to view the total boarding time as the sum of two parts. The first part, 𝐸 total , is the time needed for all passengers to enter the cabin; during this phase passengers are still moving along the aisle, so it is governed by how quickly the aisle clears, because a passenger can enter or move forward only when the space ahead is free. The second part, 
+
+𝐷 last , is the extra time that the group boarding last (i.e., the front group) needs, after entering, to reach its seats and sit down; this is a closing phase that no later boarding can overlap with. The two parts respond to the row split in opposite directions. The total boarding time always includes the full seating time of the last group, so a small last group makes 𝐷 last short: the large-first split (the large group at the back, boarding first) places the small group last and keeps this closing phase short, whereas the small-first split places the large group last and makes it long. At the same time, 𝐸 total 
+
+depends on how long passengers stay in the aisle before they sit. Under the large-first split the large 1400                        
+
+> 1450
+> 1500
+> 1550
+> 650
+> 675
+> 700
+> 725
+> 750
+> 775
+> 14812 16 20 24 28 31
+> First BF group size m1(rows)
+> 1080
+> 1100
+> 1120
+> 1140
+> 1160
+> 14812 16 20 24 28 31
+> First BF group size m1(rows)
+> 530
+> 540
+> 550
+> 560
+> 570
+> 580
+> Total boarding time (sec)
+> Average individual boarding time (sec)
+> (a) (b)
+> (c) (d)
+> BF split candidates Random
+
+Figure 8: Two-group back-to-front row splits compared with random boarding: (a) total boarding time for the (3 + 3) × 32 layout; (b) average individual boarding time for the (3 + 3) × 32 layout; (c) total boarding time for the (2 + 4 + 2) × 32 layout; (d) average individual boarding time for the 
+
+(2 + 4 + 2) × 32 layout. 24 group occupies the back rows, so most passengers walk a long way along a crowded aisle and leave it slowly, making 𝐸 total large; under the small-first split the large group occupies the front rows, so most passengers walk only a short way and leave the aisle quickly, making 𝐸 total small. The large-first split therefore shortens the closing phase but lengthens the entry phase, and the net result depends on how costly it is to send the large group to the back. In the single-aisle layout this cost is high, because the aisle is crowded and the walking distance is long; the longer entry phase of the large-first split then roughly cancels its shorter closing phase, and the two extreme splits give similar total boarding times, with no clear advantage. In the simulated double-aisle layout, the two aisles ease congestion, so the entry phase may grow only slightly under the large-first split; the shorter closing phase can then dominate, and the large-first split achieves the lower total boarding time. For average individual boarding time, both layouts favor the small-first split, and the comparison is simpler than for total boarding time, because here the relevant effects reinforce each other instead of competing. The average is governed by the large group, since it contains most of the passengers. Two things determine when a passenger finally sits: the time spent waiting to enter the cabin, and the time spent reaching the assigned row and sitting down after entering. Placing the large group at the front shortens both. Its members walk only a short distance and sit soon after entering, which lowers their own boarding times; and because they leave the aisle quickly, the cabin fills faster, so passengers in general also enter and sit sooner. Both effects therefore favor placing the large group at the front, that is, the small-first split. There is no opposing effect here, because the average reflects the experience of a typical passenger rather than that of the last passenger to sit; the closing phase that matters for total boarding time does not affect the average in the same way. Consequently, the small-first split gives the lower average individual boarding time in both layouts. The size of this advantage follows the same congestion difference as before. In the single-aisle layout, sending the large group to the back is very costly, because the aisle is crowded and the walking distance is long, so avoiding it gives the small-first split a clear advantage. In the double-aisle layout the back rows are easier to reach, so the position of the large group matters less, and the advantage of the small-first split, although still present, is smaller. The total-time and average-individual-time panels in Fig. 8 therefore convey a consistent message: two-group back-to-front is effective only when the row split is chosen carefully, and the split that minimizes total boarding time does not necessarily minimize average individual boarding time. (Appendix B extends this analysis to three-group splits and shows that adding a third group can further reduce total boarding time when group sizes are chosen appropriately.) This observation motivates the two-objective evaluation in Section 7.3. 
+
+7.2.2 Comparison Across Cabin Layouts 
+
+We now compare the three static policies from Section 5 across the six airplane layouts in Section 4.1. Fig. 9 reports each policy’s total boarding time and average individual boarding time relative to random boarding: back-to-front with 𝑁 = 2, 3, and 4, modified-Steffen, and alternating-block. Values below one indicate improvement over random boarding. For back-to-front and alternating-block, we enumerate all feasible group size combinations and keep the one that minimizes total boarding time. Across all six layouts and for every 𝑁 , the optimal back-to-front policy beats random boarding on total boarding time; adding a third group lowers it further (Appendix B), while including the fourth improves little. Back-to-front also beats random on average individual boarding time everywhere, except that the four-group policy is marginally worse than random on the small (2 + 2) × 11 cabin. 25 0.90         
+
+> 0.95
+> 1.00
+> 1.05
+> 1.10
+> 1.15
+> Relative total boarding time
+> (2 + 2) × 11 (3 + 3) × 32 (2 + 3 + 2) × 29 (2 + 4 + 2) × 32 (3 + 3 + 3) × 28 (3 + 4 + 3) × 36
+> Cabin layout
+> 0.90
+> 0.95
+> 1.00
+> 1.05
+> 1.10
+> 1.15
+> Relative average individual boarding time
+> (a)
+> (b)
+> Random
+> Optimal Back-to-Front ( N= 2 )
+> Optimal Back-to-Front ( N= 3 )
+> Optimal Back-to-Front ( N= 4 )
+> Modified-Steffen
+> Optimal Alternating-Block
+
+Figure 9: Companion-compatible static boarding policies compared across cabin layouts: (a) relative total boarding time; (b) relative average individual boarding time. In the simulated layouts, the improvement is larger in double-aisle cabins: four-group back-to-front cuts total boarding time by 7.0–10.1% and average individual boarding time by 6.7–9.7% relative to random boarding. Note that earlier works found no benefit from additional groups and did not model double-aisle cabins (e.g., Bachmat et al., 2013). The modified-Steffen policy offers only marginal total-time improvement. In single-aisle layouts, it reduces total boarding time by less than 2%, compared to the 6.2% reported by Steffen (2008). The difference reflects our more detailed simulation that additionally accounts for seat interference, which also blocks the aisle and shrinks the portion of aisle blockage that spatial separation can reduce. In the (2 + 3 + 2) and (3 + 3 + 3) double-aisle layouts, modified-Steffen even increases total boarding time relative to random boarding. On average individual boarding time, it is worse than random in every layout. The alternating-block policy consistently underperforms random boarding across all layouts on both metrics, even after selecting the best group sizes. The two mechanisms identified in Section 5, later groups passing through unsettled blocks and large leading groups spilling forward, introduce additional aisle interference. This cost outweighs the spatial separation that the alternating design attempts to create between simultaneously boarding groups. Among the static policies tested, the optimal back-to-front policy is the only one that consistently outperforms random boarding across all layouts and both metrics. Appendix B further shows that 26 the relative ordering of these policies remains stable as the number of rows varies, and that the back-to-front advantage grows with higher row counts. 
+
+7.3 Evaluations of Dynamic RL Policy 
+
+Bachmat et al. (2023) showed that under slow-first and fast-first luggage orderings, total boarding time and average individual boarding time can move in opposite directions. We therefore compare the RL policy against the optimal back-to-front policy from Section 7.2, random boarding as the baseline, and two luggage-ordering benchmarks (slow-first and fast-first), on both metrics under the 
+
+(3 + 3) × 32 layout with the settings in Section 7.1. We exclude the modified-Steffen and alternating-block policies, both of which perform generally worse than the optimal back-to-front in Section 7.2. Column-based policies such as outside-in and reverse-pyramid are excluded by construction, since they split companions across groups. Fig. 10 presents the Pareto tradeoff between total and average individual boarding time; the policy settings that require further specification are as follows: 
+
+• RL policy with only seat observation. The state observation includes seat information but not luggage quantities. Both 𝑁 = 2 and 𝑁 = 4 variants are trained for 6000 episodes. The normalized reward in Eq. (2) is used, and 𝜆 is swept from 0 to 1 in increments of 0.1 for each variant. We refer to these non-dominated evaluation points as an approximate Pareto frontier. Detailed network architecture and PPO hyperparameters are reported in Appendix C. 
+
+• RL policy with seat and luggage observation. Same as above, except that the observation also includes declared luggage quantities. Full declaration is assumed here; Section 7.4 relaxes this assumption. 
+
+• Back-to-front. For both 𝑁 = 2 and 𝑁 = 4, all feasible row splits are enumerated. In each case, a single split dominates all others on both metrics, so the back-to-front frontier reduces to one point per 𝑁 .
+
+• Slow-first and fast-first. Following Bachmat et al. (2023) and Erland et al. (2024), slow-first boards companion groups with more declared luggage first, since more luggage implies longer stow time; fast-first uses the reverse order. Fig. 10 shows that the RL policies are generally Pareto-superior to the benchmarks; the shaded region marks outcomes that Pareto-dominate random boarding. The RL frontiers occupy the lower-left region, and contain both the lowest total boarding time and the lowest average individual boarding time among all compared policies. Quantitatively, relative to the four-group optimal back-to-front benchmark in Fig. 10, the two ends of the four-group RL frontier cut total boarding time by 9.8% and average individual boarding time by 22.8%, respectively. Two factors drive this advantage. First, the RL policy uses seat column information and still keeps companions in the same group. Static policies that preserve companion groups can only group by row; those that do use column information necessarily separate companions. Second, the policy is trained over many stochastic episodes, so it implicitly accounts for the randomness in passenger arrival order and luggage quantities. The attainable performance region therefore extends well beyond what companion-compatible static rules can reach. The slow-first result is consistent with the mechanism discussed by Bachmat et al. (2023): prior-itizing passengers with longer luggage-handling times can slightly reduce total boarding time, but it increases average individual boarding time because these passengers enter the cabin earlier and remain there longer. In our simulation, however, the total-time improvement from slow-first is small, and the policy does not outperform the optimal back-to-front benchmarks. This suggests that lug-gage ordering alone is less effective at reducing total boarding time than row-based grouping with optimized group sizes. 27 500 550 600 650 700 750 800       
+
+> Average individual boarding time (sec)
+> 1250
+> 1300
+> 1350
+> 1400
+> 1450
+> Total boarding time (sec)
+> RL, seat observation only ( N= 2 )
+> RL, seat observation only ( N= 4 )
+> RL, seat and luggage-quantity
+> observation ( N= 2 )
+> RL, seat and luggage-quantity
+> observation ( N= 4 )
+> Back-to-Front ( N= 2 )
+> Back-to-Front ( N= 4 )
+> Random
+> Slow-first
+> Fast-first
+
+Figure 10: Pareto tradeoff between total boarding time and average individual boarding time on the 
+
+(3 + 3) × 32 layout. The role of luggage information is more visible on average individual boarding time than on total boarding time. In Fig. 10, slow-first, fast-first, and the two RL variants (with and without luggage observation) are separated more along the horizontal axis than the vertical axis. This suggests that average individual boarding time is sensitive to where passengers with different luggage loads appear in the boarding sequence. Adding luggage observation to the RL state therefore substantially improves the average-individual-time side of the Pareto frontier. For 𝑁 = 4, the best average individual boarding time drops from 618.8 to 506.6 seconds (18.1% reduction), while the minimum total boarding time changes only from 1227.7 to 1224.4 seconds. 
+
+7.4 Robustness and Generalization 
+
+We next test whether the learned policy remains effective when operating conditions deviate from the training setting, without retraining. We evaluate the RL policy with 𝑁 = 2, seat and luggage observation, trained at 𝜆 = 0.2. This 𝜆 value sits near the minimum-total-time end of the frontier in Fig. 10 but already noticeably improves average individual boarding time. We compare it with random boarding and the optimal back-to-front policy with 𝑁 = 2 from Section 7.2. All three policies are fixed throughout; none is re-optimized for the changed conditions. We vary four aspects of the operating conditions: 
+
+• Passenger load factor. The load factor takes values 50% , 60% , 70% , 80% , 90% , and 100% .
+
+• Travel-companion distribution. We vary 𝑞 = (𝑞 1 , 𝑞 2 , 𝑞 3) across five settings with an increasing share of companion travelers: (0.75 , 0.20 , 0.05 ), (0.65 , 0.30 , 0.05 ), (0.55 , 0.38 , 0.07 ), (0.40 , 0.50 , 0.10 ), and 
+
+(0.30 , 0.50 , 0.20 ).
+
+• Luggage distribution. We test five cases with increasing luggage load, labeled Very light through Very heavy : 𝑝 = (0.65 , 0.30 , 0.05 ), (0.55 , 0.35 , 0.10 ), (0.45 , 0.40 , 0.15 ), (0.35 , 0.43 , 0.22 ), and (0.25 , 0.45 , 0.30 ).The nonzero luggage-handling times are scaled by 0.80 , 0.90 , 1.00 , 1.10 , and 1.20 accordingly. 28 50% 60% 70% 80% 90% 100%                 
+
+> Passenger load factor
+> 600
+> 800
+> 1000
+> 1200
+> 1400
+> 1600
+> (.75,.20,
+> .05)
+> (.65,.30,
+> .05)
+> (.55,.38,
+> .07)
+> (.40,.50,
+> .10)
+> (.30,.50,
+> .20)
+> q= ( q1,q2,q3)
+> 1200
+> 1400
+> 1600
+> Very light Light Base Heavy Very heavy
+> Luggage distribution
+> 750
+> 1000
+> 1250
+> 1500
+> 1750
+> 2000
+> 0% 25% 50% 75% 100%
+> Declared-luggage ratio
+> 1100
+> 1200
+> 1300
+> 1400
+> 1500
+> 1600
+> Total boarding time (sec)
+> (a) (b)
+> (c) (d)
+> RL policy (seat+luggage obs.) Optimal Back-to-Front ( N= 2 )Random
+
+Figure 11: Robustness of total boarding time under changed operating conditions on the (3 + 3) × 32 
+
+layout: (a) passenger load factor; (b) travel-companion distribution; (c) luggage distribution; (d) luggage declaration ratio. 
+
+• Luggage declaration ratio. The declaration ratio takes values 0% , 25% , 50% , 75% , and 100% .Figs. 11 and 12 report total boarding time and average individual boarding time, respectively, each computed from 1000 simulation runs per setting. In Figs. 11a and 12a, the RL policy produces the lowest boarding time at every tested load factor. The three policies are close at low load factors, where sparse cabins limit the room for improvement. As the load factor increases, congestion grows and the RL policy’s advantage widens, because denser cabins create more interference that the RL policy can mitigate. For the travel-companion distribution test (Figs. 11b and 12b), larger companion groups force more passengers into the same boarding group and reduce the degrees of freedom in assignment. Despite this constraint, the RL policy consistently achieves the lowest total boarding time and average individual boarding time across all five settings. The luggage distribution test (Figs. 11c and 12c) shows that heavier luggage loads raise both metrics for all policies, as expected from longer aisle-blocking times. The RL policy maintains the lowest total boarding time and average individual boarding time throughout. The luggage declaration ratio test (Figs. 11d and 12d) is the only panel where the three policies respond differently. The back-to-front and random policies are unaffected by the declaration ratio, as neither uses luggage information. At 0% declaration, the RL policy still beats both benchmarks on total boarding time using seat information alone, but its average individual boarding time is worse than the back-to-front benchmark. As more passengers declare their luggage, the RL policy improves 29 50% 60% 70% 80% 90% 100%                 
+
+> Passenger load factor
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> (.75,.20,
+> .05)
+> (.65,.30,
+> .05)
+> (.55,.38,
+> .07)
+> (.40,.50,
+> .10)
+> (.30,.50,
+> .20)
+> q= ( q1,q2,q3)
+> 500
+> 550
+> 600
+> 650
+> 700
+> 750
+> 800
+> 850
+> Very light Light Base Heavy Very heavy
+> Luggage distribution
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000
+> 1100
+> 0% 25% 50% 75% 100%
+> Declared-luggage ratio
+> 500
+> 550
+> 600
+> 650
+> 700
+> 750
+> 800
+> Average individual boarding time (sec)
+> (a) (b)
+> (c) (d)
+> RL policy (seat+luggage obs.) Optimal Back-to-Front ( N= 2 )Random
+
+Figure 12: Robustness of average individual boarding time under changed operating conditions on the (3 + 3) × 32 layout: (a) passenger load factor; (b) travel-companion distribution; (c) luggage distribution; (d) luggage declaration ratio. monotonically on both metrics, with larger gains on average individual boarding time than on total boarding time. This matches the Pareto analysis in Section 7.3: seat-based assignment drives the total-time improvement, while luggage information is what mainly reduces average individual boarding time. 
+
+7.5 RL Policy Evaluation Across Cabin Layouts 
+
+The RL experiments in Sections 7.3 and 7.4 use the (3 + 3) × 32 layout. To test whether the same approach stays effective on other cabin layouts, we repeat the RL experiment on all six layouts in Section 4.1: (2 + 2) × 11 , (3 + 3) × 32 , (2 + 3 + 2) × 29 , (2 + 4 + 2) × 32 , (3 + 3 + 3) × 28 , and (3 + 4 + 3) × 36 .For each layout we train a two-group RL policy with the same PPO hyperparameters, seat-plus-luggage observation, full luggage declaration, and objective weight 𝜆 = 0.2, then compare it with random boarding and the optimal two-group back-to-front benchmark for the same layout using 1000 simulation runs. Fig. 13 reports each policy’s total boarding time and average individual boarding time, in two panels, relative to random boarding within the same cabin layout. Across all six layouts, the three policies keep the same ranking as in Section 7.3: the RL policy leads, the optimal two-group back-to-front follows, and random boarding trails. Specifically, compared with the optimal two-group back-to-front policy, the RL policy further reduces total boarding time by 2.7–7.1% and average individual boarding time by 5.8–18.0%, or 10–99 seconds and 24–130 seconds in absolute terms. Section 7.2.2 already showed that the optimal two-group back-to-front policy beats both modified-Steffen and 30 (2 + 2)                       
+
+> ×11
+> (3 + 3)
+> ×32
+> (2 + 3 + 2)
+> ×29
+> (2 + 4 + 2)
+> ×32
+> (3 + 3 + 3)
+> ×28
+> (3 + 4 + 3)
+> ×36
+> 0.8
+> 0.9
+> 1.0
+> Relative time
+> (vs. Random)  3.7% 2.9%
+> 7.7% 6.9% 5.8% 5.5% 6.3%
+> 9.8% 11.1% 10.7% 10.4% 10.3%
+> (a)
+> (2 + 2)
+> ×11
+> (3 + 3)
+> ×32
+> (2 + 3 + 2)
+> ×29
+> (2 + 4 + 2)
+> ×32
+> (3 + 3 + 3)
+> ×28
+> (3 + 4 + 3)
+> ×36
+> 0.8
+> 0.9
+> 1.0
+> Relative time
+> (vs. Random)  6.8%
+> 4.8% 4.6% 4.9% 3.7% 3.6%
+> 18.6%
+> 10.3%
+> 16.4% 17.8%
+> 21.0% 20.2%
+> (b)
+> Random Optimal back-to-front with N= 2 RL with N= 2 (= 0.2 )
+
+Figure 13: RL policy evaluated across cabin layouts against random boarding and the optimal two-group back-to-front: (a) relative total boarding time; (b) relative average individual boarding time. alternating-block on both metrics in every layout, so the RL policy’s lead over back-to-front implies that it outperforms all three static policies across all six layouts. We extend the above analysis to 𝑁 = 4 and find that the ranking and general pattern between the RL and back-to-front policies hold across all six layouts; the results are omitted for brevity. 
+
+# 8 Conclusions 
+
+We consider a sequential boarding group assignment problem: passengers check in one at a time in no fixed order, and the airline must assign a group on arrival without seeing later passengers. In practice, airlines rely on fixed rules that map seat to a group. We formulate the assignment as an MDP for a commonplace setting where passengers are sorted into a few boarding groups and travel companions can board together, and solve it with a CNN-based RL policy trained by PPO. The policy exploits the seat column and optionally declared luggage quantities that companion-compatible static rules leave unused. To evaluate the policy, we develop a parsimonious simulation model calibrated from empirical boarding parameters that captures aisle interference, seat interference, and stochastic luggage handling. We then benchmark the learned policy against standard static policies across six representative single- and double-aisle economy-class layouts. The experiments yield four main findings. First, among the three static policies tested, back-to-front with optimal group sizes is the strongest: it dominates modified-Steffen and alternating-block on both total and average individual boarding time across all layouts, and adding a third group further lowers both metrics while a fourth adds little. In the simulated layouts, the reduction relative to random boarding is larger on double-aisle cabins, reaching 7.0–10.1% in total boarding time and 31 6.7–9.7% in average individual boarding time. Second, the dynamic RL policy forms a Pareto frontier that lies below the optimal back-to-front, slow-first, and fast-first benchmarks across the total and average individual boarding time tradeoff on the representative (3+3) × 32 layout. The four-group RL frontier improves on the four-group optimal back-to-front benchmark by up to 9.8% in total boarding time and up to 22.8% in average individual boarding time at the two ends of the frontier. Across all six cabin layouts tested, the same RL approach also leads both metrics, so the advantage is not specific to the representative layout. Third, declared luggage quantities mainly improve average individual boarding time, while the seat column drives most of the reduction in total boarding time. Fourth, the learned policy is robust and generalizable: across changes in load factor, travel-companion distribution, luggage distribution, and luggage declaration ratio, a single trained policy largely outperforms optimal back-to-front without retraining. Two recommendations follow for airline operations. Carriers that prefer a simple static rule should use back-to-front boarding with deliberately unequal group sizes: a two-group rule should use highly unequal groups, whereas a three-group rule should use small rear and front groups with a large middle group, especially for double-aisle aircraft in the tested simulation settings. Carriers that want the largest reductions in total boarding time or in average individual boarding time can embed the RL policy in the check-in process at counters or in mobile apps; the policy handles both solo travelers and companion groups, and asking passengers to declare luggage quantities at check-in yields a substantial additional gain in average individual boarding time. That said, our study has three limitations that suggest future work. First, the simulation simplifies the real boarding process in several ways. Actual boarding involves late arrivals (Skorupski and Wierzbińska, 2015), state-dependent luggage stow times that vary with bin space and aisle-seat occu-pancy (Kierzkowski and Kisiel, 2017), and delays at boarding-pass checks (Kierzkowski and Kisiel, 2017). Second, although the simulation’s operational parameters are calibrated from empirical data (Steiner and Philipp, 2009), the model’s outputs have not been validated against real boarding times. Future work could close this gap by aligning predicted total boarding times with field observations (Schultz, 2018a). Third, like most RL applications, our approach learns from simulation, because the trial-and-error exploration it needs is too costly to run in live airport operations. Future work could transfer simulation-trained policies to real environments or learn directly from historical boarding data without live experimentation. 
+
+# Acknowledgements 
+
+This work was supported by the National Natural Science Foundation of China (Project Nos. 72571220 and 72201214), the Research Grants Council of Hong Kong (Project No. 15237624) and the Sichuan Science and Technology Program (Project No. 2025NSFSC1978). We also thank Ms. Xiao Liang, a former undergraduate student at The Hong Kong Polytechnic University, whose Final Year Project work helped inspire this paper. 32 Appendix A Table of Notations 
+
+Table A.1: List of notations Notation Description 
+
+𝒜 Action space 
+
+𝑎 𝑗 Action (group assignment) for passenger 𝑗 𝐴 𝑗 𝑏 Advantage estimate for decision 𝑗 in episode 𝑏 
+
+𝛼 𝜃 Learning rate for updating actor parameters 
+
+𝛼 𝜔 Learning rate for updating critic parameters 
+
+𝐵 Number of episodes collected in one PPO rollout batch 
+
+𝐶 Number of seats per row (column number) 
+
+𝒟 Mini-batch of assignment decisions used in a PPO update 
+
+𝐷 Per-seat feature dimension ( 𝑁 + 5)
+
+Δ𝑡 Time step size for discrete simulation 
+
+𝑒 𝑥 Embedding of checked-in passenger states 
+
+𝑒 𝑦 Embedding of current passenger state 
+
+𝑒 𝑧 Embedding of global state 
+
+¯𝑒 Concatenated embedding vector [𝑒 𝑥 ; 𝑒 𝑦 ; 𝑒 𝑧 ]
+
+𝜖 PPO clipping parameter 
+
+𝜂 Entropy-bonus coefficient in PPO training 
+
+𝐹 𝑖 Number of filters in 𝑖 -th convolutional layer 
+
+𝐺 Episodic return 
+
+𝐺 𝑏 Realized return for episode 𝑏 
+
+b𝐺 𝑏 Normalized return for episode 𝑏 𝐺 𝑥 Dimension of checked-in state embedding 
+
+𝐺 𝑦 Dimension of current passenger state embedding 
+
+𝐺 𝑧 Dimension of global state embedding 
+
+𝐻 Dimension of final state representation 
+
+ℎ𝑗 Final state representation for passenger 𝑗 (subscripted ℎ𝑗 
+
+> 𝜃
+
+, ℎ𝑗  
+
+> 𝜔
+
+for actor and critic) 
+
+ℋ ( 𝜋 𝜃 ) Entropy of the policy distribution 
+
+𝐽 Set of arriving passengers 
+
+𝐾 PPO Number of PPO epochs per rollout batch 
+
+𝑲 Random variable representing number of luggage items per passenger 
+
+𝜆 Weight in the reward function for the normalized 𝑇 total and 𝑇 avg tradeoff 
+
+𝐿 Total luggage-handling time for a passenger 
+
+𝑀 Maximum companion group size 
+
+𝑚 𝑖 Number of rows assigned to group 𝑖 for back-to-front policy 
+
+𝜇 𝑘 Mean total luggage-handling time if a passenger has 𝑘 items 
+
+𝑁 Number of boarding groups 
+
+𝑛 (𝑡 ) Number of occupied seats in front of passenger’s seat at time 𝑡 𝑛 𝑖 Number of rows in group 𝑖 for alternating-block policy 33 Table A.1: List of notations (continued) Notation Description 
+
+𝑶 𝑘 Random variable of total luggage-handling time if a passenger has 𝑘 items 
+
+𝑜 𝑘 Realized total luggage-handling time if a passenger has 𝑘 items 
+
+𝒫 State transition dynamics 
+
+𝑝 𝑘 Probability of a passenger having 𝑘 luggage items 
+
+𝜙 (·) Activation function in the neural network 
+
+𝜋 𝜃 Policy function parameterized by 𝜃 
+
+𝑞 𝑘 Proportion of passengers traveling in companion groups of size 𝑘 𝑅 Total number of rows in the airplane 
+
+𝜌 𝑗 𝑏 PPO probability ratio for decision 𝑗 in episode 𝑏 
+
+ℛ Reward function 
+
+𝑟 𝑗 Reward at step 𝑗 
+
+𝒮 State space 
+
+𝑠 𝑗 State observation for passenger 𝑗 
+
+𝜎 𝑘 Standard deviation of total luggage-handling time if a passenger has 𝑘 items 
+
+𝑇 total Total boarding time 
+
+𝑇 avg Average individual boarding time 
+
+𝑇 rand total Mean total boarding time under random boarding for the same layout and oper-ating setting 
+
+𝑇 rand avg Mean average individual boarding time under random boarding for the same layout and operating setting 
+
+𝑉 𝜔 Value function parameterized by 𝜔 
+
+𝑥 𝑗 Checked-in state of previous passengers 
+
+Ξ(·) State embedding function (subscripted Ξ𝜃 , Ξ𝜔 for actor and critic) 
+
+𝜉 Basic time unit for passenger movement when taking seat 
+
+𝑦 𝑗 Current passenger state 
+
+𝑧 𝑗 Global state 
+
+# Appendix B Additional Static-Policy Analyses 
+
+B.1 Benefits of Increasing Boarding Group Number for the Back-to-Front Policy 
+
+Figs. B.1 and B.2 report total boarding time for three-group back-to-front policies on the (3 + 3) × 32 
+
+and (2 + 4 + 2) × 32 layouts, respectively, under the empirical luggage and travel-companion setting of the experimental setup in the main paper. We evaluate all possible combinations of group sizes 𝑚 1,
+
+𝑚 2, and 𝑚 3. Due to the constraint 𝑚 1 + 𝑚 2 + 𝑚 3 = 𝑅 , each figure presents results in a two-dimensional heat map of 𝑚 1 and 𝑚 2 values. The value in each cell represents the percentage reduction in total boarding time relative to the optimal two-group back-to-front policy under the same setting; greener cells indicate improvement and redder cells indicate deterioration. Fig. B.1 reveals that the most effective arrangements feature a large middle group ( 𝑚 2) with small first and last groups. The two-group back-to-front benchmark in the main paper showed that two-group back-to-front works best when group sizes are highly unequal, in either the small-first or 34 Figure B.1: Three-group back-to-front performance relative to the optimal back-to-front policy with 
+
+𝑁 = 2 for the (3 + 3) × 32 single-aisle layout. large-first form; the three-group case effectively combines both, with a small group at each end and a large group in the middle. 
+
+Figure B.2: Three-group back-to-front performance relative to the optimal back-to-front policy with 
+
+𝑁 = 2 for the (2 + 4 + 2) × 32 double-aisle layout. For the double-aisle layout, Fig. B.2 shows a similar pattern, with the difference that the first group (𝑚 1) can be moderately large while still achieving comparable reductions. Adding a fourth group yields minimal improvements across all tested combinations, so we omit the detailed examination. Complete results comparing the 𝑁 = 4 case against other policies appear in the static-policy comparison in the main paper. 
+
+B.2 Impacts of Row Numbers on Static-Policy Performance 
+
+Fig. B.3 shows how total boarding time varies with the row number 𝑅 under the (3 + 3) × 𝑅 and 
+
+(2 + 4 + 2) × 𝑅 layouts for the optimal back-to-front policies with 𝑁 = 2 and 3, the modified-Steffen policy, and the random policy, under the empirical luggage and travel-companion setting of the 35 experimental setup in the main paper. The back-to-front split is re-optimized for each row number. We exclude the alternating-block policy due to its consistently inferior performance. All curves increase monotonically with the row number, because each additional row adds more passengers than the aisle can accommodate at once, so more passengers must queue outside the aisle and total boarding time grows. The ranking of the policies is consistent across row numbers, and the gaps between them remain roughly stable. Back-to-front therefore remains beneficial across the full range of row numbers, including the higher values typical of budget carriers. 
+
+Figure B.3: Total boarding time as a function of row number 𝑅 for the (3 + 3) × 𝑅 and (2 + 4 + 2) × 𝑅 
+
+layouts under the optimal back-to-front policies with 𝑁 = 2 and 3, the modified-Steffen policy, and the random policy. 36 Appendix C RL Implementation Details 
+
+Tables C.1 and C.2 summarize the neural-network architecture and PPO hyperparameters used in the Pareto evaluation. The actor and critic use the same embedding architecture but maintain separate parameters. Table C.1: Neural-network hyperparameters used by the RL policy. Hyperparameter Value 
+
+𝐹 1 , 𝐹 2 , 𝐹 3 32 , 64 , 32 
+
+Convolution kernel 3 × 3, padding 1 
+
+𝐺 𝑥 64 
+
+𝐺 𝑦 32 
+
+𝐺 𝑧 16 
+
+𝐻 128 
+
+𝜙 (·) ReLU Table C.2: PPO hyperparameters used for the RL policies in the Pareto evaluation. Hyperparameter Value Training episodes 6000 Optimizer Adam 
+
+𝛼 𝜃 , 𝛼 𝜔 2.5 × 10 −4
+
+𝐵 5
+
+|𝒟| 64 
+
+𝐾 PPO 4
+
+𝜖 0.2 
+
+𝜂 0.01 Gradient clipping norm 0.5 On the Mac Studio described in the simulation section of the main paper, a full 6000-episode PPO training run for the representative (3 + 3) × 32 setting completes in approximately 1 hour. 37 References 
+
+Airbus, 2024. Global market forecast. URL: https://www.airbus.com/en/products-services/ commercial-aircraft/global-market-forecast . accessed: 2024-11-16. Audenaert, J., Verbeeck, K., Vanden Berghe, G., 2009. Multi-agent based simulation for boarding, in: The 21st Belgian-Netherlands Conference on Artificial Intelligence, Eindhoven, The Netherlands. pp. 3–10. URL: https://lirias. kuleuven.be/1580537 .Bachmat, E., 2019. Airplane boarding meets express line queues. European Journal of Operational Research 275, 1165–1177. Bachmat, E., Berend, D., Sapir, L., Skiena, S., 2005. Airplane boarding, disk scheduling and space-time geometry, in: Algorithmic Applications in Management: First International Conference, AAIM 2005, Xian, China, June 22-25, 2005. Proceedings 1, Springer. pp. 192–202. Bachmat, E., Berend, D., Sapir, L., Skiena, S., Stolyarov, N., 2006. Analysis of aeroplane boarding via spacetime geometry and random matrix theory. Journal of physics A: Mathematical and general 39, L453. Bachmat, E., Berend, D., Sapir, L., Skiena, S., Stolyarov, N., 2009. Analysis of airplane boarding times. Operations Research 57, 499–513. Bachmat, E., Elkin, M., 2008. Bounds on the performance of back-to-front airplane boarding policies. Operations research letters 36, 597–601. Bachmat, E., Erland, S., Jaehn, F., Neumann, S., 2023. Air passenger preferences: An international comparison affects boarding theory. Operations Research 71, 798–820. Bachmat, E., Khachaturov, V., Kuperman, R., 2013. Optimal back-to-front airplane boarding. Physical Review E 87, 062805. Bazargan, M., 2007. A linear programming approach for aircraft boarding strategy. European Journal of Operational Research 183, 394–411. Budesca, G.C., Juan, A.A., i Casas, P.F., 2014. Optimization of aircraft boarding processes considering passengers’ grouping characteristics, in: Proceedings of the Winter Simulation Conference 2014, IEEE. pp. 1977–1988. Coppens, J., Dangal, S., Vendel, M., Anjani, S., Akkerman, S., Hiemstra-van Mastrigt, S., Vink, P., 2018. Improving airplane boarding time: a review, a field study and an experiment with a new way of hand luggage stowing. International Journal of Aviation, Aeronautics, and Aerospace 5, 7. Cotfas, L.A., Delcea, C., Milne, R.J., Salari, M., Crăciun, L., Molănescu, A.G., 2019. Testing new methods for boarding a partially occupied airplane using apron buses. Symmetry 11, 1044. Delcea, C., Cotfas, L.A., Salari, M., Milne, R.J., 2018. Investigating the random seat boarding method without seat assignments with common boarding practices using an agent-based modeling. Sustainability 10, 4623. Erland, S., Bachmat, E., Steiner, A., 2024. Let the fast passengers wait: Boarding an airplane takes shorter time when passengers with the most bin luggage enter first. European Journal of Operational Research 317, 748–761. Erland, S., Kaupužs, J., Frette, V., Pugatch, R., Bachmat, E., 2019. Lorentzian-geometry-based analysis of airplane boarding policies highlights “slow passengers first” as better. Physical Review E 100, 062313. Erland, S., Kaupužs, J., Steiner, A., Bachmat, E., 2021. Lorentzian geometry and variability reduction in airplane boarding: Slow passengers first outperforms random boarding. Physical Review E 103, 062310. Ferrari, P., 2005. Improving passenger boarding in airplanes using computer simulations. International Airport Review. URL: https://leeds-faculty.colorado.edu/vandenbr/papers/05sep05article.pdf .Ferrari, P., Nagel, K., 2005. Robustness of efficient passenger boarding strategies for airplanes. Transportation Research Record 1915, 44–54. Giitsidis, T., Sirakoulis, G.C., 2016. Modeling passengers boarding in aircraft using cellular automata. IEEE/CAA Journal of Automatica Sinica 3, 365–384. 
+
+38 Gu, W., Cassidy, M.J., 2013. Maximizing bus discharge flows from multi-berth stops by regulating exit maneuvers. Transportation Research Part B: Methodological 56, 254–264. Gu, W., Cassidy, M.J., Li, Y., 2012. On the capacity of highway checkpoints: Models for unconventional configurations. Transportation Research Part B: Methodological 46, 1308–1321. Gu, W., Cassidy, M.J., Li, Y., 2015. Models of bus queueing at curbside stops. Transportation Science 49, 204–212. Gu, W., Li, Y., Cassidy, M.J., Griswold, J.B., 2011. On the capacity of isolated, curbside bus stops. Transportation Research Part B: Methodological 45, 714–723. Gwynne, S., Yapa, U.S., Codrington, L., Thomas, J., Jennings, S., Thompson, A., Grewal, A., 2018. Small-scale trials on passenger microbehaviours during aircraft boarding and deplaning procedures. Journal of air transport management 67, 115–133. Heidemann, D., Wegmann, H., 1997. Queueing at unsignalized intersections. Transportation Research Part B: Methodolog-ical 31, 239–263. Hiemstra-Van Mastrigt, S., Ottens, R., Vink, P., 2019. Identifying bottlenecks and designing ideas and solutions for improving aircraft passengers’ experience during boarding and disembarking. Applied Ergonomics 77, 16–21. Hu, S., Shen, M., Gu, W., 2023. Impacts of bus overtaking policies on the capacity of bus stops. Transportation Research Part A: Policy and Practice 173, 103702. Jaehn, F., Meissner, F., Neumann, S., 2026. Determining airplane boarding groups. OR Spectrum 48, 669–689. Jaehn, F., Neumann, S., 2015. Airplane boarding. European Journal of Operational Research 244, 339–359. Jafer, S., Mi, W., 2017. Comparative study of aircraft boarding strategies using cellular discrete event simulation. Aerospace 4, 57. Kierzkowski, A., Kisiel, T., 2017. The human factor in the passenger boarding process at the airport. Procedia Engineering 187, 348–355. Kisiel, T., 2020. Resilience of passenger boarding strategies to priority fares offered by airlines. Journal of Air Transport Management 87, 101853. Milne, R.J., Delcea, C., Cotfas, L.A., Salari, M., 2019. New methods for two-door airplane boarding using apron buses. Journal of Air Transport Management 80, 101705. Milne, R.J., Kelly, A.R., 2014. A new method for boarding passengers onto an airplane. Journal of Air Transport Management 34, 93–100. Milne, R.J., Salari, M., 2016. Optimization of assigning passengers to seats on airplanes based on their carry-on luggage. Journal of Air Transport Management 54, 104–110. Milne, R.J., Salari, M., Kattan, L., 2018. Robust optimization of airplane passenger seating assignments. Aerospace 5, 80. Mirza, M., 2008. Economic Impact of Airplane Turn-Times. Boeing AERO Quarterly, Q4 2008, pp. 15–19. URL: https: //studylib.net/doc/8216601/airplane-utilization-and-turn-time-models .Neumann, S., 2019. Is the boarding process on the critical path of the airplane turn-around? European Journal of Operational Research 277, 128–137. Newell, G.F., 1982. Applications of Queueing Theory. 2nd ed., Chapman and Hall, London. Notomista, G., Selvaggio, M., Sbrizzi, F., Di Maio, G., Grazioso, S., Botsch, M., 2016. A fast airplane boarding strategy using online seat assignment based on passenger classification. Journal of Air Transport Management 53, 140–149. Pacheco, A., Simões, M.L., Milheiro-Oliveira, P., 2017. Queues with server vacations as a model for pretimed signalized urban traffic. Transportation Science 51, 841–851. 
+
+39 Ren, X., Xu, X., 2018. Experimental analyses of airplane boarding based on interference classification. Journal of Air Transport Management 71, 55–63. Salari, M., Milne, R.J., Kattan, L., 2019. Airplane boarding optimization considering reserved seats and passengers’ carry-on bags. Opsearch 56, 806–823. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O., 2017. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 URL: https://arxiv.org/abs/1707.06347 .Schultz, M., 2018a. Field trial measurements to validate a stochastic aircraft boarding model. Aerospace 5, 27. Schultz, M., 2018b. Implementation and application of a stochastic aircraft boarding model. Transportation Research Part C: Emerging Technologies 90, 334–349. Schultz, M., Schmidt, M., 2018. Advancements in passenger processes at airports from aircraft perspective. Sustainability 10, 3877. Schultz, M., Schulz, C., Fricke, H., 2008. Efficiency of aircraft boarding procedures, in: 3rd International Conference on Research in Air Transportation, pp. 371–377. URL: http://boarding.work-ing.zone/wp-content/uploads/ 2017/08/icrat2008_schultz_Efficiency-of-Aircraft-Boarding.pdf .SeatMaps, 2024. Extensive list of airplane models and types. https://seatmaps.com/aircraft/ .Shen, M., Gu, W., Hu, S., Cheng, H., 2019. Capacity approximations for near- and far-side bus stops in dedicated bus lanes. Transportation Research Part B: Methodological 125, 94–120. Shen, M., Gu, W., Hu, S., Xiao, F., 2023. Efficient heuristic methods for berth allocation at multi-line, multi-berth curbside bus stops. Transportation Research Part C: Emerging Technologies 154, 104269. Skorupski, J., Wierzbińska, M., 2015. A method to evaluate the time of waiting for a late passenger. Journal of air transport management 47, 79–89. Soolaki, M., Mahdavi, I., Mahdavi-Amiri, N., Hassanzadeh, R., Aghajani, A., 2012. A new linear programming approach and genetic algorithm for solving airline boarding problem. Applied Mathematical Modelling 36, 4060–4072. Steffen, J.H., 2008. Optimal boarding method for airline passengers. Journal of Air Transport Management 14, 146–150. Steffen, J.H., Hotchkiss, J., 2012. Experimental test of airplane boarding methods. Journal of Air Transport Management 18, 64–67. Steiner, A., Philipp, M., 2009. Speeding up the airplane boarding process by using pre-boarding areas, in: 9th Swiss Transport Research Conference, Ascona, 9-11 September 2009. Tang, T.Q., Wu, Y.H., Huang, H.J., Caccetta, L., 2012. An aircraft boarding model accounting for passengers’ individual properties. Transportation Research Part C: Emerging Technologies 22, 1–16. Tang, T.Q., Yang, S.P., Ou, H., Chen, L., Huang, H.J., 2018. An aircraft boarding model accounting for group behavior. Journal of Air Transport Management 69, 182–189. Van Den Briel, M.H., Villalobos, J.R., Hogg, G.L., Lindemann, T., Mulé, A.V., 2005. America west airlines develops efficient boarding strategies. Interfaces 35, 191–201. Van Landeghem, H., Beuselinck, A., 2002. Reducing passenger boarding time in airplanes: A simulation based approach. European Journal of Operational Research 142, 294–308. Vendel, M., Dangal, S., Coppens, J., Hiemstra-van Mastrigt, S., Vink, P., 2019. Effects of a hand luggage guiding system on airplane boarding time and passenger experience. International Journal of Aviation, Aeronautics, and Aerospace 6, 5. Willamowski, F.J., Tillmann, A.M., 2022. Minimizing airplane boarding time. Transportation Science 56, 1196–1218. Yang, F., Gu, W., Cassidy, M.J., Li, X., Li, T., 2020. Achieving higher taxi outflows from a drop-off lane: A simulation-based study. Transportation Research Part C: Emerging Technologies 115, 102623. Zeineddine, H., 2017. A dynamically optimized aircraft boarding strategy. Journal of Air Transport Management 58, 144–151. 
+
+40
