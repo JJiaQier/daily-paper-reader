@@ -1,0 +1,1730 @@
+Title: Integrated Order Dispatching and Routing for Last-Mile Pickup via Deep Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2607.22356v1
+
+Published Time: Mon, 27 Jul 2026 01:01:13 GMT
+
+Number of Pages: 38
+
+Markdown Content:
+# Integrated Order Dispatching and Routing for Last-Mile Pickup via Deep Reinforcement Learning 
+
+Yida Xu a, Zhaofang Mao a,b , Yuheng Miao a, Jiaxin Zhang a, ∗, Yiting Sun a
+
+> aCollege of Management and Economics, Tianjin University, Tianjin 300072, China
+> bLaboratory of Computation and Analytics of Complex Management Systems (CACMS), Tianjin University, Tianjin 300072, China
+
+Abstract 
+
+In recent years, the growing complexity of last-mile pickup operations has increased the need for fast and accurate decision-making on logistics platforms. This challenge is fundamentally driven by two key and tightly coupled decision-making processes: order dispatching and routing. Solving them sep-arately overlooks their interdependence, while fully end-to-end learning can be unstable and costly on large, variable-scale instances due to sparse rewards. To solve this problem, we propose an integrated optimization framework which couples a learned routing oracle with real-time dispatching heuristics. For the routing subproblem, we develop a Dynamic-Residual Graph Attention Network encoder with a Look-Ahead Courier-Personalized decoder. For the dispatching subproblem, we develop a routing-oracle-guided dispatching heuristic with local search, where the oracle provides near-optimal solutions to select candidate couriers while retaining real-time scalability. Extensive experiments on real-world datasets from Cainiao Logistics are used to test the performance of our approach, including an offline evaluation and an online rolling-horizon simulation. The experimental results show that our approach outperforms other benchmarks regarding solution quality and solving time, indicating it can effectively support logistics companies in solving real-time and large-scale last-mile pickup problems. 
+
+Keywords: Last-mile pickup, Deep reinforcement learning, Graph neural network, Mixed integer programming 
+
+1. Introduction 
+
+Last-mile pickup has become a significant bottleneck within urban logistics, highlighting the im-portance of an effective decision-making platform as a critical focus in transportation system research (Özarık et al., 2024; Fatehi and Wagner, 2022). The increasing customer demand for timely pickups  
+
+> ∗Corresponding author. Email address: jiaxin.y.zhang@outlook.com (Jiaxin Zhang)
+> Email addresses:
+
+xuyida@tju.edu.cn (Yida Xu), maozhaofang@tju.edu.cn (Zhaofang Mao), 
+
+3019209337@tju.edu.cn (Yuheng Miao), jiaxin.y.zhang@outlook.com (Jiaxin Zhang), syt209054@tju.edu.cn 
+
+> (Yiting Sun) arXiv:2607.22356v1 [cs.LG] 24 Jul 2026
+
+pressures these platforms to make rapid decisions, typically within seconds, involving two tightly cou-pled processes: order dispatching and routing (Mao et al., 2025). Order dispatching determines the assignment of accumulated orders to candidate couriers, considering constraints such as time windows, geographical proximity, and courier availability, while routing sequences the assigned pickup locations for each courier to minimize travel time and service penalties. At each dispatching wave (e.g., every 5 minutes), the platform faces a dynamic decision scenario: couriers are distributed across the service re-gion, each carrying previously dispatched but uncompleted orders, and the platform must dispatch newly accumulated orders to these couriers while generating feasible pickup routes. These two processes are inherently interdependent. On the one hand, dispatching directly shapes each courier’s workload and spatial distribution, which in turn determine the feasibility and efficiency of subsequent routing. On the other hand, routing outcomes, such as estimated completion times and time-window violations, provide critical feedback for evaluating dispatch quality. Moreover, the dynamic nature of urban traffic (Rah-mani et al., 2024), heterogeneity in courier attributes (Pegado-Bardayo et al., 2024), and environmental factors such as weather conditions (Özarık et al., 2024) introduce significant complexity and variability into this integrated decision-making process. Due to the high complexity and computational burden of solving order dispatching and routing problem in an integrated manner, most existing studies solve these two problem separately (e.g., Chen et al. (2024); Wen et al. (2022)). While this separation improves tractability, it often leads to subop-timal decisions by failing to capture the interdependencies between dispatching and routing (Liu and Luo, 2023). Moreover, although traditional optimization methods have been widely adopted to enhance decision-making efficiency in last-mile logistics, they typically struggle to exploit historical data effec-tively and scale poorly in the presence of the complexity and volatility inherent in real-world environ-ments (Wang et al., 2023). As a result, such approaches may incur inefficiencies and higher operational costs in large-scale and dynamic settings. In recent years, machine learning (ML) methods, particularly deep reinforcement learning (DRL), have emerged as promising approaches to address the uncertainty and dynamism of such optimization problems (Zhou et al., 2024; Baty et al., 2024), as they can learn from historical data and adapt to dynamic environments (Xiao et al., 2024). However, fully end-to-end DRL approaches face several challenges: they can be unstable on large, variable-scale instances due to sparse rewards (Mazyavkina et al., 2021), struggle to generalize across different graph sizes (Le and Jegelka, 2023), and require careful handling of time-dependent travel times (Çimen et al., 2024; Chen et al., 2025). A natural alternative is to train two separate DRL models for dispatching and routing, yet this separation not only increases computational costs but also breaks the feedback loop between these interdependent processes (Nazari et al., 2018). In conclusion, current ML approaches fail to exploit the intrinsic coupling between dispatching and routing, ultimately limiting system-level performance (Mao et al., 2024). To address these challenges, we develop an integrated optimization framework that couples a DRL routing oracle with lightweight dispatching heuristics. Specifically, we first decompose the last-mile 2pickup problem into two hierarchical subproblems, order dispatching and routing, each formulated as a mixed-integer linear program (MILP) with time-dependent travel times. For the routing subproblem, we recast it as a Markov decision process (MDP) and train a policy network using a rollout-baseline policy-gradient scheme. The policy network adopts a Dynamic-Residual Graph Attention Network encoder with a Look-Ahead Courier-Personalized decoder (DR-LaCPNet) to capture spatial-temporal dependencies and courier heterogeneity. The trained DRL routing oracle then guides the dispatching heuristic, which employs a position-pool screening mechanism and local search refinement to rapidly evaluate candidate couriers via routing-aware marginal cost estimation, enabling real-time decisions across variable-scale instances. Figure 1 illustrates the decision-making process of the proposed framework. Finally, we evaluate the proposed framework on real-world data from Cainiao Logistics (LaDe; Wu et al. (2024)) using offline benchmarks and online rolling-horizon simulations, with sensitivity analyses on supply-to-demand ratios and objective weights. Order-Dispatching 
+
+Courier 
+
+Routing 
+
+PP-Greedy Local Search Decisions       
+
+> Environment Lower-level
+> Agent
+> State
+> Action
+> (Routing)
+> Courier 1
+> Environment Lower -level
+> Agent
+> State
+> Action
+> (Routing )
+> Courier 2
+> Environment Lower -level
+> Agent
+> State
+> Action
+> (Routing )
+> Courier n
+> Policy
+> 𝐀 𝐀
+> Reward Reward Reward
+> (DR-LaCPNet)
+> Figure 1: The proposed integrated optimization framework
+
+The main contributions of this study are as follows: (i) To the best of our knowledge, this is the first work to address the integrated order dispatching and routing problem via DRL. We propose two novel MILP formulations with time-dependent travel times for this problem. (ii) We develop an integrated optimization framework that couples a DRL routing oracle with dispatching heuristics, enabling rapid and accurate evaluation of dispatching through routing-aware marginal cost estimation. (iii) For the routing subproblem, we propose the DR-LaCPNet model, where the Look-Ahead mechanism captures future time-window information and the Courier-Personalized mechanism models individual courier heterogeneity. (iv) Extensive experiments on real-world data demonstrate that the proposed framework delivers high-quality solutions across variable-scale instances within strict time constraints, with ablation studies confirming the effectiveness of each component. The remainder of this paper is organized as follows: Section 2 reviews relevant literature on non-ML and ML methods for last-mile pickup and delivery; Section 3 presents the MILP formulations for the order 3dispatching and routing subproblems; Section 4 details the MDP formulation, the DR-LaCPNet model, and the dispatching heuristic; Section 5 reports experimental results using offline evaluation and online rolling-horizon simulation, along with sensitivity analyses; Section 6 concludes and discusses future directions. 
+
+2. Literature review 
+
+2.1. Non-ML methods for last-mile pickup and delivery 2.1.1. Order dispatching optimization 
+
+Traditional approaches for solving the order dispatching problem often formulate it as a combina-torial optimization task, while the order pool accumulates the orders in the last dispatching wave and previous remaining orders. Among relevant studies, the dispatching process is often formulated as an MILP model or as a bipartite matching problem (BMP). For MILP models, Liu and Luo (2023) propose an MILP model for the stochastic dynamic driver dispatching and routing problem and then develop efficient exact algorithms based on Benders decomposition and column generation to solve it. For BMP models, Li et al. (2022) present a time-aware batch matching algorithm to offer high-quality courier-task matching in each sliding window. The solutions of order dispatching problems can usually be obtained through heuristic or approx-imate algorithms due to the computational complexity of exact solvers. The proposed heuristic rules mainly include nearest-neighbor dispatching (Sheridan et al., 2013; Zhou et al., 2020), adaptive strat-egy (Liu et al., 2021), local search (Bonassa et al., 2023), or meta-heuristics (Silva et al., 2003). Fur-thermore, some studies have considered multi-objective optimization. For example, Kashansky et al. (2023) focus on the intelligent and sustainable transportation processes through the design of the multi-objective model for the logistic order dispatching system, then present an Integer Linear Programming (ILP) optimization model to solve it. Zhang et al. (2022) balance the pick-up distance, order destination regional demand, and driver service level as objectives, then propose a centralized matching algorithm to maximize all driver-order-pair values. However, real-world last-mile logistics is inherently dynamic and uncertain. Orders arrive con-tinuously throughout the day, and courier availability fluctuates due to break times, pickup progress, and personal preferences (Liu and Luo, 2023). Moreover, external conditions such as traffic congestion and weather may further influence assignment decisions. To address such complexities, Wong and Bell (2006) formulate a rolling horizon approach of taxi dispatching which takes the stochastic and dynamic nature of the problem into account. Auad et al. (2023) propose an optimization-based rolling hori-zon algorithm for courier management that handles both region resizing and delivery task assignment decisions. Furthermore, some improvements to the conventional rolling horizon approach have been applied to dispatching problems. Huang et al. (2023) propose a receding-horizon dispatching model that periodically re-optimizes assignments as new data becomes available. Nevertheless, these methods 4still largely rely on static optimization formulations, which limit their responsiveness and scalability in high-frequency dispatching scenarios. 
+
+2.1.2. Courier routing optimization 
+
+At each decision stage, the courier routing problem without additional constraints can be regarded as a variant of the traveling salesman problem (TSP), namely open TSP (OTSP , Bellmore and Hong (1974)). The only difference between TSP and OTSP is that the courier does not necessarily need to return to the warehouse after picking up goods from the customer’s position in the OTSP . When consid-ering the time-dependent travel time, the traditional TSP would become the time-dependent traveling salesman problem (TDTSP). Therefore, in this section, we review the relevant literature on non-ML methods on TSP , OTSP and TDTSP .TSP has been extensively studied in both static and dynamic settings. In the static TSP , all customer positions and inter-city distances are known and fixed prior to route planning. This classical version has been the focus of numerous algorithmic developments over the past decades (Voudouris and Tsang, 1999; Englot et al., 2013; Aksit et al., 2024). In contrast, the dynamic TSP (DTSP) introduces real-time elements such as changing travel times, newly appearing positions, or evolving cost structures, which require adaptive planning throughout the tour (Chang et al., 2009; Toriello et al., 2014; Mavrovouniotis et al., 2016; Ünal et al., 2023). Several non-ML approaches have been developed to solve this NP-hard problem. For heuristics or meta-heuristics, Theys et al. (2010) use Lin–Kernighan–Helsgaun heuristic to solve the TSP and verify whether the sophistication of “state-of-the-art” local search heuristics is necessary for routing order pickers in warehouses. Exact algorithms with tailored cuts also show great efficiency when dealing with TSP variants. For example, Cha et al. (2024) introduce a TSP with a sequence-and-load dependent risk and propose an iterative-deepening A*-based tree search algorithm to solve it. For a more comprehensive survey of TSP variants, we refer the readers to the work of Pop et al. (2024). The OTSP is a fundamental variant of the classical TSP , in which the salesman is not required to re-turn to the starting point. While the problem remains NP-hard, similar to the classical TSP , its asymmetric structure and open-ended nature require specialized solution methods (Frieze et al., 1982). Early ap-proaches include adaptations of branch-and-bound and dynamic programming techniques (e.g., Pekny and Miller (1990)). Additionally, several work has focused on heuristic and approximation algorithms to solve OTSP , often tailored to handle large-scale instances or real-world constraints (e.g., Glover et al. (2001); Barketau and Pesch (2016)). Another important variant of TSP is to consider the time-dependent travel time, which indicates that the travel time between two nodes would vary according to the time intervals or the sequence of edges, as introduced in Wang et al. (2019). Among related works, Cordeau et al. (2014) formulate the TDTSP as an integer linear programming (ILP) model for which valid inequalities are devised. Pralet (2023) proposes an Iterated Maximum Large Neighborhood Search (ImaxLNS) to solve the TDTSP with 5time window (TDTSPTW). Çimen et al. (2024) develop an MILP for the open time-dependent traveling salesman problem to determine routing and vehicle speed decisions. These formulation structures are well-suited for solving using decomposition methods, but they need to be appropriately modified to be compatible with the DRL framework. 
+
+2.2. ML methods for last-mile pickup and delivery 
+
+Recent years have witnessed a growing interest in applying ML techniques to last-mile pickup and delivery. The shift is driven by the increasing complexity of urban delivery networks and the availability of granular operational data. This section reviews the recent literature on ML-based approaches for last-mile pickup and delivery problems. A central focus in the literature is the use of ML for route prediction and dispatching optimization. Mao et al. (2023) present the first attempt to generalize Reinforcement Learning (RL) to the route pre-diction task, leading to a novel RL-based framework called DRL4Route. Also, Mo et al. (2023) propose a pair-wise attention-based pointer neural network to model the actual stop sequences followed by couri-ers, leveraging historical GPS traces. Their model significantly outperforms conventional shortest-path heuristics, highlighting the limitations of purely distance-based metrics in real-world operations. Build-ing on this direction, Denis et al. (2025) introduce Proximity Attention and Pointer Network framework (PAPN), which models the decision process from courier behavior, and performs competitively with state-of-the-art reinforcement learning models. Zhou et al. (2021) choose order fee and the spatio-temporal relationship as two objectives, then combine Implicit Quantile Networks (IQN) with the traditional Deep Q-Networks (DQN) to jointly learn the two return distributions and adjusting their weights. These stud-ies demonstrate that incorporating domain-specific features and attention mechanisms into supervised learning frameworks improves route prediction accuracy and scalability. Another strand of research explores hybrid ML-optimization frameworks. Carvalhosa et al. (2024) develop a two-stage model that first uses a neural network to predict delivery zones and then applies a LKH-based metaheuristic for route refinement. Their approach shows that ML can act as a pre-processing tool to reduce problem complexity and enhance solver performance. Similar ideas are adopted by Bruni et al. (2023), who present a new heuristic algorithm to solve the variable cost and size bin packing problem with stochastic items based on machine learning techniques. However, a common limitation in these hybrid approaches is the reliance on high-quality labeled data, which may not be available in all deployment contexts. Recent work has explored the use of graph neural networks (GNNs) to better model the structural and decision-making complexities of last-mile pickup and delivery. GNNs effectively capture spatial and relational dependencies in road networks and pickup and delivery tasks. For example, Wen et al. (2022) propose a dynamic spatial-temporal graph-based model, named Graph2Route, to solve the pick-up and delivery route prediction task. Chen et al. (2024) propose an optimization algorithm based on GNN to solve the order dispatching problem. Despite these advances, most studies still treat dispatching and 6routing as separate components, leaving their strong interdependence insufficiently exploited. While in-tegrated solutions have been attempted (e.g., hierarchical deep reinforcement learning; Li et al. (2025)), fully end-to-end learning frameworks often suffer from sparse and delayed rewards. Their training and tuning costs also scale poorly with the highly variable instance size in last-mile pickup, undermining convergence stability and practical deployability. Our motivation for adopting a DRL optimization approach stems from the limitations of existing methods for last-mile pickup problems. In this work, we address the integrated order dispatching and routing problem with time-dependent travel times, a real-world variant that incorporates complex spatial-temporal dynamics and stochastic operational conditions. Solving this problem efficiently at scale requires fine-grained coordination between dispatching decisions and routing outcomes. Instead of learning dispatching and routing jointly from scratch, we adopt a learning-augmented perspective by coupling a learned DRL routing oracle with lightweight dispatching heuristics. This framework enables fast, scalable, and controllable real-time operations, effectively handling the interdependence between dispatching and routing without the need for costly end-to-end training. The studies reviewed in this section are summarized and compared in Table 1, providing a comprehensive overview of their charac-teristics and approaches.        
+
+> Table 1: An overview of recent related studies for order dispatching and courier routing
+> Study Strategy Order dispatching Courier routing TD-TT Method
+> Wang et al. (2018) Static
+
+! DRL Zhou et al. (2020) Static ! Heuristics Liu et al. (2021) Dynamic ! DL + Heuristics Zhou et al. (2021) Static ! Distributional RL Wen et al. (2022) Dynamic DL Li et al. (2022) Dynamic ! BMP Zhang et al. (2022) Dynamic ! Reward Learning Auad et al. (2023) Dynamic ! BMP Liu and Luo (2023) Dynamic ! ! ! Exact algorithms Mao et al. (2023) Dynamic ! DL Zhen et al. (2023) Static ! ! ! Exact + Heuristic algorithms Chen et al. (2024) Dynamic ! DL + Heuristics Özarık et al. (2024) Static ! DL + Heuristics Pegado-Bardayo et al. (2024) Dynamic ! DL + Heuristics Carvalhosa et al. (2024) Dynamic ! DL + Heuristics Li et al. (2025) Dynamic ! ! HDRL This study Dynamic ! ! ! DRL + Heuristics 
+
+73. Mathematical formulation 
+
+In this paper, we address the integrated order dispatching and routing problem, from the perspective of decision-making platform of a logistics company (e.g., Cainiao Logistics). During each decision cycle, the decision-making platform would make operational decisions based on current order and courier availability, while simultaneously dispatching orders and generating reference routes for couriers. The schematic diagram of the integrated order dispatching and routing problem is illustrated in Figure 2. Decision-making platform 
+
+> Candidate
+> Couriers
+
+Order Dispatching  
+
+> Order Pool (𝐀 𝐀𳰀𝐀 )
+
+Courier Routing 
+
+> ①
+> ②
+> ③
+> ④
+> ①
+> ③
+> ④
+
+Decision time ：
+
+Each Order Wave (5min) 
+
+> Figure 2: Schematic diagram of integrated order dispatching and routing
+
+To handle this challenging problem, we decompose the original problem into two distinct subprob-lems, the order dispatching problem and the routing problem. We formulate each of the subproblem as an MILP model. Table 2 shows the notations used for both subproblems. In the subsequent sections, we would introduce these two subproblems in detail. 
+
+3.1. Order dispatching subproblem 
+
+In order to handle the dynamic order dispatching subproblem, we consider the decision-making process at each dispatching wave. We discretize the operating horizon into a series of time intervals, denoted as T = {0, 1, 2, · · · , T }, each time interval has length ∆t. At each decision time, let Onew denote the set of all orders available for dispatch, consisting of all previously undispatched orders and newly arriving orders. Let K be the set of all candidate couriers, each candidate courier k ∈ K carries qk in-hand orders that have been dispatched but not completed for pickup, denoted as Oold k . Let Oold = S 
+
+> k∈K
+
+Oold 
+
+> k
+
+be the aggregated set of all such in-hand orders. Each order i associated with a pickup time window 
+
+[ai , bi ], any early or late pickup results in a penalty p. Each candidate courier k is located at lk ∈ L at the beginning of the dispatching wave, where L is the set of starting positions of all candidate couriers. 8Table 2: The summary of notations 
+
+Notation Definition Sets: 
+
+K the set of all candidate couriers 
+
+L the set of starting positions of all candidate couriers 
+
+Onew the set of all orders available for dispatch 
+
+Oold the set of all in-hand orders Parameters: 
+
+tri j travel time from node i to j during time interval rgir the time of node i at time interval r when the travel time function changes 
+
+ai , bi the release time and the deadline of node i
+
+α, φ objective weights Decision and auxiliary variables: 
+
+y ki 1, if order i is dispatched to courier k; 0, otherwise 
+
+x ki j 1, if courier k ∈ K traverses arc (i, j); 0, otherwise 
+
+cki j the realized travel time from node i to node j of courier kU kir 1, if courier k arrive at node i in time interval r; 0, otherwise 
+
+β ki the time when courier k arrive at node i
+
+β kir auxiliary variable which takes value β ki when U kir = 1; 0, otherwise 
+
+pki Penalty at node i for courier k We describe the order dispatching subproblem using G = ( V, A), where V = L ∪ Oold ∪ Onew is the set of nodes and A is the arc set. Note that G is not a complete graph, since orders that have been dispatched to courier k will not be picked up by other couriers. minimize 
+
+X
+
+> k∈K
+
+α × max  
+
+> i∈V\L
+
+β ki + φ ×
+
+X
+
+> i∈V\L
+
+pki
+
+!
+
+(1) 
+
+X
+
+> j∈V
+
+x ki, j = y ki , ∀i ∈ Onew , k ∈ K (2) 
+
+X
+
+> k∈K
+
+y ki = 1, ∀i ∈ Onew (3) 
+
+x ki j ∈ { 0, 1 } ∀i, j ∈ Vk, i̸ = j (4) 
+
+y ki ∈ { 0, 1 } ∀i ∈ V (5) where β ki and pki are computed from the reference route of courier k returned by the routing subproblem defined in Section 3.2. The objective (1) consists of two components: (1) Minimize the total travel time; (2) Minimize the total time window penalty of all candidate couriers. Here we use adjustable weight factors α and φ
+
+to balance the trade-off between these two components. Constraints (2) ensure the dispatched orders 9must be served. Constraints (3) guarantee that all new orders must be dispatched to a specific courier. Finally, constraints (4)-(5) present the domains of x ki j and y ki .
+
+3.2. Routing subproblem 
+
+Subsequently, the routing subproblem can be considered as a parallel optimization problem for each candidate courier. For simplicity, we list the routing subproblems for courier k here, which we denote as time dependent traveling salesman problem with time window for pickup (TDTSPTW-PU). We formulate the TDTSPTW-PU as an MILP defined on a complete graph Gk = ( Vk, Ak) with finite node set Vk and finite arc set Ak for courier k. Let lk denote the starting position of courier k, then Vk = lk ∪ Oold k ∪ Onew k
+
+and graph Gk is a subgraph of graph G. Formally, TDTSPTW-PU can be regarded as a special case of TDTSPTW, with minor revisions to set the travel time of all nodes back to the courier’s starting position (warehouse in TDTSPTW) to 0. Here we consider time-dependent travel time based on time intervals, following the study of (Wang et al., 2019). The time-dependent travel time matrix is denoted as T ∈ RT ×| Vk |×| Vk | and each element of it can be represented by tri j , indicating the travel time from node i to node j at time period r. In order to better depict discrete travel times, we take Chen et al. (2025)’s suggestion and follow Kok et al. (2011)’s formulation by introducing the variables U kir and β ki ; parameter gir ; auxiliary variable β ki,r to aid in modeling. The binary variables Ui,r takes 1 only if gi,r ⩽ β ki ⩽ gi,r+1, while β kir takes the value of 
+
+β ki if the corresponding variable Uir is one, and zero otherwise. In this way, we avoid using the unknown time period r directly as a subscript for the travel time tri j , transforming it into an optimization problem that can be solved through solvers. The mathematical formulation of TDTSPTW-PU is given below. minimize α × max   
+
+> i∈Vk\{ lk}
+
+β ki + φ ×
+
+X  
+
+> i∈Vk\{ lk}
+
+pki
+
+!
+
+(6) s.t. 
+
+X   
+
+> i∈Vk,i̸=j
+
+x ki j = 1 ∀ j ∈ Vk (7) 
+
+X   
+
+> j∈Vk,j̸=i
+
+x ki j = 1 ∀i ∈ Vk (8) 
+
+X
+
+> i∈S
+
+X  
+
+> j∈S,j̸=i
+
+x ki j ≤ | S| − 1 ∀S ⊂ Vk \ { lk}, 2 ≤ | S| ≤ | Vk| − 1. (9) 
+
+β kj ≥ β ki + cki j − M (1 − x ki j ) ∀i, j ∈ Vk, i̸ = j, j̸ = lk (10) 
+
+β klk = 0. (11) 
+
+> T
+
+X
+
+> r=1
+
+U ki,r = 1 ∀i ∈ Vk (12) 10 gi,r U ki,r ≤ β ki,r ∀i ∈ Vk, r ∈ T (13) 
+
+gi,r+1U ki,r ≥ β ki,r ∀i ∈ Vk, r ∈ T (14) 
+
+> T
+
+X
+
+> r=1
+
+β ki,r = β ki ∀i ∈ Vk (15) 
+
+cki j ≥ tri j + M (U kir + x ki j − 2) ∀i, j ∈ Vk, i̸ = j, r ∈ T (16) 
+
+pki =
+
+
+
+β ki − bi , β ki > bi
+
+ai − β ki , β ki < ai
+
+0, ai ≤ β ki ≤ bi
+
+∀i ∈ Vk (17) 
+
+x ki j ∈ { 0, 1 } ∀i, j ∈ Vk, i̸ = j (18) 
+
+U kir ∈ { 0, 1 } ∀i ∈ Vk, t ∈ T (19) 
+
+cki j ∈ R>0 ∀i, j ∈ Vk, i̸ = j (20) 
+
+β ki ∈ R>0 ∀i ∈ Vk (21) 
+
+β ki,r ∈ R>0 ∀i ∈ Vk, r ∈ T (22) As previously introduced, the objectives are to minimize the maximum arrival time and the time win-dow penalty, as shown in (6). Constraints (7)-(8) are known as flow conservation constraints. To elimi-nate subtours and enforce a single tour visiting all nodes, we further introduce the Dantzig–Fulkerson– Johnson (DFJ) subtour-elimination constraints (9). Constraints (10) indicate the relationship between arrival time and travel time and constraint (11). Constraints (12)-(15) forces gi,r ⩽ β ki ⩽ gi,r+1 if and only if U kir = 1. Constraints (16) guarantee cki j ≥ tri j if and only if U kir = x ki j = 1. Constraints (17) characterize the nonlinear relationship between penalty pki and arrival time β ki , which can be easily generalized to other forms of time window penalty functions. Constraints (18)-(22) present the domain of the variables. The proposed MILPs are then served as baselines in our experiments. 
+
+4. Methodology 
+
+In this section, we describe the solution methods for the routing subproblem and dispatching sub-problem, respectively. In Section 4.1, we first establish an MDP model and introduce the Dynamic-Residual Graph Attention Network encoder with a Look-Ahead Courier-Personalized decoder (DR-LaCPNet) for the routing subproblem. Consequently, in Section 4.2, we propose a position-pool greedy dispatch with local search refinement (PP-Greedy-LS) algorithm using the trained DR-LaCPNet as the DRL routing oracle. 11 4.1. DRL for the routing subproblem 
+
+In this section, we first model the routing subproblem as an MDP , then employ the reinforcement learning algorithm for training while dynamically updating the baseline. Finally, the DR-LaCPNet is proposed to capture the spatial-temporal characteristics and to make decisions sequentially. 
+
+4.1.1. Markov Decision Process 
+
+As stated earlier, the oprating horizon is discretized as T = {0, 1, 2, · · · , T }. Here, we model the routing subproblem as a sequential decision MDP , the decisions are made at each time step. Following the notations of Chen et al. (2025), we employ d to represent the index of the current decision step. The MDP of the routing subproblem is described as follows. 
+
+State : To better demonstrate the state compositions, we divide the states Skd into three distinct components for decision step d: static courier global information Gk, environmental information Ekd
+
+and dynamic courier local information Lkd , i.e., Skd = ( Gk, Ekd , Lkd ). The static courier global courier information Gk consists of inherent courier attributes, including the starting position lk = ( x ini k , y ini k )
+
+of courier k, average traveling speed vav g k , average task completion time C T av g k , courier index N U k,and the order type list OT k indicating the old orders or new dispatched orders and order time windows 
+
+[ai , bi ]. The environmental information Ekd includes timestamp ts d , date stamp ds d , traffic congestion factor ξd , and weather Wd . Finally, the dynamic courier local information Lkd consists of current courier position (x dk , y dk ), the vector of visited mask M dk = ( vdk,0 , vdk,1 , · · · , vdk,|Vk |), the vector of arrival times 
+
+AT dk = ( ϑdk,0 , ϑdk,1 , · · · , ϑdk,|Vk |) and the vector of rewards Rdk = ( Rdk,0 , Rdk,1 , · · · , Rdk,|Vk |).
+
+Action : The action is to determine the next order to pickup, which would incur a reward according to the travel time and time window penalty. 
+
+State Transition Rule : The state transition rule will let the current state Skd move to the next state 
+
+Skd+1 based on the previous action. Suppose node j is chosen as the next node at the decision step 
+
+d + 1 and the last visited node is i, then vd+1  
+
+> k,j
+
+:= 1, ϑd+1  
+
+> k,j
+
+:= ϑdk,i + trkd i j , (x d+1 
+
+> k
+
+, y d+1 
+
+> k
+
+) := ( x j , y j ) and 
+
+Rdk, j := α × trkd i j + φ × pj , where rkd =
+
+ ϑdk,i
+
+> ∆t
+
+
+
+is the last time interval and (x j , y j ) is the coordination of order j.
+
+Objective Function : The objective function is set to be the same as Equation (6), while both con-sidering the total travel time and the time window penalty. 
+
+4.1.2. Reinforcement learning algorithm 
+
+The reinforcement learning framework for the routing subproblem is illustrated in Figure 3, where the agent sequentially selects the next node and the environment transitions to a new state. After a small-scale preliminary experiments, we find that even for instances with only a few orders, commercial solvers often fail to obtain near-optimal solutions within the decision time budget ∆t. Since each dis-12 Environment 
+
+①
+
+Agent 
+
+Order Pool 
+
+[ 𝐀 𝐀 
+
+> 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀 𝐀
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+⋮ ]
+
+[ 𝐀 𝐀 
+
+> 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀 𝐀
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+⋮ ]
+
+Order Attributes Courier Personalized Attributes 
+
+[𝐀 𝐀 
+
+> 𝐀 ℎ
+
+, 𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀 𝐀
+
+, 𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀 𝐀 𝐀 𝐀
+
+, 𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+, 𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀
+
+, 𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀 𝐀
+
+, ⋯]
+
+Courier - order Edges (self)      
+
+> [𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 , ⋯ ][𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 , ⋯ ]
+
+Order Pool  
+
+> ×𝐀𳰀𝐀 _𝐀𴀀𝐀𴰀𴀀𱐀
+
+DR-LaCPNet 
+
+State 
+
+Action 
+
+Reward    
+
+> 1234
+
+Initial state 
+
+（𝐀 𝐀 ）
+
+𝐀 𝐀 
+
+Final State 
+
+(𝐀 𝐀 )           
+
+> 1234
+> 1234
+> 1
+> 2
+> 3
+> 4
+> 𝐀 1
+> 𝐀
+> 𝐀 2
+> 𝐀
+> 𝐀 3
+> 𝐀
+> 𝐀 4
+> 𝐀
+> 𝐀 1
+> 𝐀 ,𝐀 2
+> 𝐀 ,⋯, 𝐀 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀 𝐀 𝐀 𝐀
+> 𝐀
+
+Probability vector Sample 
+
+Greedy 
+
+Next 
+
+Node 
+
+Mask 
+
++
+
+Spatial-temporal Encoder & Decoder    
+
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀
+> Node embedding
+> Spatial-correlation
+> embedding
+> Graph-based input
+> Node embedding
+> Spatial-correlation
+> embedding
+> Graph-based input
+> Node embedding
+> Spatial-correlation
+> embedding
+> Graph-based input
+> Node embedding
+> Spatial-correlation
+> embedding
+> Graph-based input
+> Temporal
+> correlations
+> Temporal
+> correlations
+> Temporal
+> correlations
+
+Figure 3: Reinforcement learning framework for the routing subproblem 
+
+patching wave must be completed in real time, the computation time per wave is restricted to at most 
+
+∆t. Therefore, in order to reflect the goodness of solutions obtained by the DL model, we use the in-teractive update method of policy and baseline as our reinforcement learning algorithm, as detailed in Algorithm 4.1. At epoch 0, the baseline is initialized as a copy of the policy, which is then continuously updated using a greedy strategy. In order to further expand the solution space, the policy is updated using a more “moderate” sampling strategy instead of a greedy strategy. Here we use Adam as the op-timizer to update θ (Kingma and Ba, 2015). Also, a warm start with pre-trained weights is employed in reinforcement learning to get θ0, which accelerates the convergence and enhances training stability by leveraging prior knowledge. Unlike Kool et al. (2019) and Chen et al. (2025) directly replacing the baseline with the updated parameters when the difference between the solution obtained by policy and baseline is too large by t-test ( α = 5%), we softly update the baseline, i.e., θ B L 
+
+τ = μθ B L 
+
+τ−1 + λθ τ, where μ
+
+and λ are the soft update factors, θ B L 
+
+τ−1 is the coefficient of baseline in the previous epoch, and θτ is the coefficient of policy in the current epoch. This weighted rather than direct substitution update prevents model oscillations and overfitting (Nikishin et al., 2018), which improves the generalization ability of the model. 
+
+4.1.3. DR-LaCPNet framework 
+
+The total framework of the proposed DR-LaCPNet for the routing subproblem is shown in Figure 4. We next describe the critical components in detail as follows. 
+
+a) Input spatial-temporal graph structures 
+
+We use a spatial-temporal graph since travel times are time-dependent and each order is associ-ated with temporal attributes (e.g., accept /promise times and time windows). We integrate the spatial-13 Algorithm 4.1 Reinforcement Learning Algorithm for the routing subproblem 
+
+1: Input: number of epochs τmax , batch size B, soft update factors μ, λ, datasets DTrain , DValid 
+
+2: Initialize: Load pre-trained weights for policy θ ← θ0 (warm start), set baseline θ B L ← θ0
+
+3: for τ = 1, . . . , τmax do 
+
+4: for bat ch = 1, . . . , B do 
+
+5: Sample : si ← RandomInstance (DTrain )
+
+6: Rollout : πi ← SampleRollout (si , θτ), πB L i ← GreedyRollout (si , θ B L 
+
+τ )
+
+7: Update : θτ ← Adam 
+
+
+
+θτ, PBi=1(L(πi ) − L(πB L i )) ∇θ log pθ (πi )
+
+
+
+8: end for 
+
+9: Validate the results on DValid 
+
+10: Calculate α = t-test  {L(πi )}Bi=1, {L(πB L i )}Bi=1|DValid 
+
+11: if significant difference ( α ≤ 5%) then 
+
+12: Soft update : θ B L 
+
+τ = μθ B L 
+
+τ−1 + λθ τ
+
+13: end if 
+
+14: end for 
+
+15: Output: The parameters of the routing DL θOrder Pool 
+
+[ 𝐀 𝐀 
+
+> 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀 𝐀
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+⋮ ]
+
+[ 𝐀 𝐀 
+
+> 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀 𝐀
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀 𝐀
+
+,
+
+𝐀 𝐀 
+
+> 𝐀 𝐀 𝐀
+
+⋮ ]
+
+Order attributes Edges       
+
+> [𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 , ⋯ ]
+> [𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 , ⋯ ]
+> [𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 , ⋯ ]
+
+Dynamic Residual 
+
+Graph Attention 
+
+Networks (DRGAN) 
+
+①
+
+Courier Global Information      
+
+> [𝐀 𝐀
+> 𝐀 ℎ,𝐀 𝐀
+> 𝐀 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀
+> 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀 𝐀 𝐀 𝐀 ,𝐀 𝐀
+> 𝐀 𝐀 𝐀 ,𝐀 𝐀
+> 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀 ,𝐀 𝐀
+> 𝐀 𝐀 𝐀 _𝐀 𝐀 𝐀 𝐀 , ⋯ ]
+
+Environmental 
+
+Information 
+
+𝐀𝰀𝐀𝐀 
+
+𝐀𡰀𝐀𝐀𝐀𝐀𝰀𝐀𝐀 
+
+𝐀𝐀𝰀𝐀 ℎ𝐀𤠀 
+
+Embedding 
+
+Layer 
+
+Embedding 
+
+Layer 
+
+Embedding 
+
+Layer 
+
+Look-ahead Courier 
+
+Personalized 
+
+Decoder (LaCP) 
+
+> Spatial-temporal
+> characteristics
+> Dynamic
+> Updated
+
+MLP 
+
+(Feature Fusion ) 
+
+Mask + Prob Layer                
+
+> 1234123412341234
+
+Prob 
+
+𝐀 1 
+
+> 𝐀
+
+𝐀 2 
+
+> 𝐀
+
+𝐀 3 
+
+> 𝐀
+
+𝐀 4
+
+> 𝐀
+
+×L 𝐀 𝐀 
+
+𝐀 𝐀 + 𝐀 LayerNorm 
+
+Figure 4: LaCPNet model framework 
+
+temporal features into the subsequent module designed for feature enhancement, rather than using them as raw inputs without feature transformation. For each decision step d, Vd denotes the node set, Ad
+
+denotes the edge set, Xd denotes the node features, and Ed denotes the edge features. Given the ini-tial information, we can construct the input spatial-temporal graph Gkd = ( Vd , Ad , Xd , Ed ) to capture the spatial-temporal correlations in the routing subproblem. By padding the starting position of the courier to match the length of other nodes, we ensure all nodes have feature vectors of the same length. Then, 14 the feature vector of node i, denoted by xi , is defined as: 
+
+xi =  x i , y i , X ac i , X pr i , ai , bi , AOI i , I cur i , T W ur i , T W re i
+
+ , (23) where (x i , y i ) are the coordinates, X ac i is the accept time, X pr i is the promised arrival time, [ai , bi ] is the time window, AOI i is the area of interests ( AOI ) type and I cur i is the indicator that whether node 
+
+i is the current courier position. To better distinguish the temporal difference of orders, we introduce 
+
+T W ur i = bi − r as the time urgency and T W re i = r − ai as the time readiness, where r represent the current time. The dimension of xi is denoted as Dx.In addition, the edge features of the complete graph Gkd is denoted as edi j , which constitutes the edge-feature tensor Ed . Instead of directly feeding the raw features into subsequent modules, we slightly preprocess the edge features to reflect the temporal characteristics. Given the time-dependent travel time of each edge, we set edi j =
+
+
+
+trkd i j , eAdi j , δearly  
+
+> di j
+
+, δlate  
+
+> di j
+
+, Bdi j 
+
+
+
+. Here we consider the travel-time attributes from node i to all remaining nodes when constructing edge features, where rkd denotes the current time at step d. Specifically, we use eAdi j for estimated arrival time of node j, δearly  
+
+> di j
+
+and δlate  
+
+> di j
+
+indicating whether arriving early of late at node j, and Bdi j for time window penalties. The dimension of edi j is denoted as 
+
+De.To reduce the value discrepancy between node features Xd and edge features Ed , we embed them through linear transformation layers separately. Let Dh denote the dimension of the hidden layers. For simplicity, we drop the subscript d and the superscript k when there is no ambiguity. The transformed node features xi and edge features ei j can be computed as: 
+
+xi = ReLU (Wxxi + bx) ,
+
+ei j = ReLU  Weei j + be
+
+ , (24) where Wx ∈ RDh×Dx , bx ∈ RDh , We ∈ RDh×De , be ∈ RDh are trainable parameters. From this we obtain 
+
+xi ∈ RDh and ei j ∈ RDh . After processing, our input spatial-temporal graph can be easily fed into the subsequent dynamic residual graph attention network encoder. 
+
+b) Dynamic Residual Graph Attention Network Encoder 
+
+In this section, we present the Dynamic Residual Graph Attention Network (DRGAN) Encoder, the crucial component of our proposed model designed to effectively capture the complex spatial-temporal relationships in the routing subproblem. This encoder leverages the strengths of Graph Attention Net-works (GAT) and residual connections to enhance the representation of node and edge features, thereby improving the model’s ability to make informed decisions. Each GAT residual block consists of a GAT layer followed by an activation function, a residual con-nection, and a normalization layer. The GAT layer incorporates edge features into the node representa-tion and then updates it. Here we set the initial input embeddings as the 0-th layer, i.e., h0 
+
+> i
+
+= xi . The 15 attention coefficients zli, j are then computed by Equation (26) at each layer. Since each edge (i, j) ∈ A
+
+contains multidimensional features, we first transform ei j into a scalar edge attribute ˜ e li j ∈ R used in the attention mechanism. At the first layer, ˜ e 0 
+
+> i j
+
+is obtained from ei j via a lightweight learnable mapping; in deeper layers, ˜ e li j is dynamically updated using the attention weights from the previous layer. We then update node representations via one-hop attention aggregation and update edge representations layer-wisely using zli, j , i.e., we set ˜ el+1 
+
+> i j
+
+= zli j .
+
+hli =
+
+X
+
+> j∈N(i)
+
+zli, j Θt hlj (25) 
+
+zli, j =
+
+exp 
+
+
+
+LeakyReLU 
+
+
+
+q⊤ 
+
+> s
+
+Θshli + q⊤ 
+
+> t
+
+Θt hlj + q⊤ 
+
+> z
+
+Θz ˜e li j 
+
+ P 
+
+> k∈N(i)
+
+exp  LeakyReLU  q⊤ 
+
+> s
+
+Θshli + q⊤ 
+
+> t
+
+Θt hlk + q⊤ 
+
+> z
+
+Θz ˜e lik 
+
+ (26) where q⊤ 
+
+> s
+
+, Θs, q⊤ 
+
+> t
+
+, Θt , q⊤ 
+
+> z
+
+, Θz are all trainable parameters and N(i) is the one-hop set of node i. Conse-quently, we apply the following residual mechanism to mitigate gradient vanishing and a normalization layer to stabilize the training process. 
+
+h(l+1) 
+
+> i
+
+= LayerNorm 
+
+
+
+ReLU 
+
+
+
+hli
+
+
+
++ hli
+
+
+
+(27) Finally, the output of the DRGAN encoder includes node representations HE = (hEi )⊤ 
+
+> i∈V
+
+∈ R|V|× Dh
+
+and edge representations AE = ˜e Ei j 
+
+  
+
+> (i,j)∈A
+
+∈ R|A|× 1. These outputs are treated as the input of the following Look-Ahead Courier-Personalized Decoder. 
+
+c) Look-Ahead Courier- Personalized Decoder 
+
+Building upon the DRGAN encoder’s output, which includes node representations HE and edge representations AE , the Look-Ahead Courier-Personalized (LaCP) Decoder further incorporates environ-mental and courier-specific information to refine routing decision-making. Initially, we embed the environmental information Ekd ∈ RDA to Ekd ∈ RDh through a multilayer perceptron (MLP). Subsequently, we expand the embedded environmental information to match the number of edges, i.e., eEkd ∈ R|A|× Dh . We apply the same strategy to the courier global information and transform the Gk ∈ RDG into eGk ∈ R|A|× Dh . The edge representations are updated by concatenating the courier’s global information and the environmental information. ˜AE = ReLU    AE ∥ eGk∥eEkd
+
+ · WA + bA
+
+ (28) where WA ∈ R(2Dh+1)×Dh and bA ∈ RDh are trainable parameters and ∥ means concatenation. Let ic
+
+denote the index of the current node at decision step d. Given the edge embedding matrix ˜ AE ∈ R|A|× Dh ,we extract the rows corresponding to outgoing edges (ic , j) ∈ A to obtain a node-aligned edge-context matrix ˜ AEic ∈ R|V|× Dh , where the j-th row represents the edge embedding from the current node ic to 16 node j.Due to the discreteness of the time-dependent travel times, relying solely on the travel time of the current time step or incorporating travel times of all time steps is not ideal. The reasons are as follows: 1) Relying solely on the travel time of the current time step undermines its ability to anticipate future conditions. 2) Using travel times from past steps provides limited additional benefit once the current travel-time snapshot is available, and it increases the input size unnecessarily. 3) Incorporating travel times from distant future time steps can introduce noise, thereby perturbing the current decision-making process. Therefore, we propose the look-ahead mechanism to balance the model’s need for the current decision step and the future decision step. We set the look-ahead time window to γ to determine how far the model should look ahead, then denote the look-ahead travel time matrix as F ∈ Rγ×| V|×| V|. Given the current node ic ∈ V, we extract the travel times from the current node to all other nodes across these matrices and transpose the result to obtain eF.
+
+eF = Td (ic , ·) , Td+1 (ic , ·) , . . . , Td+γ−1 (ic , ·)T ∈ R|V|× γ (29) We encode eF using an MLP defined as follows: 
+
+F = ReLU  eF · WeF + beF
+
+ (30) where WeF ∈ Rγ×Dh and beF ∈ RDh are trainable parameters. The output of the MLP is denoted as 
+
+F ∈ R|V|× Dh . By fusing the travel time matrices of future γ steps, we can enhance the model’s ability to anticipate near-future travel conditions. Moreover, to explicitly represent the current node ic and indicate its position within the graph, we extract the embedding corresponding to ic from HE , denoted as H Eic . This embedding is then expanded by repetition to match the number of nodes |V|, forming 
+
+H Eic ∈ R|V|× Dh . We further encode the current-step travel times Td (ic , ·) by a separate MLP , yielding 
+
+Fic ∈ R|V|× Dh .To integrate the diverse factors influencing the decision-making process, we employ a composite node scorer to compute the final node scores. The proposed node scorer is an MLP which concatenates 
+
+HE , F, ˜ AEic , H Eic , Fic to enhance the feature representation. 
+
+hd := NodeScorer 
+
+
+
+HE ∥F∥˜AEic ∥H Eic ∥Fic
+
+
+
+(31) The Mask mechanism is then applied to the node scores according to the visited mask Md to get the probabilities pθ (Xd | Sd ) while choosing the next node Xd .
+
+Mask (hd , Md ) = 
+
+
+
+hd [i] if Md [i] = 1
+
+−10 9 if Md [i] = 0(32) 17 pθ (Xd | Sd ) = Softmax (Mask (hd , Md )) (33) We next introduce the proposed heuristic for the order dispatching problem. 
+
+4.2. Heuristic for the order dispatching subproblem 
+
+As stated earlier, the resulting model in Section 4.1 is then embedded into the dispatching process to rapidly score candidate couriers via routing-aware marginal cost estimation. Below gives the specific description of the position-pool greedy dispatch heuristic. As shown in Algorithm 4.2, the proposed algorithm includes the position-pool greedy dispatch heuristic and a local-search refinement phase (PP-Greedy-LS) to further improve solution quality. Specif-ically, the PP-Greedy-LS heuristic first evaluates each courier’s current routing cost J k 
+
+> old
+
+under the trained routing policy πR, and aggregates them to obtain the initial system cost Jtot = P 
+
+> k∈K
+
+J k
+
+> old
+
+. For each courier 
+
+k, the heuristic then constructs a position pool Sk consisting of the courier’s current position lk and the positions of its currently dispatched orders Oold k , which serves as a compact spatial representation of the courier’s workload. Next, the new orders Onew are sorted in a non-descending order of urgency bi ,yielding ˆ Onew , so that more urgent orders are processed first. For each order i ∈ ˆOnew , the heuristic restricts dispatch candidates to a local neighborhood by selecting KQ(i), the Q-nearest couriers with the smallest distance min p∈Sk ∥p − li ∥ to the order position li . Among these candidates, the heuristic chooses 
+
+k⋆ that minimizes the incremental routing cost ∆ik , defined as the difference between the rollout routing cost after tentatively inserting order i into courier k’s workload and the courier’s current cost J k
+
+> old
+
+, i.e., 
+
+∆ik = GreedyRolloutCost (πR, k ∪ { i}) − J k
+
+> old
+
+. If a feasible k⋆ exists, the dispatch decision is set to y k⋆ 
+
+> i
+
+= 1(and y ki = 0 for all k̸ = k⋆), the position pool is updated as Sk⋆ ← Sk⋆ ∪ { li }, and both J k⋆ 
+
+> old
+
+and Jtot are updated by adding ∆ik ⋆ ; otherwise, the order is skipped for next dispatching. After completing the position-pool greedy dis- patch heuristic, the algorithm sets the resulting dis-patch as the current solution Y ← { y ki } with cost J ← Jtot , and initializes the best solution and objective by (Y ⋆, J⋆) ← (Y, J). The algorithm then performs a local search for at most I iterations. In each it-eration, a neighborhood N(Y ) is generated by applying dispatch moves (e.g., relocating an order to a different courier). For each candidate solution Z ∈ N(Y ), its total routing cost J(Z) is evaluated incre-mentally using πR, i.e., by recomputing only the affected couriers’ rollout costs while keeping others unchanged. The algorithm selects the best neighbor Y ′ = arg min Z∈N(Y ) J(Z). If J(Y ′) < J, the move is accepted, then the current solution and the current objective are updated, i.e., Y ← Y ′ and J ← J(Y ′)). The best objective J⋆ would be updated if J < J⋆. Otherwise, the algorithm accepts the inferior solution with probability σ to encourage exploration and escape local optima. Finally, the algorithm outputs the best dispatch Y ⋆ and its associated routing cost J⋆.Unlike directly training an upper-layer neural network to make order dispatching decisions, the pro-posed algorithm provides a rather lightweight strategy to solve different scales of dispatching instances. This is particularly important in real-world operations, where the number of active couriers and incom-18 Algorithm 4.2 Position-pool greedy dispatch with local search refinement (PP-Greedy-LS)  
+
+> 1:
+
+Input: new orders Onew , couriers K, trained routing policy πR, candidate size Q, max iterations I,acceptance probability σ 
+
+> 2:
+
+Compute J k 
+
+> old
+
+for all k ∈ K using πR; set Jtot ← P 
+
+> k∈K
+
+J k 
+
+> old
+> 3:
+
+For each k ∈ K, construct a courier position pool Sk from the positions of Oold k and lk 
+
+> 4:
+
+Sort orders in Onew in non-descending order by urgency bi to obtain ˆ Onew  
+
+> 5:
+
+for each order i ∈ ˆOnew do  
+
+> 6:
+
+Select the top-Q candidate couriers with the smallest min p∈Sk ∥p − li ∥, denoted by KQ(i) 
+
+> 7:
+
+k⋆ ← arg min k∈KQ (i) ∆ik , where ∆ik = GreedyRolloutCost (πR, k ∪ { i}) − J k 
+
+> old
+> 8:
+
+if k⋆ exists then  
+
+> 9:
+
+Set y k⋆ 
+
+> i
+
+← 1 and y ki ← 0 for all k̸ = k⋆ 
+
+> 10:
+
+Update Sk⋆ ← Sk⋆ ∪ { li } 
+
+> 11:
+
+J k⋆ 
+
+> old
+
+← J k⋆ 
+
+> old
+
++ ∆ik ⋆ , Jtot ← Jtot + ∆ik ⋆ 
+
+> 12:
+
+else  
+
+> 13:
+
+Continue  
+
+> 14:
+
+end if  
+
+> 15:
+
+end for  
+
+> 16:
+
+Set current dispatch Y ← { y ki } and current cost J ← Jtot  
+
+> 17:
+
+Set best dispatch Y ⋆ ← Y and best cost J⋆ ← J 
+
+> 18:
+
+for t = 1 to I do  
+
+> 19:
+
+Generate a neighborhood N(Y ) by dispatch moves  
+
+> 20:
+
+Select Y ′ ← arg min Z∈N(Y ) J(Z), where J(Z) is evaluated incrementally by πR 
+
+> 21:
+
+if J(Y ′) < J then  
+
+> 22:
+
+Y ← Y ′, J ← J(Y ′) 
+
+> 23:
+
+if J < J⋆ then  
+
+> 24:
+
+Y ⋆ ← Y , J⋆ ← J 
+
+> 25:
+
+end if  
+
+> 26:
+
+else  
+
+> 27:
+
+Generate random number rnd ∈ [0, 1 ] 
+
+> 28:
+
+if rnd < σ then  
+
+> 29:
+
+Select a random Y ′ ∈ N(Y ) and set Y ← Y ′, J ← J(Y ′) 
+
+> 30:
+
+end if  
+
+> 31:
+
+end if  
+
+> 32:
+
+end for  
+
+> 33:
+
+Output: best dispatch Y ⋆ and J⋆
+
+19 ing orders within a region is inherently time-varying and uncertain, fluctuating due to demand surges, courier online /offline dynamics, and spatial-temporal imbalances. By selecting the Q-nearest candidate couriers based on the proximity measure min p∈Sk ∥p − li ∥, our algorithm significantly reduces the num-ber of route evaluations and avoids unreasonable dispatch decisions to couriers whose current workload footprint is far from the order position. In the algorithm, the underlying routing DRL serves as an oracle for our dispatch heuristic, enabling rapid route evaluation. This allows relatively accurate and low-cost assessment of dispatch strategies without iteratively solving MILPs. Moreover, our routing oracle incor-porates time-dependent travel times, which is able to reflect near-future routing implications. This yields more informative marginal-cost estimates, since ∆ik is evaluated by time-dependent rollouts and cap-tures downstream routing impacts, mitigating myopic dispatches under time-varying traffic conditions. Finally, Through the subsequent local-search phase with the inferior solution acceptance mechanism, the algorithm could escape local optima and improve robustness. 
+
+5. Numerical study 
+
+In this section, we conduct experiments to verify the performance and efficiency of the proposed framework. For parameter settings, we apply a fixed learning rate of η = 0.001 in the reinforcement learning algorithm, with gradient clipping enforced via a maximum L2 norm of 1.0. The batch size is set to 128. In the DR-LaCPNet model, we configure embedding dimensions D = 128, number of GAT layers L = 5. The MILP was solved directly by the Gurobi solver in Python. The numerical studies are conducted on a high-performance workstation equipped with an NVIDIA RTX 4090D GPU with 24 GB memory, and an Intel Xeon Platinum 8481C processor with 16 virtual cores. 
+
+5.1. Dataset description 
+
+In this work, we use the LaDe-P dataset, which focuses on dynamic package pick-up processes. It contains over 10.6 million packages and 619k courier trajectories generated by about 21k couriers across five Chinese cities during a six-month period. Each record provides information on the courier, package, position, and time of the pick-up event, with GPS coordinates perturbed within 10 meters for privacy protection. The dataset exhibits rich spatial-temporal patterns: for example, more than 70% of packages belong to type-1 AOIs, most packages are picked up within three hours, and couriers show noticeable differences in efficiency and working profiles. These large-scale, diverse, and dynamic features make LaDe-P a representative and challenging benchmark for research in last-mile logistics. Figure 5 illustrates the spatial distribution across the five cities. It is evident that Hangzhou accounts for the largest share of the dataset. At the same time, different cities exhibit varying densities and cover distinct time periods, which provides us with diverse instances to validate the performance of our algorithms under heterogeneous urban environments and different experimental configurations. 20 Figure 5: Spatial distribution across 5 cities 
+
+5.2. Dispatch instance simulator 
+
+Because the LaDe datasets are temporally sparse in each region, it is generally infeasible to directly extract a sufficiently large number of representative dispatching instances for scalable learning and test-ing. We therefore design a data-driven dispatch instance simulator that combines event replay with a ROLLING UPDATE strategy to dynamically update the context, enabling the generation of abundant train-ing instances while preserving the spatial–temporal patterns observed in the original data, as shown in Algorithm 5.1. To construct dispatch instances for experiments and routing instances for training with controlled and diverse scales, we specify two scale parameters, i.e., the number of couriers K and the num-ber of new orders N , and vary them within [Kmin , Kmax ] and [Nmin , Nmax ] across instances. Firstly, INIT CONTEXT (D, R, t0) initializes the context. For each dispatching wave h, the simulator then draws 
+
+K candidate couriers from an empirical snapshot pool P(th, R), and retrieves each courier k’s in-hand orders Oold  
+
+> k
+
+from the historical records. Next, the simulator performs event replay to collect a candi-date set of order accept events ˜ O within time (th, th + ∆] and region R. To control the instance scale while maintaining the spatial-temporal characteristics of the raw dataset, we set each event o ∈ ˜O to be independently activated with probability pact = min {1, N /| ˜O|} to yield the new order set Onew . If the realized |Onew | exceeds N , we subsample Onew to length N .For each activated order, we construct its node features according to Equation (23) at time th. The 21 resulting dispatch instance is built as Ih = ( K, Onew , th, ∆, Γh) and is solved by the proposed dispatch procedure and routing rollouts under the pretrained routing policy πR. After obtaining the dispatch de-cision { y ki }, the simulator advances to the next wave via R OLLING UPDATE introduced in Algorithm 5.2. Specifically, for each courier k, we merge its in-hand orders with the newly dispatched orders (i.e., 
+
+i ∈ Onew : y ki = 1), run πR to solve the routing subproblem and obtain arrival times {Tk,i }i∈Ocur  
+
+> k
+
+. Sub-sequently, the old orders Oold k are updated, while the courier position is also updated as the last visited position before th + ∆. Repeating this loop produces a temporally consistent, state-evolving sequence of dispatching waves. Specifically, the decision at wave h is propagated to wave h+1 through R OLLING UP-
+
+> DATE
+
+, making subsequent instances and decisions conditional on earlier outcomes. Together with the scale controls (K, |Onew |), this provides a convenient way to generate continuous benchmark sequences spanning diverse instance sizes while preserving key spatial–temporal patterns in the raw logs. 
+
+Algorithm 5.1 Dispatch Instance Simulator  
+
+> 1:
+
+Input: Dataset D, region R, start time t0, dispatching wave length ∆, horizon H, courier number range [Kmin , Kmax ], order number range [Nmin , Nmax ], routing policy πR 
+
+> 2:
+
+Output: Dispatch instances {Ih}H−1 
+
+> h=0
+> 3:
+
+Initialize rolling context Γ0 ← INIT CONTEXT (D, R, t0) 
+
+> 4:
+
+for h = 0, 1, . . . , H − 1 do  
+
+> 5:
+
+Set dispatching wave time th ← t0 + h∆ 
+
+> 6:
+
+Sample K ∼ Unif ({Kmin , . . . , Kmax }) and N ∼ Unif ({Nmin , . . . , Nmax }) 
+
+> 7:
+
+Sample K couriers from the empirical snapshot pool P(th, R); obtain courier set K and, for each courier k ∈ K, its in-hand orders Oold  
+
+> k
+> 8:
+
+Collect candidate accept events ˜ O within time (th, th + ∆] and region R 
+
+> 9:
+
+Set pact ← min {1, N /| ˜O|}  
+
+> 10:
+
+Activate each o ∈ ˜O independently with probability pact to obtain Onew  
+
+> 11:
+
+If |Onew | > N , subsample Onew to size N 
+
+> 12:
+
+Construct node states {xi } for all orders in Onew according to Equation (23) at th 
+
+> 13:
+
+Build instance Ih ← (K, Onew , th, ∆, Γh) 
+
+> 14:
+
+Solve Ih to obtain dispatch decision { y ki } and routing rollouts under πR 
+
+> 15:
+
+Γh+1 ← ROLLING UPDATE (Γh, Ih, { y ki }, πR, th, ∆) according to Algorithm 5.2  
+
+> 16:
+
+end for  
+
+> 17:
+
+Return {Ih}H−1
+
+> h=0
+
+5.3. Learning performance 
+
+This section discusses the parameter settings and the learning curve of the LaCPNet. We train our LaCPNet for 100 epochs with a batch size of 64, a learning rate of l r = 10 −3, hidden dimension of 64, and a look-ahead step of 3. The objective weights are set to be α = 0.7 and φ = 1.0 by default. During training process, the policy πi is evaluated against its baseline counterpart πB L i , and the objective is defined as the difference between their respective losses, i.e., Lπi − LπB L i . As shown by the convergence curves in Figure 6a, the loss decreases steadily until iteration 50. The loss then stabilizes 22 Algorithm 5.2 ROLLING UPDATE  
+
+> 1:
+
+Input: Current rolling context Γh, instance Ih = ( K, Onew , th, ∆, Γh), dispatch { y ki }, routing policy 
+
+πR, wave time th, wave length ∆ 
+
+> 2:
+
+Output: Next rolling context Γh+1 
+
+> 3:
+
+for each courier k ∈ K do  
+
+> 4:
+
+Let Ocur  
+
+> k
+
+← Oold  
+
+> k
+
+∪ { i ∈ Onew : y ki = 1} 
+
+> 5:
+
+Run πR on Ocur  
+
+> k
+
+starting at time th to solve the routing subproblem and obtain arrival times 
+
+{Tk,i }i∈Ocur  
+
+> k
+> 6:
+
+Set Oold  
+
+> k
+
+← { i ∈ Ocur  
+
+> k
+
+: Tk,i > th + ∆} 
+
+> 7:
+
+Update courier position to the last visited position before th + ∆ 
+
+> 8:
+
+end for  
+
+> 9:
+
+Update time in the rolling context to th + ∆ and return the updated courier positions and carry-over order sets as Γh+1 
+
+> 10:
+
+Return Γh+10 20 40 60 80 100       
+
+> Epoch
+> 8
+> 7
+> 6
+> 5
+> 4
+> 3
+> 2
+> 1
+> 0
+> Loss
+> (a) Training loss with epochs 020 40 60 80 100
+> Epoch
+> 2.6
+> 2.4
+> 2.2
+> 2.0
+> 1.8
+> 1.6
+> 1.4
+> Reward
+> Policy Reward
+> Baseline Reward (b) Training rewards of policy and baseline
+> Figure 6: Learning curve of DR-LaCPNet
+
+and further training provides only marginal improvements at the cost of significant computational over-head. Consistently, Figure 6b reports the episodic rewards of πi and πB L i , where both curves improve sharply within the first ∼ 50 epochs and converge thereafter, with the policy reward gradually catching up to the baseline, while further gains become marginal. Consequently, for all subsequent evaluations, we adopt the model obtained at iteration 50 as the representative result. 
+
+5.4. Numerical experiments 5.4.1. Evaluation of the DRL routing oracle 
+
+To ensure both the computational efficiency and decision quality of the upper-level dispatching heuristic, the solution quality and solution time of the DRL routing policy is of significance. Therefore, we first evaluate the effectiveness of the proposed DRL routing oracle across different number of new 23 orders |Onew  
+
+> k
+
+| for a specific courier, including its in-hand orders and newly dispatched orders. We begin with a benchmark against the MILP formulation solved by commercial solver Gurobi. The following approaches are used as baselines for comparison: 1) MILP: The Mixed-Integer Linear Programming (MILP) of TDTSPTW-PU is solved using the Gurobi solver. 2) Greedy: A simple heuristic generating the routes by a step-by-step policy, selecting the next node with the shortest travel time at each step. 3) TS: A tabu search algorithm proposed by Brandão (2004) for the open VRP . To apply it to TDTSPTW-PU, we specialize it to the single-vehicle ase and use 2-opt exchanges as the neighborhood structure. 4) DeepRoute: A deep model with a Transformer encoder and an attention-based decoder to rank unserved orders proposed by Wen et al. (2021). 5) Graph2Route: A deep model proposed by Wen et al. (2022), which formulates the task as a graph-to-sequence problem. It applies a GNN to learn task embeddings and a sequence decoder to generate the route, effectively modeling spatial correlations among orders. The maximum solution time of Gurobi is set to 300s, since dispatch decisions must be computed within each short dispatching wave to remain actionable.                                                                                                                                                                                               
+
+> Table 3: Performance comparison for DRL routing oracle
+> Scenario MILP Greedy TS Deeproute Graph2Route DR-LaCPNet
+> |Onew
+> k|δU B T ime Gap Ob j T ime Ob j T ime Ob j T ime Ob j T ime Ob j T ime Ob j I mp .
+> [1, 4 ]
+> 10.50 34.26 0.00 0.65 0.02 0.50 0.76 0.50 0.01 0.50 0.02 0.50 0.03 0.00 30.31 41.55 0.00 0.42 0.01 0.31 0.32 0.31 0.02 0.31 0.01 0.31 0.02 0.00 50.19 31.08 0.00 0.28 0.03 0.19 0.55 0.19 0.01 0.19 0.03 0.19 0.04 0.00
+> [5, 8 ]
+> 11.17 120.45 0.00 1.55 0.05 1.25 25.63 1.28 0.04 1.22 0.05 1.17 0.09 0.00 31.36 157.26 0.00 1.85 0.04 1.48 41.97 1.52 0.06 1.45 0.04 1.36 0.13 0.00 51.28 300.00 24.7 1.45 0.07 1.16 33.55 1.20 0.05 1.18 0.06 1.11 0.08 4.31
+> [9, 12 ]
+> 1–––2.10 0.11 1.74 55.05 1.76 0.08 1.71 0.09 1.52 0.21 11.11 3–––2.05 0.09 1.68 64.33 1.65 0.09 1.62 0.12 1.41 0.26 12.96 5–––2.35 0.12 1.85 52.45 1.82 0.07 1.78 0.10 1.55 0.19 12.92
+> [13, 16 ]
+> 1–––4.50 0.18 3.85 98.04 3.75 0.13 3.62 0.15 3.15 0.29 12.98 3–––4.20 0.15 3.35 103.82 3.25 0.16 3.03 0.14 2.72 0.34 10.23 5–––3.50 0.22 2.65 96.89 2.60 0.14 2.50 0.18 2.12 0.27 15.20
+
+The results are demonstrated in Table 3, where columns “Obj” and “Time” reports the objective value and solution time of the methods, respectively. For MILP , U B denotes Gurobi’s best incumbent objective and Gap is the average optimality gap, i.e., Gap = ( U B − LB )/U B ×100%, where LB is Gurobi’s lower bound. Ob j I mp . reports the objective improvement of DR-LaCPNet relative to the best objective value achieved by all methods (including DR-LaCPNet). Thus, Ob j I mp . = 0 if DR-LaCPNet attains the best objective. It can be observed that on small- and medium-scale route instances, e.g., |Onew  
+
+> k
+
+| ∈ 
+
+[1, 4 ] and |Onew  
+
+> k
+
+| ∈ [5, 8 ], the proposed DR-LaCPNet attains objective values that are competitive with the MILP baseline while requiring substantially shorter computation times. On larger instances, e.g., 
+
+|Onew  
+
+> k
+
+| ∈ [9, 12 ] and |Onew  
+
+> k
+
+| ∈ [13, 16 ], where Gurobi frequently fails to identify a feasible solution within the prescribed time limit (“–”), DR-LaCPNet continues to generate competitive results compared with other baselines. Specifically, compared with classical construction heuristics (Greedy and TS), LaCPNet achieves markedly better or comparable objective values across all instances while retaining 24 sub-second runtime, making it suitable for time-sensitive routing evaluations. Compared with other deep models (DeepRoute and Graph2Route), LaCPNet consistently attains lower objective values across most scenarios, suggesting the benefit of jointly leveraging DRGAN encoder and LaCP decoder. It is also noteworthy that the solution time of LaCPNet does not increase significantly with larger instance sizes, but instead remains relatively stable at less than 0.1 seconds. This confirms that our LaCPNet can fully account for environmental factors within an extremely short timeframe, thereby delivering high-quality solutions and providing a robust solution oracle for order dispatching heuristics. 
+
+5.4.2. Offline evaluation 
+
+To investigate the performance of our proposed integrated optimization framework for order dis-patch and route planning, we first conduct offline evaluations across different cities in the LaDe dataset to isolate solution quality and runtime under controlled settings. As the experimental results shown in Section 5.4.1, DR-LaCPNet consistently delivers superior solutions compared with other baselines, we therefore use the trained DR-LaCPNet as a unified routing oracle ( πR) for all dispatching methods when computing objectives for y ki . As a results, the reported objective values reflect only the quality of the dispatching policy rather than differences in routing evaluation For this offline evaluation, we construct dispatch instances from the LaDe dataset across five cities. Each instance consists of N new new orders and K candidate courier. We benchmark PP-Greedy-LS against four baselines: (i) DRL Marginal-cost Assignment (DMCA), which solves a static dispatching problem by minimizing the DRL-estimated marginal routing cost. Specifically, for each courier k, we first compute its base routing cost under the DRL oracle, and then evaluate the incremental cost of assigning each new order i to k via a one-order rollout. These marginal costs form a cost matrix, based on which we solve a minimum-cost bipartite assignment using Gurobi (with an optional per-courier capacity constraint), yielding the dispatch decision y ki ; (ii) Greedy (Algorithm Appendix A.1), which processes orders in non-descending urgency and assigns each order to the courier that minimizes the routing-cost increment within a local candidate set screened by current-position distance; (iii) PP-Greedy (Algorithm Appendix A.2), which replaces the screening rule by a position-pool distance that accounts for proximity to any already-committed stop; and (iv) TS-Dispatching, which generates solutions using a tabu search that repeatedly relocates a newly dispatched order between couriers. Each candidate move is scored by recomputing the induced cost with the trained DR-LaCPNet, and a tabu list with aspiration is used to avoid cycling. Overall, Table 4 shows that PP-Greedy-LS delivers the best objectives in most settings (bold entries) with acceptable solution times, demonstrating the benefit of combining position-pool greedy construc-tion with a lightweight local search. The advantage becomes more pronounced as the instance size grows: in Shanghai with N new = 27, PP-Greedy-LS reduces the objective to 8.57 versus 8.77 for PP-Greedy; in Hangzhou, it achieves 6.92 versus 7.06 at N new = 22 and 8.78 versus 10.17 at N new = 24. Meanwhile, TS-Dispatching is consistently more time-consuming, e.g., 420.36s for Jilin’s instance with 25 Table 4: Performance comparison for dispatching heuristics                                                                                                                                                                                                       
+
+> Scenario DMCA Greedy PP-Greedy TS-Dispatching PP-Greedy-LS City |Onew |KObj Time Obj Time Obj Time Obj Time Obj Time Obj Imp. Shanghai 852.30 1.51 3.43 0.38 3.43 0.38 2.30 22.52 2.30 1.07 0.00 20 910.38 6.87 6.17 2.59 6.17 2.61 6.11 89.29 6.11 40.91 0.00 27 13 10.36 18.47 8.91 4.37 8.77 4.29 8.86 97.87 8.57 93.62 2.38 Hangzhou 854.28 0.60 4.67 0.56 4.67 0.56 4.20 22.20 4.28 1.02 -1.94 22 87.46 5.14 8.64 3.29 8.64 3.26 7.06 45.76 6.92 23.42 2.01 24 12 10.66 7.26 12.52 3.27 12.52 3.28 10.17 67.61 8.78 30.32 13.68 Chongqing 9614.65 0.57 14.65 0.52 14.65 0.51 14.65 21.90 14.65 0.97 0.00 16 10 40.14 4.26 41.00 1.92 41.12 1.90 39.55 32.34 39.70 6.31 -0.38 24 12 30.60 8.96 36.99 2.79 34.84 2.69 30.60 73.36 30.60 25.86 0.00 Jilin 982.69 2.30 4.71 1.89 2.74 1.74 2.69 21.28 2.69 6.48 0.00 19 11 28.44 6.20 28.50 2.95 28.50 2.97 28.44 67.32 28.50 21.66 -0.22 33 14 56.89 30.70 57.00 7.02 57.00 6.86 49.44 420.36 52.86 132.07 -6.92 Yantai 8626.31 1.28 26.79 0.97 26.79 0.96 23.49 7.57 23.34 3.19 0.66 22 10 34.17 9.64 57.73 4.60 57.73 4.61 29.81 49.77 31.38 33.58 -5.25 28 13 35.80 10.09 63.01 5.84 65.80 4.51 32.78 39.18 32.60 44.76 0.58
+
+N new = 33 and K = 14, whereas PP-Greedy-LS completes in 132.07s while maintaining competitive solution quality. These results support PP-Greedy-LS as an effective and efficient upper-level dispatching heuristic when paired with DR-LaCPNet for rapid routing evaluation. 
+
+5.4.3. Online rolling-horizon simulation 
+
+To further investigate the operational effectiveness and robustness of the proposed integrated opti-mization framework, we use the dispatch instance simulator introduced in Algorithm 5.1 to dynamically assess the cumulative system-level impact under repeated decision making within strict per-wave time budgets. Specifically, we consider the continuous dispatching results for each city within one hour (i.e., 12 dispatching waves) and calculate the average results for each dispatching wave. The following metrics are used to evaluate the solution quality and stability of different methods: 1) Avg. Obj: the average objective value. 2) Avg. TWVR: the average time-window violation rate. For an order i ∈ Onew dispatched to courier k, a violation occurs if β ki < ai or β ki > bi , counting both early and late pickups. 3) Avg. TWP: the average time-window penalties defined in Equation (17). 4) Max. TWP: the maximum realized time-window penalty, which reflects tail-risk service failures that may be obscured by averages. 5) Avg. TT: the average travel time per courier within a dispatching wave. 6) 
+
+Avg. ST: the average solution time required by each dispatching method for within a dispatching wave. 7) Avg. WL: the average workload-imbalance ratio across couriers after dispatching. At each wave, the workload of courier k is measured by wk = |Oold k | + P 
+
+> i∈Onew
+
+y ki . We define WL = std k∈K(wk )  
+
+> mean k∈K(wk)
+
+, and report its average over all waves. This metric reflects how evenly the active workload is distributed among couriers, while smaller values indicate a more balanced dispatch. 26 Table 5: Online rolling-horizon simulation results for Shanghai, Hangzhou, Chongqing, Jilin, and Yantai 
+
+Shanghai ( N = 20, K = 9)
+
+Methods Avg. Obj Avg. TWVR Avg. TWP Max. TWP Avg. TT Avg. ST Avg. WL DMCA 7.38 0.84 2.14 0.86 7.49 8.79 0.79 Greedy 6.58 0.62 1.86 0.74 6.74 3.56 0.44 PP-Greedy 6.32 0.60 1.74 0.68 6.54 3.92 0.41 TS-Dispatching 6.11 0.25 1.58 0.44 6.47 108.13 0.28 PP-Greedy-LS 5.82 0.22 1.34 0.46 6.40 20.91 0.21 Hangzhou ( N = 22, K = 10 )
+
+DMCA 12.58 0.42 3.42 1.14 13.09 6.32 0.58 Greedy 11.82 0.38 3.12 1.02 12.43 3.14 0.51 PP-Greedy 10.46 0.33 2.74 0.88 11.03 3.28 0.44 TS-Dispatching 9.84 0.28 2.41 0.64 10.61 62.45 0.38 PP-Greedy-LS 9.12 0.19 2.16 0.58 9.94 28.12 0.31 Chongqing ( N = 16, K = 10 )
+
+DMCA 31.43 0.44 8.42 1.68 32.87 10.85 0.52 Greedy 30.15 0.41 7.82 1.42 31.90 2.24 0.46 PP-Greedy 28.44 0.36 7.14 1.28 30.43 5.12 0.38 TS-Dispatching 27.22 0.28 6.84 1.04 29.11 78.41 0.31 PP-Greedy-LS 26.39 0.20 6.24 0.92 28.79 18.56 0.25 Jilin ( N = 19, K = 11 )
+
+DMCA 23.41 0.42 6.24 1.32 24.53 12.14 0.78 Greedy 22.63 0.38 5.84 1.18 23.99 2.22 0.72 PP-Greedy 21.84 0.31 5.34 1.04 23.57 5.84 0.62 TS-Dispatching 21.02 0.22 4.96 0.84 22.94 84.62 0.54 PP-Greedy-LS 20.15 0.12 4.62 0.86 22.19 23.42 0.38 Yantai ( N = 22, K = 10 )
+
+DMCA 38.45 0.52 10.32 1.84 40.19 13.12 0.72 Greedy 35.12 0.48 9.44 1.58 36.69 3.56 0.64 PP-Greedy 32.68 0.42 8.64 1.42 34.34 4.12 0.54 TS-Dispatching 30.24 0.31 7.54 1.18 32.43 115.42 0.42 PP-Greedy-LS 28.56 0.22 6.84 0.98 31.03 28.36 0.35 
+
+Table 5 provides a comprehensive evaluation of PP-Greedy-LS compared with other baselines across five cities. The results demonstrate that PP-Greedy-LS consistently outperforms other baselines across all of the instances from five cities. Within an acceptable increase in runtime of ( ≈ 30 seconds), PP-Greedy-LS significantly reduces the average objective compared to PP-Greedy, such as in the Yantai instance where the objective improves from 32.68 to 28.56. This superior performance is achieved through shorter Avg. TT and lower Avg. TWP , with the latter dropping to 2.16 in Hangzhou and 4.62 in Jilin, which underscores the practicality and necessity of the local search component in dispatching optimiza-tion. Notably, Avg. WL results indicate that dispatching decisions under PP-Greedy-LS are more equitably distributed among couriers, with imbalance ratios falling to 0.21 in Shanghai and 0.25 in Chongqing. This distribution prevents over-dispatching to individual couriers and further reduces the Max. TWP from 1.14 for DMCA in Hangzhou to only 0.58 for PP-Greedy-LS, thereby providing robust real-time 27 decision support for logistics platforms. 
+
+5.4.4. The impact of supply-to-demand ratio 
+
+In real-world pickup ecosystems, dispatching outcomes are fundamentally governed by the dynamic interplay between the temporal fluctuations of the number of new orders |Onew | (demand) and the number of candidate couriers K (supply). To evaluate the robustness and scalability of the proposed PP-Greedy-LS under varying operational pressures, we next conduct a sensitivity analysis based on the Supply-to-Demand Ratio (SDR), defined as the ratio of candidate couriers to new orders. This analysis is motivated by the need to ensure that the proposed algorithm maintains a competitive advantage not only during resource-abundant off-peak periods but also during highly congested peak intervals, where the tighter coupling of constraints typically leads to a degradation in service quality for less sophisticated heuristics. Specifically, to isolate the impact of the supply-demand ratio, we select a representative dispatching instance from the Shanghai dataset with |Onew | = 20 and vary K to derive different SDR. The corresponding values for Obj, TWVR, TWP , Max. TWP , TT, Avg. ST, and WL are reported in Table 6. These results characterize the system’s performance across a broad spectrum of operational conditions, spanning from severe peak-demand pressure ( SDR = 0.2) to significant supply abundance ( SDR = 2.0).                                                                                                            
+
+> Table 6: Impact of SDR on system performance for Shanghai instance ( N=20, α=0.7, φ=1.0)
+> |Onew |KSDR Obj TWVR TWP Max. TWP TT Avg. ST WL 20 40.2 16.28 0.82 9.81 3.42 9.24 14.07 0.65 20 80.4 13.24 0.65 7.33 2.56 8.44 16.23 0.52 20 12 0.6 11.35 0.52 5.88 2.05 7.82 17.84 0.44 20 16 0.8 9.46 0.42 4.32 1.51 7.34 19.46 0.38 20 20 1.0 9.08 0.38 4.10 1.44 7.12 20.45 0.35 20 24 1.2 7.54 0.25 2.82 0.98 6.74 22.08 0.28 20 28 1.4 6.91 0.18 2.35 0.82 6.52 23.91 0.25 20 32 1.6 6.55 0.15 2.11 0.74 6.34 25.18 0.22 20 36 1.8 6.32 0.12 1.97 0.68 6.22 27.06 0.21 20 40 2.0 6.07 0.10 1.79 0.62 6.12 29.02 0.19
+
+Table 6 shows that when the system is supply-constrained (low SDR, e.g., SDR = 0.2 and 0.4), infeasibilities and TWP dominates the objective, whereas increasing SDR progressively shifts the system into a regime where TT becomes the primary driver of performance. Importantly, the effect of SDR exhibits diminishing returns: increasing SDR from a low level yields substantial gains, whereas further increases beyond a moderate level lead to only incremental improvements. For instance, increasing SDR from 0.2 to 1.0 reduces the objective from 16.28 to 9.08 and lowers T W V R from 0.82 to 0.38, indicating that additional supply primarily mitigates TWP and stabilizes service quality. Once the system has sufficient coverage, the marginal benefit diminishes. Increasing SDR from 1.4 to 2.0 improves the objective only from 6.91 to 6.07, suggesting that extra candidates mainly refine routing decisions rather than recovering feasibility, where Figure 7 also shows consistent results. From the perspective of logistics platforms, this supports a two-regime operating policy. During peak 28 SDR=0.4 SDR=0.8 SDR=1.2 SDR=1.6 SDR=2.0 
+
+> Supply-to-Demand Ratio (SDR)
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Time Window Violation Penalty (TWP) Figure 7: The impact of SDR on time window violation penalties
+
+hours, prioritize supply-side interventions such as temporary courier activation, short-term incentives, or enlarging the candidate set via geo-fencing to avoid violation-driven degradation. During off-peak periods, allocate effort to routing and coordination measures such as tighter spatial matching or zoning, because expanding the candidate pool yields only limited incremental gains. 
+
+5.4.5. Ablation study 
+
+The DR-LaCPNet model proposed in this paper includes a DRGAN encoder and a LaCP decoder, where LaCP integrates a look-ahead travel-time encoding (LA) and a courier-personalization module (CP). In order to verify the rationality of adding these components, we made partial changes to the DR-LaCPNet model framework and conducted ablation studies. The ablation study evaluates the perfor-mances of the LaCPNet (DR-LaCPNet without the DRGAN Encoder), DR-Net (DR-LaCPNet without the LaCP decoder), DR-CPNet (DR-LaCPNet without the Look-Ahead mechanism), DR-LaNet (DR-LaCPNet without the CP mechanism). We assess the performance degradation on the instances in Section 5.4.1 for routing-only optimization and on the instances in Section 5.4.2 for the integrated dispatching and routing optimization, respectively. The columns “Obj Imp.” report the relative improvement of other networks compared with LaCPNet. Table 7 shows that DR-LaCPNet consistently delivers the best objective across all scenarios, and the benefit of the full design grows with instance scale. For small instances ( N ∈ [1, 4 ]), all variants are close, indicating limited room for architectural enhancements; however, as N increases, remov-ing either the DRGAN encoder (LaCPNet) or the LaCP decoder (DR-Net) leads to clear degradation, while the full model maintains a stable advantage (e.g., N ∈ [13, 16 ], the improvement reaches up to 41.99 % at δ = 1). Moreover, ablations inside LaCP confirm that both the look-ahead mechanism and courier-personalized mechanism contribute to the final performance, with their impact becoming more 29 Table 7: Performance comparison under different scenarios Scenario LaCPNet DR-Net DR-CPNet DR-LaNet DR-LaCPNet                                                                                                                       
+
+> NδObj Obj Obj Imp. Obj Obj Imp. Obj Obj Imp. Obj Obj Imp.
+> [1, 4 ]
+> 10.53 0.53 0.00 0.53 0.00 0.53 0.00 0.50 5.66 30.34 0.37 -8.82 0.34 0.00 0.34 0.00 0.31 8.82 50.20 0.20 0.00 0.20 0.00 0.20 0.00 0.19 5.00
+> [5, 8 ]
+> 11.83 1.40 23.50 1.20 34.43 1.20 34.43 1.17 36.07 31.99 1.70 14.57 1.64 17.59 1.61 19.10 1.36 31.66 51.16 1.23 -6.03 1.16 0.00 1.23 -6.03 1.11 4.31
+> [9, 12 ]
+> 11.63 1.58 3.07 1.74 -6.75 1.58 3.07 1.52 6.75 31.72 1.80 -4.65 1.75 -1.74 1.48 13.95 1.41 18.02 52.07 2.15 -3.86 2.07 0.00 1.90 8.21 1.55 25.12
+> [13, 16 ]
+> 15.43 3.60 33.70 4.08 24.86 4.78 11.97 3.15 41.99 34.06 3.19 21.43 3.07 24.38 2.95 27.34 2.72 33.00 52.80 2.45 12.50 2.52 10.00 2.74 2.14 2.12 24.29
+
+pronounced on harder, larger-scale settings, suggesting that anticipating downstream travel-time effects and capturing courier heterogeneity are both crucial to sustaining solution quality when the routing problem becomes complex. 
+
+5.4.6. The impact of objective weights 
+
+To better characterize how objective weights design translates into operational behavior, we conduct a sensitivity analysis by varying (α, φ). In practice, these weights are policy levers that shift the system from a service-oriented regime to an efficiency-oriented regime. This analysis is crucial because real-world pickup operations often experience regime shifts across time and regions, where managers must deliberately re-tune priorities to meet different KPIs. Moreover, service quality and efficiency can trade off nonlinearly under tight time windows, so a weight sweep provides a transparent way to quantify the resulting managerial trade-offs and assess how robust each method remains across regimes. Therefore, we vary α on the Shanghai instance with N = 20 and K = 9 over a set of representative configurations spanning from service-oriented to efficiency-oriented settings, and report the resulting objective values and operational metrics for each configuration. Table 8 shows a clear shift from service-oriented to efficiency-oriented operations as the objective weights change. For PP-Greedy-LS, moving from Scenario A to Scenario C compresses travel time sub-stantially (Avg. TT drops from 8.37 to 3.22) but increases time-window penalties (Avg. TWP rises from 0.83 to 3.92 and Max. TWP from 0.29 to 1.10). This suggests a practical lever for managers: use more service-oriented weights in peak or high-penalty contexts to cap violation risk, and switch toward efficiency-oriented weights in off-peak or capacity-abundant periods to prioritize throughput. Across all regimes, PP-Greedy-LS remains the most robust, achieving the best objective in Scenarios A–C while 30 Table 8: Sensitivity analysis for objective weights Method Avg. obj Avg. TWVR Avg. TWP Max. TWP Avg. TT Avg. ST Avg. WL                                                                                                                         
+
+> Scenario A: Service-Oriented ( α=0.3 ,φ=1.0 )
+> DMCA 4.54 0.28 1.48 0.44 10.21 8.74 0.76 Greedy 4.12 0.24 1.27 0.41 9.49 3.52 0.81 PP-Greedy 3.84 0.21 1.12 0.36 9.07 3.88 0.73 TS-Dispatching 3.66 0.17 0.92 0.27 9.14 108.24 0.29 PP-Greedy-LS 3.34 0.13 0.83 0.29 8.37 20.84 0.22 Scenario B: Balanced ( α=0.7 ,φ=1.0 )
+> DMCA 7.38 0.84 2.14 0.86 7.49 8.79 0.79 Greedy 6.58 0.62 1.86 0.74 6.74 3.56 0.44 PP-Greedy 6.32 0.60 1.74 0.68 6.54 3.92 0.41 TS-Dispatching 6.11 0.25 1.58 0.44 6.47 108.13 0.28 PP-Greedy-LS 5.82 0.22 1.34 0.46 6.40 20.91 0.21 Scenario C: Efficiency-Oriented ( α=1.1 ,φ=1.0 )
+> DMCA 9.87 0.94 5.16 1.82 4.28 8.81 0.77 Greedy 8.92 0.90 4.67 1.64 3.86 3.54 0.81 PP-Greedy 8.41 0.84 4.38 1.52 3.66 3.94 0.74 TS-Dispatching 7.94 0.80 4.14 1.14 3.45 107.92 0.73 PP-Greedy-LS 7.46 0.78 3.92 1.10 3.22 21.04 0.74
+
+keeping violations low, whereas TS-Dispatching attains comparable service metrics but at much higher latency (Avg. ST ≈ 108 s vs. ≈ 21 s), making it less suitable for frequent real-time re-optimization. 
+
+6. Conclusion 
+
+In this work, we study the integrated order dispatching and routing problem arising in the last-mile pickup. To address this challenging problem, we propose an integrated optimization framework which couples a learned routing oracle with real-time dispatching heuristics. We first formulate the dispatch problem and routing problem as two MILP models, incorporating time-dependent travel time. For the routing subproblem, we initially model it as a sequential decision Markov Decision Process. Subsequently, we propose a DR-LaCPNet framework comprising a Dynamic-Residual Graph Attention Network encoder, and a Look-Ahead Courier-Personalized decoder. While the Look-Ahead mechanism effectively handles the uncertainty introduced by time-dependent travel times, the courier-personalized mechanism accounts for courier heterogeneity. We then introduce Position-pool Greedy Dispatch with Local Search Refinement for order dispatching, where we innovatively integrate the trained DRL routing oracle into this heuristic to rapidly screen dispatchable couriers. Subsequently, we conduct extensive experiments based on the LADE dataset of Cainiao Logistics. We first propose the dispatch instance simulator leveraging the spatial-temporal characteristics of the LADE dataset to construct effective training and testing instances, and further validate the model’s con-vergence. Following this, we evaluate the performance of the DRL routing oracle. Extensive experi-31 ments demonstrate the effectiveness of the DRL routing oracle compared against other heuristics and deep learning models. Subsequently, the proposed integrated optimization framework demonstrates outstanding performance in both offline evaluation and online rolling-horizon simulation, yielding sat-isfactory solutions within short decision times. We further examine the impact of the supply-to-demand ratio on the solution and reveal the role of each component through ablation studies. Finally, by training multiple DRL models with different objective weights, we compare the consequent results and provide managerial insights for logistics platforms. For the future work, one possible direction is to address the issues of overly sparse training rewards and the inability of graph-based training to generalize across varying numbers of nodes. This would enable more effective strategies for integrating order dispatch and routing, such as adopting hierarchical deep reinforcement learning. Another possible direction is that while the current model only solves the last-mile pickup problem, the proposed look-ahead mechanism and courier personalization mechanism demonstrate broad applicability and can be extended to other similar routing problems. Finally, utilizing heterogeneous graphs to distinguish order nodes from courier nodes for enhanced feature extraction represents a promising future direction. 
+
+Acknowledgments 
+
+This research was supported by the National Natural Science Foundation Council of China under Projects 72361137004, 92567301 and 92167206. 
+
+References 
+
+Aksit, B., Ozden-Gurcan, G., and Saricicek, I. (2024). Flying sidekick traveling salesman problem in truck–drone team logistics with energy issues. Transportation Research Record , 2678(11):1235–1249. Auad, R., Erera, A., and Savelsbergh, M. (2023). Courier satisfaction in rapid delivery systems using dynamic operating regions. Omega , 121:102917. Barketau, M. and Pesch, E. (2016). An approximation algorithm for a special case of the asymmetric travelling salesman problem. International Journal of Production Research , 54(14):4205–4212. Baty, L., Jungel, K., Klein, P . S., Parmentier, A., and Schiffer, M. (2024). Combinatorial optimization-enriched machine learning to solve the dynamic vehicle routing problem with time windows. Trans-portation Science , 58(4):708–725. Bellmore, M. and Hong, S. (1974). Transformation of multisalesman problem to the standard traveling salesman problem. Journal of the ACM (JACM) , 21(3):500–504. Bonassa, A. C., da Cunha, C. B., and Isler, C. A. (2023). A multi-start local search heuristic for the multi-period auto-carrier loading and transportation problem in brazil. European Journal of Operational Research , 307(1):193–211. 32 Brandão, J. (2004). A tabu search algorithm for the open vehicle routing problem. European Journal of Operational Research , 157(3):552–564. Bruni, M. E., Fadda, E., Fedorov, S., and Perboli, G. (2023). A machine learning optimization approach for last-mile delivery and third-party logistics. Computers & Operations Research , 157:106262. Carvalhosa, M. A., Pereira, M. T., Pereira, M. G., e Oliveira, E., and Ramos, F. R. (2024). Enhancing last-mile delivery: a hybrid approach with machine learning techniques that captures drivers’ knowledge. 
+
+International Journal of Logistics Research and Applications , pages 1–27. Cha, H., Lee, C., Xie, C., Lu, Q.-C., Eun, J., and Cheong, T. (2024). An Exact A*-Based Tree Search Algorithm for TSP With Sequence-and-Load Dependent Risk. IEEE Transactions on Intelligent Trans-portation Systems .Chang, T.-S., Wan, Y.-w., and Ooi, W. T. (2009). A stochastic dynamic traveling salesman problem with hard time windows. European Journal of Operational Research , 198(3):748–759. Chen, D., Imdahl, C., Lai, D., and Van Woensel, T. (2025). The dynamic traveling salesman problem with time-dependent and stochastic travel times: A deep reinforcement learning approach. Transportation Research Part C: Emerging Technologies , 172:105022. Chen, J.-F., Wang, L., Liang, Y., Yu, Y., Feng, J., Zhao, J., and Ding, X. (2024). Order dispatching via gnn-based optimization algorithm for on-demand food delivery. IEEE Transactions on Intelligent Transportation Systems .Çimen, M., Soysal, M., Belba˘ g, S., and Kazanç, H. C. (2024). Dynamic open time-dependent traveling salesman problem with speed optimization. International Transactions in Operational Research .Cordeau, J.-F., Ghiani, G., and Guerriero, E. (2014). Analysis and branch-and-cut algorithm for the time-dependent travelling salesman problem. Transportation Science , 48(1):46–58. Denis, H., Mercelis, S., and Luong, N.-Q. (2025). Papn: Proximity attention encoder and pointer network decoder for parcel pickup route prediction. arXiv preprint arXiv:2505.03776 .Englot, B., Sahai, T., and Cohen, I. (2013). Efficient tracking and pursuit of moving targets by heuristic solution of the traveling salesman problem. In 52nd ieee conference on decision and control , pages 3433–3438. IEEE. Fatehi, S. and Wagner, M. R. (2022). Crowdsourcing last-mile deliveries. Manufacturing & Service Operations Management , 24(2):791–809. Frieze, A. M., Galbiati, G., and Maffioli, F. (1982). On the worst-case performance of some algorithms for the asymmetric traveling salesman problem. Networks , 12(1):23–39. Glover, F., Gutin, G., Yeo, A., and Zverovich, A. (2001). Construction heuristics for the asymmetric tsp. 
+
+European Journal of Operational Research , 129(3):555–568. Huang, Y., Gordon, D., and Scott, P . (2023). Receding horizon dispatch of multi-period look-ahead market for energy storage integration. Applied Energy , 352:121856. 33 Kashansky, V ., Agha Hossein Kashani, S., Zhuge, H., Garcia-Blas, J., and Marozzo, F. (2023). Intelligent and sustainable transportation through multi-objective model for the logistic route-order dispatching system. In Proceedings of the 2023 ACM Conference on Information Technology for Social Good , pages 530–536. Kingma, D. P . and Ba, J. (2015). Adam: A method for stochastic optimization. In 3rd International Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings .Kok, A. L., Hans, E. W., and Schutten, J. M. J. (2011). Optimizing departure times in vehicle routes. 
+
+European Journal of Operational Research , 210(3):579–587. Kool, W., Van Hoof, H., and Welling, M. (2019). Attention, learn to solve routing problems! ICLR 2019 .Le, T. and Jegelka, S. (2023). Limits, approximation and size transferability for gnns on sparse graphs via graphops. Advances in Neural Information Processing Systems , 36:41305–41342. Li, M., Cai, K., and Zhao, P . (2025). Optimizing same-day delivery with vehicles and drones: A hierarchi-cal deep reinforcement learning approach. Transportation Research Part E: Logistics and Transportation Review , 193:103878. Li, Y., Wu, Q., Huang, X., Xu, J., Gao, W., and Xu, M. (2022). Efficient adaptive matching for real-time city express delivery. IEEE Transactions on Knowledge and Data Engineering , 35(6):5767–5779. Liu, S., He, L., and Max Shen, Z.-J. (2021). On-time last-mile delivery: Order assignment with travel-time predictors. Management Science , 67(7):4095–4119. Liu, S. and Luo, Z. (2023). On-demand delivery from stores: Dynamic dispatching and routing with random demand. Manufacturing & Service Operations Management , 25(2):595–612. Mao, W., Ming, L., Rong, Y., Tang, C. S., and Zheng, H. (2025). Faster deliveries and smarter order assignments for an on-demand meal delivery platform. Journal of Operations Management , 71(2):220– 245. Mao, X., Wen, H., Zhang, H., Wan, H., Wu, L., Zheng, J., Hu, H., and Lin, Y. (2023). Drl4route: A deep reinforcement learning framework for pick-up and delivery route prediction. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 4628–4637. Mao, X., Wu, G., Fan, M., Cao, Z., and Pedrycz, W. (2024). Dl-drl: A double-level deep reinforcement learning approach for large-scale task scheduling of multi-uav. IEEE Transactions on Automation Science and Engineering , 22:1028–1044. Mavrovouniotis, M., Müller, F. M., and Yang, S. (2016). Ant colony optimization with local search for dynamic traveling salesman problems. IEEE transactions on cybernetics , 47(7):1743–1756. Mazyavkina, N., Sviridov, S., Ivanov, S., and Burnaev, E. (2021). Reinforcement learning for combina-torial optimization: A survey. Computers & Operations Research , 134:105400. Mo, B., Wang, Q., Guo, X., Winkenbach, M., and Zhao, J. (2023). Predicting drivers’ route trajectories in last-mile delivery using a pair-wise attention-based pointer neural network. Transportation Research Part E: Logistics and Transportation Review , 175:103168. 34 Nazari, M., Oroojlooy, A., Snyder, L., and Takác, M. (2018). Reinforcement learning for solving the vehicle routing problem. Advances in neural information processing systems , 31. Nikishin, E., Izmailov, P ., Athiwaratkun, B., Podoprikhin, D., Garipov, T., Shvechikov, P ., Vetrov, D., and Wilson, A. G. (2018). Improving stability in deep reinforcement learning with weight averaging. In 
+
+Uncertainty in artificial intelligence workshop on uncertainty in Deep learning .Özarık, S. S., da Costa, P ., and Florio, A. M. (2024). Machine learning for data-driven last-mile delivery optimization. Transportation Science , 58(1):27–44. Pegado-Bardayo, A., Lorenzo-Espejo, A., Muñuzuri, J., and Onieva, L. (2024). A predictive framework for last-mile delivery routes considering couriers’ behavior heterogeneity. Computers & Industrial En-gineering , 198:110665. Pekny, J. F. and Miller, D. L. (1990). A parallel branch and bound algorithm for solving large asymmetric traveling salesman problems. In Proceedings of the 1990 ACM annual conference on Cooperation , pages 56–62. Pop, P . C., Cosma, O., Sabo, C., and Sitar, C. P . (2024). A comprehensive survey on the generalized traveling salesman problem. European Journal of Operational Research , 314(3):819–835. Pralet, C. (2023). Iterated maximum large neighborhood search for the traveling salesman problem with time windows and its time-dependent version. Computers & Operations Research , 150:106078. Rahmani, M., Delavernhe, F., Senouci, S. M., and Berbineau, M. (2024). Toward sustainable last-mile deliveries: A comparative study of energy consumption and delivery time for drone-only and drone-aided public transport approaches in urban areas. IEEE Transactions on Intelligent Transportation Systems .Sheridan, P . K., Gluck, E., Guan, Q., Pickles, T., Balcıog, B., Benhabib, B., et al. (2013). The dynamic nearest neighbor policy for the multi-vehicle pick-up and delivery problem. Transportation Research Part A: Policy and Practice , 49:178–194. Silva, C. A., Runkler, T. A., Sousa, J. M., and da Costa, J. S. (2003). Optimization of logistic processes in supply-chains using meta-heuristics. In Portuguese Conference on Artificial Intelligence , pages 9–23. Springer. Theys, C., Bräysy, O., Dullaert, W., and Raa, B. (2010). Using a tsp heuristic for routing order pickers in warehouses. European Journal of Operational Research , 200(3):755–763. Toriello, A., Haskell, W. B., and Poremba, M. (2014). A dynamic traveling salesman problem with stochastic arc costs. Operations Research , 62(5):1107–1125. Ünal, V ., Soysal, M., Çimen, M., and Koç, Ç. (2023). Dynamic routing optimization with electric vehicles under stochastic battery depletion. Transportation Letters , 15(10):1376–1388. Voudouris, C. and Tsang, E. (1999). Guided local search and its application to the traveling salesman problem. European Journal of Operational Research , 113(2):469–499. Wang, L., Xu, M., and Qin, H. (2023). Joint optimization of parcel allocation and crowd routing for crowdsourced last-mile delivery. Transportation Research Part B: Methodological , 171:111–135. 35 Wang, Y., Yuan, Y., Ma, Y., and Wang, G. (2019). Time-dependent graphs: Definitions, applications, and algorithms. Data Science and Engineering , 4(4):352–366. Wang, Z., Qin, Z., Tang, X., Ye, J., and Zhu, H. (2018). Deep reinforcement learning with knowledge transfer for online rides order dispatching. In 2018 IEEE International Conference on Data Mining (ICDM) , pages 617–626. IEEE. Wen, H., Lin, Y., Mao, X., Wu, F., Zhao, Y., Wang, H., Zheng, J., Wu, L., Hu, H., and Wan, H. (2022). Graph2route: A dynamic spatial-temporal graph neural network for pick-up and delivery route pre-diction. In Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining ,pages 4143–4152. Wen, H., Lin, Y., Wu, F., Wan, H., Guo, S., Wu, L., Song, C., and Xu, Y. (2021). Package pick-up route pre-diction via modeling couriers’ spatial-temporal behaviors. In 2021 IEEE 37th International Conference on Data Engineering (ICDE) , pages 2141–2146. IEEE. Wong, K.-I. and Bell, M. G. (2006). The optimal dispatching of taxis under congestion: A rolling horizon approach. Journal of Advanced Transportation , 40(2):203–220. Wu, L., Wen, H., Hu, H., Mao, X., Xia, Y., Shan, E., Zheng, J., Lou, J., Liang, Y., Yang, L., et al. (2024). Lade: The first comprehensive last-mile express dataset from industry. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 5991–6002. Xiao, Y., Yu, H., Yang, Y., Wang, Y., Liu, J., and Ansari, N. (2024). Adaptive joint routing and caching in knowledge-defined networking: An actor-critic deep reinforcement learning approach. IEEE Transac-tions on Mobile Computing .Zhang, W., Wang, Q., Shi, D., Yuan, Z., and Liu, G. (2022). Dynamic order dispatching with multiobjec-tive reward learning. IEEE Transactions on Intelligent Transportation Systems , 23(10):18001–18011. Zhen, L., Wu, J., Laporte, G., and Tan, Z. (2023). Heterogeneous instant delivery orders scheduling and routing problem. Computers & Operations Research , 157:106246. Zhou, F., Lu, C., Tang, X., Zhang, F., Qin, Z., Ye, J., and Zhu, H. (2021). Multi-objective distributional reinforcement learning for large-scale order dispatching. In 2021 IEEE International Conference on Data Mining (ICDM) , pages 1541–1546. IEEE. Zhou, G., Li, X., Li, D., and Bian, J. (2024). Learning-based optimization algorithms for routing problems: Bibliometric analysis and literature review. IEEE Transactions on Intelligent Transportation Systems .Zhou, Q., Zheng, H., Wang, S., Hao, J., He, R., Sun, Z., Wang, X., and Wang, L. (2020). Two fast heuristics for online order dispatching. In 2020 IEEE Congress on Evolutionary Computation (CEC) ,pages 1–8. IEEE. 36 Appendices 
+
+Appendix A. Baseline heuristics 
+
+The baseline heuristics used for comparison in Sections 5.4.2, 5.4.3, and 5.4.6 are summarized as follows. 
+
+Algorithm Appendix A.1 Greedy dispatch heuristic (Greedy)  
+
+> 1:
+
+Input: new orders Onew , candidate couriers K, trained routing policy πR, candidate size Q 
+
+> 2:
+
+Compute J k 
+
+> old
+
+for all k ∈ K using πR; set Jtot ← P 
+
+> k∈K
+
+J k 
+
+> old
+> 3:
+
+Sort orders in Onew in non-descending order by urgency bi to obtain ˆ Onew  
+
+> 4:
+
+for each order i ∈ ˆOnew do  
+
+> 5:
+
+Select the top-Q candidate couriers in K with the smallest Euclidean distance to order i (based on current courier locations), denoted by KQ(i) 
+
+> 6:
+
+k⋆ ← arg min k∈KQ (i) ∆ik , where ∆ik = GreedyRolloutCost  πR, Oold k ∪ { i} − J k 
+
+> old
+> 7:
+
+if k⋆ exists then  
+
+> 8:
+
+Set y k⋆ 
+
+> i
+
+← 1 and y ki ← 0 for all k̸ = k⋆ 
+
+> 9:
+
+J k⋆ 
+
+> old
+
+← J k⋆ 
+
+> old
+
++ ∆ik ⋆ , Jtot ← Jtot + ∆ik ⋆ 
+
+> 10:
+
+else  
+
+> 11:
+
+Continue  
+
+> 12:
+
+end if  
+
+> 13:
+
+end for  
+
+> 14:
+
+Output: { y ki }i∈Onew ,k∈K and Jtot 
+
+We first use the greedy dispatch heuristic (Greedy) as the baseline. As shown in Algorithm Appendix A.1, Greedy first evaluates each courier’s current routing cost J k 
+
+> old
+
+under πR and aggregates them to obtain the initial system cost Jtot = P 
+
+> k∈K
+
+J k
+
+> old
+
+. The orders in Onew are then sorted in a non-descending order of urgency bi , yielding ˆ Onew , so that more urgent orders are processed first. For each order i ∈ ˆOnew ,the heuristic restricts the dispatch candidates to a local neighborhood by selecting KQ(i), the top-Q
+
+couriers with the smallest Euclidean distance to i (based on their current locations). The heuristic then chooses the courier k⋆ that minimizes the incremental cost ∆ik , defined as the difference between the rollout routing cost after tentatively inserting i into courier k’s workload and the current cost J k
+
+> old
+
+,i.e., ∆ik = GreedyRolloutCost  πR, Oold k ∪ { i} − J k
+
+> old
+
+. If a feasible k⋆ exists, the corresponding dispatch variable is set to y k⋆ 
+
+> i
+
+= 1, and both J k⋆ 
+
+> old
+
+and Jtot are updated by adding ∆ik ⋆ . Orders that cannot be feasibly assigned are skipped. The heuristic outputs the dispatch decisions  y ki for all i ∈ Onew and the resulting total routing cost Jtot .Another baseline model we have employed is the position-pool greedy dispatch heuristic (PP-Greedy), which excludes the local search refinement. As shown in Algorithm Appendix A.2, PP-Greedy follows the same routing-aware greedy rollout framework but replaces the candidate-screening rule by a position-pool mechanism. Specifically, for each courier k, we maintain a position pool Sk that contains the 37 Algorithm Appendix A.2 Position-pool greedy dispatch heuristic (PP-Greedy)  
+
+> 1:
+
+Input: new orders Onew , candidate couriers K, trained routing policy πR, candidate size Q 
+
+> 2:
+
+Compute J k 
+
+> old
+
+for all k ∈ K using πR; set Jtot ← P 
+
+> k∈K
+
+J k 
+
+> old
+> 3:
+
+Initialize Onew k ← ; for all k ∈ K 
+
+> 4:
+
+Initialize the position pool Sk ← { lk} ∪ { l j : j ∈ Oold k } for all k ∈ K 
+
+> 5:
+
+Sort orders in Onew in non-descending order by urgency bi to obtain ˆ Onew  
+
+> 6:
+
+for each order i ∈ ˆOnew do  
+
+> 7:
+
+Compute dik ← min p∈Sk ∥li − p∥2 for all k ∈ K 
+
+> 8:
+
+Select the top-Q candidate couriers with the smallest dik , denoted by Kpool  
+
+> Q
+
+(i) 
+
+> 9:
+
+k⋆ ← arg min k∈Kpool   
+
+> Q(i)
+
+∆ik , where ∆ik = GreedyRolloutCost  πR, Oold k ∪ Onew k ∪ { i} − J k 
+
+> old
+> 10:
+
+if k⋆ exists then  
+
+> 11:
+
+Set y k⋆ 
+
+> i
+
+← 1 and y ki ← 0 for all k̸ = k⋆ 
+
+> 12:
+
+Update Onew k⋆ ← Onew k⋆ ∪ { i} and Sk⋆ ← Sk⋆ ∪ { li } 
+
+> 13:
+
+Update J k⋆ 
+
+> old
+
+← J k⋆ 
+
+> old
+
++ ∆ik ⋆ , Jtot ← Jtot + ∆ik ⋆ 
+
+> 14:
+
+else  
+
+> 15:
+
+Continue  
+
+> 16:
+
+end if  
+
+> 17:
+
+end for  
+
+> 18:
+
+Output: { y ki }i∈Onew ,k∈K and Jtot 
+
+courier’s current position lk and the positions of its already assigned stops (i.e., the pickup locations of orders in Oold k ), and we further augment Sk on-the-fly as new orders are dispatched to k. For each incoming order i, we compute its distance to courier k as the minimum Euclidean distance to the pool, 
+
+dik = min p∈Sk ∥li − p∥2, and select Kpool  
+
+> Q
+
+(i), the top-Q couriers with the smallest dik , as a local candidate set. We then evaluate the incremental cost for each candidate k ∈ Kpool  
+
+> Q
+
+(i) using the routing policy πR
+
+via a greedy rollout, i.e., ∆ik = GreedyRolloutCost  πR, Oold k ∪ Onew k ∪ { i} − J k
+
+> old
+
+, and dispatch i to the courier k⋆ that yields the minimum ∆ik . Compared with screening candidates solely by the courier’s current position, the position pool provides a more robust spatial proxy of a courier’s near-term service footprint, since it accounts for proximity to any already-committed stop. After assigning i to k⋆, PP-Greedy updates Onew k⋆ , augments Sk⋆ with li , and updates both J k⋆ 
+
+> old
+
+and the system cost Jtot accordingly. 38

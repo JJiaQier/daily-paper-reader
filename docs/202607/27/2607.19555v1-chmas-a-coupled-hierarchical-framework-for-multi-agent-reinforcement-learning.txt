@@ -1,0 +1,1182 @@
+Title: CHMAS: A Coupled Hierarchical Framework for Multi-Agent Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2607.19555v1
+
+Published Time: Thu, 23 Jul 2026 00:16:34 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# CHMAS: A Coupled Hierarchical Framework for Multi-Agent Reinforcement Learning 
+
+Dongming Wang, Jie Xu, Yanyu Zhang, and Wei Ren 
+
+Abstract — Multi-agent reinforcement learning (MARL) sys-tems face fundamental challenges in balancing global coordi-nation with local execution across different temporal scales. This paper introduces the Coupled Hierarchical Multi-Agent System (CHMAS), a novel framework that decomposes multi-agent decision-making into centralized strategic planning and distributed tactical execution with bidirectional information flow. The strategic layer integrates all agents’ states with an exclusive global environmental state to generate guidance ac-tions every T timesteps, while tactical agents execute distributed policies augmented by strategic guidance and local neighbor-hood observations. Unlike existing hierarchical approaches with unidirectional control, CHMAS establishes a feedback mecha-nism where accumulated tactical rewards influence strategic objectives through a coupling coefficient λ, ensuring strategic plans remain grounded in tactical feasibility. To address the non-stationarity inherent in hierarchical learning, we propose an asynchronous update protocol where strategic parameters update every Nf tactical episodes, allowing tactical policies to converge to quasi-stationary points between strategic changes. We present both a general bi-level formulation capturing full system dynamics and a tractable additive approximation enabling rigorous analysis. Theoretical analysis proves that this asynchronous scheme achieves O(log K/ √K) convergence for the strategic layer after K strategic updates under stan-dard assumptions. Experimental validation in a multi-agent foraging domain demonstrates successful learning of spatially partitioned exploration strategies, with both layers converging stably despite hierarchical coupling. 
+
+I. INTRODUCTION Multi-agent reinforcement learning (MARL) has emerged as a fundamental paradigm for autonomous coordination in complex environments, with applications spanning robotics [1], traffic management [2], and resource allocation [3]. Despite significant progress, real-world deployment faces a critical challenge: coordinating distributed agents across multiple temporal and spatial scales while maintaining com-putational tractability. The curse of dimensionality renders purely centralized approaches intractable. For N agents with state spaces Si and action spaces Ai, the joint space grows as O(QNi=1 |S i|·|A i|)
+
+[4]. While distributed methods address scalability through local decision-making [5], they sacrifice coordination qual-ity for long-horizon objectives. Traditional approaches like QMIX [6] and MADDPG [7] leverage centralized training with decentralized execution, but assume all agents access relevant global information during training, which often fails                 
+
+> This work was supported by the National Science Foundation under Grant ECCS-2129949. The authors are with the Department of Electrical and Computer Engineering, University of California, Riverside, CA 92521, USA.
+
+{wdong025, jxu150, yzhan831, wei.ren }@ucr.edu .
+
+in practice due to partial observability and communication constraints [8]. Furthermore, multi-agent systems inherently operate across multiple temporal scales. Strategic decisions (for-mation control, task allocation) require global information including environmental states inaccessible to individual agents, operating on extended timescales. Tactical responses (collision avoidance, local adaptation) demand rapid reac-tions based on immediate observations. While hierarchical reinforcement learning offers a natural framework for multi-scale decision-making [9], [10], existing hierarchical MARL approaches [11], [12] employ unidirectional control where high-level policies dictate low-level actions, missing oppor-tunities for tactical feedback to inform strategic planning. The interaction between hierarchical levels creates com-plex learning dynamics. Strategic changes fundamentally alter the environment perceived by tactical agents, violating stationarity assumptions [8]. Conversely, evolving tactical policies change execution characteristics that strategic plan-ners rely upon. Previous hierarchical MARL work [13], [14] addresses this through reward engineering or option learning but requires domain expertise and often fails to generalize. This paper introduces CHMAS, which addresses these limitations through bidirectional coupling between strategic and tactical layers at different temporal scales. The strategic level maintains centralized access to both agents’ states and an exclusive global environmental state Senv capturing system-wide properties essential for coordination. Strategic guidance, generated every T timesteps, broadcasts to tactical agents who execute distributed policies based on augmented local observations. Tactical rewards accumulate and influence strategic objectives through coupling coefficient λ, creating feedback that grounds strategic planning in tactical realities. An asynchronous protocol with strategic updates every Nf
+
+tactical episodes manages non-stationary dynamics, allowing tactical convergence between strategic changes. Our contributions are threefold. First, we formalize the hierarchical MARL problem with bidirectional coupling and information asymmetry, providing both a general bi-level formulation and tractable additive approximation. Second, we develop the Asynchronous Hierarchical Policy Gradient (AHPG) algorithm managing non-stationarity through tem-poral separation while maintaining O(log K/ √K) conver-gence guarantees for the strategic layer. Third, we validate the framework empirically, demonstrating stable bidirec-tional learning in a cooperative multi-agent foraging task. arXiv:2607.19555v1 [cs.MA] 21 Jul 2026 II. PRELIMINARIES We consider a cooperative multi-agent system with N
+
+agents operating in a shared environment. The system em-ploys a hierarchical architecture with a strategic layer that accesses global information at low temporal frequency and a tactical layer that operates distributedly at high frequency using only local information. 
+
+A. Multi-Agent Communication Graph 
+
+The tactical agents interact through a time-invariant com-munication graph G = ( V, E) where V = {1, 2, . . . , N }
+
+represents the agent set and E ⊆ V × V denotes the edge set [15], [16]. For each agent i, the neighborhood 
+
+Ni = {j ∈ V : ( i, j ) ∈ E} is the set of agents that can directly communicate with agent i. This graph constrains information flow at the tactical level, ensuring distributed execution remains scalable. 
+
+B. Strategic MDP Definition 1 (Strategic MDP): The strategic layer evolves as Mstr = (Sstr , Astr , P str , R str , γ str ), where: (i) the state 
+
+Sstr = Senv ×QNi=1 Si combines the exclusive global environ-mental state Senv (resource distributions, global objectives) with all agent states, so that at epoch k the strategic state is sstr  
+
+> k
+
+= ( senv  
+
+> k
+
+, s 1,k , . . . , s N,k ); (ii) actions Astr = QNi=1 Astr 
+
+> i
+
+provide personalized guidance astr  
+
+> i,k
+
+to each agent, persisting for the interval [kT, (k +1) T ); and (iii) the reward integrates global objectives with tactical feedback: 
+
+Rstr (sstr  
+
+> k
+
+, astr  
+
+> k
+
+) = Rglobal (senv  
+
+> k
+
+, astr  
+
+> k
+
+) + λ 
+
+> (k+1) T−1
+
+X
+
+> t=kT N
+
+X
+
+> i=1
+
+rtac 
+
+> i,t
+
+, (1) where λ ∈ [0 , 1] controls the influence of tactical execution quality on strategic evaluation. The strategic policy πstr : Sstr → P (Astr ) maps complete state observations to guidance distributions, encoding high-level coordination logic that individual agents cannot com-pute from local information alone. 
+
+C. Tactical Multi-Agent MDP Definition 2 (Tactical MAMDP): Given fixed strategic guidance astr  
+
+> k
+
+, the tactical layer evolves as Mtac =({S i}, {O tac  
+
+> i
+
+}, {A tac  
+
+> i
+
+}, P tac , {Rtac  
+
+> i
+
+}, γ tac ), where: (i) each agent i observes 
+
+otac  
+
+> i,t
+
+= ϕi(si,t , {sj,t }j∈N i , a str 
+
+> i,k
+
+) ∈ O tac  
+
+> i
+
+, (2) combining local state, neighbor states, and strategic guidance ( k = ⌊t/T ⌋); (ii) the joint transition factorizes over the communication graph: P tac (st+1 |st, atac  
+
+> t
+
+) =QNi=1 Pi(si,t +1 |si,t , {sj,t , a tac 
+
+> j,t
+
+}j∈N i∪{ i}), maintaining tractability as N grows [4]; and (iii) the per-agent reward 
+
+Rtac  
+
+> i
+
+(si,t , a tac 
+
+> i,t
+
+, {sj,t , a tac 
+
+> j,t
+
+}j∈N i , a str 
+
+> i,k
+
+) (3) enables local optimization and neighbor coordination while incorporating strategic objectives. 
+
+D. Bidirectional Coupling 
+
+Unlike traditional top-down hierarchies [11], CHMAS establishes feedback in both directions. Downward coupling 
+
+(strategic → tactical): guidance astr  
+
+> i,k
+
+shapes tactical behavior through observation augmentation (2), reward modulation (3), and temporal persistence over T timesteps. Upward cou-pling (tactical → strategic): accumulated rewards Rtac,cum  
+
+> k
+
+=
+
+P(k+1) T −1
+
+> t=kT
+
+PNi=1 rtac  
+
+> i,t
+
+influence strategic rewards via λ in (1), so that strategic decisions account for tactical feasibility. Setting λ = 0 recovers a purely top-down hierarchy. The framework maintains asymmetric information access: the strategic layer observes complete state sstr  
+
+> k
+
+while tactical agents access only Ni, with strategic guidance serving as an information bottleneck [17]. III. PROBLEM FORMULATION 
+
+A. General Coupled Formulation 
+
+The bidirectional coupling creates a bi-level optimization structure [18], [19]. The strategic objective: 
+
+Jstr (θstr |{ θtac  
+
+> i
+
+}) = E
+
+" ∞X
+
+> k=0
+
+γk
+
+> str
+
+Rstr (sstr  
+
+> k
+
+, astr  
+
+> k
+
+)
+
+#
+
+(4) depends on tactical policies through (1). Each tactical objec-tive: 
+
+Jtac  
+
+> i
+
+(θtac  
+
+> i
+
+|θstr ) = E
+
+" ∞X
+
+> t=0
+
+γt
+
+> tac
+
+rtac 
+
+> i,t
+
+#
+
+(5) depends on strategic parameters through (2) and (3). 
+
+Definition 3 (Coupled Hierarchical Problem): The cou-pled optimization problem is the bi-level program: 
+
+max  
+
+> θstr
+
+Jstr (θstr |{ θtac ∗ 
+
+> i
+
+(θstr )})
+
+s.t. θtac ∗ 
+
+> i
+
+(θstr ) = arg max 
+
+> θtac
+> i
+
+Jtac  
+
+> i
+
+(θtac  
+
+> i
+
+|θstr ), ∀i ∈ V ,
+
+where the strategic optimization accounts for tactical best responses. 
+
+Remark 1: We operate in the cooperative MARL setting where agents share a common team objective. Accordingly, the per-agent best responses θtac ∗ 
+
+> i
+
+are aligned with the joint team optimum, and no equilibrium-seeking across agents is required at the tactical level [4]. This Stackelberg structure is computationally intractable in general [20], motivating the approximation below. 
+
+B. Additive Approximation for Tractable Optimization Definition 4 (Additive Hierarchical Problem): Under the additive approximation, the global objective is: 
+
+Jglobal (θstr , {θtac  
+
+> i
+
+}) = Jstr (θstr ) + 
+
+> N
+
+X
+
+> i=1
+
+Jtac  
+
+> i
+
+(θtac  
+
+> i
+
+), (6) where each term is evaluated with fixed parameters of the other layer. 
+
+Remark 2: Equation (6) is an approximation of the true coupled objective: the cross-layer dependencies in (4)– (5) are not eliminated but handled implicitly through the asynchronous update schedule. The approximation error is controlled by the tactical optimality gap δk which will be defined in Assumption 2 at each epoch, which vanishes as learning progresses. The separable gradient structure, 
+
+∇θ Jglobal = ∇θstr Jstr , ∇θtac Jtac T , (7) allows updates to be treated as coordinate steps in the joint parameter space, enabling rigorous convergence analysis via two-timescale stochastic approximation [21], [22]. IV. ASYNCHRONOUS LEARNING ALGORITHM 
+
+A. Algorithm Design Principles 
+
+AHPG leverages three principles for stable hierarchical learning. 
+
+Temporal separation. Strategic decisions occur every T
+
+timesteps and persist throughout the interval. Strategic pa-rameters follow a decaying step size schedule ηstr  
+
+> k
+
+= α/ √k
+
+and update only every Nf tactical episodes, operating at a slower effective timescale than tactical learning. This allows tactical policies to converge to near-optimal responses between strategic changes, transforming the non-stationary hierarchical problem into alternating stationary subproblems. 
+
+Structured information flow. Downward flow provides coordination signals through strategic guidance without re-quiring centralized control at each timestep. Upward flow aggregates tactical performance Rtac  
+
+> k
+
+= P 
+
+> t,i
+
+rtac  
+
+> i,t
+
+into strate-gic rewards, keeping high-level plans grounded in execution realities. The strategic layer maintains exclusive access to 
+
+senv  
+
+> k
+
+, preserving the information asymmetry that enables scalable distributed execution. 
+
+Distributed tactical learning. Each tactical agent maintains its own policy πtac  
+
+> i
+
+and experience buffer Dtac  
+
+> i
+
+, updating parameters using only local gradients without inter-agent communication during learning, so that tactical computation scales linearly with N .
+
+B. Algorithm Specification 
+
+Algorithm 1 presents the complete AHPG procedure. Strategic guidance is generated at the start of each new strategic epoch (every Nf episodes), and strategic parameters are updated at the end of each epoch using the accumu-lated tactical performance. Tactical parameters update every episode. During the Nf episodes between strategic updates, tactical agents operate in a stationary environment with fixed guid-ance, converging toward near-optimal policies. This ensures strategic updates observe stable tactical performance that accurately estimates the tactical contribution to strategic rewards. For learning components, the strategic layer employs cen-tralized policy gradient algorithms (e.g., PPO [23]) lever-aging complete state access, while tactical agents use dis-tributed policy gradient or actor-critic variants operating on local observations. The framework naturally extends to continuous control through continuous guidance vectors and to partially observable settings through recurrent policies. 
+
+Algorithm 1 Asynchronous Hierarchical Policy Gradient (AHPG) 
+
+Require: Initial parameters θstr  
+
+> 1
+
+, {θtac 
+
+> i, 0
+
+}
+
+Require: Hyperparameters T , Nf , α, ηtac , λ, c 
+
+> 1:
+
+Initialize episode counter e ← 0, strategic epoch k ← 1 
+
+> 2:
+
+for episode e = 1 , 2, . . . do  
+
+> 3:
+
+// Strategic Planning Phase  
+
+> 4:
+
+if e mod Nf = 1 then  
+
+> 5:
+
+Observe full state sstr  
+
+> k
+
+= ( senv  
+
+> k
+
+, sk) 
+
+> 6:
+
+Generate astr  
+
+> k
+
+∼ πstr (sstr  
+
+> k
+
+; θstr  
+
+> k
+
+) 
+
+> 7:
+
+Broadcast astr  
+
+> i,k
+
+to each agent i 
+
+> 8:
+
+end if  
+
+> 9:
+
+// Tactical Execution Phase  
+
+> 10:
+
+for t = 0 to T − 1 do  
+
+> 11:
+
+for agent i ∈ V in parallel do  
+
+> 12:
+
+otac  
+
+> i,t
+
+= ϕi(si,t , {sj,t }j∈N i , a str 
+
+> i,k
+
+) 
+
+> 13:
+
+atac  
+
+> i,t
+
+∼ πtac  
+
+> i
+
+(otac 
+
+> i,t
+
+; θtac 
+
+> i,e
+
+) 
+
+> 14:
+
+Store (otac 
+
+> i,t
+
+, a tac 
+
+> i,t
+
+, r tac 
+
+> i,t
+
+) in Dtac  
+
+> i
+> 15:
+
+end for  
+
+> 16:
+
+end for  
+
+> 17:
+
+// Tactical Policy Update  
+
+> 18:
+
+for agent i ∈ V in parallel do  
+
+> 19:
+
+gtac  
+
+> i
+
+= ∇θtac  
+
+> i
+
+Jtac  
+
+> i
+
+using Dtac  
+
+> i
+> 20:
+
+θtac  
+
+> i,e +1
+
+= θtac  
+
+> i,e
+
++ ηtac gtac  
+
+> i
+> 21:
+
+end for  
+
+> 22:
+
+// Strategic Update  
+
+> 23:
+
+if e mod Nf = 0 then  
+
+> 24:
+
+Rtac  
+
+> k
+
+= P(k+1) T −1
+
+> t=kT
+
+PNi=1 rtac  
+
+> i,t
+> 25:
+
+rstr  
+
+> k
+
+= Rglobal (senv  
+
+> k
+
+, astr  
+
+> k
+
+) + λR tac  
+
+> k
+> 26:
+
+gstr = ∇θstr Jstr using Dstr  
+
+> 27:
+
+θstr  
+
+> k+1
+
+= θstr  
+
+> k
+
++ ( α/ √k) gstr  
+
+> 28:
+
+k ← k + 1  
+
+> 29:
+
+end if  
+
+> 30:
+
+end for 
+
+V. CONVERGENCE ANALYSIS We establish convergence for AHPG under the additive approximation Jglobal (θ) = Jstr (θstr ) + PNi=1 Jtac  
+
+> i
+
+(θtac  
+
+> i
+
+).
+
+Assumption 1: 1) Smoothness : Jstr and each Jtac  
+
+> i
+
+are 
+
+L-smooth with L-Lipschitz gradients. 2) Boundedness : Jstr ≤ Jstr ∗ and Jtac  
+
+> i
+
+≤ Jtac ∗ 
+
+> i
+
+for all i.3) Bounded variance : Stochastic gradient estimates sat-isfy E[∥gstr  
+
+> k
+
+− ∇ Jstr  
+
+> k
+
+∥2] ≤ σ2 
+
+> str
+
+and E[∥gtac  
+
+> i,e
+
+− ∇ Jtac  
+
+> i
+
+∥2] ≤
+
+σ2
+
+> tac
+
+.4) Biased strategic gradient : E[gstr  
+
+> k
+
+| θstr  
+
+> k
+
+] = ∇Jstr (θstr  
+
+> k
+
+)+ 
+
+bk, where bk captures the error from evaluating strate-gic gradients with non-converged tactical parameters. 
+
+Assumption 2: 1) PL condition : Each Jtac  
+
+> i
+
+satisfies the 
+
+μ-PL inequality: ∥∇ Jtac  
+
+> i
+
+(θ)∥2 ≥ 2μ(Jtac ∗ 
+
+> i
+
+− Jtac  
+
+> i
+
+(θ)) .2) Warm-start : At the beginning of each strategic epoch 
+
+k, tactical agents are initialized from the converged state of the previous epoch. The initial optimality gap satisfies E[Jtac ∗ 
+
+> i
+
+− Jtac  
+
+> i
+
+(θtac  
+
+> i,kN f
+
+)] ≤ δk, where δk =
+
+O(ηstr  
+
+> k
+
+) = O(1 /√k), reflecting the magnitude of the strategic parameter change between successive epochs. 3) Round-robin updates : Within each tactical phase, agents update sequentially with others’ parameters held fixed, so that the PL condition applies to each per-agent landscape independently. 
+
+Remark 3: The PL condition in Assumption 2 holds for log-linear (softmax) policies in tabular settings [24] and locally for over-parameterized neural networks near sta-tionary points. The round-robin assumption is a standard device to decouple per-agent landscapes; it can be relaxed to simultaneous updates at the cost of a more involved coupling analysis. 
+
+Assumption 3 (Coupling structure): The strategic gradi-ent is Lb-Lipschitz in the tactical parameters: 
+
+∥∇ Jstr (θstr , θtac ) − ∇ Jstr (θstr , θtac ∗)∥ ≤ Lb∥θtac − θtac ∗∥.
+
+Theorem 1 (AHPG Convergence): Under Assump-tions 1–3, with ηstr  
+
+> k
+
+= α/ √k where α ≤ 1/(8 L),
+
+ηtac = β/ √K where β < 1/(2 L), and Nf = c√K for a constant c > 0, after K strategic updates AHPG achieves: 
+
+min  
+
+> k∈{ 1,...,K }
+
+E[∥∇ Jstr (θstr  
+
+> k
+
+)∥2] = O
+
+ log K
+
+√K
+
+
+
+,
+
+1
+
+KN fKX 
+
+> k=1 (k+1) Nf−1
+
+X
+
+> e=kN f
+> N
+
+X
+
+> i=1
+
+E[∥∇ Jtac  
+
+> i
+
+(θtac 
+
+> i,e
+
+)∥2] = O
+
+ 1
+
+√K
+
+
+
+.
+
+Proof: Strategic layer. By L-smoothness of Jstr and the update θstr  
+
+> k+1
+
+= θstr  
+
+> k
+
++ ηstr  
+
+> k
+
+gstr  
+
+> k
+
+:
+
+Jstr  
+
+> k+1
+
+≥ Jstr  
+
+> k
+
++ ηstr  
+
+> k
+
+⟨∇ Jstr  
+
+> k
+
+, g str  
+
+> k
+
+⟩ − L 
+
+> 2
+
+(ηstr  
+
+> k
+
+)2∥gstr  
+
+> k
+
+∥2.
+
+Taking expectation with E[gstr  
+
+> k
+
+] = ∇Jstr  
+
+> k
+
++ bk, we bound the two terms. For the inner product, applying Young’s inequality 
+
+⟨a, b ⟩ ≥ − 14 ∥a∥2 − ∥ b∥2:
+
+E[⟨∇ Jstr  
+
+> k
+
+, g str  
+
+> k
+
+⟩] ≥ 34 ∥∇ Jstr  
+
+> k
+
+∥2 − ∥ bk∥2.
+
+For the squared norm, using E[∥gstr  
+
+> k
+
+∥2] ≤ ∥∇ Jstr  
+
+> k
+
++ bk∥2 +
+
+σ2 
+
+> str
+
+≤ 2∥∇ Jstr  
+
+> k
+
+∥2 + 2 ∥bk∥2 + σ2
+
+> str
+
+:
+
+E[Jstr 
+
+> k+1
+
+] ≥ Jstr  
+
+> k
+
++  34 ηstr  
+
+> k
+
+− L(ηstr  
+
+> k
+
+)2 ∥∇ Jstr  
+
+> k
+
+∥2
+
+− ηstr  
+
+> k
+
++ L(ηstr  
+
+> k
+
+)2 ∥bk∥2 − L 
+
+> 2
+
+(ηstr  
+
+> k
+
+)2σ2
+
+> str
+
+.
+
+Since ηstr  
+
+> k
+
+≤ 1/(8 L), we have L(ηstr  
+
+> k
+
+)2 ≤ ηstr  
+
+> k
+
+/8, so 34 ηstr  
+
+> k
+
+−
+
+L(ηstr  
+
+> k
+
+)2 ≥ 58 ηstr  
+
+> k
+
+≥ 18 ηstr  
+
+> k
+
+and ηstr  
+
+> k
+
++ L(ηstr  
+
+> k
+
+)2 ≤ 98 ηstr  
+
+> k
+
+≤ 2ηstr  
+
+> k
+
+.Rearranging and telescoping over k = 1 , . . . , K :
+
+18
+
+> K
+
+X
+
+> k=1
+
+ηstr  
+
+> k
+
+E[∥∇ Jstr  
+
+> k
+
+∥2] ≤ ∆Jstr + 2 
+
+> K
+
+X
+
+> k=1
+
+ηstr  
+
+> k
+
+∥bk∥2
+
++ Lσ 2
+
+> str
+
+2
+
+> K
+
+X
+
+> k=1
+
+(ηstr  
+
+> k
+
+)2, (8) where ∆Jstr = Jstr ∗ − Jstr  
+
+> 1
+
+.
+
+Bias bound. By Assumption 3, ∥bk∥2 ≤ L2 
+
+> b
+
+∥θtac  
+
+> (k+1) Nf
+
+−
+
+θtac ∗∥2. Running Nf = c√K SGD steps under the PL con-dition (Assumption 2) with step size β/ √K and warm-start gap δk yields contraction factor ρ = (1 − 2μβ/ √K)c√K →
+
+e−2μβc < 1, so the residual tactical deviation satisfies 
+
+∥bk∥2 = O(δk + 1 /√K) = O(1 /√k).
+
+Completing the strategic bound. With ηstr  
+
+> k
+
+= α/ √k:
+
+> K
+
+X
+
+> k=1
+
+ηstr  
+
+> k
+
+∥bk∥2 = O α
+
+> K
+
+X 
+
+> k=1 1√k
+
+· 1√k
+
+!
+
+= O(log K),
+
+> K
+
+X
+
+> k=1
+
+(ηstr  
+
+> k
+
+)2 = α2
+
+> K
+
+X 
+
+> k=1 1
+> k
+
+= O(log K).
+
+Dividing (8) by PKk=1 ηstr  
+
+> k
+
+= O(α√K) gives 
+
+min k E[∥∇ Jstr  
+
+> k
+
+∥2] = O(log K/ √K).
+
+Tactical layer. Within epoch k, θstr  
+
+> k
+
+is fixed, so Jtac  
+
+> i
+
+is stationary. Standard SGD under the μ-PL condition over Nf
+
+steps gives per-epoch average gradient norm O(δk +1 /√K).Averaging over K epochs and using K−1 PKk=1 δk =
+
+K−1 PKk=1 O(k−1/2) = O(K−1/2), the overall tactical average is O(1 /√K), completing the proof. 
+
+Remark 4: Theorem 1 is established for policy gradient implementations. The DQN-based experiments in Section VI serve as an empirical proof of concept; extending the conver-gence analysis to Q-learning variants is left for future work. VI. EXPERIMENTAL VALIDATION 
+
+A. Experiment Setting 
+
+We evaluate CHMAS on a 25 ×25 GridWorld environ-ment with N = 4 agents performing cooperative foraging, instantiating the key features of hierarchical multi-agent coordination: information asymmetry, temporal abstraction, and bidirectional coupling. 
+
+Fig. 1: The 25 ×25 GridWorld environment. Four agents (A0-blue, A1-orange, A2-purple, A3-green) operate within their assigned 9 ×9 regions (dashed boxes) determined by strategic guidance. Colored areas indicate visited cells tracked in the global state senv , while agents pursue local resources (red apple). The global environmental state senv ∈ { 0, 1}625 tracks cell visitation, representing system-wide coverage that individual agents cannot observe. The strategic layer accesses the complete state sstr = ( senv , s 1, s 2, s 3, s 4), while each tactical agent i observes only local information otac  
+
+> i
+
+∈ R20 compris-ing its position, nearby resources, and strategic guidance. Strategic actions assign each agent a 9 ×9 region center 
+
+astr  
+
+> i
+
+= ( gxi , g yi ) ∈ [4 , 20] 2 at the start of each epoch ( T =5 timesteps). Tactical agents select discrete actions atac  
+
+> i
+
+∈{0, 1, 2, 3, 4, 5} (movement, collection, wait). The reward structure implements bidirectional cou-pling: tactical agents receive rtac  
+
+> i,t
+
+= rcollect  
+
+> i,t
+
+− 0.01 −
+
+0.01 · 1[outside region ], while the strategic layer exclu-sively receives global coverage reward Rglobal  
+
+> k
+
+= 0.01 ×|newly visited cells | computed from senv . Strategic rewards integrate both: Rstr  
+
+> k
+
+= Rglobal  
+
+> k
+
++ λ P 
+
+> t,i
+
+rtac  
+
+> i,t
+
+with λ = 0 .5.The implementation is publicly available at https:// github.com/EricDmWang/Hierarchy_RL.git .
+
+B. Results and Analysis 
+
+We implement the tactical layer using Multi-Agent DQN (MA-DQN) with parameter sharing, dueling architecture, double Q-learning, and prioritized experience replay. The strategic layer employs a centralized DQN on the global state. Training runs for 400 episodes with 5 independent seeds. Figure 2 shows the tactical layer’s learning progression. Q-values (a) grow rapidly before stabilizing near episode 300. Returns (b) improve from approximately −80 to −10 ,showing agents learn efficient resource collection while re-specting region constraints. Critic loss (c) and policy loss (d) peak early during exploration and then decrease as policies stabilize. Figure 3 shows the strategic layer’s asynchronous learn-ing with updates every Nf = 5 episodes. Strategic Q-values (a) improve from −8 to near 0, and strategic returns (b) increase from −10 to approximately 15 , demonstrating successful optimization of global coverage objectives. The delayed onset of learning (first 10–20 episodes) reflects the asynchronous protocol allowing tactical policies to stabilize before strategic updates commence. Low variance across runs confirms algorithmic stability. 
+
+C. Qualitative Analysis 
+
+Figure 4 shows the execution trajectory of a trained AHPG model over a complete episode. The strategic layer learns to assign non-overlapping regions that collectively tile the grid, initially placing agents in corners and then adapting assignments to unexplored areas. Agents balance region compliance with opportunistic resource collection. By frame (e), full resource collection with maintained spatial coordi-nation validates the effectiveness of bidirectional hierarchical control. VII. CONCLUSION This paper introduced CHMAS, a hierarchical MARL framework based on bidirectional coupling between strategic and tactical layers. By enabling strategic planning with exclusive global state access while maintaining distributed tactical execution, CHMAS provides a new architectural paradigm for coordinating agents across multiple temporal scales. The asynchronous update protocol, with a decaying strategic step size schedule, manages the non-stationarity inherent in hierarchical learning and admits O(log K/ √K)
+
+convergence guarantees for the strategic layer. The bidirectional coupling mechanism offers a principled approach to constrained reinforcement learning: strategic guidance encodes global constraints while tactical feedback ensures feasibility, with λ providing tunable constraint satis-faction. REFERENCES [1] T. T. Nguyen, N. D. Nguyen, and S. Nahavandi, “Deep reinforcement learning for multiagent systems: A review of challenges, solutions, and applications,” IEEE transactions on cybernetics , vol. 50, no. 9, pp. 3826–3839, 2020. [2] M. A. Wiering et al. , “Multi-agent reinforcement learning for traffic light control,” in Machine Learning: Proceedings of the Seventeenth International Conference (ICML’2000) , 2000, pp. 1151–1158. [3] G. Qu, Y. Lin, A. Wierman, and N. Li, “Scalable multi-agent reinforce-ment learning for networked systems with average reward,” Advances in Neural Information Processing Systems , vol. 33, pp. 2074–2086, 2020. [4] K. Zhang, Z. Yang, and T. Bas ¸ar, “Multi-agent reinforcement learn-ing: A selective overview of theories and algorithms,” Handbook of Reinforcement Learning and Control , pp. 321–384, 2021. [5] K. Zhang, Z. Yang, H. Liu, T. Zhang, and T. Basar, “Fully decen-tralized multi-agent reinforcement learning with networked agents,” in International Conference on Machine Learning . PMLR, 2018, pp. 5872–5881. [6] T. Rashid, M. Samvelyan, C. S. De Witt, G. Farquhar, J. Foerster, and S. Whiteson, “Monotonic value function factorisation for deep multi-agent reinforcement learning,” Journal of Machine Learning Research ,vol. 21, no. 178, pp. 1–51, 2020. [7] R. Lowe, Y. I. Wu, A. Tamar, J. Harb, P. Abbeel, and I. Mor-datch, “Multi-agent actor-critic for mixed cooperative-competitive environments,” in Advances in Neural Information Processing Systems ,vol. 30, 2017. [8] P. Hernandez-Leal, B. Kartal, and M. E. Taylor, “A survey and critique of multiagent deep reinforcement learning,” Autonomous Agents and Multi-Agent Systems , vol. 33, no. 6, pp. 750–797, 2019. [9] R. S. Sutton, D. Precup, and S. Singh, “Between MDPs and semi-MDPs: A framework for temporal abstraction in reinforcement learn-ing,” Artificial Intelligence , vol. 112, no. 1-2, pp. 181–211, 1999. [10] P.-L. Bacon, J. Harb, and D. Precup, “The option-critic architecture,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 31, no. 1, 2017. [11] S. Pateria, B. Subagdja, A.-h. Tan, and C. Quek, “Hierarchical reinforcement learning: A comprehensive survey,” ACM Computing Surveys , vol. 54, no. 5, pp. 1–35, 2021. [12] A. S. Vezhnevets, S. Osindero, T. Schaul, N. Heess, M. Jaderberg, D. Silver, and K. Kavukcuoglu, “Feudal networks for hierarchical reinforcement learning,” in International Conference on Machine Learning . PMLR, 2017, pp. 3540–3549. [13] T. D. Kulkarni, K. Narasimhan, A. Saeedi, and J. Tenenbaum, “Hier-archical deep reinforcement learning: Integrating temporal abstraction and intrinsic motivation,” in Advances in Neural Information Process-ing Systems , vol. 29, 2016. [14] O. Nachum, S. S. Gu, H. Lee, and S. Levine, “Data-efficient hi-erarchical reinforcement learning,” Advances in Neural Information Processing Systems , vol. 31, 2018. [15] R. Olfati-Saber, J. A. Fax, and R. M. Murray, “Consensus and cooperation in networked multi-agent systems,” Proceedings of the IEEE , vol. 95, no. 1, pp. 215–233, 2007. [16] A. Nedic, A. Ozdaglar, and P. A. Parrilo, “Constrained consensus and optimization in multi-agent networks,” IEEE Transactions on Automatic Control , vol. 55, no. 4, pp. 922–938, 2010. [17] N. Tishby, F. C. Pereira, and W. Bialek, “The information bottleneck method,” arXiv preprint physics/0004057 , 2000. [18] B. Colson, P. Marcotte, and G. Savard, “An overview of bilevel optimization,” Annals of Operations Research , vol. 153, no. 1, pp. 235–256, 2007. (a) Tactical Q-values (b) Tactical returns (c) Tactical critic loss (d) Tactical policy loss 
+
+Fig. 2: Tactical layer learning dynamics. 
+
+(a) Strategic Q-values (b) Strategic returns (c) Strategic critic loss (d) Strategic actor loss 
+
+Fig. 3: Strategic layer learning dynamics with Nf = 5 .
+
+(a) t = 0 (b) t = 6 (c) t = 9 (d) t = 16 (e) t = 19 
+
+Fig. 4: Evolution of hierarchical coordination during execution. Agents operate within their assigned 9 ×9 regions (dashed boxes) while collectively achieving grid coverage. Red apples represent resources collected opportunistically. 
+
+[19] A. Sinha, P. Malo, and K. Deb, “A review on bilevel optimization: From classical to evolutionary approaches and applications,” IEEE Transactions on Evolutionary Computation , vol. 22, no. 2, pp. 276– 295, 2018. [20] M. Hong, H.-T. Wai, Z. Wang, and Z. Yang, “A two-timescale stochas-tic algorithm framework for bilevel optimization: Complexity analysis and application to actor-critic,” SIAM Journal on Optimization , vol. 33, no. 1, pp. 147–180, 2023. [21] V. S. Borkar, “Stochastic approximation with two time scales,” Systems & Control Letters , vol. 29, no. 5, pp. 291–294, 1997. [22] Y. Nesterov, “Efficiency of coordinate descent methods on huge-scale optimization problems,” SIAM Journal on Optimization , vol. 22, no. 2, pp. 341–362, 2012. [23] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Proximal policy optimization algorithms,” arXiv preprint arXiv:1707.06347 , 2017. [24] A. Agarwal, S. M. Kakade, J. D. Lee, and G. Mahajan, “Optimality and approximation with policy gradient methods in markov decision processes,” in Conference on learning theory . PMLR, 2020, pp. 64– 66.
