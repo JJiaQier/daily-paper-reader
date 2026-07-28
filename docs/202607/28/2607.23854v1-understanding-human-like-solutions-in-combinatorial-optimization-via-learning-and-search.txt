@@ -1,0 +1,917 @@
+Title: Understanding Human-like Solutions in Combinatorial Optimization via Learning and Search
+
+URL Source: https://arxiv.org/pdf/2607.23854v1
+
+Published Time: Tue, 28 Jul 2026 01:20:51 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# Understanding Human-like Solutions in Combinatorial Optimization via Learning and Search 
+
+Haijiang Yan 1†, Jian-Qiao Zhu 2†, Liqiang Huang 3, Ming Meng 4,5* 
+
+1Department of Psychology, The University of Warwick, Coventry, United Kingdom. 
+
+2Department of Psychology, The University of Hong Kong, Hong Kong, China. 
+
+3Department of Psychology, The Chinese University of Hong Kong, Hong Kong, China. 
+
+4School of Psychology, South China Normal University, Guangdong, China. 
+
+5* Department of Neurobiology, The University of Alabama at Birmingham, Alabama, United States. *Corresponding author(s). E-mail(s): mengm@uab.edu; Contributing authors: haijiang.yan@warwick.ac.uk; zhujq@hku.hk; lqhuang@cuhk.edu.hk; 
+
+†These authors contributed equally to this work. 
+
+Abstract 
+
+Humans often find good solutions to combinatorial optimization problems that are compu-tationally hard even for advanced computer algorithms. In the Euclidean traveling salesman problems (TSP), people rapidly produce tours that are near-optimal, despite severe limits on time and computation. What makes a tour human-like, and how might such solutions be learned? Here we address these questions through a large-scale behavioral and compu-tational investigation of human performance in Euclidean TSP. We sampled a broad space of TSP instances, collected human solutions, and compared them with neural policies based on Pointer Networks, which are recurrent neural networks with an attention-based pointing mechanism that define probability distributions over valid tours. We trained these networks under multiple objectives, including reinforcement learning (RL), supervised learning from optimal tours, supervised learning from human tours, and RL fine-tuning after optimal-supervised pretraining. Human tours were not identical to optimal tours, but occupied a near-optimal geometric basin: they shared many structural properties with opti-mal solutions while preserving systematic human-specific deviations. The best account of 
+
+1arXiv:2607.23854v1 [cs.AI] 26 Jul 2026 human tours was not direct imitation of optimal tours, but a model pretrained on optimal tours, fine-tuned by RL, and decoded through Best-of-𝑵 sampling. These findings suggest that human-like solutions may emerge from a combination of structured supervised learn-ing, RL, and test-time search, echoing computational principles underlying many modern artificial intelligence systems.  
+
+> Keywords: Combinatorial Optimization, Large-Scale Behavioral Experiments, Learning and Search, Pointer Network, Problem Solving, Cognitive Modeling
+
+# 1 Introduction 
+
+Many combinatorial optimization problems are deceptively simple: easy to state, but hard to solve. This challenge is not confined to mathematics and computer science. Many everyday cognitive tasks also have a combinatorial structure. Planning errands, cooking a meal, packing a suitcase, or organizing a workday all require selecting and ordering actions from a large space of possibilities. The Euclidean Traveling Salesman Problem (TSP) is a canonical example. The task is to find the shortest tour, measured by Euclidean length, that visits each city in a two-dimensional space exactly once and returns to the starting city (see example TSP instances in Figure 1a). Although this goal is easy to understand, the problem is difficult because the number of possible tours grows factorially with the number of cities, making exhaustive search rapidly infeasible. Formally, the TSP is NP-hard, meaning that no polynomial-time algorithm is currently known that can guarantee optimal solutions for all instances. The TSP therefore provides a useful task for studying how intelligent agents produce good solutions under severe computational constraints. What makes the TSP especially intriguing is that humans often produce near-optimal tours within only a few seconds [1–4]. This striking ability raises a central question for cognitive science and artificial intelligence: how do humans construct such high-quality solutions under severe computational constraints? More specifically, what cognitive algorithm supports near-optimal human TSP performance? Can this algorithm be approximated or implemented in computational models? And what geometric properties distinguish human-like tours from other possible solutions? To better understand human-like solutions to the TSP, we conducted the largest behavioral experiment on human TSP performance to date and generated the tsp150k dataset, which spans 150,000 unique TSP instances and includes over 20 million human-generated tours from 1,107 participants (see Appendix A for details). For each TSP instance, between 92 and 207 human tours were collected, with an average of 139 human tours per instance. The TSP instances can be further categorized into five distinct complexity levels based on the number of cities tested: 10 (simplest), 12, 15, 19, and 24 (most complex, see illustrations in Figure 1). This large-scale behavioral dataset of human TSP performance thus offers a unique opportunity to systematically characterize human behavior and investigate a broad class of computational models of the TSP, including heuristic search methods and neural-network-based learning methods. Briefly, our descriptive analyses of human TSP behavior replicate many classical findings in the cognitive psychology literature on the TSP, including that human tours are near-optimal, approximately 10% longer than the optimal tour [2, 5]; and that tour 210 cities 12 cities   
+
+> City
+> Starting city
+> 15 cities 19 cities 24 cities
+
+# aGeometric Component 1  
+
+> Geometric Component 2
+> 10 cities
+> 12 cities
+> 15 cities
+> 19 cities
+> 24 cities
+
+# b
+
+Fig. 1 Euclidean TSP instances from the tsp150k dataset. (a) Example TSP instances from each of the five complexity levels. Star symbols denote the starting cities. In each trial, participants were instructed to begin at the designated starting city, visit every city exactly once, and return to the starting city to complete the tour. (b) 
+
+Visualization of the TSP instance space. Each instance in the dataset is represented by an eight-dimensional vector of geometric features (see Appendix D.2) extracted from the tours produced by human participants for that instance. Feature vectors were averaged across human tours for each instance. We then applied t-distributed stochastic neighbor embedding (t-SNE) to project the resulting feature vectors into a two-dimensional space for visualization. Each dot corresponds to a single TSP instance, with colors indicating its complexity level. 
+
+optimality gradually decreases while time spent on the task increases with TSP complexity [1, 6]. We also uncover several novel behavioral patterns, including that, after ignoring previ-ously visited cities, people’s next-city choices stabilize at a high level of local optimality; and that people spend substantially more time deliberating or planning at the initial position (see Appendix B for details). Collectively, these results suggest that people may employ a gen-eral think-then-implement strategy, which enables them to achieve near-optimal performance within relatively short timeframes. 
+
+# 2 Developing Models of Human-like Tours 
+
+To further understand the cognitive mechanisms underlying human tours, we explored a broad space of computational models of the TSP. The scale of our tsp150k dataset enabled us to examine this large hypothesis space of candidate cognitive models, which can be broadly classified into two categories: (i) search-only methods and (ii) hybrid methods that combine search and learning (see Table 1). Search is a fundamental component of solving combinatorial optimization problems. Its appeal in the Euclidean TSP is intuitive: the quality of a candidate tour can be evaluated efficiently by its Euclidean length, allowing candidate solutions to be readily ranked. The dif-ficulty therefore lies not in evaluating candidate tours, but in generating high-quality ones, as the space of possible tours is too large to search exhaustively. In light of these computational challenges, numerous heuristic search methods have been proposed in operations research and computer science as alternatives to exhaustive search [8–10]. Nearest Neighbor is one of the simplest search heuristics: given a partial tour, it iteratively extends the tour by selecting the nearest unvisited city at each step [8]. It is, however, a myopic algorithm that overemphasizes local optimality, often leading to inefficient and suboptimal tours. Other heuristic algorithms exploit global geometric structure to generate tours that more closely resemble optimal solu-tions. A prominent example is the Convex Hull heuristic, which first constructs an initial partial tour by connecting the cities on the boundary of the convex hull. The remaining interior cities are then inserted iteratively by selecting the insertion that minimizes the increase in tour 3Table 1 Overview of computational models of TSP tours. Model Learning Search Concorde ( optimal ) [7] None Exact optimization Nearest Neighbor [8] None Local heuristic Convex Hull Cheapest Insertion [8] None Geometric heuristic Largest Interior Angle [9] None Geometric heuristic Elastic Net [10] None Gradient descent PointerNet policy: 𝑝 optimal ( 𝜋 |x) Supervised learning on optimal tours Greedy decoding Beam search Best-of-𝑁 sampling PointerNet policy: 𝑝 RL ( 𝜋 |x) Reinforcement learning with nega-tive Euclidean length as the reward Greedy decoding Beam search Best-of-𝑁 sampling PointerNet policy: 𝑝 optimal+RL ( 𝜋 |x) Supervised learning on optimal tours followed by reinforcement learning fine-tuning Greedy decoding Beam search Best-of-𝑁 sampling PointerNet policy: 𝑝 human ( 𝜋 |x) Supervised learning on human tours Greedy decoding Beam search Best-of-𝑁 sampling     
+
+> Note. 𝜋 denotes a tour, and xdenotes the sequence of cities in a TSP instance.
+
+length [8] or maximizes the resulting interior angle [9], until all cities have been incorporated into the tour. More sophisticated search algorithms approach the TSP by optimizing geometric or math-ematical relaxations of the original combinatorial problem. One representative example is the Elastic Net [10]. It initializes a deformable ring consisting of more points than the number of cities at the center of the two-dimensional space. Each city attracts nearby points on the ring, while neighboring points exert elastic forces on one another to preserve the continuity of the ring. Together, these competing forces define an energy landscape, which is optimized using gradient descent to produce a locally optimal ring configuration. Once the optimization converges, the resulting ring is converted into a valid TSP tour. A related but exact approach is implemented in Concorde [7]. Concorde solves the TSP using a branch-and-cut algorithm that repeatedly optimizes a simplified mathematical formulation of the problem, progressively rules out invalid solutions, and systematically narrows the remaining search space until the globally optimal tour is certified. Concorde has solved TSP instances containing up to 85,900 cities [7] and was therefore used in this work to generate the optimal solutions for all instances in our dataset. An independent axis of improvement over search-only TSP solvers, and a model class that has been largely neglected in the psychological studies of TSP [1–3], is to learn a proposal distribution that efficiently generates high-quality candidate tours for a given instance, thereby reducing the computational cost associated with search. This idea underlies modern neural-network-based TSP solvers, in which neural networks are trained to generate high-quality tours [13, 14]. Here, we consider the Pointer Network (PointerNet hereafter) [13], a recurrent 4x0 x1 x2 x3 x0 x3x4 x1 x4 
+
+> attention-based pointing mechanism
+> Encoder Decoder
+
+# a
+
+# b
+
+PointerNet 
+
+> PointerNet
+> Demo tours
+> (optimal/human tours)
+
+Supervised Learning 
+
+> teacher
+> forcing
+> PointerNet
+
+Reinforcement Learning 
+
+−L(π1)
+
+> Negative
+> Euclidean distance
+
+−L(π2)
+
+−L(πK)
+
+…
+
+> Proximal Policy Gradient
+> Generated
+> tours
+
+π1
+
+π2
+
+πK
+
+…
+
+# c
+
+x0
+
+x3
+
+x1
+
+x2
+
+x4
+
+Generated tour  πFig. 2 Illustration of the PointerNet architecture and training methods. (a) The PointerNet consists of two RNN modules. The encoder RNN (purple) sequentially processes the city locations, while the decoder RNN (green) autoregressively generates a city sequence. At each decoding step, an attention-based mechanism is used to select the next city while masking out previously decoded cities, thereby ensuring that the generated sequence forms a valid TSP tour. (b) The PointerNet can be trained with supervised learning using teacher forcing on a set of demonstration tours [11]. (c) The PointerNet can also generate a set of candidate tours and receive reinforcement-learning signals that reward tours with shorter Euclidean lengths. The neural network is optimized using proximal policy optimization [12]. 
+
+neural network (RNN) with an attention-based pointing mechanism that generates a valid permutation of the input sequence (see Figure 2 for an illustration and Appendix C for details). The PointerNet first encodes the sequence of city coordinates into latent representations and then autoregressively decodes a tour. At each decoding step, the pointing mechanism selects one previously unvisited city, ensuring that every city is visited exactly once and that the decoded sequence constitutes a valid TSP tour. In our implementations, the starting city is always used as both the first encoded city and the first decoded city, mirroring our experimental design. For PointerNet models of human TSP solutions, we can independently manipulate learning and search (see Table 1). Let x denote a city layout, and let 𝜋 denote a permutation of the cities representing the serial order of a tour. Different versions of the PointerNet were trained using different objectives, including (i) supervised learning on optimal tours, 𝑝 optimal (𝜋 |x), (ii) RL with negative Euclidean tour length as the reward, 𝑝 RL (𝜋 |x), and (iii) a combination of the first two: supervised learning on optimal tours followed by RL fine-tuning, 𝑝 optimal+RL (𝜋 |x). We also trained a PointerNet directly on human tours, 𝑝 human (𝜋 |x), which serves as an upper bound on model performance in predicting human behavior. As a result, each trained PointerNet defines a proposal distribution 𝑝 𝜃 (𝜋 |x) (i.e., a stochastic policy of TSP), with different values of parameter 𝜃 corresponding to different training regimes. To decode a TSP tour from a trained 5model, we examined three search/decoding strategies: (i) greedy decoding, which myopically selects the most probable next city conditioned on the current partial tour; (ii) Beam search, which heuristically approximates the most probable complete sequence; and (iii) Best-of-𝑁 
+
+sampling, which randomly samples 𝑁 complete tours and selects the shortest one among them. Overall, this results in a total of 4 (learning objectives ) × 3 (search strategies ) = 12 
+
+PointerNet models of human TSP tours (see Appendix C for details). 
+
+# 3 Comparing Model-Generated with Human Tours 
+
+All computational models considered here eventually generate valid TSP tours, with each model assuming a different underlying mechanism. We therefore developed a set of evaluation metrics to quantify the alignment between model-generated and human tours, each capturing a distinct aspect of model performance. As a human-level reference, we additionally included a human-tour baseline that randomly sampled one human solution for each TSP instance from the behavioral dataset. This reference incorporates inter-participant variability, a model that outperforms it should therefore capture systematic and coherent patterns of human behavior shared across individuals. Additionally, because the learning-based models (i.e., the PointerNet variants) were exposed to a training set, our model comparisons were conducted on the same held-out test set of TSP instances that were unseen during training (50,000 instances in total, with 10,000 at each complexity level). The tour-level evaluation metrics aim to quantify the alignment between pairs of complete tours for a given TSP instance: one generated by a model and one produced by a human participant. We developed five such metrics of pairwise similarity: (i) Edge Overlap Ratio (EOR), which measures the proportion of shared edges between two tours, irrespective of their traversal order (e.g., the tours 1-2-3-4-5 and 1-4-5-2-3 share the edge 2-3 and 4-5); (ii) Longest Common Substring (LCS), which measures the length of the longest shared consecutive sequence of visited cities, regardless of where that sequence occurs within either tour (e.g., the tours 1-2-3-4-5-6-7 and 1-6-7-2-3-4-5 share the substring 2-3-4-5); (iii) Levenshtein distance (LD), which measures the minimum number of edits required to transform one tour into the other, providing a measure of overall sequence dissimilarity (e.g., the tours 1-2-3-4-5 and 1-2-3-5-4 differ only by substituting the last two positions, resulting in a small edit distance); (iv) Fréchet distance (FD), which measures the greatest spatial separation between corresponding points as the two tours are traversed from start to finish (e,g., two tours that share similar spatial trajectories but different visiting orders remain geometrically similar); and (v) Kendall’s 𝜏 ,which measures the rank correlation between the visiting orders of cities in two tours (see Appendix D for details). As shown in Table 2 (gray row), beam-search decoding of tours from the PointerNet policy trained directly on human solutions, 𝑝 human (𝜋 |x), achieved the strongest overall alignment with human tours, providing an empirical upper bound on model performance. By preferentially selecting high-probability sequences under the learned policy, beam search reveals that the PointerNet concentrates probability mass on human-like tours that can best reflect regularities shared across participants. For the search-only models, both optimal tours generated by Concorde and near-optimal tours by Elastic Net outperformed the three canonical heuristic approaches and human-tour baseline, achieving levels of human-likeness only slightly below the best PointNet model. 6Table 2 Multi-dimensional evaluations between model-generated tours and human tours. All numbers were computed based on the same held-out test set. Model EOR ↑ LCS ↑ LD ↓ FD ↓ 𝜏 ↑ Aggregate score ↑
+
+Concorde 0.580 0.488 6.156 39.442 0.331 0.592 Elastic Net 0.572 0.484 5.940 38.688 0.332 0.593 Nearest Neighbor 0.436 0.354 9.190 61.940 0.266 0.447 Convex Hull Cheapest Insertion 0.571 0.418 10.437 65.257 0.130 0.449 Largest Interior Angle 0.561 0.412 10.460 65.240 0.129 0.445 Random Human Tours 0.503 0.423 6.900 43.091 0.333 0.547 PointerNet 𝑝 optimal ( 𝜋 |x)
+
+Greedy decoding 0.540 0.457 6.644 41.596 0.347 0.569 Beam search 0.555 0.472 6.346 40.348 0.355 0.582 Best-of-𝑁 (𝑁 =1) 0.487 0.408 7.416 44.040 0.303 0.530 Best-of-𝑁 (10) 0.565 0.476 6.242 39.079 0.347 0.588 Best-of-𝑁 (100) 0.578 0.488 6.087 38.923 0.346 0.595 PointerNet 𝑝 RL ( 𝜋 |x)
+
+Greedy decoding 0.523 0.436 6.497 40.521 0.322 0.562 Beam search 0.523 0.437 6.487 40.498 0.322 0.563 Best-of-𝑁 (𝑁 =1) 0.521 0.435 6.512 40.558 0.321 0.561 Best-of-𝑁 (10) 0.537 0.449 6.351 40.097 0.325 0.570 Best-of-𝑁 (100) 0.546 0.457 6.262 39.832 0.328 0.576 PointerNet 𝑝 optimal+RL ( 𝜋 |x)
+
+Greedy decoding 0.540 0.457 6.374 41.183 0.353 0.573 Beam search 0.544 0.460 6.314 40.964 0.355 0.576 Best-of-𝑁 (𝑁 =1) 0.528 0.445 6.537 41.650 0.347 0.565 Best-of-𝑁 (10) 0.565 0.478 6.052 38.883 0.364 0.593 Best-of-𝑁 (100) 0.576 0.488 5.930 38.245 0.367 0.600 
+
+PointerNet 𝑝 human ( 𝜋 |x)
+
+Greedy decoding 0.554 0.474 6.219 40.893 0.374 0.585 Beam search 0.575 0.493 5.948 39.370 0.388 0.600 Best-of-𝑁 (𝑁 =1) 0.448 0.372 7.742 45.599 0.300 0.507 Best-of-𝑁 (10) 0.551 0.466 6.302 39.054 0.357 0.584 Best-of-𝑁 (100) 0.575 0.488 6.015 38.481 0.360 0.598 
+
+Note. The highlighted gray row indicates the best-performing PointerNet model, which was pretrained directly on human data and decoded using beam search. Bold numbers indicate the best scores among models that were not directly trained on human data, reflecting the strongest similarity between model-generated and human tours for each metric. To quantify overall similarity, we computed an aggregate score by averaging the five evaluation metrics after min–max normalizing each to the interval [0,1]. For consistency, the directions of LD and FD were reversed so that higher values indicated greater alignment with human behavior, matching the other metrics. Consequently, the aggregate score also ranges from 0 to 1, with higher values indicating greater human-likeness. For beam search, the width was set as 100 for a more extensive exploration. EOR=Edge Overlap Ratio, LCS=Longest Common Substring, LD=Levenshtein distance, FD=Fréchet distance, 𝜏 =Kendall’s 𝜏 (see Table D4 for detailed definitions). Standard deviations are omitted from the table because the large number of observations resulted in negligible variability across estimates, with standard deviations close to zero in nearly all cases. 
+
+These results indicate a strong geometric correspondence between human and optimal tours, mirroring previous findings that humans routinely produce near-optimal tours in TSP tasks [2]. By contrast, all three canonical heuristics previously proposed as models of human TSP performance performed below the baseline of random human tours, demonstrating that they capture insufficient systematic structure in human solutions, even less than a randomly sampled human tour. 7Among all models without access to any human solutions, we find that the PointerNet policy 𝑝 optimal+RL (𝜋 |x), pretrained on optimal solutions and subsequently fine-tuned with RL, produced the most human-like solutions overall. When combined with Best-of-𝑁 decoding, this model approached the empirical upper bound defined by the PointerNet trained directly on human tours (see the bold numbers in Table 2). This finding suggests that supervised pretraining on optimal tours allows the model to acquire rich structural representations of high-quality TSP solutions, while RL fine-tuning further reshapes the policy toward effective tour-length optimization. However, when generalizing to novel TSP instances, the learned policy may still assign non-negligible probability mass to candidate tours that deviate from both optimal and human solutions due to the limited capacity of neural networks. Best-of-𝑁 
+
+decoding provides a form of test-time search: by sampling multiple candidate tours from the learned policy and selecting among them based on tour-length evaluation, it refines model-generated solutions toward tours that are both shorter and more human-like. More broadly, these results suggest that human-like TSP behavior is best captured not by learning alone, but by the combination of learned structural representations, reinforcement-based improvement, and test-time search under capacity constraints. 
+
+# 4 Characterizing Geometric Features of Human-like Tours 
+
+Beam search applied to the PointNet policy of 𝑝 human (𝜋 |x) best captured the overall patterns of human tours, establishing an empirical upper bound on the extent to which human behavior can be reproduced at the instance level. Both search-only optimal approximations and Best-of-𝑁 sampling from the other PointerNet policies approached this upper bound to varying degrees. To understand the computational basis of this human-likeness, we next examined the geometric characteristics of the generated tours. Specifically, we seek to understand which geometric features distinguish human-like solutions from alternative computational strategies, and what enables the PointNet policy of 𝑝 optimal+RL (𝜋 |x) to achieve the closest alignment with human tours when combined with Best-of-𝑁 sampling. To characterize the geometry of human-like tours, we developed eight geometric fea-tures spanning two complementary categories. Instance-dependent features capture geometric properties whose values are intrinsically determined by the spatial arrangement of cities in a particular TSP instance: (i) smoothness ( 𝐺 𝑠𝑚 ), the average turning angle along a tour; (ii) turning-angle entropy ( 𝐺 𝑡 𝑎𝑒 ), the variability of turning angles; (iii) edge-length variance (𝐺 𝑒𝑙𝑣 ), the variability of edge lengths; and (iv) nearest-neighbor ranking ( 𝐺 𝑛𝑛𝑟 ), the average rank of each selected edge among all feasible outgoing edges. In contrast, instance-independent features capture geometric properties that that consistently distinguish high-quality tours across different TSP instances, irrespective of their specific spatial configurations: (i) convex-hull preservation ( 𝐺 𝑐ℎ ), the proportion of convex-hull boundary edges preserved by a tour; (ii) optimality gap ( 𝐺 𝑜𝑔 ), the relative difference in tour length from the corresponding optimal tour; (iii) 2-opt optimality ( 𝐺 2𝑜 𝑝𝑡 ), the extent to which a tour satisfies 2-opt local optimality; and (iv) crossing rate ( 𝐺 𝑐𝑟 ), the proportion of crossing edges in a tour (see Appendix D5 for details). Here, the geometric properties of beam-searched tours from 𝑝 human (𝜋 |x) served as the empirical benchmark for human-likeness. We then compared the corresponding geomet-ric features of tours generated by the two most human-like search algorithms (i.e., Concorde and Elastic Net) and the PointerNet policies decoded using Best-of-𝑁 sampling against this 8benchmark to identify the geometric characteristics underlying their discrepancy or alignment with human-like behavior. Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+> Search algorithms
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+> poptimal ( |x)
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+> pRL ( |x)
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+> poptimal  + RL ( |x)
+
+# a0.0 
+
+0.5 
+
+1.0 
+
+Gtae Gsm Gelv Gnnr Gch G2opt Gog Gcr 
+
+0.0 
+
+0.5 
+
+1.0 
+
+0.0 
+
+0.5 
+
+1.0 
+
+0.0 0.5 1.0 
+
+0.0 
+
+0.5 
+
+1.0 
+
+0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 0.0 0.5 1.0 
+
+> Human-like Geometric Benchmark
+
+Model-generated Geometric Properties Human-like tours Elastic Net Optimal N = 1 N = 10 N = 100 Gtae Gsm Gelv Gnnr Gch G2opt Gog Gcr Gbasin 
+
+Optimal 
+
+Elastic Net 
+
+N=1 
+
+N=10 
+
+N=100 
+
+N=1 
+
+N=10 
+
+N=100 
+
+N=1 
+
+N=10 
+
+N=100                                                                                                                                                                                            
+
+> 0.059 0.694 0.066 0.647 0.014 0.804 0.047 0.815 0.013 NA 0.027 0.064 0.050 NA 0.005 NA 0.028 0.504
+> 0.061 0.691 0.061 0.630 0.014 0.802 0.046 0.802 0.013 NA 0.027 0.190 0.040 0.190 0.005 NA 0.024 0.472
+> 0.085 0.550 0.089 0.474 0.031 0.611 0.070 0.713 0.070 0.101 0.060 0.175 0.109 0.203 0.032 0.113 0.056 0.263
+> 0.059 0.698 0.059 0.661 0.014 0.809 0.038 0.839 0.017 0.070 0.025 0.150 0.037 0.344 0.006 0.076 0.023 0.509
+> 0.058 0.701 0.062 0.663 0.014 0.806 0.042 0.833 0.013 0.033 0.026 0.042 0.042 0.302 0.005 0.024 0.025 0.528
+> 0.076 0.607 0.083 0.549 0.020 0.718 0.055 0.759 0.022 0.044 0.041 0.196 0.067 0.260 0.011 0.093 0.036 0.351
+> 0.071 0.631 0.072 0.583 0.018 0.746 0.049 0.779 0.018 0.047 0.035 0.197 0.053 0.253 0.008 0.092 0.030 0.389
+> 0.068 0.643 0.067 0.603 0.017 0.759 0.047 0.789 0.017 0.040 0.032 0.190 0.047 0.246 0.007 0.072 0.027 0.409
+> 0.071 0.638 0.074 0.595 0.022 0.706 0.049 0.797 0.040 0.225 0.043 0.288 0.068 0.318 0.016 0.262 0.038 0.418
+> 0.056 0.713 0.054 0.685 0.013 0.817 0.034 0.862 0.017 0.240 0.025 0.312 0.035 0.392 0.007 0.275 0.022 0.549
+> 0.054 0.722 0.053 0.702 0.013 0.824 0.035 0.866 0.014 0.198 0.024 0.275 0.035 0.386 0.005 0.216 0.021 0.583
+> pRL  poptimal poptimal  + RL
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+
+Pearson's r 
+
+> 0.01
+> 0.02
+> 0.03
+> 0.04
+> 0.05
+> 0.06
+> 0.07
+
+MAE 
+
+# b
+
+Fig. 3 The comparison between tours decoded from candidate models and the systematic patterns of human tours encoded in the PointerNet policy of 𝑝 human ( 𝜋 |x) (the empirical human-like benchmark) along eight geometric properties (blue=instance-dependent properties, red=instance-independent properties): 𝐺 𝑡 𝑎𝑒 =turning-angle entropy, 
+
+𝐺 𝑠𝑚 =smoothness, 𝐺 𝑒𝑙𝑣 =edge-length variance, 𝐺 𝑛𝑛𝑟 =nearest-neighbor ranking, 𝐺 𝑐ℎ =convex-hull preservation, 
+
+𝐺 2𝑜 𝑝𝑡 =2-opt optimality, 𝐺 𝑜𝑔 =optimality gap, 𝐺 𝑐𝑟 =crossing rate. (a) The radar plots on the left show the average geometric features across instances for each model and decoding strategy included in the comparison, with black dashed lines enclosing the geometric features of human-like tours. The scatter plots on the right further present the instance-level correspondence between candidate models (horizontal axis) and the human-like geometric benchmark (vertical axis). Each dot indicates a TSP instance. Gaussian jitter (standard deviation = 0.01) was added for visualization purposes to reduce overlap among data points. (b) Mean absolute errors (MAE) and Pearson’s correlation coefficients (𝑟 ) that quantify how each candidate model relates to the human-like benchmark on each geometric feature. The last column applies a geometric basin score that normalized and then aggregated from the eight geometric features. Black boxes with boldface text indicate the model-generated tours that are most closely aligned with the geometry of human-like tours. 
+
+The extent to which each model aligns with the benchmark is illustrated in Figure 3a. At the level of TSP instances, both optimal and Elastic Net-derived tours overlap with the geometric region occupied by the human-like tours, while also exhibiting systematic deviations along the extracted geometric features (see Figure 3a first row). Among the eight geometric features, the most pronounced differences were observed in smoothness, 2-opt local optimality, and 9convex-hull boundary preservation. On average, compared with tours generated by both the optimal solver and Elastic Net, human-like tours exhibited lower smoothness, lower 2-opt local optimality, and weaker preservation of convex-hull boundaries. These deviations capture characteristic geometric signatures of suboptimality in human-like tours. In contrast, PointerNet-based approaches exhibited distinct geometries as the size of the Best-of-𝑁 sample increased, progressively moving toward the optimal geometric region. For 
+
+𝑝 optimal (𝜋 |x), Best-of-𝑁 sampling rapidly drove solutions from a markedly different geometric profile into the optimal region (see Figure 3a second row). However, tours from 𝑝 RL (𝜋 |x)
+
+aligned well with the human-like benchmark from when 𝑁 = 1 and evolved substantially more slowly in subsequent sampling, suggesting that RL produces a strong but comparatively over-concentrated geometric profile that is less responsive to test-time search (see Figure 3a third row). Sampling from 𝑝 optimal+RL (𝜋 |x) lay between these two extremes, exhibiting a clear convergence trend toward the optimal region while stabilizing in a near-optimal region adjacent to the human-like benchmark (see Figure 3a fourth row). To quantitatively evaluate their alignment with the human-like benchmark in detail, we further checked instance-level correspondence along each geometric feature, as illustrated in Figure 3a (scatterplots), and summarized model performance using the mean absolute error (MAE) and Pearson’s correlation coefficient ( 𝑟 ) shown in Figure 3b. Overall, tours gener-ated from both the optimal TSP solver and Elastic Net provided little support for human-like tour geometries on instance-independent features (e.g., 𝐺 𝑐ℎ and 𝐺 𝑐𝑟 for which both meth-ods consistently predicted perfect convex-hull preservation and complete absence of edge crossings) because human-like tours show systematic suboptimalities in these instances. In contrast, PointerNet-based approaches showed a greater capacity to capture these character-istic suboptimalities in human tours. Best-of-𝑁 samples from 𝑝 optimal+RL (𝜋 |x) yielded the closest alignment with human-like tour geometries, achieving the highest Pearson’s correla-tion across all eight geometric features and the lowest mean absolute error for seven of them. By normalizing and aggregating the eight geometric features into a single geometric basin score, we quantified the overall alignment of each model with the benchmark tours (see the last column in Figure 3b and Appendix D.2). Best-of-𝑁 samples ( 𝑁 = 100 ) from 𝑝 optimal+RL (𝜋 |x)
+
+achieved the strongest human-likeness in reproducing the geometries of human tours, yielding the highest correspondence with the benchmark solutions (Pearson’s 𝑟 = 0.583 , 𝑝 < 0.001 )and the lowest prediction error (MAE = 0.021). Why does the PointNet policy of 𝑝 optimal+RL (𝜋 |x) generate more human-like tours under Best-of-𝑁 sampling? Test-time compute such as Best-of-𝑁 sampling does not modify the weights of the neural network but selects the highest-reward tours from samples drawn from it at test time. Its effectiveness therefore depends largely on the structure of the learned policy distribution: whether the policy assigns sufficient probability mass to human-like candidate tours and how concentrated that probability mass is around its modal solutions. Supervised learning trains the PointerNet by maximizing the conditional likelihood of demonstration tours (i.e., teacher-forcing training), encouraging the policy to model the empirical distribution of optimal tours [15]. Consequently, the learned policy assigns substantial probability mass to multiple geometrically optimal-like tours, allowing Best-of-𝑁 sampling to progressively converge to the near-optimal region through test-time search. In contrast, RL directly optimizes expected reward (i.e., negative Euclidean distance), progressively concentrating probability 10 mass around a relatively narrow set of high-reward tours, reducing the diversity of high-quality alternatives available for test-time search [16–18]. Fine-tuning a supervised policy with RL balances these two effects: it preserves broad support over geometrically near-optimal tours while biasing the distribution toward shorter ones. This intermediate policy distribution enables Best-of-𝑁 sampling to converge to a near-optimal region that most closely aligns with human behavior. Figure D3 in Appendix D provides a conceptual illustration of these learned policy distributions together with two representative test instances showing their effects on individual TSP problems. Notably, the model was not trained on any human tours, yet its decoded tours nevertheless reproduce human-like geometries [c.f. 19]. This result suggests a computational analogy to human learning: people may acquire broad geometric knowledge about good TSP solutions through exposure to high-quality or approximately optimal examples, and then refine these representations through reinforcement-like feedback from experience. 
+
+# 5 Discussion 
+
+Many real-world cognitive tasks require selecting high-quality solutions from combinatorially large search spaces under multiple constraints. These tasks share a common computational structure with the TSP: they require efficient navigation through vast spaces of possibilities while satisfying structural constraints, as in route planning; temporal constraints, as in schedul-ing; or semantic constraints, as in language production. Although search is clearly part of the solution, our results show that learning a strong proposal distribution that guides and accel-erates search is equally important for understanding how human-like solutions emerge. More specifically, human-like performance on such problems can emerge from a two-stage learn-ing process: first, acquiring structural knowledge of high-quality solutions through imitation learning from expert or optimal demonstrations, and subsequently adapting this knowledge through RL based on task-specific feedback. Rather than relying on handcrafted heuristics or exhaustive search, this framework enables efficient generation of candidate solutions while preserving sufficient flexibility for test-time search. Similar combinations of imitation learning and RL have proved highly effective in AI research, where supervised pretraining substantially improves the sample efficiency and generalization of subsequent RL [20–22]. In this sense, human performance in the TSP may reflect a cognitive analogue of the general-purpose meth-ods emphasized by Richard Sutton’s famous “bitter lesson” [23]: effective solutions often arise not from fixed hand-designed heuristics, but from mechanisms that learn from experience and exploit computation through search. An important question raised by this account is where the demonstrations required for supervised learning come from. Humans are unlikely to directly observe optimal solutions to large combinatorial problems, especially at the scale used in our supervised training. Instead, these internal representations may be acquired gradually through experience with simpler instances whose optimal solutions are easier to discover, allowing useful geometric features to accumulate over development before being transferred to more challenging problems. One promising direction for future research is to develop curriculum-learning or meta-learning algorithms that support stronger generalization in neural networks under limited-data regimes [c.f. 24–26]. 11 Our results also highlight the importance of test-time compute as a crucial yet largely overlooked component of cognitive modeling. Rather than treating a neural network as a static model, we show that test-time search is critical for reproducing human behavior. Varying the amount of test-time computation without changing the neural network’s weights provides a principled mechanism for generating human-like variability in solution quality. Of course, more sophisticated test-time search algorithms could be tested in future work. One promising approach is to apply Markov chain Monte Carlo (MCMC) to draw samples from the sequence-level distribution defined by a trained neural network [27, 28]. Autocorrelated samples decoded using MCMC have also been shown to explain classical cognitive phenomena, such as slow errors [29]. This perspective, which emphasizes the role of test-time computation in modeling intelligent behavior, again parallels recent advances in large language models, where increasing test-time computation, for example through chain-of-thought reasoning or iterative refinement loops, can substantially improve performance without modifying model parameters [30, 31]. Therefore, human-like performance may arise not only from directly reading out learned representations, but also from the amount of computation devoted to deliberation that builds on them. 
+
+# Acknowledgments 
+
+H.Y. acknowledges the Chancellor’s International Scholarship from the University of Warwick for support. J.-Q.Z. acknowledges support from the HKU-100 scheme of the University of Hong Kong. Empirical work was performed while M.M. was at South China Normal University, supported by grants from the STI2030-Major Projects (2021ZD0204200), the Sino-German Center for Research Promotion (M-0705), the National Natural Science Foundation of China (32371100), the Research Center for Brain Cognition and Human Development, Guangdong, China (No. 2024B0303390003), and the Striving for the First-Class, Improving Weak Links and Highlighting Features (SIH) Key Discipline for Psychology in South China Normal University. 
+
+# Author Contributions 
+
+H.Y. and J.-Q.Z. conceptualized the theoretical component of this work, while L.H. and M.M. conceptualized the empirical component, conducted the experiments, and collected the human dataset. H.Y. and J.-Q.Z. performed the analyses and computational modeling and wrote the first draft. All authors commented on and contributed to the manuscript. 12 Appendix A A Large-Scale Experiment of Human Performance in Traveling Salesman Problems 
+
+The AI revolution of the past decade has inspired new approaches to psychological research. The present study adopts one such approach, known as comprehensive exploration (CE). CE seeks to combine the strengths of traditional experimental psychology with the data-driven model development characteristic of AI [32]. On the one hand, CE is theory-oriented: like experimental psychology, it relies on controlled experiments designed to address specific research questions and aims to generate theoretical insight. On the other hand, it is data-guided: like AI research, it emphasizes the construction of large, high-quality benchmark datasets— for example, a single experiment involving 30,000 hours of human data—as the foundation for model development, followed by iterative model refinement until satisfactory performance is achieved. In short, CE is a data-guided, theory-building approach that uses AI tools and methods in pursuit of experimental psychology’s central goal: theoretical understanding. The CE approach builds on earlier work moving in a similar direction [33–37]. Epistemo-logically, it is designed to achieve both precision, through formal quantitative modeling, and breadth, through broad stimulus coverage and large-scale experimentation. CE has already been successfully applied in several previous studies in cognitive psychology [38, 39]. 
+
+A.1 Ethics 
+
+The study was approved by the Human Research Ethics Board of South China Normal University and complied with the Declaration of Helsinki. The experiment was conducted as an online game that participants accessed using their personal devices. To obtain informed consent, participants were explicitly informed that the results of the task would contribute to a scientific study. They were also provided with details about the task embedded in the experiment. Participants expressed their willingness to take part in the study by tapping the “Continue” button on their personal devices. 
+
+A.2 Online Data Collection Platform 
+
+The current experiment was conducted as an online game using an online data collection platform (https://huang.psy.cuhk.edu.hk/games/) maintained by L.H. The webpage for data collection was implemented in JavaScript, Vue.js (version 2.6.11), and PHP (version 5.3.3). The platform was embedded within the WeChat app, such that the webpage functioned properly only when accessed through WeChat. This integration was important for facilitating user engagement and participant management. WeChat is a widely used multipurpose instant messaging and social media application among Chinese users, with over one billion active users. Its broad adoption made it convenient for participants to share the platform through WeChat Moments. More importantly, embed-ding the platform within WeChat allowed us to use WeChat’s identification system, which streamlined participant payment and helped prevent the creation of multiple user IDs. Because the platform relied on automatically detecting WeChat IDs, the webpage had to be accessed exclusively through the WeChat app. 13 A.3 Participants 
+
+As described above, the experiment was conducted as an online game that participants accessed using their personal devices, suggesting that most participants were likely active internet users. In addition, the data collection platform was presented in Chinese and embedded within the WeChat app, indicating that participants were likely Chinese-language users. Individuals with color vision deficiencies were explicitly instructed not to participate. Beyond these factors, we are not aware of any other apparent sources of bias in the study population. A total of 1,232 participants participated in the game. During each week-long session, several hundred active participants received participation-based awards of 25 Chinese Yuan each. Specifically, participants earned one credit for each successfully completed block of 40 trials, with each block taking approximately 5 minutes to complete. Participants were then ranked according to their cumulative credits. At the end of each week-long session, a cutoff was determined based on the cumulative credits of the participant ranked 200th among all participants. Participants whose credits exceeded 75% of this cutoff, typically corresponding to approximately 300 participants, received a prize of 25 Chinese Yuan. In addition, two participants were randomly selected from among the top 200 and each received a lottery-based award of 500 Chinese Yuan. b Partial tour a City layout  c Partial tour  d Completed tour        
+
+> Fig. A1 Screenshots of a typical Euclidean TSP trial from the participant’s viewpoint. (a) Participants first viewed a two-dimensional city layout, with the required starting city marked by a star. (b–c) Participants constructed a tour sequentially by selecting one city at a time, with selected cities and connecting edges shown in red. (d) The trial ended once all cities had been visited, producing a complete tour.
+
+A.4 Procedures 
+
+The experiment was administered between May 29, 2023, and September 18, 2023, totaling 16 week-long sessions. Participants were allowed to join the gamified TSP task at any time during this period (see Figure A1 for screenshots of a typical trial). They were instructed to produce short tours. The TSP trials were organized into blocks, with each block consisting of 40 trials: 8 TSP instances from each of the five complexity levels. Complexity levels were defined by the number of cities in each TSP instance: 𝑛 = 10 , 12 , 15 , 19 , and 24 . TSP instances 14 were randomly sampled from the pool of 150,000 instances to satisfy the requirements of each block, and their order within each block was fully randomized. For each TSP trial, we imposed a time limit equal to twice the number of cities. Thus, for the five complexity levels, the time limits were 20, 24, 30, 38, and 48 seconds, respectively. If a participant failed to complete a tour before the time limit, both the trial and the block containing that trial were recorded as failed. Blocks containing incomplete tours were excluded from the analyses. No feedback about tour length was provided during the experiment. 
+
+A.5 The tsp150k Dataset 
+
+After excluding failed blocks, we obtained the tsp150k dataset, which contains a total of 20,786,680 tours produced by 1,107 participants (404 male and 703 female; mean age = 35.5 years, s.d. = 11.3). The dataset includes 150,000 TSP instances across five complexity levels, with 30,000 instances per level. For each TSP instance, between 92 and 207 human tours were collected, with an average of 139 human tours per instance. 
+
+# Appendix B Stylized Facts of Human Performance 10c 12c 15c 19c 24c                       
+
+> Complexity
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> Mean length
+> a. Performance gap
+> Human
+> Optimal
+> 1510 15 20
+> Step Index
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Optimal Rate
+> b. Optimal adherence
+> 10 cities
+> 12 cities
+> 15 cities
+> 19 cities
+> 24 cities
+> 1510 15 20
+> Step Index
+> 0.70
+> 0.75
+> 0.80
+> Improved fraction
+> c. Stepwise rationality
+> 010 20 30 40
+> Reaction Time (s)
+> 0.0000
+> 0.0001
+> 0.0002
+> 0.0003
+> 0.0004
+> Density
+> d. Trial RT Distribution
+> 10 cities
+> 12 cities
+> 15 cities
+> 19 cities
+> 24 cities 1510
+> Step
+> 0.0
+> 0.5
+> 1.0
+> RT (s)
+> e. Stepwise RT
+> 10 cities
+> 1510
+> Step
+> 12 cities
+> 1510
+> Step
+> 15 cities
+> 110 20
+> Step
+> 19 cities
+> 110 20
+> Step
+> 24 cities
+
+Fig. B2 Stylized facts of human performance in TSP. (a) Performance gap between human and optimal tours, measured by Euclidean tour length, across the five complexity levels. (b) Proportion of trials in which participants followed the optimal solution up to a given step, shown separately for each complexity level. (c) Stepwise rationality measure: at each step of a trial, conditioned on the completed partial tour, we computed the fraction of available improvement over chance achieved by participants’ current choices. (d) Distribution of trial-level response times for each complexity level. (e) Mean response time at each step for each complexity level. Error bars are omitted because the large number of observations renders sampling uncertainty negligible relative to the reported effect sizes. 
+
+With behavioral data collected at this scale, we can establish several stylized facts about human performance in the Euclidean TSP. Below, we report a series of descriptive analyses that complement our main modeling work. 15 First, human tours are typically not optimal, but they are near-optimal (see Figure B2a). Across the five complexity levels, the mean ratios of human tour length to the corresponding optimal tour length were 1.062 (10 cities), 1.072 (12 cities), 1.084 (15 cities), 1.098 (19 cities), and 1.110 (24 cities). We further identified, for each TSP instance, the shortest tour produced by any participant. The mean ratios of these best human tour lengths to the corresponding optimal tour lengths were 1.000 (10 cities), 1.000 (12 cities), 1.000 (15 cities), 1.001 (19 cities), and 1.003 (24 cities). Overall, human performance is close to optimal in the TSP: on average, human tours are less than 11% longer than the optimal tour, and the best human tours are less than 0.3% longer than the optimal tour. Second, we calculated the optimality rate of human tours. For a given TSP instance, this rate was computed as the proportion of human tours which followed the optimal tour up to a given time step. For example, if 80% of human tours selected the same first city as the optimal tour, the optimality rate would be 80% at time step 1. Subsequently, if 70% of human tours selected the same first two cities as the optimal tour, the optimality rate would be 70% at time step 2. As shown in Figure B2b, this rate decreases as more cities are connected in the tour. Moreover, as TSP complexity increases from 10 to 24 cities, the rate of optimal completion decreases approximately to zero. Third, we examined a local metric of optimality that measures next-city optimality after removing all previously visited cities. That is, we asked whether, ignoring the sunk cost of the current partial tour, the next city chosen by humans would still belong to an optimal tour if the tour were restarted from the current city. Because removing previously visited cities also reduces the number of unvisited cities as participants progress through the task, the random baseline changes accordingly and the task becomes easier over time. To adjust for this decreasing difficulty, we calculated the fraction of improvement over the random baseline for each next-city choice. The random baseline is simply 1 
+
+> number of unvisited cities
+
+, assuming that the next city is selected uniformly at random. The improvement fraction is then defined as the proportion of next-city choices that belong to an optimal tour after removing previously visited cities, minus the random baseline, divided by 1 minus the random baseline. We found that this local optimality rate decreases slightly for the second city, but then rises to a stable level for all subsequent cities (see Figure B2c). Fourth, on average, participants spent more time on more complex TSP instances. Mean response time (RT) showed an approximately linear relationship with the number of cities in a TSP instance (see Figure B2d): 3.5s (10 cities), 4.3s (12 cities), 5.3s (15 cities), 6.7s (19 cities), and 8.7s (24 cities). This effect may be partially explained by the fact that more complex TSP instances require participants to make more sequential choices, while also increasing the number of available options at each step and expanding the combinatorial space of possible tours factorially with the number of cities. Fifth, by examining the RT series within each TSP instance, we found that participants spent the most time on the first city, whereas RTs for the remaining cities were substantially shorter and relatively similar across all five complexity levels (see Figure B2e). This pattern suggests that most planning or deliberation may occur at the beginning of the tour, whereas the relatively stable RTs at later steps may primarily reflect the motor implementation of an initially planned route. This RT result also qualitatively aligns with our test-time computation account in the PointerNet model: Best-of-𝑁 sampling draws and evaluates 𝑁 candidate tours 16 from the initial position, which would naturally produce longer deliberation time at the first city. 
+
+# Appendix C Computational Models of the Traveling Salesman Problem 
+
+We systematically compare a variety of computational models that generate valid solutions to the Euclidean TSP. Broadly, these models can be classified into (1) exact search methods, which yield optimal solutions; (2) heuristic search methods; (3) neurally inspired dynamic models; and (4) neural-network-based learning and search models. 
+
+C.1 Formalizing the Euclidean Traveling Salesman Problem 
+
+Let a Euclidean TSP instance be denoted by x = {𝑥 1, . . . , 𝑥 𝑛 }, where 𝑥 𝑖 ∈ R2 is the location of city 𝑖 in two-dimensional space, and 𝑛 is the number of cities. We define the Euclidean distance between cities 𝑖 and 𝑗 as 
+
+𝑑 𝑖 𝑗 =∥ 𝑥 𝑖 − 𝑥 𝑗 ∥2, (C1) where ∥ 𝑥 𝑖 − 𝑥 𝑗 ∥2=√︃ (𝑥 (1) 
+
+> 𝑖
+
+− 𝑥 (1) 
+
+> 𝑗
+
+)2 + ( 𝑥 (2) 
+
+> 𝑖
+
+− 𝑥 (2) 
+
+> 𝑗
+
+)2.A tour 𝜋 can be written as an ordered sequence 
+
+𝜋 = (𝜋 1, . . . , 𝜋 𝑛 ), (C2) where 𝜋 𝑡 denotes the index of the city visited at position 𝑡 in the tour. For example, if 
+
+𝜋 = (3, 1, 4, 2), then the tour visits city 3 first, city 1 second, city 4 third, and city 2 fourth. Because a TSP tour is cyclic, the choice of starting city is arbitrary. Thus, after fixing one city as the starting point, the set of possible tours contains (𝑛 − 1)! permutations. Moreover, due to the symmetry of the Euclidean TSP, each tour and its reverse have the same length, leaving (𝑛 − 1)!/2 unique tours. Therefore, for the simplest ( 𝑛 = 10 ) and most complex (𝑛 = 24 ) conditions, the numbers of unique tours to consider are 181 , 440 and approximately 
+
+1.29 × 10 22 , respectively. Given a tour 𝜋 , the Euclidean tour length is 
+
+𝐿 (𝜋 ; x) =∥ 𝑥 𝜋 𝑛 − 𝑥 𝜋 1 ∥2 +
+
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑡 =1
+
+∥ 𝑥 𝜋 𝑡 − 𝑥 𝜋 𝑡 +1 ∥2 (C3) The first term ∥ 𝑥 𝜋 𝑛 − 𝑥 𝜋 1 ∥2 closes the cycle by returning from the last city back to the first. The optimal tour for a TSP instance x is then defined as the one that minimize the Euclidean tour length: 
+
+𝜋 ∗ (x) = arg min  
+
+> 𝜋 ∈𝑆 𝑛
+
+𝐿 (𝜋 ; x) (C4) 17 C.2 Concorde (Exact TSP Solver) 
+
+Although solving TSP exactly is computationally demanding in general, the relatively small problem sizes considered in this study (up to 24 cities) make exact optimization computa-tionally feasible. We therefore generated the optimal solution for each TSP instance using Concorde [7], a state-of-the-art exact TSP solver based on a branch-and-cut framework. Concorde formulates the TSP as an optimization problem over binary edge variables. For each pair of cities (𝑖, 𝑗 ), the variable 1𝑖 𝑗 ∈ { 0, 1} indicates whether the edge connecting the two cities is included in the tour. The objective is to minimize the total tour length while ensuring that every city is visited exactly once and that all selected edges form a single Hamiltonian cycle. Rather than solving this integer optimization problem directly, Concorde first solves a linear programming (LP) relaxation by allowing each edge variable to take any fractional value between 0 and 1, i.e., replacing the binary constraint 1𝑖 𝑗 ∈ { 0, 1} with 0 ≤ 1𝑖 𝑗 ≤ 1.This relaxation can be solved efficiently but may produce intermediate solutions that do not correspond to valid TSP tours. For example, instead of producing a single tour that visits every city exactly once, the LP may produce multiple disconnected subtours, each visiting only a subset of cities. Concorde detects these violations and introduces additional linear constraints, known as cutting planes , that explicitly eliminate the invalid solution while preserving every feasible TSP tour. The LP is then solved again with the new constraints. By repeatedly identifying invalid solutions and adding the corresponding cutting planes, the LP relaxation progressively approaches the feasible set of valid TSP tours. If the LP relaxation still yields multiple competing candidates, Concorde further partitions the search through branching . For example, if the LP cannot determine whether a particular edge should belong to the optimal tour, it creates two subproblems: one in which the edge is required to be included ( 1𝑖 𝑗 = 1) and another in which it is forbidden ( 1𝑖 𝑗 = 0). Each subproblem is solved independently using the same branch-and-cut procedure. Subproblems whose best achievable objective value is already longer than the best tour found so far are discarded immediately, allowing large portions of the search space to be eliminated without explicit enumeration. This procedure guarantees global optimality because every feasible TSP tour remains feasible throughout the optimization. Cutting planes eliminate only infeasible or suboptimal regions of the search space without excluding any valid optimal tour, while branching system-atically explores every remaining possibility that could still contain the optimum. Subproblems are pruned only when rigorous mathematical bounds prove that they cannot yield a shorter tour than the best solution already found. Consequently, when the algorithm terminates, every candidate tour that could outperform the reported solution has either been explicitly explored or mathematically excluded, certifying that the returned tour is globally optimal. In practice, Concorde has been successfully applied to TSP instances far larger than those considered in this study, including benchmark instances containing up to 85,900 cities. 
+
+C.3 Heuristic Search 
+
+In contrast to the exact solver, classic heuristic algorithms construct approximate solutions by following simple search rules. Although these algorithms do not guarantee global optimality, 18 they are computationally efficient and have long been proposed as models of human TSP performance because they exploit intuitive geometric properties of Euclidean tours [1–3]. 
+
+Nearest Neighbor. The Nearest Neighbor heuristic constructs a tour greedily by repeatedly selecting the closest unvisited city to the latest city. Starting from the designated starting city, the algorithm searches among all unvisited cities and extends the partial tour by choosing the city with the shortest Euclidean distance. This process is repeated until every city has been visited, after which the tour returns to the starting city. Because each decision depends only on the current city and its local neighborhood, Nearest Neighbor represents a purely local search strategy that does not consider the global geometry of the remaining tour. 
+
+Convex Hull Cheapest Insertion . The Convex Hull Cheapest Insertion heuristic exploits the observation that cities on the boundary of the convex hull frequently appear consecutively in optimal Euclidean tours. The algorithm first computes the convex hull of the city set and connects the boundary cities to form an initial partial tour. It then repeatedly inserts one interior city at a time into the existing tour. At each iteration, the algorithm evaluates every possible insertion position and selects the city-edge combination that produces the smallest increase in total tour length. This procedure gradually expands the tour while preserving its global geometric structure. 
+
+Largest Interior Angle . Largest Interior Angle follows the same initialization procedure as Convex Hull Cheapest Insertion by first constructing the convex hull and then inserting the remaining interior cities sequentially. However, instead of minimizing the increase in tour length, each interior city is inserted into the edge that subtends the largest interior angle with respect to that city. This geometric criterion encourages the tour to maintain smooth boundary-like trajectories while avoiding sharp detours, producing tours that often resemble optimal Euclidean solutions despite relying solely on local geometric information. 
+
+C.4 Elastic Net 
+
+The Elastic Net algorithm [10] approaches the TSP by optimizing a continuous geometric representation rather than directly constructing a discrete tour. It formulates the problem as an energy minimization task in which the tour emerges from the equilibrium of competing forces (a helpful visualization of Elastic Net can be found at https://ena-tsp.mathieularose.com/). The algorithm begins by initializing a closed ring consisting of more points than the number of cities, typically arranged as a small circle near the center of the TSP instance. Each city exerts an attractive force on every point of the ring, encouraging the ring to pass close to the cities, while neighboring points on the ring exert elastic forces on one another that encourage the ring to minimize its length. These competing forces define an energy function that balances proximity to the cities with smoothness of the ring. Using the default parameter settings, the global minimum of this energy approximates the shortest feasible TSP tour. The positions of the ring points are then optimized using gradient descent to minimize this energy function. As optimization proceeds, the ring progressively expands, deforms, and wraps around the cities while remaining connected. After convergence, each city is associated with its nearest point on the ring, and the order of these points along the ring determines the final TSP tour. Because the optimization is performed over a continuous geometric object rather than directly over discrete tours, the Elastic Net can be viewed as searching a continuous relaxation of the TSP. However, the energy landscape is non-convex, making gradient descent generally 19 converge to a local optimum rather than the globally shortest tour. Consequently, the Elastic Net produces high-quality approximate solutions without guaranteeing global optimality. 
+
+C.5 Pointer Network 
+
+Modern neural-network methods for solving the TSP aim to learn a stochastic policy 𝑝 𝜃 (𝜋 |x),where 𝜃 denotes the trainable parameters of the policy network [13, 14]. The chain rule can be used to further factorize the probability of a tour as 
+
+𝑝 𝜃 (𝜋 |x) =
+
+> 𝑛
+
+Ö
+
+> 𝑡 =1
+
+𝑝 𝜃 (𝜋 𝑡 |𝜋 <𝑡 , x) (C5) where individual softmax modules can be used to represent 𝑝 𝜃 (𝜋 𝑡 |𝜋 <𝑡 , x) for all 𝑡 ≤ 𝑛 . This is the familiar autoregressive factorization of the joint distribution used in sequence-to-sequence models [40] and large language models [41]. The Pointer Network consists of two recurrent neural network modules: an encoder and a decoder [14]. In our implementation, both modules are Long Short-Term Memory (LSTM) cells [42]. At inference, city locations are first transformed by an linear embedding layer into a sequence of 𝑑 -dimensional embeddings, {𝑒𝑚𝑏 𝑡 }𝑛 𝑡 =1 (𝑒𝑚𝑏 𝑡 ∈ R𝑑 ). The encoder then reads the embeddings, one at a time and transforms them into a sequence of latent memory states 
+
+{𝑒𝑛𝑐 𝑡 }𝑛 𝑡 =1, where 𝑒𝑛𝑐 𝑡 ∈ R𝑑 . The input to the first decoder step is the first city, from which our participants were required to start their tours. Similar to the encoder, the decoder network maintains its own sequence of latent memory states {𝑑𝑒𝑐 𝑡 }𝑛 𝑡 =1, where 𝑑𝑒𝑐 𝑡 ∈ R𝑑 . At each decoding step, a pointing mechanism is used to produce a distribution over the next city to visit in the current tour. Once the next city is selected, it is passed as the input to the next decoder step. The pointing mechanism masks out previously decoded cities from further generation, thereby ensuring that the generated tour is a permutation of the cities. This mechanism is similar to the attention mechanism proposed in [43]. At each decoding step 𝑡 , the attention function takes as input the decoder memory state 𝑞 = 𝑑𝑒𝑐 𝑡 as the query vector, and a set of encoder memory states 𝑟𝑒 𝑓 = {𝑒𝑛𝑐 1, . . . , 𝑒𝑛𝑐 𝑘 } as the reference vectors. The attention function then predicts a distribution 𝐴 (𝑞, 𝑟𝑒 𝑓 ) over the set of 𝑘 references. This probability distribution can be understood as the degree to which the model points to each reference 
+
+𝑟 𝑖 (where 𝑖 ≤ 𝑘 ) after observing the query 𝑞 .More specifically, the logit for the 𝑖 -th reference vector produced by the attention mechanism is defined as 
+
+𝑢 𝑖 =
+
+(
+
+𝑣 ⊤ · tanh (𝑊 𝑟 𝑒 𝑓 · 𝑟 𝑖 + 𝑊 𝑞 · 𝑞 ), if 𝑖 ≠ 𝜋 𝑗 for all 𝑗 ≤ 𝑖 
+
+−∞ , otherwise (C6) Here, the trainable parameters are 𝑊 𝑟 𝑒 𝑓 , 𝑊 𝑞 ∈ R𝑑 ×𝑑 and 𝑣 ∈ R𝑑 . The predicted probability distribution is then given by a softmax over all 𝑘 logits: 
+
+𝐴 (𝑞, 𝑟𝑒 𝑓 ) = softmax (u), where u = {𝑢 1, . . . , 𝑢 𝑘 } (C7) 20 Therefore, the Pointer Network assigns the probability of visiting the next city 𝜋 𝑡 in the tour as follows: 
+
+𝑝 𝜃 (𝜋 𝑡 |𝜋 <𝑡 , x) = 𝐴 (𝑞 = 𝑑𝑒𝑐 𝑡 , 𝑟𝑒 𝑓 = 𝑒𝑛𝑐 1: 𝑛 ), (C8) that is, by applying the attention mechanism to the decoder memory state at step 𝑡 and all encoder memory states. Setting the logits of cities that have already appeared in the tour to 
+
+−∞ ensures that the model only points to cities that have not yet been visited, and therefore outputs valid TSP tours. Finally, we can control the shape of the probability distribution produced by the attention mechanism by introducing temperature scaling: 
+
+𝐴 (𝑞, 𝑟𝑒 𝑓 ) = softmax (u/𝑇 ), (C9) where 𝑇 is the temperature, which is set to 𝑇 = 1 during training. When 𝑇 > 1, the distribution becomes less peaked, thereby encouraging more exploratory generations of TSP tours. 
+
+C.5.1 PointerNet Architecture and Hyperparameters 
+
+All PointerNet used throughout this work shared the same network architecture (see hyperpa-rameters included in Table C1). Each city was represented by its two-dimensional coordinate and projected into a 128-dimensional embedding space. The embedded sequence was pro-cessed by a single-layer LSTM encoder with 128 hidden units. A single-layer LSTM decoder then generated the tour autoregressively, starting from the designated first city. At each decod-ing step, an attention-based pointing mechanism computed logits over all input cities from the decoder hidden state and the encoder states. Previously visited cities were masked to ensure that each city could be selected only once, so that the decoded sequence formed a valid TSP tour.       
+
+> Table C1 Hyperparameters of PointerNet Architecture. Hyperparameter Value Embedding dimension 128 Encoder Single-layer LSTM Decoder Single-layer LSTM Hidden dimension 128
+
+C.5.2 Training Details 
+
+All training procedures described below were conducted using 50% of the tsp150k dataset (75,000 TSP instances; 15,000 instances from each of the five complexity levels). An additional one-sixth of the dataset (25,000 instances; 5,000 per complexity level) was reserved as a validation set for early stopping and model selection. The remaining one-third of the dataset (50,000 instances; 10,000 per complexity level) was held out as the test set. Unless otherwise 21 stated, all similarity metrics and geometric analyses reported in this study were computed exclusively on this held-out test set. We trained the stochastic policy of the Pointer Networks, 𝑝 𝜃 (𝜋 |x), using supervised learning with two types of teacher tours separately: (1) optimal tours, 𝜋 ∗ (x), and (2) human-generated tours, 𝜋 ℎ𝑢𝑚𝑎𝑛 (x). Training the Pointer Network follows the standard teacher-forcing procedure used for RNNs, whereby the decoder received the ground-truth city from the previous decoding step as input, and the model was optimized using the cross-entropy loss between the predicted probability distribution and the next city in the optimal or human-generated tour. Training was performed using the Adam optimizer [44] with a learning rate of 1 × 10 −4
+
+and a batch size of 128. The model was trained for 50,000 parameter-update steps. To stabilize optimization, the gradient norm was clipped to a maximum value of 1.0. Validation loss was evaluated every 100 training steps, and the model with the lowest validation loss was retained for subsequent analyses. To improve generalization, two forms of data augmentation were applied during training. First, for each TSP instance, the order of the input cities was randomly permuted while keeping the designated starting city fixed, and the corresponding target tour was transformed accord-ingly. This augmentation encourages the model to learn permutation-invariant representations of TSP instances rather than memorizing particular input orderings. Second, because a TSP tour is equivalent when traversed in either direction, the target tour was randomly reversed with probability 0.5, encouraging the model to learn both traversal directions equally. We also trained a version of the Pointer Network using reinforcement learning (RL), specifically with a policy-gradient method based on the proximal policy optimization (PPO) algorithm [12]. In this setting, the Pointer Network defines a stochastic policy over tours, and the reward assigned to each sampled tour is the negative Euclidean tour length. Thus, maximizing expected reward corresponds to minimizing the total length of the generated tour. The actor network was initialized randomly, and the critic network shared the same encoder architecture and consisted of three glimpse-processing blocks followed by a two-layer multilayer perceptron that predicted the expected tour length. At each training iteration, the actor sampled one tour for each TSP instance, and the tour length was computed as the reinforcement signal. The critic estimated the expected tour length of each instance, and the advantage was computed as the difference between the sampled tour length and the critic prediction. Advantages were normalized within each training batch to improve optimization stability. The actor was optimized using the clipped PPO surrogate objective with clipping parameter 
+
+𝜖 = 0.2. An entropy regularization term with coefficient 0.01 was added to encourage policy exploration and prevent premature collapse of the policy distribution. The critic was trained by minimizing the mean squared error between its predicted tour length and the observed tour length. Training used the Adam optimizer [44] with an initial learning rate of 1 × 10 −4 for both the actor and critic. The learning rate decayed by a factor of 0.96 every 100 training iterations using a step scheduler. Each rollout consisted of 128 sampled tours, followed by three PPO optimization epochs using randomly shuffled minibatches of size 32. Gradient norms for both networks were clipped to a maximum value of 1.0. Training was performed for 200,000 rollout iterations, and the actor achieving the lowest average tour length on the validation set was retained for subsequent experiments. 22 Finally, we trained the PointerNet using a two-stage procedure. In the first stage, the model was pretrained by supervised learning with teacher forcing on optimal tours. In the second stage, the pretrained model was further fine-tuned using PPO, in which the policy was optimized on tours sampled from the model itself. The PPO training procedure followed that described above and was run for 10,000 rollout iterations. The actor achieving the lowest average tour length on the validation set was retained for subsequent experiments. This two-stage procedure is analogous to the training pipelines used in several leading AI systems, such as AlphaGo [45] and GPT-3 [21], where supervised pretraining is followed by RL fine-tuning.                                   
+
+> Table C2 Overview of Pointer Network training methods and objectives. Model Training Method Training Objective
+> 𝑝 optimal (𝜋 |x)Supervised learning Predict optimal tours
+> 𝑝 human (𝜋 |x)Supervised learning Predict human-generated tours
+> 𝑝 RL (𝜋 |x)Reinforcement learning Maximize the negative Euclidean length of generated tours
+> 𝑝 optimal+RL (𝜋 |x)Supervised learning with reinforcement learning fine-tuning Predict optimal tours, followed by fine-tuning on maximizing the negative Euclidean tour length
+
+C.5.3 Decoding Methods 
+
+The decoder of the PointerNet generates a tour autoregressively, selecting one city at a time conditioned on the cities that have already been visited. Thus, although the model defines a probability distribution over complete tours, the actual tour produced by the model also depends on the decoding method used during generation. In other words, tour-level behavior is shaped not only by the learned policy 𝑝 𝜃 (𝜋 𝑡 |𝜋 <𝑡 , x), but also by how this policy is decoded. As a result, different decoding strategies can produce different tours even for the same trained model and the same TSP instance. We considered several decoding strategies. The simplest is greedy decoding, in which the model selects the city with the highest probability at each decoding step: 
+
+𝜋 𝑡 = arg max  
+
+> 𝑖
+
+𝑝 𝜃 (𝜋 𝑡 = 𝑖 | 𝜋 <𝑡 , x). (C10) Greedy decoding is deterministic and efficient, but it may fail to find high-quality tours because locally optimal choices early in the sequence can constrain later decisions. We also considered stochastic sampling, in which the next city is sampled from the probability distribution produced by the decoder: 
+
+𝜋 𝑡 ∼ 𝑝 𝜃 (𝜋 𝑡 | 𝜋 <𝑡 , x). (C11) Compared with greedy decoding, stochastic sampling allows the model to generate a more diverse set of tours for the same TSP instance, thereby characterizing the broader distribution implied by the trained policy. We additionally considered temperature-scaled sampling, where the logits produced by the attention mechanism are divided by a temperature parameter 𝑇 before 23 applying the softmax. Larger values of 𝑇 produce flatter and more exploratory distributions, whereas smaller values concentrate probability mass on high-probability cities, with 𝑇 = 0
+
+corresponding to greedy decoding. Building on stochastic sampling, we further considered a Best-of-𝑁 decoding strategy. Under this strategy, we sample 𝑁 complete tours (with temperature 𝑇 = 1) from the trained PointerNet and select the tour with the shortest Euclidean length: 
+
+𝜋 Best-of-𝑁 = arg min          
+
+> 𝜋 (𝑚 )∈ { 𝜋 (1),..., 𝜋 (𝑁 )}
+
+𝐿 (𝜋 (𝑚 ) ), (C12) where 𝐿 (𝜋 ) denotes the Euclidean length of tour 𝜋 . Best-of-𝑁 decoding therefore allows the model to explore multiple candidate tours while returning a single high-quality solution. Finally, we considered beam search. Rather than committing to one partial tour at each decoding step, beam search maintains the top 𝐵 partial tours according to their cumulative log probability under the model. These partial tours are expanded autoregressively, and only the best 𝐵 = 100 candidates are retained at each step. Beam search can therefore be viewed as a heuristic approximation to the mode of the tour-level stochastic policy 𝑝 𝜃 (𝜋 |x), as it attempts to identify a high-probability complete tour without exhaustively enumerating all possible tours: 
+
+𝜋 Beam Search ≈ arg max  
+
+> 𝜋
+
+𝑝 𝜃 (𝜋 |x) (C13)          
+
+> Table C3 Overview of decoding strategies applied to trained PointerNets. Decoding Method Description Greedy decoding Selects the city with the highest next-step probability at each decoding step Best-of-𝑁 Randomly samples 𝑁 complete tours and selects the one with the shortest Euclidean length Beam search Maintains the top 𝐵 partial tours and provides a heuristic approximation to the highest-probability tour under the tour-level policy
+
+# Appendix D Model Comparisons 
+
+D.1 Evaluation Metrics 
+
+Since a large variety of computational models will be evaluated, we developed a set of tour-level metrics that target different aspects of model performance (see Table D4 for an overview). These tour-level metrics evaluate the similarity between model-generated tours and human tours. These global metrics capture broader structural properties of the generated solutions, including shared edges, sequential overlap, geometric similarity, and overall order-ing, and therefore provide a more direct assessment of whether a model produces human-like tours as complete solutions. Together, these metrics allow us to evaluate global tour-level correspondence between computational models and human behavior. To quantify the overall similarity between a model-generated tour and human solutions, we developed a composite score by aggregating the five pairwise similarity metrics introduced 24 Table D4 Overview of evaluation metrics for computational models of human TSP tours. Metric Description Edge overlap ratio ( ↑) Measures the proportion of shared edges between model-generated and human tours. Longest common substring ( ↑) Measures shared local sequential structure between model-generated and human tours. Levenshtein distance ( ↓) Measures the number of edits required to transform a model-generated tour into a human tour, including insertions, deletions, and substitutions. Discrete Fréchet distance ( ↓) Measures the geometric similarity between model-generated and human tours. Kendall’s 𝜏 (↑) Measures the rank correlation between model-generated and human tours. 
+
+in the main text: Edge Overlap Ratio (EOR), Longest Common Substring (LCS), Levenshtein Distance (LD), Fréchet Distance (FD), and Kendall’s 𝜏 .For a given TSP instance, let 𝜋 𝑚𝑜𝑑𝑒𝑙 denote the model-generated tour and 
+
+𝜋 (1)
+
+> ℎ𝑢𝑚𝑎𝑛
+
+, . . . , 𝜋 ( 𝑀 ) 
+
+> ℎ𝑢𝑚𝑎𝑛
+
+denote the set of tours produced by the 𝑀 human participants. Each metric was first computed between 𝜋 𝑚𝑜𝑑𝑒𝑙 and every human tour independently. Because a TSP tour is equivalent when traversed in either direction, each metric was evaluated for both the forward and reversed human tour, and the better matching orientation was retained. The metric values were then averaged across all human participants: 
+
+1
+
+𝑀 
+
+> 𝑀
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑠 𝑘 
+
+
+
+𝜋 𝑚𝑜𝑑𝑒𝑙 , 𝜋 (𝑖 )
+
+> ℎ𝑢𝑚𝑎𝑛
+
+
+
+, (D14) where 𝑘 ∈ { EOR , LCS , LD , FD , 𝜏 }.To place the five metrics on a common scale, each metric was normalized to the interval 
+
+[0, 1] (i.e., 𝑠 𝑘 → ˜𝑠 𝑘 ). Metrics that naturally increase with similarity, namely EOR, LCS, and Kendall’s 𝜏 , were normalized directly. Specifically, EOR and LCS were divided by the number of cities, while Kendall’s 𝜏 was linearly transformed from [− 1, 1] to [0, 1]. By contrast, the two distance measures, LD and FD, were converted into similarity scores by reversing their direction before normalization to [0, 1], so that larger values consistently indicate greater similarity. Finally, the aggregate score was defined as the arithmetic mean of the five normalized similarity metrics: 15
+
+Í𝑘 ˜𝑠 𝑘 . The resulting aggregate score thus lies in the interval [0, 1], with larger values indicating greater overall similarity between the model-generated tour and the human solutions. 
+
+D.2 Geometric Properties of TSP Tours 
+
+Why are certain generated tours human-like? To address this question, we developed a series of geometric features that characterize the structure of complete TSP tours. These features are intended to capture qualitative properties often associated with human solutions, such as avoiding unnecessary crossings, connecting nearby cities, producing smooth trajectories, yielding near-optimal distances and preserving convex hull of patterns (see Table D5). These geometric features can be computed directly from any complete tour (see illustrations in Figure 25 Example Instance 1 Example Instance 2 Fig. D3 Conceptual illustrations and examples of the geometric distributions learned by different PointerNet policies under Best-of-𝑁 sampling. Green dots and contours denote human tours, whereas blue dots and contours denote the tour distributions induced by the PointerNet policy. Each tour was embedded into a vector space defined by eight geometric features and then reduced to two dimensions using t-SNE for visualization. 
+
+D4), allowing us to compare human-like tours and model-generated tours in a shared feature space. These features thus provide interpretable summaries of the geometric structure of a tour. They allow us to ask not only whether a model generates tours that are close to human tours according to standard similarity metrics, but also whether the model captures the geometric features that may underlie human TSP behavior. To quantify the overall geometric properties of tours, we developed a Geometric Basin Score by aggregating the eight geometric features. For each geometric feature 𝐺 𝑖 , where 𝐺 𝑖 ∈ { 𝐺 𝑠𝑚 , 𝐺 𝑡 𝑎𝑒 , 𝐺 𝑒𝑙𝑣 , 𝐺 𝑛𝑛𝑟 , 𝐺 𝑐ℎ , 𝐺 𝑜𝑔 , 𝐺 2𝑜 𝑝𝑡 , 𝐺 𝑐𝑟 },
+
+feature values were first normalized across all computational models considered in this study using min-max normalization: 
+
+˜𝐺 𝑘 = 𝐺 𝑘 − min (𝐺 𝑘 )
+
+max (𝐺 𝑘 ) − min (𝐺 𝑘 ) , (D15) where the minimum and maximum were computed over all evaluated models. Consequently, every normalized feature lay in the interval ([0,1]). 26 Table D5 Overview of the geometric features used to characterize TSP tours. Category Feature Description Instance-dependent Turning-angle entropy Measures the diversity of turning angles along a tour, reflecting the complexity and regularity of its directional changes. Smoothness Measures the smoothness of a tour by penalizing abrupt changes in travel direction. Edge-length variance Measures the variability of edge lengths, indicating the consistency of step distances throughout the tour. Nearest-neighbor edge rank Measures the extent to which a tour connects each city to its spatially nearest neighbors. Instance-independent Convex-hull preservation Measures the extent to which the tour follows the bound-ary defined by the convex hull of the point set. 2-opt local optimality Measures the consistency of a tour with local optimality under 2-opt edge-exchange operations. Optimality gap Measures the relative deviation of the tour length from the optimal solution. Crossing rate Measures the frequency with which a tour contains self-intersecting edges. 
+
+Because lower values indicate better tours for some geometric features (turning-angle entropy, edge-length variance, nearest-neighbor ranking, optimality gap, and crossing rate), whereas higher values indicate better tours for others (smoothness, convex-hull preservation, and 2-opt optimality), the former were converted into similarity scores by reversing their direction. That is, ˆ𝐺 𝑘 = 1 − ˜𝐺 𝑘 , for 𝑘 ∈ { 𝐺 𝑡 𝑎𝑒 , 𝐺 𝑒𝑙𝑣 , 𝐺 𝑛𝑛𝑟 , 𝐺 𝑜𝑔 , 𝐺 𝑐𝑟 }, whereas ˆ𝐺 𝑘 =
+
+˜𝐺 𝑘 , for 𝑘 ∈ { 𝐺 𝑠𝑚 , 𝐺 𝑐ℎ , 𝐺 2𝑜 𝑝𝑡 }.
+
+Finally, the Geometric Basin Score was computed as the arithmetic mean of the eight normalized geometric features: 18
+
+Í𝑘 ˆ𝐺 𝑘 . The resulting Geometric Basin Score lies in the interval ([0,1]), with larger values indicating that a tour is located closer to the human-like geometric basin. 
+
+# References 
+
+[1] MacGregor, J.N., Chu, Y.: Human performance on the traveling salesman and related problems: A review. The Journal of Problem Solving 3(2), 2 (2011) [2] MacGregor, J.N., Ormerod, T.: Human performance on the traveling salesman problem. Perception & Psychophysics 58 (4), 527–539 (1996) [3] Van Rooij, I., Stege, U., Schactman, A.: Convex hull and tour crossings in the euclidean traveling salesperson problem: Implications for human performance studies. Memory & Cognition 31 (2), 215–220 (2003) [4] Kyritsis, M., Gulliver, S.R., Feredoes, E., Din, S.U.: Human behaviour in the euclidean travelling salesperson problem: Computational modelling of heuristics and figural effects. Cognitive Systems Research 52 , 387–399 (2018) [5] MacGregor, J.N., Ormerod, T.C., Chronicle, E.P.: Spatial and contextual factors in human 27 10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr 
+
+10 3 10 1 10 1
+
+Gtae 
+
+Gsm 
+
+Gelv 
+
+Gnnr 
+
+Gch 
+
+G2opt 
+
+Gog 
+
+Gcr Fig. D4 Illustration of the geometric properties of human-generated tours from representative TSP instances. Each row represents a single TSP instance, where three human-generated tours for the instance were randomly selected and visualized together with their corresponding values for the eight geometric features (blue=instance-dependent features, red=instance-independent features). Five TSP instances spanning five levels of problem complexity, ranging from 10 to 24 cities, are shown. 
+
+performance on the travelling salesperson problem. Perception 28 (11), 1417–1427 (1999) [6] Dry, M., Lee, M.D., Vickers, D., Hughes, P.: Human performance on visually presented traveling salesperson problems with varying numbers of nodes. The Journal of Problem Solving 1(1), 4 (2006) [7] Applegate, D.L., Bixby, R.E., Chvatál, V., Cook, W.J.: The Traveling Sales-man Problem: A Computational Study. Princeton University Press, ??? (2006). 
+
+http://www.jstor.org/stable/j.ctt7s8xg Accessed 2026-05-25 28 [8] Golden, B., Bodin, L., Doyle, T., Stewart Jr, W.: Approximate traveling salesman algorithms. Operations Research 28 (3-part-ii), 694–711 (1980) [9] Norback, J.P., Love, R.F.: Geometric approaches to solving the traveling salesman problem. Management Science 23 (11), 1208–1223 (1977) [10] Durbin, R., Willshaw, D.: An analogue approach to the travelling salesman problem using an elastic net method. Nature 326 (6114), 689–691 (1987) [11] Williams, R.J., Zipser, D.: A learning algorithm for continually running fully recurrent neural networks. Neural computation 1(2), 270–280 (1989) [12] Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O.: Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 (2017) [13] Vinyals, O., Fortunato, M., Jaitly, N.: Pointer networks. Advances in Neural Information Processing Systems 28 (2015) [14] Bello, I., Pham, H., Le, Q.V., Norouzi, M., Bengio, S.: Neural combinatorial optimization with reinforcement learning. arXiv preprint arXiv:1611.09940 (2016) [15] Ross, S., Gordon, G., Bagnell, D.: A reduction of imitation learning and structured prediction to no-regret online learning. In: Proceedings of the Fourteenth International Conference on Artificial Intelligence And Statistics, pp. 627–635. JMLR Workshop and Conference Proceedings, ??? (2011) [16] Liu, J., Gu, X., Liu, S.: Policy Optimization Reinforcement Learning with Entropy Reg-ularization. arXiv. arXiv:1912.01557 [cs.LG] (2020). https://doi.org/10.48550/arXiv. 1912.01557 . http://arxiv.org/abs/1912.01557 [17] Ahmed, Z., Roux, N.L., Norouzi, M., Schuurmans, D.: Understanding the impact of entropy on policy optimization. In: Proceedings of the 36th International Conference on Machine Learning, pp. 151–160. PMLR, ??? (2019) [18] Sutton, R.S., McAllester, D., Singh, S., Mansour, Y.: Policy gradient methods for rein-forcement learning with function approximation. In: Advances in Neural Information Processing Systems, vol. 12. MIT Press, ??? (1999) [19] Zhu, J.-Q., Yan, H., Griffiths, T.L.: Language models trained to do arithmetic pre-dict human risky and intertemporal choice. In: International Conference on Learning Representations, vol. 2025, pp. 64953–64971 (2025) [20] Silver, D., Huang, A., Maddison, C.J., Guez, A., Sifre, L., Driessche, G., Schrittwieser, J., Antonoglou, I., Panneershelvam, V., Lanctot, M., Dieleman, S., Grewe, D., Nham, J., Kalchbrenner, N., Sutskever, I., Lillicrap, T., Leach, M., Kavukcuoglu, K., Graepel, T., Hassabis, D.: Mastering the game of Go with deep neural networks and tree search. Nature 
+
+529 (7587), 484–489 (2016) https://doi.org/10.1038/nature16961 . Accessed 2026-06-28 29 [21] Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J.D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al. : Language models are few-shot learners. Advances in Neural Information Processing Systems 33 , 1877–1901 (2020) [22] Limozin, A., Durech, E., Hoefler, T., Schlag, I., Pyatkin, V.: Sft-then-rl outperforms mixed-policy methods for llm reasoning. arXiv preprint arXiv:2604.23747 (2026) [23] Sutton, R.S.: The Bitter Lesson. http://www.incompleteideas.net/IncIdeas/BitterLesson. html. Accessed: 2026-07-01 (2019) [24] Mi, Q., Summerfield, C.: Human curriculum learning of a cue combination task. Nature Human Behaviour, 1–18 (2026) [25] Lake, B.M., Baroni, M.: Human-like systematic generalization through a meta-learning neural network. Nature 623 (7985), 115–121 (2023) [26] Griffiths, T.L., Callaway, F., Chang, M.B., Grant, E., Krueger, P.M., Lieder, F.: Doing more with less: meta-reasoning and meta-learning in humans and machines. Current Opinion in Behavioral Sciences 29 , 24–30 (2019) [27] Karan, A., Du, Y.: Reasoning with sampling: Your base model is smarter than you think. arXiv preprint arXiv:2510.14901 (2025) [28] Hu, X., Zhu, J.-Q.: Simulated annealing enhances theory-of-mind reasoning in autoregressive language models. arXiv preprint arXiv:2601.12269 (2026) [29] Zhu, J.-Q., Sundh, J., Spicer, J., Chater, N., Sanborn, A.N.: The autocorrelated bayesian sampler: A rational process for probability judgments, estimates, confidence intervals, choices, confidence judgments, and response times. Psychological Review 131 (2), 456 (2024) [30] Snell, C., Lee, J., Xu, K., Kumar, A.: Scaling llm test-time compute optimally can be more effective than scaling model parameters. arXiv preprint arXiv:2408.03314 (2024) [31] Wei, J., Wang, X., Schuurmans, D., Bosma, M., Ichter, B., Xia, F., Chi, E., Le, Q., Zhou, D.: Chain-of-Thought Prompting Elicits Reasoning in Large Language Models. arXiv. arXiv:2201.11903 [cs.CL] (2023). https://doi.org/10.48550/arXiv.2201.11903 . http://arxiv.org/abs/2201.11903 Accessed 2026-06-28 [32] Huang, L.: Addressing the precision-breadth-simplicity impossible trinity in psycholog-ical research: a comprehensive exploration approach. Review of General Psychology 
+
+30 (1), 104–129 (2026) [33] Griffiths, T.L.: Manifesto for a new (computational) cognitive revolution. Cognition 135 ,21–23 (2015) [34] Watts, D.J.: Should social science be more solution-oriented? Nature Human Behaviour 
+
+1(1), 0015 (2017) 30 [35] Agrawal, M., Peterson, J.C., Griffiths, T.L.: Scaling up psychology via scientific regret minimization. Proceedings of the National Academy of Sciences 117 (16), 8825–8835 (2020) [36] Peterson, J.C., Bourgin, D.D., Agrawal, M., Reichman, D., Griffiths, T.L.: Using large-scale experiments and machine learning to discover theories of human decision-making. Science 372 (6547), 1209–1214 (2021) [37] Zhu, J.-Q., Peterson, J.C., Enke, B., Griffiths, T.L.: Capturing the complexity of human strategic decision-making with machine learning. Nature Human Behaviour 9(10), 2114– 2120 (2025) [38] Huang, L.: A quasi-comprehensive exploration of the mechanisms of spatial working memory. Nature Human Behaviour 7(5), 729–739 (2023) [39] Huang, L.: Comprehensive exploration of visual working memory mechanisms using large-scale behavioral experiment. Nature Communications 16 (1), 1383 (2025) [40] Sutskever, I., Vinyals, O., Le, Q.V.: Sequence to sequence learning with neural networks. Advances in Neural Information Processing Systems 27 (2014) [41] Radford, A., Narasimhan, K., Salimans, T., Sutskever, I., et al.: Improving language understanding by generative pre-training (2018) [42] Hochreiter, S., Schmidhuber, J.: Long short-term memory. Neural Computation 9(8), 1735–1780 (1997) [43] Bahdanau, D., Cho, K., Bengio, Y.: Neural machine translation by jointly learning to align and translate. International Conference on Learning Representations (2015) [44] Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 (2014) [45] Silver, D., Schrittwieser, J., Simonyan, K., Antonoglou, I., Huang, A., Guez, A., Hubert, T., Baker, L., Lai, M., Bolton, A., et al. : Mastering the game of go without human knowledge. Nature 550 (7676), 354–359 (2017) 31

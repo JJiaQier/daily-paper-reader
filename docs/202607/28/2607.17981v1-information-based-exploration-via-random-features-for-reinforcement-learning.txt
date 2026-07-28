@@ -1,0 +1,829 @@
+Title: Information-Based Exploration via Random Features for Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2607.17981v1
+
+Published Time: Tue, 21 Jul 2026 01:57:47 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+> Proceedings of Machine Learning Research 304, 2025 ACML 2025
+
+# Information-Based Exploration via Random Features for Reinforcement Learning 
+
+Waris Radji waris.radji@inria.fr 
+
+Odalric-Ambrym Maillard odalric.maillard@inria.fr 
+
+Univ. Lille, Inria, CNRS, Centrale Lille, UMR 9189-CRIStAL, F-59000 Lille, France 
+
+Editors: Hung-yi Lee and Tongliang Liu 
+
+Abstract 
+
+Representation learning has enabled classical exploration strategies to be extended to deep Reinforcement Learning (RL), but often makes algorithms more complex and theoretical guarantees harder to establish. We introduce Random Feature Information Gain ( RFIG ), grounded in Bayesian kernel methods theory, which uses random Fourier features to ap-proximate information gain and compute exploration bonuses in non-countable spaces. We provide error bounds on information gain approximation and avoid the black-box aspects of neural network-based uncertainty estimation, for optimism-based exploration. We present practical details that make RFIG scalable to deep RL scenarios, enabling smooth integra-tion into standard deep RL algorithms. Experimental evaluation across diverse control and navigation tasks demonstrates that RFIG achieves competitive performance with well-established deep exploration methods while offering superior theoretical interpretation. 
+
+Keywords: Reinforcement Learning; Exploration; Random Features; Kernel Methods; 
+
+1. Introduction 
+
+In Reinforcement Learning (RL), agents learn optimal decision-making strategies through trial-and-error interactions with an environment, receiving rewards or penalties that guide their learning process (Sutton et al., 1998). A fundamental challenge is the exploration-exploitation tradeoff, where agents must balance between exploiting current knowledge to maximize immediate rewards and exploring new actions to potentially discover better long-term strategies. In this paper, we focus our attention on the exploration part in continuous and high-dimensional problems. In small-scale environments like Multi-Armed Bandits (MABs) and discrete Markov Decision Processes (MDPs), an effective strategy is the Op-timism in Face of Uncertainty (OFU), which operates on the principle that when an agent lacks sufficient information about certain states, it should assume they may yield high re-wards, thereby encouraging exploration of these uncertain regions (Auer et al., 2002, 2008). This principle, theoretically grounded in MABs, was adapted to more general problems, through an exploration bonus , where the reward obtained by the learner is augmented, typ-ically rt + βr + 
+
+> t
+
+, where at interaction step t, rt is the reward given by the MDP, r+ 
+
+> t
+
+is the exploration bonus and β ≥ 0 is an parameter that control exploration strength. The litera-ture often considers bonus in the form of 1 /pnt(s), where nt(s) is the number of times the agent has visited state s at interaction t: the more we visit a state, the more certain we are about the estimations (Strehl and Littman, 2008). However, in non-countable spaces, which  
+
+> ©2025 W. Radji & O.-A. Maillard. arXiv:2607.17981v1 [cs.LG] 20 Jul 2026 Radji Maillard
+
+we consider here, this bonus is not straightforward to implement: the probability of visiting the same state twice can be zero, and direct count-based exploration becomes meaningless. 
+
+Research question. This fundamental challenge has led to the development of deep learning-based exploration strategies, where neural networks (NNs) exploit representation learning to learn a proxy of uncertainty or pseudo-counts . Traditional deep representa-tion learning approaches, while empirically successful (Bellemare et al., 2016; Pathak et al., 2017; Badia et al., 2020), suffer from limited interpretability that hinders theoretical un-derstanding and creates hyperparameter sensitivity. This brittleness arises from complex interactions between optimization dynamics and problem structure, where gradient-based algorithms and backpropagation show fragile dependencies on learning rate schedules that can destabilize training and require parameter adjustments spanning orders of magnitude across domains (Glorot and Bengio, 2010). Additionally, architectural choices and regu-larization strategies depend on environmental characteristics, creating optimization land-scapes where effective hyperparameter settings often transfer poorly and fail dramatically in new contexts. This sensitivity means that even algorithmically sound approaches can ex-hibit dramatic performance degradation when operating under suboptimal hyperparameter regimes (Henderson et al., 2018). These observations raise an interesting question: 
+
+How can we design alternative exploration mechanisms for deep RL that offer theoretical interpretability and computational tractability while achieving competitive empirical performance relative to standard deep methods? 
+
+Interesting directions. A promising direction lies in kernel methods, which provide the-oretically grounded uncertainty quantification through closed-form solutions rather than iterative gradient-based optimization. These methods avoid the extensive hyperparameter tuning and training instabilities inherent to neural architectures (Srinivas et al., 2009), while maintaining the ability to capture complex nonlinear patterns. From a Bayesian perspec-tive, the concept of information gain , provides a grounded approach to create exploration bonus that go beyond discrete spaces: poorly visited states are very uncertain and could lead to high information gain, making them attractive targets for exploration while natu-rally diminishing the bonus as states become well-explored and their uncertainty decreases (Kolter and Ng, 2009). However, vanilla kernel methods suffer from cubic computational complexity, limiting their scalability to the large sample sizes required in deep RL. 
+
+Contributions. In this paper, to tackle the problem of OFU exploration in uncountable spaces, we introduce a novel exploration bonus for deep RL: Random Feature Information Gain ( RFIG ). Our bonus is directly derived from information gain quantification in Bayesian kernel methods, which we combine with recent advances that allow these methods to be-come scalable. An important component of our approach is to exploit random features (Rahimi and Recht, 2007), which enable capturing complex nonlinear spatial patterns in high-dimensional data and approximate kernels, to handle the cubic scaling in the number of samples. Unlike pure deep learning approaches, RFIG computes exploration bonuses via closed-form solutions, eliminating backpropagation complexity and hyperparameter brittle-ness while maintaining theoretical interpretability. 
+
+Outline. We first derive RFIG from Bayesian kernel methods and random features (Sec-tion 4.1). We then provide approximation error bounds (Section 4.2) and apply them to Information-Based Exploration via Random Features 
+
+random Fourier features (Section 4.3). Finally, we detail algorithmic integration with deep RL (Section 5.1) and demonstrate effectiveness across diverse tasks (Section 5.2). 
+
+2. Related Work 
+
+Exploration remains a fundamental challenge in RL, particularly in environments with sparse rewards or large state spaces. We review existing approaches, progressing from general methods through kernelized MDPs to deep RL exploration strategies. 
+
+Exploration foundations. The exploration-exploitation tradeoff was first formalized in MABs through OFU-based algorithms (Auer et al., 2002) and Thompson Sampling (Thomp-son, 1933; Chapelle and Li, 2011). Recent approaches like Information Directed Sampling (Russo and Van Roy, 2014) and Minimum Empirical Divergence (Honda and Takemura, 2010) directly formalize information gain in their objectives. These principles have been extended to tabular MDPs (Auer et al., 2008; Osband et al., 2013; Pesquerel and Maillard, 2022) and subsequently to continuous spaces through kernelization and deep RL. 
+
+Kernelized MDPs. Kernel methods extend bandit exploration principles to MDPs with theoretically grounded uncertainty quantification. In bandits, GP-UCB achieves provable regret guarantees using Gaussian Process posteriors (Srinivas et al., 2009; Valko et al., 2013). This framework extends to MDPs where kernels encode similarity structure over state-action spaces (Morere and Ramos, 2018; Chowdhury and Gopalan, 2019; Domingues et al., 2021), and demonstrates that kernel-based uncertainty quantification enables theorically-grounded exploration in continuous MDPs but remains limited to relatively small-scale problems due to computational constraints. 
+
+Deep RL exploration. Scaling to high-dimensional spaces typically requires represen-tation learning. Curiosity-driven methods (Pathak et al., 2017) and episodic novelty ap-proaches (Badia et al., 2020) learn embeddings for exploration. Information-theoretic meth-ods maximize information gain through NN ensembles (Houthooft et al., 2016; Nikolov et al., 2018; Sukhija et al., 2024) or prediction disagreement (Osband et al., 2016; Azizzadenesheli et al., 2018). While effective, these approaches couple exploration with representation learn-ing, creating hyperparameter sensitivity (Glorot and Bengio, 2010; Henderson et al., 2018). A smaller line of work separates exploration from representation learning. RND (Burda et al., 2018) uses random features by training a network to predict a fixed random net-work’s outputs, where prediction error signals novelty. This demonstrates feature learning is not required for effective exploration, though RND lacks theoretical grounding. Yang et al. (2024) addresses this through connections to pseudo-counts. 
+
+Bridging kernels and deep RL. Recent attempts to apply kernel methods in deep RL reveal different approaches. Ma et al. (2024) uses random Fourier features with kernel density estimation but requires user-defined success criteria for specific environments. Blau et al. (2019) develops a ”Bayesian curiosity module” using posterior variance from learned kernels but suffers from cubic complexity, limiting scalability. They mention RFFs as future work, which we implement in this paper. Radji Maillard 
+
+3. Background on Information Gain, RL and Scalable Kernels 
+
+This section establishes the theoretical foundations: information gain for exploration, Bayesian kernel methods for uncertainty quantification, and random Fourier features for scalability. 
+
+Exploration in RL via information gain. An agent interacts with a discounted MDP 
+
+M = ( S, A, r, p, γ ) to learn a policy π : S → Pr( A) maximizing expected cumulative reward 
+
+J(π) = Eπ, p
+
+P ∞ 
+
+> t=0
+
+γtr(st, a t) (Sutton et al., 1998). A standard approach augments rewards with exploration bonuses (Strehl and Littman, 2008): rtotal (s, a ) = r(s, a ) + βr+(s, a ), where β > 0 controls exploration strength. The widely-used bonus 1 /pn(s) (with n(s)the visit count for state s) implicitly maximizes information gain (Bellemare et al., 2016). To formalize this, consider learning an unknown function f : X → R from noisy data 
+
+Dn = {(xi, y i)}ni=1 where yi = f (xi) + ηi. The Bayesian posterior p(f | D n) encodes uncertainty about f . The expected information gain from querying x∗ is IG( x∗ | D n) = H(f | D n) − EY∗ [H(f | D n ∪ { (x∗, Y ∗)})] (1) where H(f | D ) = − R p(f | D ) log p(f | D ) df is the differential entropy (Cover, 1999). This criterion, connect with active inference (Settles, 2009; Friston et al., 2015). 
+
+Bayesian kernel methods. As a alternative to neural exploration, we employ kernel methods that provide principled uncertainty quantification through implicit mapping to reproducing kernel Hilbert spaces Hk (Aronszajn, 1950; Sch¨ olkopf et al., 2001). A positive semi-definite kernel k : X × X → R enables high-dimensional computations using only pairwise similarities. In Bayesian kernel ridge regression (Saunders et al., 1998; Jaakkola and Haussler, 1999) with regularization λ > 0, the posterior mean and variance are 
+
+μn(x) = kn(x)T (Kn + λIn)−1yn σ2
+
+> n
+
+(x) = k(x, x ) − kn(x)T (Kn + λIn)−1kn(x) (2) where Kn ∈ Rn×n with [ Kn]ij = k(xi, x j ) and kn(x) = [ k(x1, x ), . . . , k (xn, x )] T . This is equivalent to a Gaussian process f ∼ GP (0 , k (x, x ′)) with noise σ2 = λ (Williams and Rasmussen, 1995). However, inverting ( Kn + λIn) requires O(n3) operations, prohibitive for large datasets. Random Fourier Features (RFFs) (Rahimi and Recht, 2007) resolve this bottleneck by approximating kernels with explicit finite-dimensional mappings. For shift-invariant kernels k(x, x ′) = k(x − x′), Bochner’s theorem (Bochner et al., 1959) enables 
+
+k(x, x ′) ≈ ϕ(x)T ϕ(x′) where 
+
+ϕ(x) = 
+
+r 2
+
+D
+
+
+
+cos( ωT 
+
+> 1
+
+x + b1)...cos( ωTDx + bD)
+
+ (3) with ωi ∼ p(ω) from the kernel’s spectral density (Fourier transform of k) and bi ∼
+
+Uniform[0 , 2π]. For the RBF kernel k(x, x ′) = exp( −∥ x − x′∥2/2ℓ2), the length-scale ℓ
+
+determines p(ω) = N (0 , ℓ −2I). Applying the Woodbury identity (Woodbury, 1950) with feature matrix Φn ∈ Rn×D yields 
+
+μn(x) = ϕ(x)T (ΦTn Φn + λID)−1ΦTn yn (4) 
+
+σ2
+
+> n
+
+(x) = ϕ(x)T ϕ(x) − ϕ(x)T (ΦTn Φn + λID)−1ϕ(x). (5) This reduces computational complexity from O(n3) to O(D3), enabling efficient uncertainty quantification that scales with feature dimension D rather than dataset size n.Information-Based Exploration via Random Features 
+
+4. Random Feature Information Gain 
+
+Before looking at how information gain is implemented in a RL training loop to promote exploration, we now derive our Random Feature Information Gain ( RFIG ). The derivation proceeds in three steps: (1) express GP information gain in terms of posterior variance, (2) approximate the kernel matrix using random features, (3) apply matrix identities to obtain the final O(D3) form. All detailed proofs of this section can be found in Appendix A. 
+
+4.1. Derivation 
+
+We start by recalling the information gain in the Gaussian process framework using the entropy reduction formulation, as described in (1). Consider a Gaussian process, that we defined in Section 3, f ∼ GP (0 , k (·, ·)) with observation noise η ∼ N (0 , σ 2). Given current data Dn = {(xi, y i)}ni=1 , the posterior entropy can be expressed using the kernel matrix Kn
+
+with H(f | D n) = 12 log det(2 πe (Kn + σ2In)−1). When we add a new observation ( x∗, y ∗) to our dataset, obtaining Dn+1 = Dn ∪ { (x∗, y ∗)}, the posterior distribution changes. 
+
+Definition 1 (Information gain in GP (Lawrence et al., 2002)) 1 The information gain, as defined in (1) , can be expressed for a query point x∗ in GP, as 
+
+IG( x∗ | D n) = H(f | D n) − EY∗ [H(f | D n+1 )] = 12 log det(2 πe (Kn + σ2In)−1) − EY∗
+
+ 12 log det(2 πe (Kn+1 + σ2In+1 )−1)
+
+
+
+= 12 log det( Kn+1 + σ2In+1 ) − 12 log det( Kn + σ2In) = 12 log 
+
+
+
+1 + σ2
+
+> n
+
+(x∗)
+
+σ2
+
+
+
+.
+
+Challenges. However, computing σ2
+
+> n
+
+(x∗) requires inverting the n × n matrix ( Kn + σ2In), which scales as O(n3) and becomes prohibitive for huge datasets. To address this computa-tional bottleneck, we next develop a random feature approximation that reduces complexity from O(n3) to O(D3), where D is the number of features (Proposition 2). Additionally, practical implementation requires careful selection of the kernel length-scale ℓ, which con-trols the smoothness assumptions and generalization behavior, and the number of random features D, which determines the approximation quality versus computational cost trade-off. Later in the paper, we will propose insights for choosing D based on theoretical error bounds (Corollary 9) and adaptive length-scale selection recommandations (Section 5.1). 
+
+Proposition 2 (Information Gain via Random Features) Consider a random feature transformation ϕ : X → RD that approximates a shift-invariant kernel k(x, x ′) ≈ ϕ(x)T ϕ(x′)
+
+(Rahimi and Recht, 2007). The information gain (Definition 1) can be approximated as 
+
+ˆIG( x∗ | D n) = 12 log  1 + ϕ(x∗)T (ΦTn Φn + λID)−1ϕ(x∗) (6) 
+
+where Φn ∈ Rn×D is the feature matrix with rows ϕ(xi)T for i = 1 , . . . , n , and λ > 0 is the regularization parameter. 
+
+> 1. This formulation is equivalent to what they term the “differential entropy score”. Radji Maillard
+
+4.2. Error Bounds 
+
+To provide theoretical guarantees for our approach, we establish error bounds for RFIG under uniform kernel convergence assumptions. Our analysis serves two key purposes: (1) quantifying how errors in kernel approximation propagate to information gain estimates, and (2) determining the number of random features D required to achieve a desired ap-proximation accuracy ε with high probability. We proceed by first bounding the error in posterior variance estimation, then using this result to establish guarantees for information gain approximation, and finally applying our general framework to RFFs. Our analysis relies on three standard assumptions commonly employed in the random features literature (Rahimi and Recht, 2007; Sutherland and Schneider, 2015). 
+
+Assumption 3 (Uniform kernel approximation) The random feature map ϕ(x) : X → 
+
+RD provides a uniform approximation to the kernel k(x, x ′) over the domain: 
+
+P
+
+h
+
+sup 
+
+> x,x ′∈X
+
+|ϕ(x)⊤ϕ(x′) − k(x, x ′)| ≥ ϵ
+
+i
+
+≤ δ(ϵ; d, D ). (7) 
+
+Assumption 4 (Regularization scaling) The regularization parameter scales linearly with sample size: λ = nλ 0 for some λ0 > 0.
+
+Assumption 5 (Bounded kernel) The kernel is bounded: |k(x, x ′)| ≤ κ for all x, x ′ ∈ X .
+
+Assumption 3 is the core requirement for random feature methods and holds for RFFs under mild conditions on the input domain (Rahimi and Recht, 2007). Assumption 4 ensures that the regularization term remain properly balanced as sample size grows, preventing regu-larization from either dominating or vanishing asymptotically, which is useful for deriving clean convergence rates and consistency results. Assumption 5 is satisfied by most practical kernels including RBF and Mat´ ern kernels. 
+
+Posterior variance error. Since information gain is fundamentally determined by pos-terior variance (1), we first establish how kernel errors propagate to variance estimates. 
+
+Proposition 6 (Posterior variance error bound) Under Assumptions 3, 4, and 5, the error in posterior variance estimation when using random features is bounded by: 
+
+∀x ∈ X , |ˆσ2
+
+> n
+
+(x) − σ2
+
+> n
+
+(x)| ≤ ϵ
+
+
+
+1 + κ2
+
+λ20
+
++ 2κλ0
+
++ ϵλ0
+
+
+
+, (8) 
+
+where ϵ = sup x,x ′∈X |ϕ(x)⊤ϕ(x′) − k(x, x ′)|.
+
+This result shows that variance estimation error scales linearly with kernel approximation quality ϵ and exhibits the expected dependence on regularization strength. 
+
+Information gain error. The connection between posterior variance and information gain enables us to translate variance errors into information gain guarantees (Lemma 10). Information-Based Exploration via Random Features 
+
+Proposition 7 (RFIG error bound) Under Assumptions 3, 4, and 5, the error in RFIG approximation is bounded by: 
+
+| IG( x|D n) − ˆIG( x|D n)| ≤ ϵ(λ0 + κ)2 + ϵ2λ0
+
+2nλ 30
+
+, (9) 
+
+where ϵ = sup x,x ′∈X |ϕ(x)⊤ϕ(x′) − k(x, x ′)|.
+
+Our bound exhibits some properties: the error decreases with sample size n (consistency), scales with kernel approximation quality ϵ (approximation dependence), and reveals a reg-ularization trade-off where stronger λ0 tightens the bound but may over-smooth posteriors. 
+
+4.3. Application to Random Fourier Features 
+
+We apply our general bound to RFFs by using existing uniform convergence results. 
+
+Proposition 8 (RFF uniform convergence Rahimi and Recht (2007)) Let X ⊂ Rd
+
+be compact with diameter diam( X ) and k a shift-invariant kernel with unit maximum and Fourier transform P (ω). Let σ2 
+
+> p
+
+= EP [∥ω∥2]. For RFF mapping ϕ and any ϵ > 0:
+
+Pr ∥ϕ⊤ϕ − k∥∞ ≥ ϵ ≤ c
+
+ σp diam( X )
+
+ϵ
+
+2
+
+exp 
+
+
+
+− Dϵ 2
+
+8( d + 2) 
+
+
+
+, (10) 
+
+c = 256 in Rahimi and Recht (2007), tightened to 66 in Sutherland and Schneider (2015). 
+
+Corollary 9 (Feature dimension requirement) To achieve approximation error 
+
+sup x | IG( x|D n) − ˆIG( x|D n)| ≤ ε with probability at least 1 − δ, it suffices to choose 
+
+D = O
+
+ dϵ2
+
+> k
+
+log σp diam( X )
+
+ϵkδ
+
+
+
+, (11) 
+
+where ϵk = 2nλ 30ε
+
+(λ0 + κ)2 when ε is sufficiently small. 
+
+Even if diam( X ) is generally not know in a RL context, this result provides practical guid-ance for hyperparameter selection: the required feature dimension D scales linearly with problem dimension d and logarithmically with desired accuracy. Importantly, D decreases with sample size n through ϵk, reflecting that larger datasets permit coarser kernel approxi-mations while maintaining the same information gain accuracy. This theoretical foundation justifies our approach and enables confident deployment in practical exploration scenarios. 
+
+5. RFIG for Efficient Exploration in RL 
+
+This paper aims to apply RFIG for improving optimism-based exploration in deep RL. This section outlines the key algorithmic components and implementation considerations that enable efficient and scalable integration with existing deep RL agents. Radji Maillard 
+
+5.1. Details that Matter 
+
+While Algorithm 1 outlines the core RFIG integration with deep RL, successful implemen-tation requires attention to several practical considerations. However, these hyperparam-eter choices are minimal compared to neural network approaches, which typically demand extensive tuning of learning rates, network architectures, regularization schemes, and opti-mization schedules. This subsection presents the key considerations that determine RFIG ’s effectiveness in practice, demonstrating the relative simplicity of our kernel-based approach. 
+
+Algorithm 1: RFIG for exploration 
+
+Input: RFF Feature map ϕℓ : X → RD with length-scale ℓ ∝ √ ¯d, regularization λ > 0, subsample ratio ρ ∈ (0 , 1], environment M, policy π, exploration scale β > 0. Initialize RFIG matrices Σ0 ← λID and Λ0 ← λ−1ID
+
+Initialize state normalization parameters ( μs, σ 2 
+
+> s
+
+)
+
+for t ← 1, 2, · · · do 
+
+Collect N transitions D = {(si, a i, r i, s ′
+
+> i
+
+)}Ni=1 with policy π in environment M
+
+Update normalization parameters with {si}Ni=1 , obtain normalized states {¯si}Ni=1 
+
+Compute information gain bonuses R+ = r+ 
+
+> i
+
+= 12 log  1 + ϕℓ(¯ si)⊤Λt−1ϕℓ(¯ si) Ni=1 
+
+Subsample ⌊N ρ ⌋ states uniformly from {¯si}Ni=1 to form Φt with rows ϕℓ(¯ sj )⊤
+
+Update Σt ← Σt−1 + Φ⊤ 
+
+> t
+
+Φt, then Λt ← Σ−1
+
+> t
+
+Update policy π using any RL algorithm with D and bonuses R+
+
+end length-scale selection. The length-scale ℓ controls the smoothness of the uncertainty es-timates and should account for the curse of dimensionality. In high-dimensional spaces, typ-ical distances between points scale as √ ¯d where ¯d is the effective input dimension (Hvarfner et al., 2024; Xu et al., 2024). Therefore, we recommend initializing ℓ ∝ √ ¯d. To estimate the effective dimension from samples, we refer to Section 4 of Valko et al. (2013). 
+
+State normalization 2. We maintain running statistics μs and σ2 
+
+> s
+
+to normalize states as ¯s = ( s − μs)/σ s. This prevents scale differences across dimensions from dominating kernel computations and is critical for RFF effectiveness. 
+
+Subsampling Strategy 2. The subsample ratio ρ serves multiple purposes. The primary goal is to prevent information gain from shrinking too rapidly to zero as the number of samples grows, which would lead to premature exploration termination. Additionally, sub-sampling helps Newton-Schulz iterations converge faster since the covariance matrix Σt
+
+changes more slowly between updates, making warm starts more effective. This approach mirrors techniques in sparse Gaussian processes, where a subset of inducing points can represent the uncertainty structure of the entire dataset. 
+
+Newton-Schulz matrix inversion. A key computational challenge in RFIG is efficiently maintaining the matrix ( ΦTn Φn + λID)−1 as new observations arrive. It’s possible to employ the Newton-Schulz iteration (Schulz, 1933), which iteratively computes matrix inverses using 
+
+> 2. These details have shown beneficial for many deep exploration strategies in Yuan et al. (2024). Information-Based Exploration via Random Features
+
+Xk+1 = Xk(2 I − AX k). This method converges quadratically to A−1 when ∥I − AX 0∥2 < 1and crucially allows using the previous iteration’s result as a warm start for X0. Compared to Sherman-Morrison or Woodbury updates, more commonly considered, Newton-Schulz offers superior numerical stability by avoiding explicit small-number divisions and provides computational savings. Combined with its parallel structure that maps naturally to GPU architectures, Newton-Schulz is ideally suited for the frequent matrix updates required in online deep RL applications. Further details are in Appendix B.1. 
+
+5.2. Numerical Experiments 
+
+We evaluate RFIG by integrating it with Proximal Policy Optimization ( PPO ) algorithm (Schulman et al., 2017), following the non-episodic exploration framework described in Burda et al. (2018) for Random Network Distillation ( RND ). This allows for direct comparison with proven implementation practices for intrinsic motivation in deep RL. Following the 
+
+PPO+RND architecture, we augment the standard PPO objective with RFIG -based intrinsic rewards. We maintain separate value networks for extrinsic and intrinsic rewards and normalize both rewards, as this has benefited many bonuses (Yuan et al., 2024). 
+
+Baselines. In addition to RND , we consider two other deep RL baselines that also follow the optimism under the face of uncertainty (OFU) principle. We include #Explo from Tang et al. (2017), which learns a hash function through an autoencoder architecture, maintains a hash table with visit counts, and employs standard count-based exploration bonuses. We also consider VIME (Houthooft et al., 2016), which shares a similar spirit to our approach by targeting information gain for exploration. VIME learns dynamics with a Bayesian NN, a NN with probability distributions over weights rather than fixed parameters, and approximates information gain as the Kullback-Leibler divergence between the prior and posterior weight distributions of the network. Both methods require effective representation learning to function properly and reflect well the popular neural network-based exploration paradigm that works independently from the policy learning process, via reward bonuses. 
+
+Setup. We adopt global hyperparameter settings proven effective for PPO across all experi-ments (detailed in Appendix B.2). The exploration coefficient β is set to 0 .5 for all methods. Since we normalize exploration bonuses before integration, this coefficient does not affect the relative comparison between baselines. For fair comparison across exploration base-lines, we avoid extensive hyperparameter search and instead use common, well-established parameter values found in reference implementations. All baseline methods employ neural networks with 256 ×256 hidden layers and perform one gradient step per batch update using the Adam optimizer. We initialize observation normalization with random trajectories for all methods and additionally estimate the effective dimension ¯d for RFIG . For RFIG -specific parameters, we use D = 1024 random features, regularization λ = 1 , subsample ratio 
+
+ρ = 6 .25%, and length-scale ℓ = √ ¯d. We evaluate RFIG across four domains designed to test exploration capabilities. Classic control tasks (Acrobot, MountainCar) provide baseline comparisons in low-dimensional settings (Lange, 2022). For challenging continuous control, we use sparse reward variants of Brax locomotion tasks (Freeman et al., 2021), where agents receive milestone rewards only upon reaching specific distance thresholds (Appendix B.3). We include PointMaze navigation environments (de Lazcano et al., 2024; Radji, 2025) and Radji Maillard 
+
+MinAtar tasks (Young and Tian, 2019; Lange, 2022), miniature Atari implementations that demonstrate exploration needs extend beyond sparse reward settings. All experiments use 32 random seeds and 32 parallel environments with 128-step unrolls. 0.00 0.25 0.50 0.75 1.00                                                             
+
+> Timesteps 1e6
+> 200
+> 150
+> Returns
+> MountainCar 0.00 0.25 0.50 0.75 1.00
+> Timesteps 1e6
+> 400
+> 200
+> Returns
+> Acrobot 0.0 0.5 1.0 1.5 2.0 2.5
+> Timesteps 1e6
+> 0
+> 10
+> 20
+> Returns
+> Breakout-MinAtar 012
+> Timesteps 1e6
+> 0
+> 50
+> 100
+> Returns
+> SpaceInvaders-MinAtar 0.00 0.25 0.50 0.75 1.00
+> Timesteps 1e6
+> 0.6
+> 0.8
+> 1.0
+> Returns
+> PointMaze-umaze 0.00 0.25 0.50 0.75 1.00
+> Timesteps 1e6
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> Returns
+> PointMaze-medium 0.00 0.25 0.50 0.75 1.00
+> Timesteps 1e6
+> 0.25
+> 0.50
+> 0.75
+> Returns
+> PointMaze-large 0.00 0.25 0.50 0.75 1.00
+> Timesteps 1e6
+> 0.2
+> 0.4
+> 0.6
+> Returns
+> PointMaze-giant 0.0 0.5 1.0 1.5 2.0 2.5
+> Timesteps 1e6
+> 0
+> 2
+> 4
+> Returns
+> sparse-ant 0.0 0.5 1.0 1.5 2.0 2.5
+> Timesteps 1e6
+> 0
+> 5
+> 10
+> 15
+> Returns
+> sparse-walker2d 0.0 0.5 1.0 1.5 2.0 2.5
+> Timesteps 1e6
+> 0
+> 5
+> 10
+> Returns
+> sparse-hopper 012
+> Timesteps 1e6
+> 0
+> 1
+> 2
+> Returns
+> sparse-halfcheetah PPO PPO+RND PPO+VIME PPO+#Explo PPO+RFIG
+
+Figure 1: Comparing exploration strategies. Solid lines represent the interquartile mean, with shaded areas indicating the 25th-75th percentiles across 32 random seeds. 
+
+Discussion. The experimental results across tasks of varying dimensionality reveal dis-tinct performance patterns that highlight fundamental tradeoffs in exploration strategy design (Table 1). PPO+RFIG demonstrates remarkable consistency, outperforming vanilla 
+
+PPO , which demonstrates that our exploration bonus is effective. The key question is how well it performs relative to established methods. RFIG is competitive with NN-based meth-ods across all environments. From control tasks to complex navigation challenges, RFIG 
+
+maintains stable performance without catastrophic failures. The representation-dependent methods exhibit environment-specific behavior. VIME excels in some high-dimensional con-tinuous control tasks like sparse-ant and sparse-walker2d when its Bayesian NN representa-tions seem to succeed, but struggles in some other tasks, which can be a failure in capturing a good representation. #Explo shows similar inconsistency. We believe that both approaches could likely improve with environment-specific hyperparameter tuning, which undermines their general direct applicability. In contrast, RFIG avoids this representational brittleness. The comparison with RND proves particularly revealing since both employ random features through different mechanisms. Beyond empirical performance, RFIG offers practical ad-Information-Based Exploration via Random Features 
+
+vantages through its closed-form solution approach. Our JAX implementation 3 shows no significant execution time differences compared to NN approaches, even with full matrix inversion used in our final experiments. RFIG competitively matches or exceeds RND ’s per-formance while offering superior theoretical interpretability. Moreover, RFIG achieves peak performance in challenging environments like sparse-halfcheetah and Breakout, demonstrat-ing effectiveness across diverse reward structures. 
+
+Method Principle Representation Computation Sensitivity 
+
+RND Prediction error ✗ Distillation Medium VIME Information gain ✓ Bayesian NN High #Explo Count-based ✓ Auto-encoder High 
+
+RFIG Information gain ✗ Closed-form Low (Kernel theory) 
+
+Table 1: Comparison of exploration methods across key characteristics. 
+
+6. Conclusion 
+
+We introduced the Random Feature Information Gain ( RFIG ) exploration bonus, demon-strating that principled kernel methods can match the empirical performance of neural network-based exploration while offering some theoretical insights and closed-form solu-tions. By leveraging Bayesian kernel methods and random Fourier features, RFIG achieves competitive results across diverse domains without requiring representation learning or hy-perparameter tuning. Our work challenges the prevailing assumption that effective explo-ration requires increasingly sophisticated neural architectures, which often have a black-box aspect. RFIG ’s success stems from its theoretical foundation in kernel methods, providing mathematical rigor often absent in popular deep RL exploration strategies 
+
+Broader impact. The framework underlying RFIG and its theoretical guarantees ex-tends naturally to other domains requiring uncertainty quantification. Active learning, Bayesian optimization, out-of-distribution detection in offline RL, and other sequential decision-making problems can all benefit from similar kernel-based approaches. 
+
+Future directions. Several promising research avenues emerge from this work. First, studying how RFIG behaves in very high-dimensional spaces like big images will reveal the scalability limits of our kernel-based approach and identify potential adaptations needed for visual domains. Second, developing adaptive mechanisms for kernel parameter selec-tion, particularly length-scale tuning, to potentially improve performance. Third, while we focused on RBF kernels and their RFFs approximation, exploring alternative kernels through different random projection schemes offers exciting possibilities. Specialized ker-nels might close the performance gap with deep RL methods that currently outperform RFIG in certain environments. Finally, the same information-theoretic principles could enable conservative exploration strategies for offline RL, where avoiding out-of-distribution states takes precedence over optimistic exploration.  
+
+> 3. The experiment code is available at https://github.com/riiswa/rfig .Radji Maillard
+
+Acknowledgments 
+
+We thank Emilie Kaufmann for valuable feedback on this work. The authors are affiliated with the Inria Scool team project. This work has been supported by the French Ministry of Higher Education and Research, the Hauts-de-France region, Inria, and the MEL. Addi-tional support was provided by the French National Research Agency under the PEPR IA FOUNDRY project (ANR-23-PEIA-0003) and the ANR JCJC REPUBLIC project (ANR-22-CE23-0003-01). Experiments presented in this paper were carried out using the PlaFRIM experimental testbed, supported by Inria, CNRS (LABRI and IMB), Universit´ e de Bor-deaux, Bordeaux INP and Conseil R´ egional d’Aquitaine (see https://www.plafrim.fr ). 
+
+References 
+
+Nachman Aronszajn. Theory of reproducing kernels. Transactions of the American math-ematical society , 68(3):337–404, 1950. Peter Auer, Nicolo Cesa-Bianchi, and Paul Fischer. Finite-time analysis of the multiarmed bandit problem. Machine learning , 47:235–256, 2002. Peter Auer, Thomas Jaksch, and Ronald Ortner. Near-optimal regret bounds for reinforce-ment learning. Advances in neural information processing systems , 21, 2008. Kamyar Azizzadenesheli, Emma Brunskill, and Animashree Anandkumar. Efficient explo-ration through bayesian deep q-networks. In 2018 Information Theory and Applications Workshop (ITA) , pages 1–9. IEEE, 2018. Adri` a Puigdom` enech Badia, Pablo Sprechmann, Alex Vitvitskyi, Daniel Guo, Bilal Piot, Steven Kapturowski, Olivier Tieleman, Mart´ ın Arjovsky, Alexander Pritzel, Andew Bolt, et al. Never give up: Learning directed exploration strategies. arXiv preprint arXiv:2002.06038 , 2020. Marc Bellemare, Sriram Srinivasan, Georg Ostrovski, Tom Schaul, David Saxton, and Remi Munos. Unifying count-based exploration and hashing. In Advances in neural information processing systems , pages 2611–2619, 2016. Tom Blau, Lionel Ott, and Fabio Ramos. Bayesian curiosity for efficient exploration in reinforcement learning. arXiv preprint arXiv:1911.08701 , 2019. Salomon Bochner et al. Lectures on Fourier integrals , volume 42. Princeton University Press, 1959. Yuri Burda, Harrison Edwards, Amos Storkey, and Oleg Klimov. Exploration by random network distillation. arXiv preprint arXiv:1810.12894 , 2018. Olivier Chapelle and Lihong Li. An empirical evaluation of thompson sampling. Advances in neural information processing systems , 24, 2011. Sayak Ray Chowdhury and Aditya Gopalan. Online learning in kernelized markov decision processes. In The 22nd International Conference on Artificial Intelligence and Statistics ,pages 3197–3205. PMLR, 2019. Information-Based Exploration via Random Features 
+
+Thomas M Cover. Elements of information theory . John Wiley & Sons, 1999. Rodrigo de Lazcano, Kallinteris Andreas, Jun Jet Tai, Seungjae Ryan Lee, and Jordan Terry. Gymnasium robotics, 2024. URL http://github.com/Farama-Foundation/ Gymnasium-Robotics .Omar Darwiche Domingues, Pierre M´ enard, Matteo Pirotta, Emilie Kaufmann, and Michal Valko. A kernel-based approach to non-stationary reinforcement learning in metric spaces. In International Conference on Artificial Intelligence and Statistics , pages 3538–3546. PMLR, 2021. C. Daniel Freeman, Erik Frey, Anton Raichuk, Sertan Girgin, Igor Mordatch, and Olivier Bachem. Brax - a differentiable physics engine for large scale rigid body simulation, 2021. URL http://github.com/google/brax .Karl Friston, Francesco Rigoli, Dimitri Ognibene, Christoph Mathys, Thomas Fitzgerald, and Giovanni Pezzulo. Active inference and epistemic value. Cognitive Neuroscience , 6 (4):187–214, 2015. doi: 10.1080/17588928.2015.1020053. Xavier Glorot and Yoshua Bengio. Understanding the difficulty of training deep feedforward neural networks. In Proceedings of the thirteenth international conference on artificial intelligence and statistics , pages 249–256. JMLR Workshop and Conference Proceedings, 2010. Peter Henderson, Riashat Islam, Philip Bachman, Joelle Pineau, Doina Precup, and David Meger. Deep reinforcement learning that matters. In Proceedings of the AAAI conference on artificial intelligence , volume 32, 2018. Junya Honda and Akimichi Takemura. An asymptotically optimal bandit algorithm for bounded support models. In COLT , pages 67–79. Citeseer, 2010. Rein Houthooft, Xi Chen, Yan Duan, John Schulman, Filip De Turck, and Pieter Abbeel. Vime: Variational information maximizing exploration. Advances in neural information processing systems , 29, 2016. Carl Hvarfner, Erik Orm Hellsten, and Luigi Nardi. Vanilla bayesian optimization performs great in high dimensions. arXiv preprint arXiv:2402.02229 , 2024. Tommi S Jaakkola and David Haussler. Probabilistic kernel regression models. In Seventh International Workshop on Artificial Intelligence and Statistics . PMLR, 1999. J Zico Kolter and Andrew Y Ng. Near-bayesian exploration in polynomial time. In Pro-ceedings of the 26th annual international conference on machine learning , pages 513–520, 2009. Robert Tjarko Lange. gymnax: A JAX-based reinforcement learning environment library, 2022. URL http://github.com/RobertTLange/gymnax .Neil Lawrence, Matthias Seeger, and Ralf Herbrich. Fast sparse gaussian process methods: The informative vector machine. Advances in neural information processing systems , 15, 2002. Radji Maillard 
+
+Haozhe Ma, Zhengding Luo, Thanh Vinh Vo, Kuankuan Sima, and Tze-Yun Leong. Highly efficient self-adaptive reward shaping for reinforcement learning. arXiv preprint arXiv:2408.03029 , 2024. Philippe Morere and Fabio Ramos. Bayesian RL for goal-only rewards. In Conference on Robot Learning , 2018. Nikolay Nikolov, Johannes Kirschner, Felix Berkenkamp, and Andreas Krause. Information-directed exploration for deep reinforcement learning. arXiv preprint arXiv:1812.07544 ,2018. Ian Osband, Daniel Russo, and Benjamin Van Roy. (more) efficient reinforcement learning via posterior sampling. Advances in Neural Information Processing Systems , 26, 2013. Ian Osband, Charles Blundell, Alexander Pritzel, and Benjamin Van Roy. Deep exploration via bootstrapped dqn. Advances in neural information processing systems , 29, 2016. Deepak Pathak, Pulkit Agrawal, Alexei A Efros, and Trevor Darrell. Curiosity-driven ex-ploration by self-supervised prediction. In International conference on machine learning ,pages 2778–2787. PMLR, 2017. Fabien Pesquerel and Odalric-Ambrym Maillard. Imed-rl: Regret optimal learning of er-godic markov decision processes. Advances in Neural Information Processing Systems ,35:26363–26374, 2022. Waris Radji. Pointax: Jax-native pointmaze environment, 2025. URL https://github. com/riiswa/pointax .Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines. Advances in neural information processing systems , 20, 2007. Daniel Russo and Benjamin Van Roy. Learning to optimize via information-directed sam-pling. Advances in neural information processing systems , 27, 2014. Craig Saunders, Alexander Gammerman, and Volodya Vovk. Ridge regression learning algorithm in dual variables. 1998. Bernhard Sch¨ olkopf, Ralf Herbrich, and Alex J Smola. A generalized representer theorem. In International conference on computational learning theory , pages 416–426. Springer, 2001. John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. G¨ unther Schulz. Iterative berechung der reziproken matrix. ZAMM-Journal of Applied Mathematics and Mechanics/Zeitschrift f¨ ur Angewandte Mathematik und Mechanik , 13 (1):57–59, 1933. Burr Settles. Active learning literature survey. 2009. Information-Based Exploration via Random Features 
+
+Niranjan Srinivas, Andreas Krause, Sham M Kakade, and Matthias Seeger. Gaussian pro-cess optimization in the bandit setting: No regret and experimental design. arXiv preprint arXiv:0912.3995 , 2009. Alexander L Strehl and Michael L Littman. An analysis of model-based interval estimation for markov decision processes. Journal of Computer and System Sciences , 74(8):1309– 1331, 2008. Bhavya Sukhija, Stelian Coros, Andreas Krause, Pieter Abbeel, and Carmelo Sferrazza. Maxinforl: Boosting exploration in reinforcement learning through information gain max-imization. arXiv preprint arXiv:2412.12098 , 2024. Danica J Sutherland and Jeff Schneider. On the error of random fourier features. arXiv preprint arXiv:1506.02785 , 2015. Richard S Sutton, Andrew G Barto, et al. Introduction to reinforcement learning, vol. 135, 1998. Haoran Tang, Rein Houthooft, Davis Foote, Adam Stooke, OpenAI Xi Chen, Yan Duan, John Schulman, Filip DeTurck, and Pieter Abbeel. # exploration: A study of count-based exploration for deep reinforcement learning. Advances in neural information processing systems , 30, 2017. William R Thompson. On the likelihood that one unknown probability exceeds another in view of the evidence of two samples. Biometrika , 25(3/4):285–294, 1933. Michal Valko, Nathaniel Korda, R´ emi Munos, Ilias Flaounas, and Nelo Cristianini. Finite-time analysis of kernelised contextual bandits. arXiv preprint arXiv:1309.6869 , 2013. Christopher Williams and Carl Rasmussen. Gaussian processes for regression. Advances in neural information processing systems , 8, 1995. Max A Woodbury. Inverting modified matrices . Department of Statistics, Princeton Uni-versity, 1950. Zhitong Xu, Haitao Wang, Jeff M Phillips, and Shandian Zhe. Standard gaussian process is all you need for high-dimensional bayesian optimization. In The Thirteenth International Conference on Learning Representations , 2024. Kai Yang, Jian Tao, Jiafei Lyu, and Xiu Li. Exploration and anti-exploration with distri-butional random network distillation. arXiv preprint arXiv:2401.09750 , 2024. Kenny Young and Tian Tian. Minatar: An atari-inspired testbed for thorough and repro-ducible reinforcement learning experiments. arXiv preprint arXiv:1903.03176 , 2019. Mingqi Yuan, Roger Creus Castanyer, Bo Li, Xin Jin, Wenjun Zeng, and Glen Berseth. Rlexplore: Accelerating research in intrinsically-motivated reinforcement learning. arXiv preprint arXiv:2405.19548 , 2024. Radji Maillard 
+
+# Supplementary Materials 
+
+Appendix A. Full Proofs 
+
+A.1. Information Gain via Random Features Poof of Proposition 2 Using the random feature approximation Kn ≈ ΦnΦTn , the posterior variance becomes 
+
+σ2
+
+> n
+
+(x∗) = ϕ(x∗)T ϕ(x∗) − ϕ(x∗)T (ΦnΦTn + σ2In)−1ϕ(x∗)Applying the Woodbury identity: (ΦnΦTn + σ2In)−1 = 1
+
+σ2 In − 1(σ2)2 Φn(ΦTn Φn + σ2ID)−1ΦTn
+
+Substituting and simplifying: 
+
+σ2
+
+> n
+
+(x∗) = ϕ(x∗)T ϕ(x∗) − 1
+
+σ2 ϕ(x∗)T ϕ(x∗) + 1
+
+σ2 ϕ(x∗)T (ΦTn Φn + σ2ID)−1ϕ(x∗) (12) = σ2ϕ(x∗)T (ΦTn Φn + σ2ID)−1ϕ(x∗) (13) 
+
+σ2
+
+> n
+
+(x∗)
+
+σ2 = ϕ(x∗)T (ΦTn Φn + σ2ID)−1ϕ(x∗) (14) Substituting back into the IG formula of GP yields 12 log  1 + ϕ(x∗)T (ΦTn Φn + σ2ID)−1ϕ(x∗).We can finally reinterpret the observation noise variance σ2 as a regularization parameter 
+
+λ, giving the desired result. 
+
+A.2. Posterior Variance Error Bound Proof of Proposition 6 Let consider the true posterior variance, σ2
+
+> n
+
+(x) = k(x, x ) −
+
+k⊤K−1k, with k = kn(x) and K = Kn + λI n, considering the approximation k(x, x ′) ≈
+
+ϕ(x)T ϕ(x′), we can consider our approximated posterior variance ˆ σ2
+
+> n
+
+(x) as a perturbation of the true one and define ˆk = k + ∆k and ˆK = K + ∆K. Let us expand the following difference ˆk⊤ ˆK−1 ˆk − k⊤K−1k = ( k + ∆k)⊤(K + ∆K)−1(k + ∆k) − k⊤K−1k (15) = k⊤ ˆK−1k + k⊤ ˆK−1∆k + ∆⊤ 
+
+> k
+
+ˆK−1k + ∆⊤ 
+
+> k
+
+ˆK−1∆k − k⊤K−1k (16) = k⊤( ˆK−1 − K−1)k + 2 k⊤ ˆK−1∆k + ∆⊤ 
+
+> k
+
+ˆK−1∆k (17) 
+
+≤ | k⊤( ˆK−1 − K−1)k
+
+| {z } 
+
+> Matrix perturbation t1
+
+| + | 2k⊤ ˆK−1∆k
+
+| {z } 
+
+> Cross term t2
+
+| + | ∆⊤ 
+
+> k
+
+ˆK−1∆k
+
+| {z } 
+
+> Vector term t3
+
+|. (18) where we used the symmetry property k⊤ ˆK−1∆k = ∆⊤ 
+
+> k
+
+ˆK−1k and triangle inequality. 
+
+Bounding t1: Since the smallest eigenvalue of K−1 ˆK−1 is λ, ∥k∥2 ≤ √nκ , and using the inverse matrix perurbation bound for ˆA = A + E, ∥ ˆA−1 − A−1∥2 ≤ ∥ A−1∥2 · ∥ ˆA−1∥2 · ∥ E∥2,we have 
+
+|k⊤( ˆK−1 − K−1)k| ≤ ∥ ˆK−1∥2 · ∥ ∆K∥2 · ∥ K−1∥2 · ∥ k∥22 ≤ ϵκ 2n2
+
+λ2 . (19) Information-Based Exploration via Random Features 
+
+Bounding t2 and t3: Similarly to t1, we can bound the two other terms with 
+
+|2k⊤ ˆK−1∆k| ≤ 2ϵnκ λ , |∆⊤ 
+
+> k
+
+ˆK−1∆k| ≤ ϵ2nλ . (20) Finally, |ˆσ2
+
+> n
+
+(x)−σ2
+
+> n
+
+(x)| ≤ ϵ+ ϵκ 2n2
+
+λ2 + 2ϵnκ λ + ϵ2nλ = ϵ+ ϵκ 2
+
+λ20
+
++ 2ϵκ λ0
+
++ ϵ2
+
+λ0
+
+, using Assumption 4. 
+
+A.3. RFIG Error Bound 
+
+To bound RFIG, we can directly use the established bound for posterior variance, by using the following lemma: 
+
+Lemma 10 (Shifted Logarithmic Difference bound) For any a, b > 0, we have 
+
+| log(1 + a) − log(1 + b)| ≤ | a − b| (21) 
+
+Proof On the interval between a and b, there exists c between a and b such that log(1 + 
+
+a) − log(1 + b) = f ′(c)( a − b) = a−b 
+
+> 1+ c
+
+. Since min( a, b ) ≤ c ≤ max( a, b ), we have 11+max( a,b ) ≤ 
+
+> 11+ c
+
+≤ 11+min( a,b ) . Therefore, a−b 
+
+> 1+ c
+
+≤ |a−b| 
+
+> 1+min( a,b )
+
+, we have a, b > 0, which completes the proof. Now, we have all the elements to obtain a deterministic upper bound on RFIG. 
+
+Proof of Proposition 7 By applying Lemma X, we have 
+
+| ˆIG( x|D n) − IG( x|D n)| ≤ ∆σ2
+
+> n
+
+2λ =
+
+ϵ + ϵκ 2
+
+> λ20
+
++ 2ϵκ λ0 + ϵ2
+
+> λ0
+
+2λ (22) =
+
+ϵ
+
+
+
+1 + κλ0
+
+2
+
++ ϵλ0
+
+
+
+2λ (23) =
+
+ϵ
+
+h (λ0+κ)2+ϵλ 0
+
+> λ20
+
+i
+
+2λ (24) = ϵ(λ0 + κ)2 + ϵ2λ0
+
+2nλ 30
+
+(25) That ends the proof. 
+
+A.4. High Probability RFIG Bound Proof of Proposition 9 We aim to find when the information gain error is at least ε:
+
+ϵ(λ0 + κ)2 + ϵ2λ0
+
+2nλ 30
+
+≥ ε (26) 
+
+ϵ(λ0 + κ)2 + ϵ2λ0 ≥ ε2nλ 30 (27) 
+
+ϵ(λ0 + κ)2 + ϵ2λ0 − ε2nλ 30 ≥ 0 (28) Radji Maillard 
+
+This is a quadratic inequality in ϵ. The quadratic f (ϵ) = λ0ϵ2 + ( λ0 + κ)2ϵ − 2nλ 30ε has for root: 
+
+ϵ ≥ −(λ0 + κ)2 + p(λ0 + κ)4 + 8 nλ 40ε
+
+2λ0
+
+, (29) since λ0 > 0, the parabola opens upward. Setting κ = 1 (Proposition 8), ends the proof. 
+
+Appendix B. Numerical Experiments 
+
+B.1. Newton-Schulz iterations 
+
+The Newton-Schulz method provides an iterative approach to matrix inversion that is par-ticularly well-suited for our kernel matrix updates. Due to JAX’s compilation and paral-
+
+Algorithm 2: Newton-Schulz Matrix Inversion Update 
+
+Input: Previous inverse Xold , matrix update Φt, regularization λ
+
+A ← ΦTt Φt + λI;
+
+X0 ← Xold (warm start); 
+
+for k = 1 , 2, . . . , K do Xk ← Xk−1(2 I − AX k−1); 
+
+end return X K
+
+lelization constraints, we implement a fixed number of Newton-Schulz iterations ( K = 20) rather than iterating until convergence. In practice, we observe that 20 iterations pro-vide sufficient accuracy for information gain estimation while maintaining computational efficiency across all experimental environments. 
+
+B.2. Hyperparameter Configuration 
+
+Table 2 presents the complete hyperparameter configuration used for PPO experiments across all environments. For RND baseline comparisons, we use an embedding size of 256, hidden layer sizes of (256, 256), a bonus learning rate of 1e-4, with ReLU activations, following standard RND implementation practices. 
+
+B.3. Milestone Reward Wrapper 
+
+We implement a MilestoneRewardWrapper that transforms dense reward signals into sparse, milestone-based rewards. This wrapper provides rewards only when the agent reaches spe-cific distance milestones during locomotion, creating challenging exploration scenarios where traditional dense rewards are unavailable. The wrapper operates by tracking the agent’s for-ward displacement from its initial position and providing rewards at fixed distance intervals. Specifically, it: 1. Records the agent’s initial position at environment reset 2. Monitors the agent’s current position throughout the episode Information-Based Exploration via Random Features 
+
+Table 2: PPO hyperparameters used in all experiments. 
+
+Parameter Value 
+
+Training Configuration 
+
+Total timesteps 1,000,000 Number of environments 32 Steps per environment 128 Evaluation frequency 24,576 Anneal learning rate True 
+
+PPO Algorithm 
+
+Learning rate 0.0003 Number of epochs 4Number of minibatches 32 Clip ratio ( ϵ) 0.2 Value function coefficient 0.5 Entropy coefficient 0.01 Maximum gradient norm 0.5 
+
+GAE & Discounting 
+
+Discount factor ( γ) 0.99 GAE lambda ( λ) 0.95 
+
+Normalization 
+
+Normalize observations True Normalize intrinsic rewards True 
+
+Network Architecture 
+
+Activation function Tanh Hidden layer sizes (64, 64) 3. Calculates the total distance traveled as the difference between current and initial positions 4. Awards rewards when the agent crosses predefined distance milestones The milestone reward rt at timestep t is computed as: 
+
+rt =
+
+(
+
+α · (mt − mt−1) if mt > m t−1
+
+0 otherwise (30) where mt = ⌊dt/δ ⌋ represents the current milestone, dt is the distance traveled, δ is the milestone distance interval, and α is the reward scale factor. The wrapper accepts three key parameters: 
+
+• milestone distance (δ = 1 .0): Distance interval between consecutive milestones 
+
+• reward scale (α = 1 .0): Scale factor applied to milestone rewards Radji Maillard 
+
+• position fn : Function extracting agent position from environment state (defaults to x-coordinate of the first body) This design creates environments where agents receive no immediate feedback for small movements but are rewarded for achieving meaningful locomotion progress, making these tasks particularly challenging for exploration strategies. For reproducibility, we provide the complete implementation of the MilestoneRewardWrapper :Listing 1: MilestoneRewardWrapper Implementation 
+
+from typing import Callable , Optional from brax . envs import PipelineEnv , State , Wrapper import jax from jax import numpy as jp class MilestoneRewardWrapper ( Wrapper ) : " " " Wrapper ␣ that ␣ adds ␣ milestone - based ␣ rewards ␣ to ␣ any ␣ Brax ␣ environment . ␣ ␣ ␣ ␣ This ␣ wrapper ␣ gives ␣ a ␣ reward ␣ whenever ␣ the ␣ agent ␣ reaches ␣ specified ␣ distance ␣ ␣ ␣ ␣ milestones ␣ ( e . g . , ␣ every ␣ 1.0 ␣ unit ␣ of ␣ forward ␣ movement ) . ␣ ␣ ␣ ␣ " " " def __init__ ( self , env : PipelineEnv , milestone_distance : float = 1.0 , reward_scale : float = 1.0 , position_fn : Optional [ Callable [[ State ] , jp . ndarray ]] =lambda state : state . pipeline_state . x . pos [0 , 0] , ) : " " " Initializes ␣ the ␣ milestone ␣ reward ␣ wrapper . ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ Args : ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ env : ␣ The ␣ environment ␣ to ␣ wrap . ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ milestone_distance : ␣ Distance ␣ between ␣ reward ␣ milestones . ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ reward_scale : ␣ Scale ␣ factor ␣ for ␣ milestone ␣ rewards . ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ position_fn : ␣ Function ␣ that ␣ extracts ␣ position ␣ from ␣ state . ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ Default ␣ extracts ␣ x ␣ position ␣ from ␣ first ␣ body . ␣ ␣ ␣ ␣ ␣ ␣ ␣ ␣ " " " super () . __init__ ( env ) self . _milestone_distance = milestone_distance self . _reward_scale = reward_scale self . _position_fn = position_fn def reset ( self , rng : jax . Array ) -> State : " " " Resets ␣ the ␣ environment ␣ and ␣ initializes ␣ milestone ␣ reward ␣ tracking . " " " state = self . env . reset ( rng ) 
+
+# Get initial position 
+
+initial_position = self . _position_fn ( state ) 
+
+# Add milestone reward tracking info 
+
+info = state . info . copy () Information-Based Exploration via Random Features 
+
+info . update ({ ’ initial_position ’: initial_position , ’ last_milestone ’: 0.0 , ’ total_milestones ’: 0 , ’ distance_traveled ’: 0.0 , ’ current_milestone ’: 0.0 , }) return state . replace ( info = info ) def step ( self , state : State , action : jax . Array ) -> State : " " " Steps ␣ the ␣ environment ␣ and ␣ adds ␣ milestone ␣ rewards . " " " 
+
+# Get tracking info 
+
+initial_position = state . info . get ( ’ initial_position ’) last_milestone = state . info . get ( ’ last_milestone ’ , 0.0) total_milestones = state . info . get ( ’ total_milestones ’ , 0) 
+
+# Step the environment 
+
+next_state = self . env . step ( state , action ) 
+
+# Get current position and calculate distance traveled 
+
+current_position = self . _position_fn ( next_state ) distance_traveled = current_position - initial_position 
+
+# Calculate the current milestone 
+
+current_milestone = jp . floor ( distance_traveled / self . _milestone_distance ) 
+
+# Check if we ’ ve reached a new milestone 
+
+new_milestone_reached = current_milestone > last_milestone 
+
+# Calculate milestone reward 
+
+reward = jp . where ( new_milestone_reached , self . _reward_scale * ( current_milestone - last_milestone ) , 0.0 )
+
+# Update the total milestones count 
+
+total_milestones = jp . where ( new_milestone_reached , total_milestones + jp . int32 ( current_milestone -last_milestone ) , total_milestones )
+
+# Update the last milestone 
+
+last_milestone = jp . where ( new_milestone_reached , current_milestone , last_milestone ) 
+
+# Update info Radji Maillard 
+
+info = next_state . info . copy () info . update ({ ’ initial_position ’: initial_position , ’ last_milestone ’: last_milestone , ’ total_milestones ’: total_milestones , ’ distance_traveled ’: distance_traveled , ’ current_milestone ’: current_milestone , }) return next_state . replace ( reward = reward , info = info )
