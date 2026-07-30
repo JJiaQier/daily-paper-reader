@@ -6,34 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-29
-- 运行时间：2026-07-29 21:41:48 UTC
+- 最新运行日期：2026-07-30
+- 运行时间：2026-07-30 21:49:28 UTC
 - 运行状态：成功
 - 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 精读区：0
+- 速读区：4
 
 ### 今日简报（AI）
-1）今日聚焦非欧几里得网络的联合路由与流分配优化，以及无人机辅助VANET中的多智能体轨迹规划与路由增强。  
-2）最值得精读的两篇高分论文：非欧网络优化新方法和分布式MARL驱动的无人机路由方案。  
-3）建议优先学习这两篇文章的优化框架，思考其如何适应稀疏信号或城市物流场景。
-- 详情：[/202607/29/README](/202607/29/README)
+1) 今日速读4篇论文，聚焦自动化启发式设计、无人机物流网络协同规划及部分可观测路径规划。
+2) 最值得关注的是《SpecAHD》通过局部搜索专门化实现大规模路由问题的自动化启发式设计，以及《Co-planning》对无人机飞行走廊与通信基础设施的协同优化。
+3) 建议深入研究启发式方法的自动化趋势，并关注如何在部分可观测条件下利用时空决策先验提升路径规划效率。
+- 详情：[/202607/30/README](/202607/30/README)
 
 ### 精读区论文标签
-1. [Learning to Optimize: Joint Routing and Flow Allocation on Sparse Non-Euclidean Networks](/202607/29/2607.23467v1-learning-to-optimize-joint-routing-and-flow-allocation-on-sparse-non-euclidean-networks)  
-   标签：评分：9.0/10、query:rl-last-mile
-   evidence：强化学习解决取送货联合路由与流量分配问题
-2. [TRUAV: Distributed Multi-Agent Reinforcement Learning for Trajectory Planning and Routing Enhancement in UAV-Aided IoT-Enabled VANETs](/202607/29/2607.23734v1-truav-distributed-multi-agent-reinforcement-learning-for-trajectory-planning-and-routing-enhancement-in-uav-aided-iot-enabled-vanets)  
-   标签：评分：8.0/10、query:rl-last-mile
-   evidence：多智能体强化学习用于无人机轨迹规划与路由，可迁移至最后一英里配送
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Predictive Lightweight MARL for Resilient Coverage in Sparse-Signaling Aerial Networks](/202607/29/2607.22109v1-predictive-lightweight-marl-for-resilient-coverage-in-sparse-signaling-aerial-networks)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：基于多智能体强化学习的无人机覆盖控制与区域划分相关
-2. [Co-planning of Flight Corridors and Communication Infrastructure for Urban Drone Logistics Networks](/202607/29/2607.23989v1-co-planning-of-flight-corridors-and-communication-infrastructure-for-urban-drone-logistics-networks)  
+1. [SpecAHD: Localize to Specialize for Automated Heuristic Design in Large-Scale Routing Problems](/202607/30/2607.23676v1-specahd-localize-to-specialize-for-automated-heuristic-design-in-large-scale-routing-problems)  
+   标签：评分：7.0/10、query:path-preproc
+   evidence：基于LLM的自动化启发式设计用于大规模路径优化
+2. [Co-planning of Flight Corridors and Communication Infrastructure for Urban Drone Logistics Networks](/202607/30/2607.23989v1-co-planning-of-flight-corridors-and-communication-infrastructure-for-urban-drone-logistics-networks)  
+   标签：评分：7.0/10、query:rl-last-mile
+   evidence：使用赌博机强化学习联合优化无人机飞行走廊与通信基础设施
+3. [Learning Spatiotemporal Decision Priors for Efficient Path Planning under Partial Observability](/202607/30/2607.22166v1-learning-spatiotemporal-decision-priors-for-efficient-path-planning-under-partial-observability)  
    标签：评分：6.0/10、query:rl-last-mile
-   evidence：使用组合多臂老虎机联合优化城市无人机物流的飞行走廊与通信基础设施
+   evidence：使用学习决策先验的路径规划
+4. [Two-Timescale Hierarchical Reinforcement Learning for Resilient Operations](/202607/30/2607.23434v1-two-timescale-hierarchical-reinforcement-learning-for-resilient-operations)  
+   标签：评分：6.0/10、query:rl-last-mile
+   evidence：用于弹性运营的层级强化学习
 
 
 <div class="dpr-home-promo-card">

@@ -1,0 +1,2303 @@
+Title: Two-Timescale Hierarchical Reinforcement Learning for Resilient Operations
+
+URL Source: https://arxiv.org/pdf/2607.23434v1
+
+Published Time: Tue, 28 Jul 2026 01:05:16 GMT
+
+Number of Pages: 52
+
+Markdown Content:
+# Two-Timescale Hierarchical Reinforcement Learning for Resilient Operations 
+
+# Young Hyun Cho *
+
+Department of Statistics, Harvard University, younghyuncho@fas.harvard.edu 
+
+# Franz Stoll 
+
+Edwardson School of Industrial Engineering, Purdue University, stollf@purdue.edu 
+
+# Will Wei Sun 
+
+Mitch Daniels School of Business, Purdue University, sun244@purdue.edu 
+
+# Guang Lin 
+
+Department of Mathematics and School of Mechanical Engineering, Purdue University, guanglin@purdue.edu 
+
+# Stephan Biller 
+
+Edwardson School of Industrial Engineering and Mitch Daniels School of Business, Purdue University; Dauch Center for the Management of Manufacturing Enterprises, sbiller@purdue.edu 
+
+Abstract. Unexpected shocks recur in global operations, requiring decision rules that adapt as market and operating conditions change. Many operational systems also have hierarchical structures in which long-term and short-term decisions pursue a shared objective. We study how hierarchical reinforcement learning can strengthen resilience by adapting these interdependent rules jointly. We develop a two-timescale hierarchical reinforcement learning framework that adapts long-term and short-term policies at their respective time scales. Because the policies are interdependent, we synchronize their updates and prove, to our knowledge, the first convergence guarantees for coupled two-timescale learning. Over 𝑇 periods, our policies’ average gap from an optimal policy pair is 𝑂 (𝑇 −1/2), improving to 𝑂 (log 𝑇 /𝑇 ) when poor decisions produce clearer profit losses. In a used-car case study, inventory replenishment is the long-term decision and customer-arrival pricing the short-term decision. Relative to the strongest partially adaptive benchmark, the framework increases mean profit by 9.2% under joint demand–supply shocks and by 11.8% under a prolonged shock scenario, while maintaining a more stable profit trajectory over time. Short-term adaptation addresses routine seasonality and one-sided disruptions by responding immediately to changing conditions. Under joint demand–supply shocks, however, it is insufficient alone; long-term adaptation is also needed to create favorable conditions for short-term decisions. Joint adaptation thus yields higher and more stable profits through disruption and recovery. Because many organizations already use hierarchical planning, the framework strengthens operational resilience without altering existing decision structures. 
+
+Key words: Supply chain disruptions; supply chain resilience; multi-timescale decision making; joint operational control; global convergence 
+
+> *
+
+Most of this work was completed while Young Hyun Cho was at the Department of Statistics, Purdue University. 
+
+1arXiv:2607.23434v1 [stat.ML] 26 Jul 2026 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+# 1 Introduction 
+
+Unexpected operating shocks are now a recurring feature of global operations. Recent events, including the COVID-19 pandemic (Ivanov, 2020), the Suez Canal blockage (Tran et al., 2025), climate-related capacity reductions at the Panama Canal (Jung et al., 2025), and disruptions around the Strait of Hormuz (UN Trade and Development, 2026), show how shocks can affect supply, logistics, and capacity. Therefore, decision rules optimized for ordinary operating conditions might perform poorly after conditions shift (Snyder et al., 2016; Katsaliaki et al., 2022). After a shock, the problem is not only that the original rule no longer matches the operating condition. If a rule is repeatedly applied without updates, the mismatch can persist into later operating decisions. This can lead to stockouts, delays, lost sales, or inventory imbalances (Chopra and Sodhi, 2004; Snyder et al., 2016; Katsaliaki et al., 2022). As a result, a single unmitigated shock can have both short- and long-term effects on operations. Resilient operations, therefore, require more than static plans for ordinary conditions (Chopra and Sodhi, 2004; Kleindorfer and Saad, 2005). Firms need decision rules that update as information arrives, while avoiding overreaction to transient noise (Christopher and Peck, 2004; Sheffi and Rice Jr, 2005). This balance is difficult because shocks can be temporary or persistent, and decisions made after a shock can affect later operating outcomes. The resulting problem is to learn decision rules that are stable under ordinary fluctuations and responsive when shocks alter operating conditions. At the same time, many operating systems have a hierarchical decision structure. Long-term decisions affect operations over a longer horizon. Given a long-term decision, short-term decisions are made repeatedly during the operating period. The resulting period outcome reflects both the long-term and short-term decisions. In manufacturing and supply networks, long-term sourcing commitments interact with base-surge allocation and expedited production decisions (Tomlin, 2006; Allon and Van Mieghem, 2010). In cloud computing and service operations, capacity sizing operates alongside real-time admission control and pricing (Maglaras and Zeevi, 2003). In retail and revenue management, inventory replenishment is coupled with dynamic pricing (Gallego and Van Ryzin, 1994; Federgruen and Heching, 1999; Elmaghraby and Keskinocak, 2003; Biller et al., 2005). Across these settings, performance depends on how long-term and short-term decisions are combined. This interdependence motivates learning the two decision rules jointly rather than fixing either rule. These considerations point to reinforcement learning (RL) as a natural tool for adaptive operating decisions. RL improves decision rules through repeated interaction with an operating system and performance feedback observed over time. In the hierarchical setting above, however, the learning problem is not to update a single decision rule. The firm must learn a long-term and a short-term decision rule that operate over different decision horizons and affect a shared performance objective. This motivates a hierarchical RL (HRL) formulation in which the long-term and short-term decision rules are modeled as cooperative policies. Figure 1 illustrates this   
+
+> 2Cho et al.: Two-Timescale HRL for Resilient Operations
+> Long-term decisions
+> Across operating periods
+> Short-term decisions
+> Within an operating period
+> Operations
+> Demand and supply
+> Short-term decision loop
+> Feedback
+> Period outcome
+> Figure 1: Two-timescale hierarchical decision structure. A long-term decision shapes the operating conditions for short-term decisions. Long-term and short-term decisions jointly determine the period outcome, which informs later long-term decisions.
+
+structure. The long-term policy selects long-term commitments that shape the state faced by short-term decisions. The short-term policy adapts within the period, and the resulting period outcome reflects both the long-term and short-term decisions. By updating both policies jointly, the two decision layers adapt together to shocks and other changes in operating conditions while working toward a shared objective. In this regard, we develop a two-timescale HRL framework for resilient operations. We implement the long-term and short-term policies using proximal policy optimization (PPO), a widely used policy-learning method for updating stochastic policies from sequential interaction data. Standard PPO analyses typically study a single policy update sequence, whereas our two policy updates are coupled because decisions under each policy affect those under the other. We address this coupling by synchronizing their update scales. Our convergence analysis shows that the average gap between our policies and an optimal policy pair is 𝑂 (𝑇 −1/2), improving to 
+
+𝑂 (log 𝑇 /𝑇 ) when poor decisions produce steep profit losses that provide a clearer learning signal. We apply the framework to a used-car inventory-pricing setting in which replenishment is the long-term decision and customer-arrival pricing is the short-term decision. We introduce demand and supply shocks separately and jointly and compare HRL with rule-based policies and methods that adapt only one decision layer. Short-term pricing adaptation produces much of the gain under regular operations and one-sided shocks. When demand and supply shocks occur together, however, adapting both decision layers becomes important. HRL improves mean profit over the strongest partially adaptive benchmark by 9.2% under joint shocks and 11.8% in the prolonged shock test. Beyond higher aggregate profit, HRL maintains a more stable profit path across operating periods, supporting resilient operations. Further analysis shows that joint learning creates its clearest value during recovery via higher selling prices, stronger inventory retention, and fewer lost sales. 
+
+> 3Cho et al.: Two-Timescale HRL for Resilient Operations
+
+# 2 Related Literature and Contributions 
+
+This section positions our work within the related literature and summarizes its contributions. Our work connects resilient operations and joint control, adaptive operational control through RL and HRL with PPO. We discuss these streams in turn, focusing on the need to learn long-term and short-term decision rules jointly for resilient operations. We then summarize the paper’s contributions. 
+
+Resilient operations and joint control. A large body of literature shows that supply disruptions might generate persistent performance losses (Hendricks and Singhal, 2003, 2005; Tang, 2006; Tomlin, 2006; Snyder et al., 2016). The bullwhip effect literature further shows that demand signals and ordering responses can amplify variability across supply chains, thereby allowing local shocks and forecasting errors to propagate through upstream decisions (Lee et al., 1997). A related stream studies joint operational controls, especially the coupling of inventory, pricing, production, and capacity decisions (Federgruen and Heching, 1999; Chen and Simchi-Levi, 2003; Elmaghraby and Keskinocak, 2003; Bitran and Caldentey, 2003; Biller et al., 2005). These literatures establish that resilience often depends on both long-term commitments and short-term responsive controls. They leave open how such decision rules can be learned jointly from operating feedback when shocks change the interaction between long-term decisions and short-term responses. 
+
+Adaptive operational control. RL provides a general framework for improving decision rules through sequential feedback (Sutton et al., 1998). Recent operational applications include adaptive pricing, resource allocation, assortment optimization, and joint inventory–pricing decisions (Miao and Chao, 2021; Perivier and Goyal, 2022; Liang et al., 2023; Luo et al., 2024; Chen et al., 2024; Xu et al., 2025; Wang et al., 2025a; Kim and Oh, 2025; Luo et al., 2026). Multi-agent, multi-echelon, and cooperative learning formulations further highlight the value of coordination in operating systems (Swaminathan et al., 1998; Liu et al., 2022; Leluc et al., 2023; Zheng et al., 2024; Yang et al., 2025; Kim et al., 2024; Kotecha and del Rio Chanona, 2025). Recent work on foundation models and autonomous agents points to broader AI-enabled supply-chain decision architectures (Xu et al., 2024; Menache et al., 2025; Long et al., 2026; Jannelli et al., 2026). This line of literature shows the value of adaptive and cooperative decision making, but much of it studies one adaptive lever, one decision layer, or coordination across separate agents. Less is known about cooperative two-timescale learning in one operating system, where the long-term and short-term policies share a performance objective and affect the states, outcomes, and data used by each other. 
+
+HRL and PPO. The idea that operational decisions are organized across levels has roots in classical hierarchical production planning (Bitran and Tirupati, 1993; Hax and Meal, 2012). Modern HRL provides a data-driven language for temporal abstraction, where higher-level decisions shape lower-level control problems (Dietterich, 2000; Pateria et al., 2021; Barto and Mahadevan, 2003). On the other hand, PPO is a widely used policy-learning method for RL (Schulman et al., 2017). Recent theory studies single-policy or single-timescale PPO behavior 
+
+> 4Cho et al.: Two-Timescale HRL for Resilient Operations
+
+(Shani et al., 2020; Jin et al., 2023; Huang et al., 2024), while less is known about coupled two-timescale PPO learning. Providing convergence theory for this HRL setting is therefore a theoretical contribution in its own right. Motivated by these gaps, our contributions are summarized below: 
+
+• A two-timescale HRL formulation for resilient operations. As shocks become more frequent, firms need decision rules that adapt across operations. We formulate resilient operations under shocks as a two-timescale HRL problem that jointly learns long-term and short-term policies toward a shared objective. The formulation makes both policies adaptive at their respective decision scales. Because many businesses already organize these decisions hierarchically, the framework is compatible with existing decision structure. 
+
+• Convergence guarantee. Two-timescale learning raises a distinct difficulty beyond single-policy PPO: each policy interacts with the operating environment while changing the environment of the other. The long-term policy learns from end-of-period outcomes shaped by short-term decisions, while the short-term policy learns under conditions set by long-term decisions. We address this by synchronizing their update and prove, to our knowledge, the first convergence guarantees. Over 𝑇 periods, our policies’ average gap from an optimal policy pair is O( 𝑇 −1/2). Interestingly, when poor decisions produce steep profit losses under harsh market conditions, those losses strengthen the learning signal and improve this rate to O( log 𝑇 /𝑇 ).
+
+•Implementation and resilient performance in used-car operations. We implement the framework in a used-car inventory-pricing setting and compare it with rule-based and partially adaptive policies under no shocks and demand, supply, and joint shocks. The framework earns the highest mean profit even without shocks. When demand and supply shocks occur together, as in many real disruptions, it adapts across both decision layers, recovers most strongly, earns the highest profit, and maintains a more stable profit path. The implementation extends to other businesses with analogous decision hierarchies without changing their existing structures. The remainder of this paper is organized as follows. Section 3 formalizes the two-timescale decision problem. Section 4 introduces our proposed method. Section 5 develops the convergence analysis and its operational interpretation. Section 6 provides managerial insights from the used-car inventory-pricing case study. Section 7 concludes the paper. All proofs, controlled numerical illustrations, and case-study implementation details are provided in the Supplementary. 
+
+# 3 Problem Setup 
+
+We formulate a two-timescale operating problem through long-term and short-term policies. Operating periods are indexed by 𝑡 ≥ 0. During period 𝑡 , the long-term policy chooses a long-term action. Conditional on this long-term action, the system proceeds through 𝐾 𝑡 short-term interactions indexed by 𝑘 = 0, . . . , 𝐾 𝑡 − 1. At each 𝑘 , the short-term policy chooses a short-term action. Long-term actions can represent replenishment or procurement, and short-term actions can represent pricing or assortment selection. 
+
+> 5
+
+Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+3.1 Two-timescale Decision Process 
+
+At the beginning of operating period 𝑡 , the system state is 𝑥 𝑡 = (𝐼 𝑡 , 𝑍 𝑡 ) ∈ X . The component 𝐼 𝑡 records the physical operating state, such as inventory, pipeline orders, capacity, or backlog. The component 𝑍 𝑡 records operating conditions that affect demand, supply, fulfillment, feasible actions, rewards, or transitions. We model 
+
+𝑍 𝑡 as a Markov state component, following Markov-modulated operations models (Song and Zipkin, 1993). Shocks are represented through changes in 𝑍 𝑡 , which alter the operating environment faced by long-term and short-term decisions. Given 𝑥 𝑡 , the long-term policy 𝜋 (· | 𝑥 𝑡 ) samples the long-term action 𝑢 𝑡 ∈ U ( 𝑥 𝑡 ), which remains fixed throughout the operating period and shapes the environment for short-term decisions. After 𝑢 𝑡 is chosen, the within-period state is initialized as 𝑠 𝑡 , 0 ∼ 𝑃 init (· | 𝑥 𝑡 , 𝑢 𝑡 ). We write 𝑠 𝑡 ,𝑘 for the within-period Markov information state at short-term interaction 𝑘 . This state contains the within-period information used for operational decisions, such as remaining inventory, customer information, demand conditions, or fulfillment status. The short-term decision node is (𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘 ). The long-term action is included because short-term decisions are conditional on the current long-term action. The index 𝑘 is included because rewards, feasible actions, and transitions may vary within an operating period. At short-term interaction 𝑘 = 0, . . . , 𝐾 𝑡 − 1, the short-term policy selects 𝑎 𝑡 ,𝑘 ∼ 𝜙 (· | 𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘 ), with 
+
+𝑎 𝑡 ,𝑘 ∈ A ( 𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘 ). The system receives reward 𝑟 𝑡 ,𝑘 = 𝑟 𝑘 (𝑠 𝑡 ,𝑘 , 𝑎 𝑡 ,𝑘 , 𝑢 𝑡 ), and the within-period state evolves according to 𝑠 𝑡 ,𝑘 +1 ∼ 𝑃 f,𝑘 (· | 𝑠 𝑡 ,𝑘 , 𝑎 𝑡 ,𝑘 , 𝑢 𝑡 ). At the end of the operating period, the next long-term state is drawn as 𝑥 𝑡 +1 ∼ 𝑃 s (· | 𝑠 𝑡 ,𝐾 𝑡 , 𝑢 𝑡 ). The long-term decision affects the operating environment faced by short-term decisions, and the resulting short-term responses shape the period outcome used for future long-term decisions. 
+
+3.2 Period Payoff and Performance Objective 
+
+Let 𝑐 (𝑥 𝑡 , 𝑢 𝑡 ) denote the cost tied to the long-term commitment. The period payoff aggregates short-term rewards and subtracts this commitment cost 
+
+𝑅 𝑡 ≜ 
+
+> 𝐾 𝑡 −1
+
+∑︁ 
+
+> 𝑘 =0
+
+𝑟 𝑡 ,𝑘 − 𝑐 (𝑥 𝑡 , 𝑢 𝑡 ).
+
+Here 𝑟 𝑡 ,𝑘 is a net short-term interaction reward that may include short-term costs or penalties, while 𝑐 (𝑥 𝑡 , 𝑢 𝑡 )
+
+captures costs tied to the long-term commitment. Thus, 𝑅 𝑡 represents the aggregate period payoff generated by the long-term decision and the short-term responses. For a stationary joint policy (𝜋, 𝜙 ), the performance criterion is 
+
+L( 𝜋, 𝜙 ) ≜ E 𝜋, 𝜙 𝜌 0
+
+"∑︁  
+
+> 𝑡 ≥0
+
+Γ𝑡 𝑅 𝑡 
+
+#
+
+,
+
+6Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+where Γ ∈ ( 0, 1) is the discount factor and 𝜌 0 is the initial distribution over long-term states. The expectation is taken under the probability law generated by 𝜌 0, the policies (𝜋, 𝜙 ), and the transition kernels. The criterion evaluates both decision layers through their joint contribution to current and future payoffs. It can represent firms that make different decisions at different levels but pursue a shared performance objective. 
+
+# 4 Methodology 
+
+In this section, we present our method for joint policy learning. We first review the RL and PPO ingredients used to update the two policies. We then present our two-timescale training procedure. 
+
+4.1 Policy Learning with PPO 
+
+RL learns a policy through repeated interaction with a decision environment, using reward feedback to improve future decisions. Proximal policy optimization (PPO) is a widely used RL algorithm for updating a parameterized stochastic policy (Schulman et al., 2017). Using collected interactions, PPO aims to update the policy in a direction that increases expected cumulative reward. To make this update more informative, PPO uses an advantage estimate, which measures whether an observed action performed better or worse than the policy’s baseline at the corresponding state. For a generic policy 𝜓 , the value function 𝑉 𝜓 (𝑠 ) is the expected cumulative reward starting from state 𝑠 and then following 𝜓 . The action-value function 𝑄 𝜓 (𝑠, 𝑎 ) is defined similarly, starting from state 𝑠 after taking action 
+
+𝑎 . The advantage is then defined as 𝐴 𝜓 (𝑠, 𝑎 ) = 𝑄 𝜓 (𝑠, 𝑎 ) − 𝑉 𝜓 (𝑠 ), and thus measures the value of action 𝑎 
+
+relative to the policy’s baseline at state 𝑠 . Given interactions collected under a reference policy 𝜓 old , PPO updates a candidate policy 𝜓 through the likelihood ratio 𝑤 𝜓 (𝑠, 𝑎 ) = 𝜓 (𝑎 |𝑠 )  
+
+> 𝜓 old (𝑎 |𝑠 )
+
+. Let ¯𝑤 𝜓 (𝑠, 𝑎 ) = clip (𝑤 𝜓 (𝑠, 𝑎 ), 1 − 𝜖, 1 + 𝜖 )
+
+for a clipping parameter 𝜖 ∈ ( 0, 1), and define 𝑚 𝜓 (𝑠, 𝑎 ) = min {𝑤 𝜓 (𝑠, 𝑎 ) b𝐴 (𝑠, 𝑎 ), ¯𝑤 𝜓 (𝑠, 𝑎 ) b𝐴 (𝑠, 𝑎 )} , where 
+
+b𝐴 (𝑠, 𝑎 ) is an empirical advantage estimate. PPO-Clip maximizes the clipped surrogate objective 
+
+𝐿 clip (𝜓 ) = E𝑚 𝜓 (𝑠, 𝑎 ) , (1) where the expectation is over the state-action pairs collected under 𝜓 old . The clipping step limits the size of each policy update since a large update in the wrong direction can distort future actions, future states, and later feedback in online operations. We parameterize the long-term and short-term policies as 𝜋 𝜃 and 𝜙 𝜔 , where 𝜃 and 𝜔 are the corresponding parameter vectors. We update both through PPO-Clip gradient-based ascent: 
+
+𝜃 ← 𝜃 + 𝜂 s𝑔 s, 𝜔 ← 𝜔 + 𝜂 f 𝑔 f ,
+
+> 7
+
+Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+Algorithm 1 Two-timescale hierarchical reinforcement learning  
+
+> 1:
+
+Inputs operating horizon 𝑇 , short-term policy batch size 𝑛 f , learning rates 𝜂 s, 𝜂 f , PPO clip parameter 𝜖 clip  
+
+> 2:
+
+Initialize long-term policy 𝜋 𝜃 and short-term policy 𝜙 𝜔  
+
+> 3:
+
+for 𝑡 = 0, 1, . . . , 𝑇 − 1 do  
+
+> 4:
+
+Observe long-term state 𝑥 𝑡 and sample 𝑢 𝑡 ∼ 𝜋 𝜃 (· | 𝑥 𝑡 ) 
+
+> 5:
+
+Initialize within-period state 𝑠 𝑡 , 0 given (𝑥 𝑡 , 𝑢 𝑡 ) 
+
+> 6:
+
+for each short-term interaction 𝑘 during operating period 𝑡 do  
+
+> 7:
+
+Sample 𝑎 𝑡 ,𝑘 ∼ 𝜙 𝜔 (· | 𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘 ) 
+
+> 8:
+
+Observe reward 𝑟 𝑡 ,𝑘 and next within-period state 𝑠 𝑡 ,𝑘 +1 
+
+> 9:
+
+Add (𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘, 𝑎 𝑡 ,𝑘 , 𝑟 𝑡 ,𝑘 , 𝑠 𝑡 ,𝑘 +1) to the collected short-term data  
+
+> 10:
+
+if the collected short-term data then contains 𝑛 f records  
+
+> 11:
+
+Update short-term policy 𝜙 𝜔 by PPO-Clip with (𝜂 f , 𝜖 clip ), then clear short-term data  
+
+> 12:
+
+end if  
+
+> 13:
+
+end for  
+
+> 14:
+
+Compute the period payoff 𝑅 𝑡 and observe 𝑥 𝑡 +1 
+
+> 15:
+
+Update long-term policy 𝜋 𝜃 by PPO-Clip with (𝜂 s, 𝜖 clip ) 
+
+> 16:
+
+end for  
+
+> 17:
+
+Output learned long-term and short-term policies 𝜋 𝜃 and 𝜙 𝜔 
+
+where 𝜂 s and 𝜂 f are the learning rates, and 𝑔 s and 𝑔 f are gradient estimates of the corresponding clipped objectives computed from period-level and within-period transitions, respectively. The next subsection gives the full training loop. 
+
+4.2 Two-timescale Hierarchical Reinforcement Learning 
+
+We describe how the two policies are updated. At a high level, the training loop alternates between long-term choices at the beginning of an operating period and short-term choices within that period. At the beginning of operating period 𝑡 , the long-term policy 𝜋 𝜃 (· | 𝑥 𝑡 ) samples the long-term action 𝑢 𝑡 . For 𝑘 = 0, . . . , 𝐾 𝑡 − 1, the short-term policy 𝜙 𝜔 (· | 𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘 ) samples the short-term action 𝑎 𝑡 ,𝑘 . The short-term update uses within-period records (𝑠 𝑡 ,𝑘 , 𝑢 𝑡 , 𝑘, 𝑎 𝑡 ,𝑘 , 𝑟 𝑡 ,𝑘 , 𝑠 𝑡 ,𝑘 +1). The long-term update uses period-level records (𝑥 𝑡 , 𝑢 𝑡 , 𝑅 𝑡 , 𝑥 𝑡 +1) after 𝑅 𝑡 is realized. Algorithm 1 combines the two policy updates in a single training loop. The short-term policy is updated after 
+
+𝑛 f within-period records are collected, while the long-term policy is updated after each period payoff is observed. The main tuning inputs are 𝑛 f , 𝜂 s, 𝜂 f , and 𝜖 clip . Batching limits the influence of any single atypical record, while the learning rates set the update scales and clipping limits the influence of large policy-ratio changes. These controls are important in online learning because an atypical record can create a misleading signal whose effect persists through later interactions. 
+
+Remark 1 (Implementation in Existing Decision Hierarchies) . Many businesses already organize long-term and short-term decisions hierarchically. To implement the framework, a firm specifies the state, action, reward, and 
+
+8Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+decision time at each existing layer. The framework adds adaptive policy learning without redesigning this structure. On the other hand, Algorithm 1 does not require a specific policy parameterization. The two policies may use different differentiable parameterizations suited to their state and action spaces. Linear parameterizations use fewer parameters and simplify training, while deep neural networks can capture nonlinear relationships but often require more parameters, data, and tuning. Regardless of policy class, RL updates a policy toward the reward, so reward design is central to what the learned policy optimizes (Ng et al., 1999). The short-term policy receives 𝑟 𝑡 ,𝑘 after each interaction and therefore uses feedback close to its action. The long-term policy receives 𝑅 𝑡 only after the period ends. This payoff reflects the long-term action, within-period decisions, realized operating conditions, and shocks. The long-term signal is therefore delayed and depends on both policy layers. A fixed rule may react to observed states, but it does not learn from new reward feedback. A partially adaptive method updates only one decision layer. Joint training instead updates both policies at their respective scales. The short-term policy adapts within conditions set by long-term decisions, while the long-term policy can change those conditions in later periods. These two adaptation channels provide a mechanism for resilient operations. Section 6 evaluates this mechanism against rule-based and partially adaptive policies. The two adaptation channels that support resilience also create a coupled learning problem. Short-term updates change the period outcomes used for long-term learning, while long-term updates change the states and operating conditions for short-term learning. The learning rates 𝜂 s and 𝜂 f control the policy-update scales. In sequential operations, each update changes subsequent learning, making the method sensitive to these scales. Large rates can destabilize learning, whereas small rates can delay adaptation. Because each policy changes the other’s learning environment, the relative rates are also a joint design choice. Section 5 analyzes a population policy-improvement counterpart and provides a sufficient calibration of the two update scales. 
+
+# 5 Convergence Analysis 
+
+This section analyzes the convergence behavior of our method. While Algorithm 1 uses sampled PPO-Clip updates with empirical advantage estimates, we study a population policy-improvement counterpart with exact advantage directions to focus on population-level behavior without sampling noise. This abstraction follows recent analyses of PPO-Clip, where the population policy-improvement step admits an explicit exponentiated-gradient form (Huang et al., 2024). We apply this analytical update separately to the long-term and short-term policy updates. At a decision node, let 𝑝 denote the current action distribution, let 𝐴 denote the exact advantage direction, 
+
+> 9Cho et al.: Two-Timescale HRL for Resilient Operations
+
+and let 𝜂 denote the learning rate. The representative population update is 
+
+𝑝 + (𝑎 ) = 𝑝 (𝑎 ) exp {𝜂 𝐴 (𝑎 )} 
+
+Í𝑏 𝑝 (𝑏 ) exp {𝜂 𝐴 (𝑏 )} .
+
+The long-term and short-term updates use this rule with learning rates 𝜂 s and 𝜂 f , respectively. 
+
+5.1 Analytical Objects and Assumptions 
+
+Let (𝜋 ∗, 𝜙 ∗) be a fixed optimal stationary benchmark for L, choosing one if multiple optimal stationary policies exist. For a learning sequence {( 𝜋 𝑡 , 𝜙 𝑡 )} , let 𝜙 𝑡 +1 denote the short-term policy after the short-term updates in operating period 𝑡 . We measure progress by the optimality gap G𝑡 = L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 +1), where the learned policy pair is evaluated after the short-term update in operating period 𝑡 . For the analysis, we specialize the training loop to a fixed within-period horizon 𝐾 and a fixed number 𝑀 of short-term policy updates within each operating period. 
+
+Assumption 1 (Markov environment) . The long-term state 𝑥 𝑡 = (𝐼 𝑡 , 𝑍 𝑡 ) and the short-term state 𝑠 𝑡 ,𝑘 take values in finite sets X and S, respectively. The feasible long-term and short-term action sets are finite. The transition dynamics are Markovian at both time scales. 
+
+Assumption 2 (Bounded rewards) . There is 𝐵 < ∞ such that |𝑟 𝑘 (𝑠, 𝑎, 𝑢 )| ≤ 𝐵 and |𝑐 (𝑥, 𝑢 )| ≤ 𝐵 for all feasible states and actions. 
+
+Assumption 3 (Positive action probabilities) . Every long-term policy during learning satisfies 𝜋 (𝑢 | 𝑥 ) > 0 for every feasible long-term action 𝑢 ∈ U ( 𝑥 ). Every short-term policy during learning satisfies 𝜙 (𝑎 | 𝑠, 𝑢, 𝑘 ) > 0
+
+for every feasible short-term action 𝑎 ∈ A ( 𝑠, 𝑢, 𝑘 ).Assumption 1 imposes a standard Markovian environment, where the transition probability of the next state depends on history only through the current state and action (Puterman, 2014). In our formulation, 𝑍 𝑡 records operating conditions, including demand shocks, supply shocks, and recovery. Unexpected shocks can therefore be modeled as low-probability transitions from normal operating condition to a disrupted condition. This follows the state-augmentation logic in Markov-modulated operations models (Song and Zipkin, 1993). Assumption 2 keeps the objective L finite. Since each operating period contains 𝐾 short-term interactions, the bound 𝐵 implies |𝑅 𝑡 | ≤ ( 𝐾 + 1)𝐵 for every period. Together with Γ ∈ ( 0, 1), this gives a finite discounted objective and well-defined optimality gaps. This is the standard bounded-payoff condition used in discounted Markov decision models (Puterman, 2014). Assumption 3 prevents hard elimination of feasible actions during learning. It keeps the KL terms in the convergence proof finite. The condition is natural for stochastic policy classes such as softmax policies, which 
+
+> 10 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+assign positive probability to feasible actions and update their probabilities during policy improvement (Schulman et al., 2015, 2017; Shani et al., 2020). 
+
+5.2 Global Convergence 
+
+We present a global convergence analysis for coupled two-timescale PPO-style learning, which is, to the best of our knowledge, the first result of this type. Recent PPO theory has begun to establish convergence guarantees for single-policy updates (Jin et al., 2023; Huang et al., 2024), but our result is not a direct application of that theory. The hierarchical structure creates a stability issue even under stationary transition dynamics, because the long-term and short-term updates enter each other’s learning signals. We tackle this issue by aligning the long-term update scale with the cumulative short-term update scale through the learning rates, as formalized in Theorem 1: 
+
+Theorem 1 (Global average-gap convergence) . Suppose Assumptions 1–3 hold. If 𝜂 s = 𝑇 −1/2 and 𝑀𝜂 f =
+
+{𝐾 /( 1 − Γ)} 𝜂 s, then there exist finite constants 𝐶 0 and 𝐶 1, independent of 𝑇 , such that 
+
+1
+
+𝑇  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ 𝐶 0 + 𝐶 1
+
+√𝑇 .
+
+Theorem 1 gives an 𝑂 (𝑇 −1/2) bound on the average optimality gap by synchronizing the two learning rates. This synchronization arises since the long-term and short-term updates enter each other’s learning signals. Specifically, 𝑀𝜂 f = {𝐾 /( 1 − Γ)} 𝜂 s links the cumulative short-term update scale within one period to the long-term update scale. Here 𝑀 appears because the short-term policy is updated 𝑀 times within an operating period, so 𝑀𝜂 f is the cumulative short-term update scale over that period. The factor 𝐾 appears because each operating period contains 𝐾 short-term interactions, and 1/( 1 − Γ) appears because short-term responses enter the discounted objective. Thus, 𝐾 and Γ determine how strongly the short-term layer enters the scale of long-term learning. The synchronization also provides useful managerial insights. When 𝐾 is large, short-term decisions account for a larger share of the period payoff 𝑅 𝑡 , so the long-term policy learns from a signal that depends more heavily on the stability of short-term responses. When Γ is close to one, short-term responses have a larger role in the long-run objective, so their effects persist more strongly in the learning signal. In systems with many within-period interactions or long-run consequences, rich short-term feedback supports more frequent short-term updates. Increasing 𝑀 , however, calls for reducing 𝜂 f , so that 𝑀𝜂 f remains calibrated to 𝜂 s. If 𝑀𝜂 f is too large, the period payoff may reflect changes in the short-term response rule rather than a stable evaluation of the long-term action. The calibration keeps short-term learning active while preserving the period payoff as a useful signal for updating future long-term actions. 
+
+> 11 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Beyond the rate, the constants 𝐶 0 and 𝐶 1 capture factors that affect the size of the bound. The constant 𝐶 0
+
+comes from the distance between the initial policy pair and the optimal (𝜋 ∗, 𝜙 ∗), so it is larger when the initial long-term and short-term policies are farther from (𝜋 ∗, 𝜙 ∗). The constant 𝐶 1 captures features of the operating setting. Across settings, severe or persistent shock dynamics can be reflected in 𝐶 1 through larger payoff losses from poor decisions, tighter feasible action sets, or transition dynamics that make future states more sensitive to long-term and short-term actions. In our formulation, these effects enter through 𝑍 𝑡 , which changes rewards, feasible actions, and transition probabilities. Overall, factors that naturally increase operating loss affect the constant 𝐶 1, rather than the 𝑇 −1/2 order. 
+
+5.3 Accelerated Convergence under Market-Specific Structures 
+
+Beyond the baseline convergence result in Theorem 1, we next refine this result under a market condition that makes poor decisions visible in the objective. For the following assumption, let Φ(𝜋, 𝜙 ) denote the KL-based policy distance from the optimal stationary pair (𝜋 ∗, 𝜙 ∗), with the exact formula given in Section S1 of the Supplementary. 
+
+Assumption 4 (Market sharpness) . There exists 𝜇 > 0 such that every learning iterate satisfies L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 ) ≥ 𝜇 Φ(𝜋 𝑡 , 𝜙 𝑡 ).Assumption 4 links the KL-based policy distance Φ to the optimality gap. If the learning policy pair is farther from (𝜋 ∗, 𝜙 ∗) in Φ, then its objective value must be lower by at least a proportional amount. In learning terms, the objective provides a clear loss signal when the current long-term or short-term policy moves in the wrong direction. In market terms, poor replenishment or pricing decisions quickly appear as lost sales or margin loss. A simple deterministic pricing example gives the basic intuition. If 𝐷 ( 𝑝 ) = 𝑎 − 𝑏 𝑝 with 𝑏 > 0 and the interior feasible maximizer is 𝑝 ∗ = 𝑎 /( 2𝑏 ), then 𝑟 ( 𝑝 ) = 𝑝𝐷 ( 𝑝 ) satisfies 𝑟 ( 𝑝 ∗) − 𝑟 ( 𝑝 ) = 𝑏 ( 𝑝 − 𝑝 ∗)2 on the relevant feasible price range (Gallego and Van Ryzin, 1994). Assumption 4 is the policy-level analogue of this visible-loss condition. Assumption 4 does not imply that markets with disruptions or tight constraints have lower absolute loss. It rules out broad flat regions in which policies far from (𝜋 ∗, 𝜙 ∗) have nearly optimal objective values. The accelerated result below uses this visible-loss structure through 𝜇 , while operating difficulty remains in the constants. 
+
+Theorem 2 (Accelerated convergence under market sharpness) . Suppose Assumptions 1–4 hold. Choose 𝜂 s,𝑡 =
+
+2/{ 𝜇 (𝑡 + 𝑡 0)} , with 𝑡 0 sufficiently large, and synchronize the short-term learning rate by 𝑀𝜂 f,𝑡 = {𝐾 /( 1 − Γ)} 𝜂 s,𝑡 .
+
+> 12 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Then there exists a finite constant 𝐶 2, independent of 𝑇 , such that for every 𝑇 ≥ 2,
+
+1
+
+𝑇  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ 𝐶 2 log 𝑇 𝜇𝑇 .
+
+Theorem 2 improves the baseline 𝑇 −1/2 bound to a log 𝑇 /𝑇 bound for the average optimality gap. Under Assumption 4, the parameter 𝜇 measures how strongly the KL-based policy distance appears as an optimality gap. As 𝜇 increases, poor long-term or short-term decisions are more sharply separated from good ones in the objective, which gives a stronger contraction. At the same time, the learning-rate synchronization remains necessary because the short-term policy still moves within each operating period and its cumulative movement must remain aligned with long-term learning. Accordingly, the constant 𝐶 2 absorbs initialization, the fixed difficulty terms from Theorem 1, and the correction caused by evaluating G𝑡 after the short-term update. Severe shock dynamics or tight feasible action sets can increase 𝐶 2 through larger payoff losses or transition dynamics that make future states more sensitive to long-term and short-term actions. Thus, 𝜇 governs the rate improvement, while operating difficulty affects the constant. 
+
+Remark 2 (Market Difficulty and Learning) . Harsh market conditions can reduce profit even under an optimal policy pair. Theorem 2 does not imply that such conditions improve absolute performance. Instead, when poor decisions produce steeper profit losses, those losses provide a clearer learning signal, allowing our policies to distinguish better decisions and approach the optimal policy pair faster. By contrast, a fixed rule does not learn from these losses and may continue to make the same decisions. Thus, although difficult conditions affect all policies, our framework uses the resulting feedback to move more quickly toward the best available response. 
+
+# 6 Case Study: Used-Car Inventory and Pricing 
+
+We study a used-car retail setting in which replenishment determines the inventory available for future customer arrivals, while pricing determines the margin and purchase probability at each arrival. The case study compares four policy configurations under regular operations, one-sided shocks, and joint demand–supply shocks. The configurations differ in whether adaptation occurs in pricing, replenishment, both, or neither. This comparison allows us to assess how adaptation at each decision layer affects performance during shocks and recovery. 
+
+6.1 Experiment Setup 
+
+The experiment combines heterogeneous demand, seasonality, and demand and supply shocks. We evaluate all policies on matched operating paths and compare them by period profit. The following subsections define the profit and training rewards, the shock channels, and the policy choices. 
+
+> 13
+
+Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+6.1.1 Profit and Reward Construction 
+
+We define the profit for performance comparisons and the two rewards used for policy training. The profit measure aggregates sales, inventory holding, ordering, and lost sales into period profit. The rewards are separated because the long-term and short-term policies make decisions at different time scales and use rewards tied to those decisions. The long-term replenishment policy uses period profit, while the short-term pricing policy uses a customer-arrival reward based on margin, inventory pressure, and stockout events. Let C = {budget , mid , premium } denote the set of vehicle classes. The period profit is defined as Π𝑡 =
+
+Í𝑐 ∈ C 
+
+Í𝑖 ∈ S 𝑐,𝑡 ( 𝑝 𝑖 − 𝑤 𝑐 ) − Í𝑐 ∈ C ℎ𝑐 𝐼 + 
+
+> 𝑐,𝑡
+
+− 𝐹 1Í 𝑐 ∈ C 𝑞 𝑐,𝑡 > 0 − Í𝑐 ∈ C 𝜆 𝑐 ℓ𝑐,𝑡 . Here, S𝑐,𝑡 is the set of class-𝑐 units sold in period 𝑡 , 𝑝 𝑖 is the realized selling price of unit 𝑖 , and 𝑤 𝑐 is the acquisition cost for class 𝑐 . The term ℎ𝑐 is the per-period holding cost, 𝐼 + 
+
+> 𝑐,𝑡
+
+is post-sales inventory, 𝐹 is the fixed ordering cost, 𝑞 𝑐,𝑡 is the order quantity, 𝜆 𝑐 
+
+is the lost-sale penalty, and ℓ𝑐,𝑡 is the number of lost sales. Acquisition cost is charged when a unit is sold rather than when it is ordered, so that period profit is aligned with realized sales rather than procurement timing. 
+
+Table 1: Rewards used for policy training in the case study. 
+
+Reward Definition 
+
+Long-term policy reward 𝑟 LT  
+
+> 𝑡
+
+= Π 𝑡 /𝜅 
+
+Short-term policy reward 𝑟 ST  
+
+> 𝑛
+
+= ( 𝑝 𝑐 − 𝑤 𝑐 )1{sale } − 𝜆 𝐼 ∑︁ 
+
+> 𝑐 ∈ C
+
+ℎ𝑐 
+
+𝑁 𝑡 
+
+𝐼 𝑐 − 𝜆 lost 1{stockout }
+
+In Table 1, 𝜅 > 0 is a constant used only to normalize the long-term policy reward for training. In the short-term policy reward, 𝑝 𝑐 is the posted price for class 𝑐 , 𝑁 𝑡 is the number of customer arrivals in period 𝑡 , 𝐼 𝑐 
+
+is the current inventory of class 𝑐 at the customer arrival, and 𝜆 𝐼 and 𝜆 lost are weights to prevent policies from keeping excessive stock while waiting for high-margin sales and to discourage overly aggressive pricing when inventory is scarce. We highlight that the profit measure Π𝑡 is used for performance comparisons, while 𝑟 LT  
+
+> 𝑡
+
+and 
+
+𝑟 ST  
+
+> 𝑛
+
+are used only for training. The two rewards are not added to Π𝑡 , so the profit measure does not double-count the components. 
+
+6.1.2 Shock Setup 
+
+The experiments use two disruption channels: demand and supply. A demand shock changes arrival volume and customer class mix. Demand surges raise arrivals and may shift demand toward higher-value classes, while contractions do the opposite. A supply shock constrains replenishment by reducing the number of fulfilled orders and delaying inventory availability. Joint shocks activate both channels. Shocks are exogenous and are not observed before they occur. Once realized, their effects enter the operating state through arrivals, class mix, inventory availability, and order fulfillment. Within each seed, all policies face 
+
+14 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+the same customer stream, purchase draws, shock timing, and supply randomness. Thus, the comparisons are paired, and only the policy differs. 
+
+6.1.3 Baseline Policies and Comparison Design 
+
+Table 2 summarizes the paired 2 × 2 comparison design. Rows vary the replenishment policy, and columns vary the pricing policy. This design separates the value of RL pricing, RL replenishment, and the joint policy.           
+
+> Table 2: Paired 2×2comparison design.
+> Fixed pricing RL pricing OUL replenishment OUL+Fixed OUL+RL
+> RL replenishment RL+Fixed HRL
+
+OUL stands for order-up-to-level, a standard periodic-review inventory rule rooted in classical inventory theory (Arrow et al., 1951, 1958; Clark and Scarf, 1960; Federgruen and Zipkin, 1984; Porteus, 2002). In our implementation, the OUL parameters are periodically re-estimated from observations. Thus, OUL is a rule-based benchmark that updates its parameters over time, but its decision rule is prescribed rather than learned from operating feedback. Fixed pricing uses a constant markup over the acquisition cost, while RL pricing updates the customer-arrival pricing policy based on reward feedback. OUL+Fixed combines OUL with fixed-markup pricing. OUL+RL keeps OUL and replaces fixed pricing with the RL pricing policy. RL+Fixed replaces OUL with the RL replenishment policy and keeps fixed-markup pricing. HRL updates both the replenishment and pricing policies jointly. The four policies therefore compare pricing-only adaptation, replenishment-only adaptation, and joint replenishment-pricing adaptation against a rule-based benchmark. Because policies are evaluated on matched exogenous operating paths within each seed, profit differences isolate policy behavior. Let 𝑃 (·) denote mean profit over a given analysis window. We use the 2 × 2 interaction contrast Δcoord = 𝑃 (HRL ) − 𝑃 (OUL +RL ) − 𝑃 (RL +Fixed ) + 𝑃 (OUL +Fixed ) to measure the additional value of adapting replenishment and pricing jointly. A positive Δcoord means that HRL creates more value than the additive benchmark formed by pricing-only and replenishment-only adaptation. A zero value indicates additive effects, and a negative value indicates that joint adaptation does not preserve the separate gains. We compute this contrast over the full evaluation horizon and over disruption and recovery windows. 
+
+6.2 Experiment 1: Multiple Shock Combinations 
+
+Experiment 1 compares the four policies across shock settings. Each policy is evaluated over 3,000 operating periods and 30 random seeds under the paired comparison design. We organize the analysis in four steps. First,                                                                                                     
+
+> 15 Cho et al.: Two-Timescale HRL for Resilient Operations
+> Table 3: Experiment 1: Mean profit by policy and shock setting over periods 450–3,000, based on 30 seeds. Values are reported with 95% confidence intervals. The best policy in each shock setting is in bold. Shock setting Policy Profit per period ($K) Cumulative profit ($M) No shocks OUL+Fixed 204.1 ±0.1 520.5 ±0.4 OUL+RL 254.2 ±15.7 648.3 ±20.2 RL+Fixed 206.6 ±0.3 526.8 ±0.9 HRL 263.8 ±14.9 672.8 ±18.0 Demand only OUL+Fixed 202.8 ±0.1 517.2 ±0.4 OUL+RL 261.7 ±13.5 667.2 ±14.4 RL+Fixed 205.0 ±0.4 522.9 ±0.9 HRL 265.5 ±17.2 677.1 ±23.9 Supply only OUL+Fixed 184.1 ±0.2 469.5 ±0.6 OUL+RL 246.4 ±12.7 628.2 ±32.5 RL+Fixed 188.3 ±0.3 480.1 ±0.8 HRL 238.9 ±17.5 609.2 ±24.5 Joint shocks OUL+Fixed 183.2 ±0.2 467.3 ±0.5 OUL+RL 238.7 ±12.4 608.7 ±31.6 RL+Fixed 188.2 ±0.3 480.0 ±0.7 HRL 260.7 ±16.7 664.7 ±22.6
+
+aggregate profitability ranks the policies across shock settings. Second, an event-window analysis compares pre-shock, end-of-shock, and recovery profits to quantify shock-period profit deterioration and post-shock rebound. Third, for joint shocks, price, inventory, and lost-sales patterns diagnose the profit differences. Finally, a 2 × 2 contrast evaluates whether joint replenishment-pricing learning adds value beyond standalone pricing and replenishment learning. Together, these analyses ask: which policy earns the highest profit, how profits deteriorate during shocks and rebound afterward, what price, inventory, and lost-sales patterns explain the differences, and whether joint learning adds value beyond standalone pricing and replenishment learning .
+
+6.2.1 Aggregate Profitability 
+
+We begin with the primary aggregate-profitability question: which policy earns the highest profit, and how does the ranking change across shock settings? Table 3 compares mean profit and cumulative profit across the four operating settings. Two patterns are immediate. First, policies with RL pricing achieve substantially higher profit than fixed-pricing policies in every setting. In our setting, pricing is the short-term decision, so this pattern reflects the value of adapting at the faster decision scale. The pricing policy can respond at each customer arrival as demand, supply, and inventory availability change, whereas fixed pricing remains tied to acquisition cost within a prescribed rule. Second, HRL earns the highest mean profit in all cases except supply-only shocks. Under no shocks and demand-only shocks, HRL and OUL+RL are both in the high-profit range. In the supply-only exception, OUL+RL earns the highest mean profit, but HRL remains close based on the 95% confidence intervals.  
+
+> 16 Cho et al.: Two-Timescale HRL for Resilient Operations
+> Figure 2: Experiment 1: Profit by shock setting, shown as 52-period rolling means. Panels correspond to (a) no shocks, (b) demand-only shocks, (c) supply-only shocks, and (d) joint shocks. Shaded bands show 95% confidence intervals across 30 seeds, and colored regions mark shock periods. Insets provide a closer view of periods 2,500–3,000.
+
+The asymmetric gains from the two partially adaptive policies further identify the short-term policy as the primary adaptation lever. OUL+RL substantially improves over OUL+Fixed in every setting, whereas RL+Fixed improves only modestly. In this case study, pricing decisions are made at customer arrivals and receive frequent purchase and profit feedback. As a result, this short decision cycle allows the policy to adapt promptly to shocks, seasonality, and other changes in conditions. Thus, the key mechanism is not pricing itself, but the speed of short-term decisions and feedback. However, we highlight that short-term adaptation is not the only valuable lever. Under joint shocks, HRL exceeds OUL+RL by about $22K per period and $56M in cumulative profit. In this setting, pricing can manage the available inventory, but it cannot change the inventory available to future arrivals. Consequently, adapting replenishment becomes important when shocks affect both demand and supply. This distinction matters because economic shocks and pandemics can combine demand and supply changes in unanticipated ways. By adapting both decision layers, HRL can respond within the current period, adjust inventory for later periods, and support recovery. Figure 2 shows that these aggregate patterns persist across operating periods rather than being driven by a few isolated periods. Under no shocks and demand-only shocks, HRL and OUL+RL remain in the high-profit range. Under supply-only shocks, OUL+RL maintains the higher path over much of the horizon, consistent 
+
+> 17 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+with the limited immediate role of replenishment learning when order fulfillment is restricted. Under joint demand–supply shocks, HRL maintains the clearest separation, consistent with the value of adapting pricing and replenishment together. Resilient operations require both strong performance and stability as conditions change. Across the four settings, HRL’s profit path varies least across periods. This stability, together with its strong aggregate profit, shows how joint adaptation supports resilient operations. The results also suggest a practical deployment strategy. Short-term adaptation is the primary response to changing conditions. If a firm expects only regular variation or one-sided shocks, or introduces RL one layer at a time, it can prioritize the short-term policy. However, real disruptions are difficult to anticipate and can affect demand and supply together. These results therefore favor HRL when resilience to complex shocks is the operating objective. The next analysis separates disruption and recovery windows to identify when this advantage emerges. 
+
+6.2.2 Disruption Response 
+
+We next examine event windows around each shock to compare profits before the shock, at its end, and through recovery. For each shock event, let 𝑆 0 be the mean profit over the five periods preceding the shock, 𝑆 1 be the mean profit over the final five periods of the shock, 𝑅 0 be the mean profit over the first five recovery periods, and 𝑅 1
+
+be the mean profit over the final five periods of the recovery window. We define resistance as 𝑆 1 − 𝑆 0, where lower values indicate larger shock-period losses, and recovery as 𝑅 1 − 𝑅 0, where larger values indicate stronger rebound. These windows are fixed across policies and shock settings. Figure 3 reports the four event-window profits for demand-only, supply-only, and joint shocks. Across all three panels, HRL has the largest rebound and the highest late-recovery profit. We examine each shock setting in turn. Panel (a) isolates demand-only shocks, which change customer arrivals and class mix. HRL remains near $278K per period from 𝑆 0 to 𝑆 1 and then rises to $334K by 𝑅 1, the highest late-recovery profit. OUL+Fixed also gains during the shock, but this reflects additional customer arrivals rather than policy adjustment. In contrast, RL+Fixed loses $55K per period from 𝑅 0 to 𝑅 1. This pattern is consistent with pricing serving as the direct adaptation channel when the shock changes demand. Panel (b) isolates supply-only shocks. Because the supply shock restricts fulfilled orders, changing replenishment has limited immediate influence on realized inventory. OUL+RL has the highest mean profit at 
+
+𝑆 1, reaching $250K per period compared with $223K for HRL. During the restriction, pricing can still adjust margins and purchase probabilities for the available inventory. However, HRL rebounds most strongly after  
+
+> 18 Cho et al.: Two-Timescale HRL for Resilient Operations
+> Figure 3: Profit response around disruption events in Experiment 1. Panels (a)–(c) show profit per period before, during, and after demand-only, supply-only, and joint shocks. Each point reports mean profit over a five-period window. Error bars show 95% confidence intervals across 30 seeds.
+
+the shock ends and reaches $322K per period at 𝑅 1, the highest late-recovery profit. Once the restriction ends, replenishment can again change inventory for future arrivals, allowing HRL to use both adaptation channels during recovery. Panel (c) combines demand and supply shocks. Consistent with the aggregate results, HRL has its clearest advantage when both shocks occur together. HRL has the highest profit at 𝑆 1, reaching $245K per period, and remains above OUL+RL at 𝑅 0. It then rises from $109K per period at 𝑅 0 to $341K at 𝑅 1, giving the largest rebound and the highest late-recovery profit. The demand shock changes arrivals and class mix, while the supply shock changes future inventory availability. Pricing adjusts margins and purchase probabilities for current inventory, while replenishment changes the inventory available to future arrivals. This pattern is consistent with joint adaptation managing both the use of current inventory and the inventory available during recovery. Taken together, these results therefore show that HRL is not only a high-profit policy, but also a recovery-oriented policy. Under isolated shocks, dealers may obtain much of the benefit from dynamic pricing because inventory availability remains relatively flexible under demand shocks, while pricing can help protect margins and slow inventory depletion under supply shocks. However, when demand and supply disruptions occur together, pricing flexibility alone is not enough. Dealers also need to rebuild the right inventory mix for future sales while adjusting prices during and after the shock to limit lost sales and margin decline. HRL is most useful in this setting because it coordinates both actions: pricing protects short-run profit during the shock, while replenishment supports a stronger recovery after the shock ends. 
+
+> 19 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+6.2.3 Detailed Diagnosis under Joint Shocks 
+
+The preceding analyses show that HRL’s profit and recovery advantages are clearest under joint shocks. We examine now the underlying channels using average selling price, total inventory, and lost sales.  
+
+> Figure 4: Average selling price and total inventory over the full horizon. The top panel reports average selling price, and the bottom panel reports total inventory. Insets show periods 1,800–2,200.
+
+Figure 4 reports full-horizon selling-price and inventory paths under joint shocks. The top panel shows that HRL maintains the highest average selling price for much of the horizon, mostly between $22.5K and $23.5K per unit. OUL+RL follows at a lower level, while the fixed-pricing policies remain near $20K to $21K per unit. Thus, policies with RL pricing generate stronger price responses than fixed-pricing policies, and HRL produces the strongest response among them. Higher prices are consistent with margin protection and slower inventory depletion when inventory is scarce. The bottom panel shows that HRL also retains more inventory after disruption-induced drawdowns. Because OUL+Fixed and OUL+RL share the OUL replenishment rule, their difference reflects how pricing changes realized sales and inventory depletion under a common replenishment rule. HRL differs because replenishment and pricing are learned jointly, changing both sales incentives and future stock availability. Figure 5 aligns these patterns with the event windows 𝑆 0, 𝑆 1, 𝑅 0, 𝑅 1.Figure 5 compares price and inventory at the four disruption-response endpoints. Panel (a) shows that HRL         
+
+> 20 Cho et al.: Two-Timescale HRL for Resilient Operations
+> Figure 5: Price and inventory at the four disruption-response endpoints under joint shocks. The endpoints match Figure 3.
+> 𝑆 0is the five-period pre-shock endpoint, 𝑆 1is the five-period end-shock endpoint, 𝑅 0is the five-period early-recovery endpoint, and 𝑅 1is the five-period late-recovery endpoint. Panel (a) reports average selling price, and panel (b) reports total inventory across 30 seeds.
+
+also has the highest average selling price at the endpoints. It is highest before and at the end of the shock. OUL+RL follows, and the fixed-pricing policies remain below both RL-pricing policies. Panel (b) clarifies the inventory component of the recovery result. OUL+RL enters the shock with slightly more inventory than HRL, but HRL retains more inventory by 𝑆 1. HRL also has the highest inventory point estimate at both recovery endpoints. Thus, the recovery advantage in Figure 3 is consistent with stronger inventory preservation at the end of the shock and a larger inventory base during recovery. Figure 6 then checks whether the higher-price and inventory-retention pattern is accompanied by more lost sales. Figure 6 reports lost sales during shock and recovery periods under joint shocks. All policies have more lost sales during shock periods than during recovery, reflecting more limited inventory availability during disruptions. During shock periods, HRL records the fewest lost sales, with 258 units per period, compared with 261 for OUL+RL and 288 for the fixed-pricing policies. The gap is larger during recovery. HRL records 103 lost sales per period, compared with 111 for OUL+RL and 138–142 for the fixed-pricing policies. Thus, HRL pairs higher prices and larger inventories with fewer lost sales rather than achieving these outcomes by leaving more customers unserved. Together, Figures 4–6 indicate that HRL’s advantage under joint-shock does not come from “more inventory” alone or “higher prices” alone. Instead, HRL combines higher selling prices, stronger inventory retention, and  
+
+> 21 Cho et al.: Two-Timescale HRL for Resilient Operations
+> Figure 6: Lost sales during shock and recovery periods. Lower values indicate fewer unserved customers. Bars report event-aligned means for shocks beginning at or after period 1,500 across 30 seeds, with values reported above each bar.
+
+fewer lost sales during recovery. For dealers, this means the joint-shock advantage is not a single-metric effect, and it should be evaluated across price, inventory, and lost sales, since improving one outcome can weaken recovery if it comes at the expense of another. The observed pattern is consistent with a balanced response: pricing protects margins and moderates inventory depletion during scarcity, while replenishment preserves the inventory base needed to serve future demand. The next experiment examines whether this joint adjustment remains effective during a prolonged disruption. 
+
+6.3 Experiment 2. Prolonged Joint Demand–Supply Shock 
+
+Experiment 1 shows that HRL performs most strongly when demand and supply shocks interact. Recent disruptions also show that shocks can persist long enough to deplete operating buffers, as illustrated by the COVID-19 pandemic and disruptions around the Strait of Hormuz (Ivanov, 2020; UN Trade and Development, 2026). Experiment 2 therefore, studies a prolonged joint demand–supply shock. Two questions guide the analysis. First, what happens when a joint shock lasts long enough to deplete inventory buffers? Second, does coordination create value beyond the separate contributions of learned pricing and learned replenishment? We address these questions using a 5,500 -period horizon and introduce a prolonged shock during periods 3,000 –3,300 . This shock combines alternating demand surges and drops with simultaneous supply restrictions and class-specific supply caps. The resulting environment creates extended scarcity and tests whether each policy can price and replenish successfully over a longer disruption. 
+
+> 22 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+6.3.1 Profit under the Prolonged Shock 
+
+Table 4 reports mean profit over the full horizon and during the prolonged shock. The shock lowers profit for all four policies, reflecting the difficulty of simultaneous demand and supply disruptions. HRL earns the highest mean profit in both windows. During the shock, it earns $210K per period, $22K more than OUL+RL.                           
+
+> Table 4: Experiment 2 under a prolonged joint demand–supply shock. Profit summary based on 30 seeds. The evaluation horizon covers periods 450–5,500, and the prolonged shock covers periods 3,000–3,300. Full horizon ($K per period) Prolonged shock ($K per period) OUL+Fixed 182.3 ±0.1 152.1 ±0.5 OUL+RL 230.7 ±5.9 187.9 ±6.7 RL+Fixed 186.1 ±0.2 160.1 ±0.5 HRL 242.8 ±7.7 210.1 ±7.0
+
+The benchmark comparisons also preserve a pattern from Experiment 1. During the prolonged shock, OUL+RL earns $35.8K more than OUL+Fixed, whereas RL+Fixed earns only $8.0K more. Pricing therefore remains the primary adaptation lever, but HRL’s additional gain over OUL+RL shows that pricing alone does not explain its advantage. HRL’s margin over OUL+RL rises from $12K per period over the full horizon to $22K during the shock. Regular periods dilute the full-horizon difference, while the shock window isolates periods when adaptation matters most. OUL+Fixed, with no RL policy at either layer, earns the lowest mean profit in both windows. The larger shock-window margin is consistent with the cumulative role of replenishment. During a prolonged disruption, replenishment shapes inventory across many later arrivals, while pricing adapts within that inventory but cannot change future availability by itself. For dealers, this suggests that adaptive pricing may provide much of the immediate response, but coordinating pricing with replenishment becomes increasingly valuable as a joint disruption persists and inventory buffers erode. Moreover, Figure 7 reinforces the table-level result through the corresponding 52-period rolling profit paths. All four policies decline during periods 3, 000 − 3, 300 as the prolonged joint shock unfolds. However, HRL remains above the other policies for much of the shock and returns to a higher profit level afterward. Thus, its advantage is sustained across the disruption and recovery rather than driven by a few high-profit periods. We next use 2 × 2 contrasts to identify when HRL’s joint value emerges across disruption and recovery phases. 
+
+6.3.2 Two-by-Two Policy Contrasts 
+
+We use the paired 2 × 2 design to separate the profit gains from adapting replenishment, pricing, and both layers together. OUL+Fixed has no RL policy, OUL+RL adapts pricing, RL+Fixed adapts replenishment, and HRL adapts both. The replenishment and pricing contrasts measure the average gain from adapting each layer, 
+
+> 23
+
+Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+Figure 7: Mean profit per period over the 5,500 -period horizon with a 52-period rolling mean. The prolonged shock occurs during periods 3,000 –3,300 . Shaded bands show 95% confidence intervals across 30 seeds. 
+
+averaging over the other layer. The interaction measures the additional profit from adapting both layers beyond the sum of their standalone gains. It is 𝑃 (HRL ) − 𝑃 (OUL +RL ) − 𝑃 (RL +Fixed ) + 𝑃 (OUL +Fixed ), where 𝑃 (·) 
+
+denotes mean profit over the relevant period. A positive interaction indicates an additional joint gain, and a confidence interval excluding zero provides clear evidence of that gain. Table 5 reports the three contrasts across evaluation periods. Figure 8 complements the table with raw mean profits in Panel (A) and 2 × 2 policy profiles in Panels (B)–(D). Parallel profiles indicate additive gains, while nonparallel profiles indicate an interaction. 
+
+Table 5: Paired 2 × 2 profit contrasts by evaluation period. Columns report the average gains from RL replenishment, the average gains from RL pricing, and the additional gain from adapting both layers. Values are in $K per period with 95% confidence intervals based on 30 paired seeds. Bold estimates have confidence intervals excluding zero. Evaluation period Average gain from RL replenishment Average gain from RL pricing Additional gain from joint adaptation Pre-shock regular 8.2 [−2.5, 19 .0] 52 .3 [43 .7, 61 .0] 6.4 [−15 .2, 27 .9]Prolonged shock 15 .1 [5.4, 24 .8] 42 .9 [34 .4, 51 .4] 14 .2 [−5.2, 33 .6]Demand-surge periods 26 .3 [15 .1, 37 .6] 58 .1 [48 .5, 67 .8] 10 .7 [−11 .6, 33 .0]Demand-drop periods 3.9 [−4.5, 12 .2] 27 .6 [20 .0, 35 .3] 17 .7 [0.6, 34 .8]Recovery 30 .5 [18 .8, 42 .3] 38 .7 [28 .5, 48 .8] 53 .4 [30 .4, 76 .4]Post-shock regular 6.7 [−3.7, 17 .2] 54 .9 [46 .0, 63 .9] 9.9 [−10 .9, 30 .8]
+
+First, RL pricing produces a clear profit gain in every evaluation period. The gain ranges from $27.6K per period during demand drops to $58.1K during demand surges, and every confidence interval excludes zero. Thus, short-term adaptation remains the most consistent source of profit improvement. Second, RL replenishment creates clear gains during the prolonged shock, demand surges, and recovery, 
+
+24 Cho et al.: Two-Timescale HRL for Resilient Operations      
+
+> Figure 8: Experiment 2 under a prolonged joint shock. Paired 2×2policy profiles. Panel (A) reports mean profit for the periods in Table 5. Panels (B)–(D) show the policy profiles for the prolonged shock, demand-drop, and recovery periods. Nonparallel lines indicate a nonzero interaction contrast.
+
+but not during regular or demand-drop periods. Its gain is largest during recovery at $30.5K per period. This pattern reflects the cumulative role of replenishment, which shapes the inventory available across future customer arrivals. Most importantly, the additional gain from adapting both layers becomes clear during demand drops and recovery. The interaction estimates for the full shock and demand surges are positive, but their confidence intervals include zero. In contrast, the interaction reaches $17.7K per period during demand drops and $53.4K during recovery, with both confidence intervals excluding zero. During recovery, replenishment changes the inventory available to future customers while pricing determines how that inventory is sold. The positive interaction indicates that adjusting the two decisions jointly creates more profit than the sum of adapting each layer separately. For dealers, adaptive pricing is the primary tool in regular operations and one-sided disruptions; adaptive replenishment becomes important when shocks persist or recovery begins. HRL is most valuable when pricing protects near-term profit while replenishment restores future inventory. 
+
+> 25 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+# 7 Discussion and Conclusion 
+
+This paper studies resilient operations as an adaptive two-timescale policy-learning problem. We develop HRL to adapt long-term and short-term policies jointly as shocks change operating conditions. The policies act at their respective decision scales while working toward a shared objective. Our used-car case study demonstrates how adaptation at both decision levels improves resilience. Short-term adaptation responds immediately to changing market conditions, whereas long-term adaptation reshapes the operating environment faced by future short-term decisions. Together, the two policies improve both operational performance and recovery from disruptions. Four managerial insights emerge. First, the proposed HRL framework is modular and can be implemented incrementally or partially, allowing organizations to preserve existing planning and decision-making processes. This feature lowers implementation barriers and facilitates adoption across organizational units, where changes to established business processes are often difficult to achieve. Second, in stable operating environments, the HRL framework performs comparably to existing policies within statistical confidence bounds. This property is essential for practical adoption because it allows firms to improve resilience without sacrificing performance during normal operations. Third, the benefits of joint adaptation become substantial when demand and supply are disrupted simultaneously. Dynamic pricing alone is often sufficient to address routine fluctuations or one-sided shocks but coordinated pricing and inventory adaptation become increasingly valuable when disruptions affect both demand and supply. The greatest advantage of HRL occurs during the recovery phase, when replenishment decisions rebuild the inventory mix while pricing protects margins and guides demand. Managers should therefore view HRL not only as a disruption-response policy but also as a recovery policy that coordinates pricing, inventory availability, and demand fulfillment. Finally, the operational benefits are economically meaningful. Compared with the strongest partially adaptive benchmark, the proposed framework increases mean profit by 9.2% under joint demand–supply shocks and by 11.8% under prolonged disruptions while simultaneously reducing profit variability. These results demonstrate that coordinated adaptation across hierarchical decision levels improves both profitability and resilience. Several opportunities for future research remain. Extending the framework to additional hierarchical decision levels, multiple interacting products, competitive environments, and richer supply-chain settings would further broaden its applicability. Another promising direction is incorporating model-based forecasts or causal information into the learning process to accelerate adaptation under rapidly changing operating conditions. 
+
+> 26 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+# References 
+
+Gad Allon and Jan A Van Mieghem. Global dual sourcing: Tailored base-surge allocation to near-and offshore production. Management Science , 56(1):110–124, 2010. Kenneth J Arrow, Theodore Harris, and Jacob Marschak. Optimal inventory policy. Econometrica: Journal of the Econometric Society , pages 250–272, 1951. Kenneth J. Arrow, Samuel Karlin, and Herbert E. Scarf. Studies in the Mathematical Theory of Inventory and Production . Stanford University Press, Stanford, California, 1958. Andrew G Barto and Sridhar Mahadevan. Recent advances in hierarchical reinforcement learning. Discrete Event Dynamic Systems , 13(4):341–379, 2003. Stephan Biller, Lap Mui Ann Chan, David Simchi-Levi, and Julie Swann. Dynamic pricing and the direct-to-customer model in the automotive industry. Electronic Commerce Research , 5(2):309–334, 2005. Gabriel Bitran and René Caldentey. An overview of pricing models for revenue management. Manufacturing & Service Operations Management , 5(3):203–229, 2003. Gabriel R Bitran and Devanath Tirupati. Hierarchical production planning. Handbooks in Operations Research and Management Science , 4:523–568, 1993. Vincenzina Caputo, Jayson L. Lusk, and Rodolfo M. Nayga. Am i getting a good deal? reference-dependent decision making when the reference price is uncertain. American Journal of Agricultural Economics , 102(1): 132–153, 2020. doi: 10.1093/ajae/aaz042. Boxiao Chen, Yining Wang, and Yuan Zhou. Optimal policies for dynamic pricing and inventory control with nonparametric censored demands. Management Science , 70(5):3362–3380, 2024. Xin Chen and David Simchi-Levi. Coordinating inventory control and pricing strategies with random demand and fixed ordering cost. Manufacturing & Service Operations Management , 5(1):59–62, 2003. Sunil Chopra and MS Sodhi. Supply-chain breakdown. MIT Sloan Management Review , 46(1):53–61, 2004. Martin Christopher and Helen Peck. Building the resilient supply chain. 2004. Andrew J Clark and Herbert Scarf. Optimal policies for a multi-echelon inventory problem. Management science ,6(4):475–490, 1960. 
+
+> 27 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Arnoud V. den Boer and N. Bora Keskin. Dynamic pricing with demand learning and reference effects. 
+
+Management Science , 68(10):7112–7130, 2022. doi: 10.1287/mnsc.2021.4234. Thomas G Dietterich. Hierarchical reinforcement learning with the maxq value function decomposition. Journal of Artificial Intelligence Research , 13:227–303, 2000. Wedad Elmaghraby and Pınar Keskinocak. Dynamic pricing in the presence of inventory considerations: Research overview, current practices, and future directions. Management Science , 49(10):1287–1309, 2003. Awi Federgruen and Aliza Heching. Combined pricing and inventory control under uncertainty. Operations Research , 47(3):454–475, 1999. Awi Federgruen and Paul Zipkin. An efficient algorithm for computing optimal (𝑠, 𝑆 ) policies. Operations Research , 32(6):1268–1285, 1984. doi: 10.1287/opre.32.6.1268. Guillermo Gallego and Garrett Van Ryzin. Optimal dynamic pricing of inventories with stochastic demand over finite horizons. Management Science , 40(8):999–1020, 1994. Arnoldo C Hax and Harlan C Meal. Hierarchical integration of production planning and scheduling. In The Roots of Logistics , pages 245–267. Springer, 2012. Kevin B Hendricks and Vinod R Singhal. The effect of supply chain glitches on shareholder wealth. Journal of Operations Management , 21(5):501–522, 2003. Kevin B Hendricks and Vinod R Singhal. Association between supply chain glitches and operating performance. 
+
+Management Science , 51(5):695–711, 2005. Nai-Chieh Huang, Ping-Chun Hsieh, Kuo-Hao Ho, and I-Chen Wu. Ppo-clip attains global optimality: Towards deeper understandings of clipping. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pages 12600–12607, 2024. Dmitry Ivanov. Predicting the impacts of epidemic outbreaks on global supply chains: A simulation-based analysis on the coronavirus outbreak (covid-19/sars-cov-2) case. Transportation Research Part E: Logistics and Transportation Review , 136:101922, 2020. Valeria Jannelli, Stefan Schoepf, Matthias Bickel, Torbjørn Netland, and Alexandra Brintrup. Agentic llms in the supply chain: towards autonomous multi-agent consensus-seeking. International Journal of Production Research , pages 1–31, 2026. 
+
+> 28 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Ruinan Jin, Shuai Li, and Baoxiang Wang. On stationary point convergence of ppo-clip. In The Twelfth International Conference on Learning Representations , 2023. Paul Jung, Kijin Kim, Ah-Hyun Jo, and Joseph Seong-Hyun Cho. Panama canal drought and supply chain disruptions in asia–united states trade: Evidence from micro-level trade shipments and vessel trajectory data. 2025. Korina Katsaliaki, Panagiota Galetsi, and Sameer Kumar. Supply chain disruptions and resilience: a major review and future research agenda. Annals of Operations Research , 319(1):965–1002, 2022. Byeongmok Kim, Jong Gwang Kim, and Seokcheon Lee. A multi-agent reinforcement learning model for inventory transshipments under supply chain disruption. IISE Transactions , 56(7):715–728, 2024. Jung-hun Kim and Min-hwan Oh. Dynamic assortment selection and pricing with censored preference feedback. 
+
+arXiv preprint arXiv:2504.02324 , 2025. Paul R Kleindorfer and Germaine H Saad. Managing disruption risks in supply chains. Production and Operations Management , 14(1):53–68, 2005. Niki Kotecha and Antonio del Rio Chanona. Leveraging graph neural networks and multi-agent reinforcement learning for inventory control in supply chains. Computers & Chemical Engineering , 199:109111, 2025. Hau L Lee, Venkata Padmanabhan, and Seungjin Whang. Information distortion in a supply chain: The bullwhip effect. Management Science , 43(4):546–558, 1997. Rémi Leluc, Elie Kadoche, Antoine Bertoncello, and Sébastien Gourvénec. Marlim: Multi-agent reinforcement learning for inventory management. arXiv preprint arXiv:2308.01649 , 2023. Yong Liang, Xiaojie Mao, and Shiyuan Wang. Online joint assortment-inventory optimization under mnl choices. 
+
+arXiv preprint arXiv:2304.02022 , 2023. Xiaotian Liu, Ming Hu, Yijie Peng, and Yaodong Yang. Multi-agent deep reinforcement learning for multi-echelon inventory management. Production and Operations Management , page 10591478241305863, 2022. Carol Xuan Long, David Simchi-Levi, Feng Zhu, Huangyuan Su, Andre P Calmon, and Flavio P Calmon. Relia-bility and effectiveness of autonomous ai agents in supply chain management. arXiv preprint arXiv:2605.17036 ,2026. Yiyun Luo, Will Wei Sun, and Yufeng Liu. Distribution-free contextual dynamic pricing. Mathematics of Operations Research , 49(1):599–618, 2024. 
+
+> 29 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Yiyun Luo, Will Wei Sun, and Yufeng Liu. Rate-optimal online learning for dynamic assortment selection with positioning. Operations Research , 74(1):224–242, 2026. Constantinos Maglaras and Assaf Zeevi. Pricing and capacity sizing for systems with shared resources: Approximate solutions and scaling relations. Management Science , 49(8):1018–1038, 2003. Ishai Menache, Jeevan Pathuri, David Simchi-Levi, and Tom Linton. How generative ai improves supply chain management. Harvard Business Review , 104(1-2):86–95, 2025. Armando Meza, Paolo Latorre, Milena Bonacic, Héctor López-Ospina, and Juan Pérez. Optimizing inventory and pricing for substitute products with soft supply constraints. Mathematics , 12(11):1751, 2024. doi: 10.3390/math12111751. Sentao Miao and Xiuli Chao. Dynamic joint assortment and pricing optimization with demand learning. 
+
+Manufacturing & Service Operations Management , 23(2):525–545, 2021. Andrew Y Ng, Daishi Harada, and Stuart Russell. Policy invariance under reward transformations: Theory and application to reward shaping. In ICML , volume 99, pages 278–287. Citeseer, 1999. Thi Thuy An Ngo, Hoang Lan Thanh Nguyen, Hoang Phi Nguyen, Ho Truc Anh Mai, Thi Huyen Tran Mai, and Phuoc Long Hoang. A comprehensive study on factors influencing online impulse buying behavior: Evidence from shopee video platform. Heliyon , 10(15):e35743, 2024. doi: 10.1016/j.heliyon.2024.e35743. Shubham Pateria, Budhitama Subagdja, Ah-hwee Tan, and Chai Quek. Hierarchical reinforcement learning: A comprehensive survey. ACM Computing Surveys (CSUR) , 54(5):1–35, 2021. Juan Pérez and Héctor López-Ospina. Competitive pricing for multiple market segments considering consumers’ willingness to pay. Mathematics , 10(19):3600, 2022. doi: 10.3390/math10193600. Noemie Perivier and Vineet Goyal. Dynamic pricing and assortment under a contextual mnl demand. Advances in Neural Information Processing Systems , 35:3461–3474, 2022. Evan L Porteus. Foundations of Stochastic Inventory Theory . Stanford University Press, 2002. Martin L Puterman. Markov Decision Processes: Discrete Stochastic Dynamic Programming . John Wiley & Sons, 2014. John Schulman, Sergey Levine, Pieter Abbeel, Michael Jordan, and Philipp Moritz. Trust region policy optimization. In International Conference on Machine Learning , pages 1889–1897. PMLR, 2015. 
+
+> 30 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. Lior Shani, Yonathan Efroni, and Shie Mannor. Adaptive trust region policy optimization: Global convergence and faster rates for regularized mdps. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 34, pages 5668–5675, 2020. Yossi Sheffi and James B Rice Jr. A supply chain view of the resilient enterprise. MIT Sloan Management Review , 2005. Andri Dayarana K. Silalahi, Do Thi Thanh Phuong, Adi Prasetyo Tedjakusuma, Ixora Javanisa Eunike, and Dalianus Riantama. How does time pressure shape impulsive buying behavior? hedonic vs. utilitarian values emerges as a key driver on e-commerce platforms. Digital Business , 5(2):100138, 2025. doi: 10.1016/j.digbus.2025.100138. Lawrence V Snyder, Zümbül Atan, Peng Peng, Ying Rong, Amanda J Schmitt, and Burcu Sinsoysal. Or/ms models for supply chain disruptions: A review. IIE Transactions , 48(2):89–109, 2016. Jing-Sheng Song and Paul Zipkin. Inventory control in a fluctuating demand environment. Operations Research ,41(2):351–370, 1993. Richard S Sutton, Andrew G Barto, et al. Reinforcement learning: An introduction , volume 1. MIT Press Cambridge, 1998. Jayashankar M Swaminathan, Stephen F Smith, and Norman M Sadeh. Modeling supply chain dynamics: A multiagent approach. Decision Sciences , 29(3):607–632, 1998. Christopher S Tang. Robust strategies for mitigating supply chain disruptions. International Journal of Logistics: Research and Applications , 9(1):33–45, 2006. Brian Tomlin. On the value of mitigation and contingency strategies for managing supply chain disruption risks. 
+
+Management Science , 52(5):639–657, 2006. Nguyen Khoi Tran, Hercules Haralambides, Theo Notteboom, and Kevin Cullinane. The costs of maritime supply chain disruptions: The case of the suez canal blockage by the ‘ever given’megaship. International Journal of Production Economics , 279:109464, 2025. UN Trade and Development. Strait of Hormuz disruptions: Implications for global trade and development. UNCTAD Rapid Assessment No. UNCTAD/OSG/TT/INF/2026/1, UN Trade and Development, 2026. 
+
+> 31 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Hanzhao Wang, Kalyan Talluri, and Xiaocheng Li. On dynamic pricing with covariates. Operations Research ,2025a. Zeming Wang, Jasper Veldman, and Ruud Teunter. Process improvement under the reference price effect. 
+
+European Journal of Operational Research , 322(3):937–948, 2025b. doi: 10.1016/j.ejor.2024.10.037. Jianyu Xu, Xuan Wang, Yu-Xiang Wang, and Jiashuo Jiang. Joint pricing and resource allocation: An optimal online-learning approach. arXiv preprint arXiv:2501.18049 , 2025. Liming Xu, Sara Almahri, Stephen Mak, and Alexandra Brintrup. Multi-agent systems and foundation models enable autonomous supply chains: Opportunities and challenges. IFAC-PapersOnLine , 58(19):795–800, 2024. Yin Xu, Sam Dzever, and Guoqin Zhao. Measuring the effects of pressure on consumer impulse buying intention in online group buying. International Journal of Enterprise Information Systems , 19(1):1–23, 2023. doi: 10.4018/IJEIS.326549. Yongbin Yang, Mengdie Wang, Jiyuan Wang, Pan Li, and Mengjie Zhou. Multi-agent deep reinforcement learning for integrated demand forecasting and inventory optimization in sensor-enabled retail supply chains. 
+
+Sensors (Basel, Switzerland) , 25(8):2428, 2025. Yi Zheng, Zehao Li, Peng Jiang, and Yijie Peng. Dual-agent deep reinforcement learning for dynamic pricing and replenishment. arXiv preprint arXiv:2410.21109 , 2024. 
+
+> 32
+
+# Supplementary Material of 
+
+# “Two-Timescale Hierarchical Reinforcement Learningfor Resilient Operations” 
+
+This Supplementary provides proofs and implementation details supporting the main paper. Section S1 proves Theorem 1. Section S2 proves Theorem 2, including the accelerated average-gap bound under market sharpness. Section S3 describes the simulation environment, demand and inventory dynamics, policy implementations, training protocol, and statistical reporting for the used-car case study. Section S4 presents controlled numerical illustrations of the mechanisms underlying Theorems 1 and 2. 
+
+# S1 Proof of Theorem 1 
+
+Proof of Theorem 1. We prove the result for the population-level policy-improvement sequence described in the main text. The empirical algorithm uses parameterized PPO-Clip with sampled advantages. The argument below abstracts from sampling, function approximation, and finite inner-optimization errors, and studies exact advantage directions. Throughout the proof, Assumptions 1–3 hold. The long-term state space, short-term state space, and feasible action sets are finite. Rewards and costs are bounded by 𝐵 , all policies used in the learning sequence assign positive probability to feasible actions, and exact long-term and short-term advantages are used. The short-term horizon within one long-term period is 𝐾 , while 𝑀 ≥ 1 denotes the number of short-term policy updates performed within one long-term period. The quantities 𝐾 and 𝑀 are fixed over the learning horizon 𝑇 .At a decision node, the population update takes the form 
+
+𝑝 + (𝑎 ) = 𝑝 (𝑎 ) exp {𝜂 𝐴 (𝑎 )} 
+
+Í𝑏 𝑝 (𝑏 ) exp {𝜂 𝐴 (𝑏 )} .
+
+Let 𝑍 𝑝 (𝜂 ) = Í𝑏 𝑝 (𝑏 ) exp {𝜂 𝐴 (𝑏 )} . For any comparator 𝑞 ,
+
+𝐷 KL (𝑞 ∥ 𝑝 +) − 𝐷 KL (𝑞 ∥ 𝑝 ) =∑︁ 
+
+> 𝑎
+
+𝑞 (𝑎 ) log 𝑝 (𝑎 )
+
+𝑝 + (𝑎 ) = −𝜂 ∑︁ 
+
+> 𝑎
+
+𝑞 (𝑎 ) 𝐴 (𝑎 ) + log 𝑍 𝑝 (𝜂 ).
+
+If ∥ 𝐴 ∥∞ ≤ 𝐺 , Hoeffding’s lemma gives 
+
+log 𝑍 𝑝 (𝜂 ) = log E𝑎 ∼ 𝑝 {exp (𝜂 𝐴 (𝑎 ))} ≤ 𝜂 ∑︁ 
+
+> 𝑎
+
+𝑝 (𝑎 ) 𝐴 (𝑎 ) + 𝜂 2𝐺 2
+
+2 .
+
+Hence, 
+
+𝐷 KL (𝑞 ∥ 𝑝 +) − 𝐷 KL (𝑞 ∥ 𝑝 ) ≤ − 𝜂 ⟨𝐴, 𝑞 − 𝑝 ⟩ + 𝜂 2𝐺 2
+
+2 .
+
+33 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+The update also satisfies a movement bound. Since 𝑝 + (𝑎 )  
+
+> 𝑝 (𝑎 )
+
+= exp { 𝜂 𝐴 (𝑎 ) }    
+
+> 𝑍 𝑝 (𝜂 )
+
+and 𝑒 − 𝜂𝐺 ≤ 𝑍 𝑝 (𝜂 ) ≤ 𝑒 𝜂𝐺 , we have 
+
+𝑒 −2𝜂𝐺 ≤ 𝑝 + (𝑎 )/ 𝑝 (𝑎 ) ≤ 𝑒 2𝜂𝐺 . Hence, for any stepsize range 𝜂 ≤ ¯𝜂 ,
+
+∥ 𝑝 + − 𝑝 ∥1 =∑︁ 
+
+> 𝑎
+
+𝑝 (𝑎 ) 𝑝 + (𝑎 )
+
+𝑝 (𝑎 ) − 1 ≤ 𝑒 2𝜂𝐺 − 1 ≤ 2𝐺𝑒 2 ¯ 𝜂𝐺 𝜂. 
+
+In the short-term-policy bounds below, 𝐵 f denotes the corresponding finite movement constant, independent of 𝑇 .
+
+Step 1. Uniform value and advantage bounds. The period payoff is 𝑅 𝑡 = Í𝐾 −1 
+
+> 𝑘 =0
+
+𝑟 𝑡 ,𝑘 − 𝑐 (𝑥 𝑡 , 𝑢 𝑡 ). Since 
+
+|𝑟 𝑡 ,𝑘 | ≤ 𝐵 and |𝑐 (𝑥 𝑡 , 𝑢 𝑡 )| ≤ 𝐵 , we have |𝑅 𝑡 | ≤ ( 𝐾 + 1)𝐵 . Write 𝑅 𝐵 = (𝐾 + 1)𝐵 . For every stationary joint policy 
+
+(𝜋, 𝜙 ),
+
+∥𝑉 𝜋, 𝜙  
+
+> s
+
+∥∞ ≤ 𝑅 𝐵 
+
+1 − Γ , ∥ 𝐴 𝜋, 𝜙  
+
+> s
+
+∥∞ ≤ 2𝑅 𝐵 
+
+1 − Γ .
+
+The long-term update uses the scaled long-term direction 𝑔 s 
+
+> 𝑡
+
+= 𝐴 𝜋 𝑡 , 𝜙 𝑡 +1 
+
+> s
+
+/( 1 − Γ), so 
+
+∥𝑔 s 
+
+> 𝑡
+
+∥∞ ≤ 𝐺 s ≜ 2𝑅 𝐵 
+
+(1 − Γ)2 .
+
+For the short-term problem, a short-term advantage includes remaining within-period rewards and the terminal continuation value Γ𝑉 𝜋 𝑡 , 𝜙  
+
+> s
+
+(𝑥 𝑡 +1). Since the short-term horizon is 𝐾 ,
+
+∥ 𝐴 𝜋 𝑡 , 𝜙  
+
+> f
+
+∥∞ ≤ 𝐺 f ≜ 2
+
+
+
+𝐾 𝐵 + Γ𝑅 𝐵 
+
+1 − Γ
+
+
+
+for every short-term policy 𝜙 used in the proof. Write 𝜙 𝑡 , 0 = 𝜙 𝑡 , 𝜙 𝑡 ,𝑀 = 𝜙 𝑡 +1, and 𝑔 f 
+
+> 𝑡 ,𝑚
+
+= 𝐴 𝜋 𝑡 , 𝜙 𝑡,𝑚  
+
+> f
+
+.
+
+Step 2. Variation of the short-term advantage. We next derive the finite-horizon variation bound used later in the proof. Fix a long-term policy 𝜋 and two short-term policies 𝜙 1 and 𝜙 2. Let 
+
+𝛿 𝜙 = ∥𝜙 1 − 𝜙 2 ∥1,∞ = sup 
+
+> 𝑠,𝑢,𝑘
+
+∑︁ 𝑎 
+
+|𝜙 1 (𝑎 | 𝑠, 𝑢, 𝑘 ) − 𝜙 2 (𝑎 | 𝑠, 𝑢, 𝑘 )| .
+
+For 𝑖 = 1, 2, let ¯𝑟 𝑖 and ¯𝑃 𝑖 denote the one-period expected payoff vector and long-term transition matrix induced by (𝜋, 𝜙 𝑖 ). Since 𝐾 is finite and the state and action spaces are finite, ¯𝑟 𝑖 and ¯𝑃 𝑖 are finite sums over within-period trajectories of length 𝐾 . For a fixed within-period action sequence, the short-term action probabilities satisfy  
+
+> 𝐾 −1
+
+Ö
+
+> 𝑘 =0
+
+𝜙 1 (𝑎 𝑘 | 𝑠 𝑘 , 𝑢, 𝑘 ) −  
+
+> 𝐾 −1
+
+Ö
+
+> 𝑘 =0
+
+𝜙 2 (𝑎 𝑘 | 𝑠 𝑘 , 𝑢, 𝑘 ) ≤ 
+
+> 𝐾 −1
+
+∑︁ 
+
+> ℓ=0
+
+|𝜙 1 (𝑎 ℓ | 𝑠 ℓ , 𝑢, ℓ ) − 𝜙 2 (𝑎 ℓ | 𝑠 ℓ , 𝑢, ℓ )| .
+
+All remaining transition probabilities are bounded by one. Since the number of within-period states and actions 
+
+34 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+is finite, there exist finite constants 𝐶 𝑟 ,𝐾 and 𝐶 𝑃,𝐾 , independent of 𝑇 , such that 
+
+∥ ¯𝑟 1 − ¯𝑟 2 ∥∞ ≤ 𝐶 𝑟 ,𝐾 𝛿 𝜙 , ∥ ¯𝑃 1 − ¯𝑃 2 ∥∞ ≤ 𝐶 𝑃,𝐾 𝛿 𝜙 .
+
+Let 𝑉 𝑖 = 𝑉 𝜋, 𝜙 𝑖  
+
+> s
+
+. The long-term value equations are 
+
+𝑉 𝑖 = ¯𝑟 𝑖 + Γ ¯𝑃 𝑖 𝑉 𝑖 , 𝑖 = 1, 2.
+
+Subtracting the two equations gives 
+
+𝑉 1 − 𝑉 2 = (𝐼 − Γ ¯𝑃 1)−1{( ¯𝑟 1 − ¯𝑟 2) + Γ( ¯𝑃 1 − ¯𝑃 2)𝑉 2}.
+
+Because ∥( 𝐼 − Γ ¯𝑃 1)−1 ∥∞ ≤ ( 1 − Γ)−1 and ∥𝑉 2 ∥∞ ≤ 𝑅 𝐵 /( 1 − Γ),
+
+∥𝑉 1 − 𝑉 2 ∥∞ ≤ 11 − Γ
+
+∥ ¯𝑟 1 − ¯𝑟 2 ∥∞ + Γ∥ ¯𝑃 1 − ¯𝑃 2 ∥∞ ∥𝑉 2 ∥∞ ≤ 11 − Γ
+
+
+
+𝐶 𝑟 ,𝐾 + Γ𝑅 𝐵 
+
+1 − Γ 𝐶 𝑃,𝐾 
+
+
+
+𝛿 𝜙 .
+
+Thus there is a finite constant 𝐿 𝑉 < ∞, independent of 𝑇 , such that 
+
+∥𝑉 𝜋, 𝜙 1 
+
+> s
+
+− 𝑉 𝜋, 𝜙 2 
+
+> s
+
+∥∞ ≤ 𝐿 𝑉 𝛿 𝜙 .
+
+We now pass this bound to the short-term advantage. For 𝑖 = 1, 2, let 𝑊 𝑖,𝑘 (𝑠, 𝑢 ) be the short-term continuation value at position 𝑘 , and let 𝑄 𝑖,𝑘 (𝑠, 𝑢, 𝑎 ) be the corresponding short-term action value under (𝜋, 𝜙 𝑖 ). The terminal value is 
+
+𝑊 𝑖,𝐾 (𝑠, 𝑢 ) = Γ ∑︁ 
+
+> 𝑥 ′
+
+𝑃 s (𝑥 ′ | 𝑠, 𝑢 )𝑉 𝑖 (𝑥 ′).
+
+For 𝑘 = 0, . . . , 𝐾 − 1,
+
+𝑄 𝑖,𝑘 (𝑠, 𝑢, 𝑎 ) = 𝑟 𝑘 (𝑠, 𝑎, 𝑢 ) + ∑︁ 
+
+> 𝑠 ′
+
+𝑃 f,𝑘 (𝑠 ′ | 𝑠, 𝑎, 𝑢 )𝑊 𝑖,𝑘 +1 (𝑠 ′, 𝑢 ),
+
+and 
+
+𝑊 𝑖,𝑘 (𝑠, 𝑢 ) =∑︁ 
+
+> 𝑎
+
+𝜙 𝑖 (𝑎 | 𝑠, 𝑢, 𝑘 )𝑄 𝑖,𝑘 (𝑠, 𝑢, 𝑎 ).
+
+Let 𝑄 𝐵 = 𝐾 𝐵 + Γ𝑅 𝐵 /( 1 − Γ). Then ∥𝑄 𝑖,𝑘 ∥∞ ≤ 𝑄 𝐵 . From the terminal condition, 
+
+∥𝑊 1,𝐾 − 𝑊 2,𝐾 ∥∞ ≤ Γ∥𝑉 1 − 𝑉 2 ∥∞ ≤ Γ𝐿 𝑉 𝛿 𝜙 .
+
+35 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+For 𝑘 = 𝐾 − 1, . . . , 0,
+
+∥𝑄 1,𝑘 − 𝑄 2,𝑘 ∥∞ ≤ ∥ 𝑊 1,𝑘 +1 − 𝑊 2,𝑘 +1 ∥∞,
+
+and 
+
+∥𝑊 1,𝑘 − 𝑊 2,𝑘 ∥∞ ≤ sup 
+
+> 𝑠,𝑢
+
+∑︁ 𝑎 
+
+{𝜙 1 (𝑎 | 𝑠, 𝑢, 𝑘 ) − 𝜙 2 (𝑎 | 𝑠, 𝑢, 𝑘 )} 𝑄 1,𝑘 (𝑠, 𝑢, 𝑎 )
+
++ sup 
+
+> 𝑠,𝑢
+
+∑︁ 𝑎 
+
+𝜙 2 (𝑎 | 𝑠, 𝑢, 𝑘 ){ 𝑄 1,𝑘 (𝑠, 𝑢, 𝑎 ) − 𝑄 2,𝑘 (𝑠, 𝑢, 𝑎 )} 
+
+≤ 𝑄 𝐵 𝛿 𝜙 + ∥ 𝑄 1,𝑘 − 𝑄 2,𝑘 ∥∞.
+
+Backward induction over the finite horizon 𝐾 gives a finite constant 𝐶 𝑄,𝐾 < ∞, independent of 𝑇 , such that 
+
+max    
+
+> 0≤𝑘 ≤𝐾
+
+∥𝑊 1,𝑘 − 𝑊 2,𝑘 ∥∞ + max     
+
+> 0≤𝑘 ≤𝐾 −1
+
+∥𝑄 1,𝑘 − 𝑄 2,𝑘 ∥∞ ≤ 𝐶 𝑄,𝐾 𝛿 𝜙 .
+
+Since 𝐴 𝑖,𝑘 (𝑠, 𝑢, 𝑎 ) = 𝑄 𝑖,𝑘 (𝑠, 𝑢, 𝑎 ) − 𝑊 𝑖,𝑘 (𝑠, 𝑢 ),
+
+∥ 𝐴 𝜋, 𝜙 1 
+
+> f
+
+− 𝐴 𝜋, 𝜙 2 
+
+> f
+
+∥∞ ≤ 2𝐶 𝑄,𝐾 𝛿 𝜙 .
+
+Writing 𝐿 𝐴,𝐾 = 2𝐶 𝑄,𝐾 , we obtain 
+
+∥ 𝐴 𝜋, 𝜙 1 
+
+> f
+
+− 𝐴 𝜋, 𝜙 2 
+
+> f
+
+∥∞ ≤ 𝐿 𝐴,𝐾 ∥𝜙 1 − 𝜙 2 ∥1,∞.
+
+The constant 𝐿 𝐴,𝐾 may depend on 𝐾 , 𝐵 , Γ, the finite state and action spaces, and the transition probabilities, but not on 𝑇 .
+
+Step 3. Joint performance-difference decomposition. Fix the learning iteration 𝑡 . Let Pr ∗ and E∗ denote probability and expectation under the benchmark pair (𝜋 ∗, 𝜙 ∗). Let 𝑉 𝑡  
+
+> s
+
+= 𝑉 𝜋 𝑡 , 𝜙 𝑡 +1 
+
+> s
+
+. Since L( 𝜋 𝑡 , 𝜙 𝑡 +1) =
+
+E𝜌 0 {𝑉 𝑡  
+
+> s
+
+(𝑥 0)} ,
+
+G𝑡 = E∗
+
+"∑︁  
+
+> 𝜏 ≥0
+
+Γ𝜏 𝑅 𝜏 − 𝑉 𝑡  
+
+> s
+
+(𝑥 0)
+
+#
+
+.
+
+The discounted telescoping identity gives 
+
+E∗
+
+"∑︁  
+
+> 𝜏 ≥0
+
+Γ𝜏 𝑅 𝜏 − 𝑉 𝑡  
+
+> s
+
+(𝑥 0)
+
+#
+
+= E∗
+
+"∑︁  
+
+> 𝜏 ≥0
+
+Γ𝜏 {𝑅 𝜏 + Γ𝑉 𝑡  
+
+> s
+
+(𝑥 𝜏 +1) − 𝑉 𝑡  
+
+> s
+
+(𝑥 𝜏 )} 
+
+#
+
+.
+
+The terminal term vanishes because Γ < 1 and 𝑉 𝑡  
+
+> s
+
+is bounded. Let 𝐴 𝑡  
+
+> s
+
+and 𝐴 𝑡  
+
+> f
+
+denote the long-term and short-term advantages evaluated under the post-short-term-update pair (𝜋 𝑡 , 𝜙 𝑡 +1). Let 𝑊 𝑡 𝑘 (𝑠, 𝑢 ) be the short-term continuation value at position 𝑘 under this pair, with terminal 
+
+36 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+condition 
+
+𝑊 𝑡 𝐾 (𝑠, 𝑢 ) = Γ ∑︁ 
+
+> 𝑥 ′
+
+𝑃 s (𝑥 ′ | 𝑠, 𝑢 )𝑉 𝑡  
+
+> s
+
+(𝑥 ′).
+
+Let 𝑄 𝑡  
+
+> f,𝑘
+
+(𝑠, 𝑢, 𝑎 ) = 𝑟 𝑘 (𝑠, 𝑎, 𝑢 ) + Í𝑠 ′ 𝑃 f,𝑘 (𝑠 ′ | 𝑠, 𝑎, 𝑢 )𝑊 𝑡 𝑘 +1 (𝑠 ′, 𝑢 ), so that 𝐴 𝑡  
+
+> f
+
+(𝑠, 𝑢, 𝑘, 𝑎 ) = 𝑄 𝑡  
+
+> f,𝑘
+
+(𝑠, 𝑢, 𝑎 ) − 𝑊 𝑡 𝑘 (𝑠, 𝑢 ).Also define 
+
+𝑄 𝑡  
+
+> s
+
+(𝑥, 𝑢 ) = −𝑐 (𝑥, 𝑢 ) + ∑︁ 
+
+> 𝑠 0
+
+𝑃 init (𝑠 0 | 𝑥, 𝑢 )𝑊 𝑡  
+
+> 0
+
+(𝑠 0, 𝑢 ), 𝐴 𝑡  
+
+> s
+
+(𝑥, 𝑢 ) = 𝑄 𝑡  
+
+> s
+
+(𝑥, 𝑢 ) − 𝑉 𝑡  
+
+> s
+
+(𝑥 ).
+
+short-term-level Bellman telescoping gives, after averaging over the initialized short-term state and the short-term transitions conditional on (𝑥 𝜏 , 𝑢 𝜏 ),
+
+E∗ 𝑅 𝜏 + Γ𝑉 𝑡  
+
+> s
+
+(𝑥 𝜏 +1) − 𝑉 𝑡  
+
+> s
+
+(𝑥 𝜏 ) | 𝑥 𝜏 , 𝑢 𝜏 
+
+ = 𝐴 𝑡  
+
+> s
+
+(𝑥 𝜏 , 𝑢 𝜏 ) + E∗
+
+"𝐾 −1∑︁ 
+
+> 𝑘 =0
+
+𝐴 𝑡  
+
+> f
+
+(𝑠 𝜏,𝑘 , 𝑢 𝜏 , 𝑘, 𝑎 𝜏,𝑘 ) | 𝑥 𝜏 , 𝑢 𝜏 
+
+#
+
+.
+
+Therefore, 
+
+G𝑡 = E∗
+
+"∑︁  
+
+> 𝜏 ≥0
+
+Γ𝜏 
+
+(
+
+𝐴 𝑡  
+
+> s
+
+(𝑥 𝜏 , 𝑢 𝜏 ) +  
+
+> 𝐾 −1
+
+∑︁ 
+
+> 𝑘 =0
+
+𝐴 𝑡  
+
+> f
+
+(𝑠 𝜏,𝑘 , 𝑢 𝜏 , 𝑘, 𝑎 𝜏,𝑘 )
+
+)# 
+
+.
+
+Let 𝑑 ∗ 
+
+> s
+
+be the normalized discounted long-term occupancy under the benchmark, 
+
+𝑑 ∗ 
+
+> s
+
+(𝑥 ) = (1 − Γ)∑︁  
+
+> 𝜏 ≥0
+
+Γ𝜏 ∗
+
+Pr (𝑥 𝜏 = 𝑥 ),
+
+and let 𝑑 ∗ 
+
+> f
+
+be the benchmark occupancy over short-term decision nodes, averaged over short-term positions, 
+
+𝑑 ∗ 
+
+> f
+
+(𝑠, 𝑢, 𝑘 ) = 1 − Γ
+
+𝐾 ∑︁ 𝜏 ≥0
+
+Γ𝜏 ∗
+
+Pr (𝑠 𝜏,𝑘 = 𝑠, 𝑢 𝜏 = 𝑢 ).
+
+For any long-term action distribution 𝛼 and any long-term function ℎ, define 
+
+⟨ℎ, 𝛼 − 𝜋 𝑡 ⟩s =∑︁ 
+
+> 𝑥
+
+𝑑 ∗ 
+
+> s
+
+(𝑥 )∑︁ 
+
+> 𝑢
+
+{𝛼 (𝑢 | 𝑥 ) − 𝜋 𝑡 (𝑢 | 𝑥 )} ℎ(𝑥, 𝑢 ).
+
+For any short-term action distribution 𝛼 and any short-term function 𝐻 , define 
+
+⟨𝐻, 𝛼 − 𝜙 ⟩f =∑︁ 
+
+> 𝑠,𝑢,𝑘
+
+𝑑 ∗ 
+
+> f
+
+(𝑠, 𝑢, 𝑘 )∑︁ 
+
+> 𝑎
+
+{𝛼 (𝑎 | 𝑠, 𝑢, 𝑘 ) − 𝜙 (𝑎 | 𝑠, 𝑢, 𝑘 )} 𝐻 (𝑠, 𝑢, 𝑘, 𝑎 ).
+
+At each long-term state, Í𝑢 𝜋 𝑡 (𝑢 | 𝑥 ) 𝐴 𝑡  
+
+> s
+
+(𝑥, 𝑢 ) = 0. At each short-term decision node, Í𝑎 𝜙 𝑡 +1 (𝑎 |
+
+37 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+𝑠, 𝑢, 𝑘 ) 𝐴 𝑡  
+
+> f
+
+(𝑠, 𝑢, 𝑘, 𝑎 ) = 0. Hence 
+
+E𝑢 ∼ 𝜋 ∗ (· | 𝑥 ) 𝐴 𝑡  
+
+> s
+
+(𝑥, 𝑢 ) =∑︁ 
+
+> 𝑢
+
+{𝜋 ∗ (𝑢 | 𝑥 ) − 𝜋 𝑡 (𝑢 | 𝑥 )} 𝐴 𝑡  
+
+> s
+
+(𝑥, 𝑢 ),
+
+and 
+
+E𝑎 ∼𝜙 ∗ (· | 𝑠,𝑢,𝑘 ) 𝐴 𝑡  
+
+> f
+
+(𝑠, 𝑢, 𝑘, 𝑎 ) =∑︁ 
+
+> 𝑎
+
+{𝜙 ∗ (𝑎 | 𝑠, 𝑢, 𝑘 ) − 𝜙 𝑡 +1 (𝑎 | 𝑠, 𝑢, 𝑘 )} 𝐴 𝑡  
+
+> f
+
+(𝑠, 𝑢, 𝑘, 𝑎 ).
+
+Using the definitions of 𝑑 ∗ 
+
+> s
+
+and 𝑑 ∗ 
+
+> f
+
+,
+
+G𝑡 = 11 − Γ 𝐴 𝑡 
+
+> s
+
+, 𝜋 ∗ − 𝜋 𝑡 s + 𝐾 
+
+1 − Γ 𝐴 𝑡  
+
+> f
+
+, 𝜙 ∗ − 𝜙 𝑡 +1 f .
+
+Using 𝑔 s 
+
+> 𝑡
+
+= 𝐴 𝑡 
+
+> s
+
+/( 1 − Γ), 𝑔 f 
+
+> 𝑡 ,𝑀
+
+= 𝐴 𝑡  
+
+> f
+
+, and 𝜙 𝑡 ,𝑀 = 𝜙 𝑡 +1, we obtain 
+
+G𝑡 = 𝑔 s 
+
+> 𝑡
+
+, 𝜋 ∗ − 𝜋 𝑡 s + 𝐾 
+
+1 − Γ 𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f .
+
+Step 4. Long-term and short-term KL drift. Define 
+
+Φ(𝜋, 𝜙 ) = KL 𝑑 ∗ 
+
+> s
+
+(𝜋 ∗ ∥𝜋 ) + KL 𝑑 ∗ 
+
+> f
+
+(𝜙 ∗ ∥𝜙 ), Φ𝑡 = Φ (𝜋 𝑡 , 𝜙 𝑡 ).
+
+The one-period drift is 
+
+Φ𝑡 +1 − Φ𝑡 = {Φ(𝜋 𝑡 +1, 𝜙 𝑡 +1) − Φ(𝜋 𝑡 , 𝜙 𝑡 +1)} + { Φ(𝜋 𝑡 , 𝜙 𝑡 +1) − Φ(𝜋 𝑡 , 𝜙 𝑡 )} .
+
+Applying the one-step inequality to the long-term update and averaging under 𝑑 ∗ 
+
+> s
+
+gives 
+
+Φ(𝜋 𝑡 +1, 𝜙 𝑡 +1) − Φ(𝜋 𝑡 , 𝜙 𝑡 +1) ≤ − 𝜂 s 𝑔 s 
+
+> 𝑡
+
+, 𝜋 ∗ − 𝜋 𝑡 s + 𝜂 2s 𝐺 2s
+
+2 .
+
+Using the decomposition from Step 3, 
+
+Φ(𝜋 𝑡 +1, 𝜙 𝑡 +1) − Φ(𝜋 𝑡 , 𝜙 𝑡 +1) ≤ − 𝜂 sG𝑡 + 𝜂 s
+
+𝐾 
+
+1 − Γ 𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f + 𝜂 2s 𝐺 2s
+
+2 .
+
+For the short-term updates, summing the one-step inequality over 𝑚 = 0, . . . , 𝑀 − 1 gives 
+
+Φ(𝜋 𝑡 , 𝜙 𝑡 +1) − Φ(𝜋 𝑡 , 𝜙 𝑡 ) ≤ − 𝜂 f 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑚 =0
+
+𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f + 𝑀𝜂 2f 𝐺 2f
+
+2 .
+
+38 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+The movement bound gives ∥𝜙 𝑡 ,𝑚 +1 − 𝜙 𝑡 ,𝑚 ∥1,∞ ≤ 𝐵 f 𝜂 f . Hence, for any 𝑚 ≤ 𝑀 ,
+
+∥𝜙 𝑡 ,𝑀 − 𝜙 𝑡 ,𝑚 ∥1,∞ ≤ 
+
+> 𝑀 −1
+
+∑︁ 
+
+> ℓ=𝑚
+
+∥𝜙 𝑡 ,ℓ +1 − 𝜙 𝑡 ,ℓ ∥1,∞ ≤ ( 𝑀 − 𝑚 )𝐵 f 𝜂 f .
+
+Step 5. Synchronization and residual control. Impose the synchronization condition 𝑀𝜂 f = {𝐾 /( 1 − Γ)} 𝜂 s.Combining the long-term and short-term drift bounds from Step 4 gives 
+
+Φ𝑡 +1 − Φ𝑡 ≤ − 𝜂 sG𝑡 + 𝜂 2s 𝐺 2s
+
+2 + 𝑀𝜂 2f 𝐺 2f
+
+2 + 𝜂 s
+
+𝐾 
+
+1 − Γ 𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f − 𝜂 f 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑚 =0
+
+𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f .
+
+Since 𝑀𝜂 f = {𝐾 /( 1 − Γ)} 𝜂 s,
+
+𝜂 s
+
+𝐾 
+
+1 − Γ 𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f = 𝜂 f 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑚 =0
+
+𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f .
+
+Thus the remaining short-term first-order term is the residual 
+
+R𝑡 = 𝜂 f 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑚 =0
+
+h
+
+𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f − 𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f
+
+i
+
+.
+
+For a fixed 𝑚 , add and subtract ⟨𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 ⟩f . Then 
+
+𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f − 𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f ≤ 𝑔 f 
+
+> 𝑡 ,𝑀
+
+− 𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f + 𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 𝑡 ,𝑚 − 𝜙 𝑡 ,𝑀 f .
+
+By Step 2 and the movement bound, 
+
+∥𝑔 f 
+
+> 𝑡 ,𝑀
+
+− 𝑔 f 
+
+> 𝑡 ,𝑚
+
+∥∞ = ∥ 𝐴 𝜋 𝑡 , 𝜙 𝑡,𝑀  
+
+> f
+
+− 𝐴 𝜋 𝑡 , 𝜙 𝑡,𝑚  
+
+> f
+
+∥∞ ≤ 𝐿 𝐴,𝐾 ∥𝜙 𝑡 ,𝑀 − 𝜙 𝑡 ,𝑚 ∥1,∞ ≤ 𝐿 𝐴,𝐾 (𝑀 − 𝑚 )𝐵 f 𝜂 f .
+
+Since ∥𝜙 ∗ − 𝜙 𝑡 ,𝑚 ∥1 ≤ 2 at each short-term decision node, 
+
+𝑔 f 
+
+> 𝑡 ,𝑀
+
+− 𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f ≤ 2𝐿 𝐴,𝐾 (𝑀 − 𝑚 )𝐵 f 𝜂 f .
+
+The second term is bounded by ∥𝑔 f 
+
+> 𝑡 ,𝑀
+
+∥∞ ≤ 𝐺 f and the movement bound, 
+
+𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 𝑡 ,𝑚 − 𝜙 𝑡 ,𝑀 f ≤ 𝐺 f (𝑀 − 𝑚 )𝐵 f 𝜂 f .
+
+39 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+Therefore, 
+
+𝑔 f 
+
+> 𝑡 ,𝑀
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑀 f − 𝑔 f
+
+> 𝑡 ,𝑚
+
+, 𝜙 ∗ − 𝜙 𝑡 ,𝑚 f ≤ 𝐵 f (2𝐿 𝐴,𝐾 + 𝐺 f )( 𝑀 − 𝑚 )𝜂 f .
+
+Summing over 𝑚 ,
+
+|R 𝑡 | ≤ 𝜂 f 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑚 =0
+
+𝐵 f (2𝐿 𝐴,𝐾 + 𝐺 f )( 𝑀 − 𝑚 )𝜂 f ≤ 𝐵 f (2𝐿 𝐴,𝐾 + 𝐺 f )𝑀 2𝜂 2f =
+
+ 𝐾 
+
+1 − Γ
+
+2
+
+𝐵 f (2𝐿 𝐴,𝐾 + 𝐺 f )𝜂 2s .
+
+The short-term second-order term satisfies 
+
+𝑀𝜂 2f 𝐺 2f
+
+2 =
+
+ 𝐾 
+
+1 − Γ
+
+2 𝜂 2s 𝐺 2f
+
+2𝑀 .
+
+Taking expectation if the update contains external randomness, 
+
+E[Φ𝑡 +1 − Φ𝑡 ] ≤ − 𝜂 sE[G 𝑡 ] + 𝐶 1𝜂 2s ,
+
+where one valid finite constant is 
+
+𝐶 1 = 𝐺 2s
+
+2 +
+
+ 𝐾 
+
+1 − Γ
+
+2 𝐺 2f
+
+2𝑀 +
+
+ 𝐾 
+
+1 − Γ
+
+2
+
+𝐵 f (2𝐿 𝐴,𝐾 + 𝐺 f ).
+
+The constant 𝐶 1 may depend on 𝐾 , 𝑀 , Γ, 𝐵 , the finite state and action spaces, the transition probabilities, and 
+
+𝐿 𝐴,𝐾 , but not on 𝑇 . Since the state component 𝑍 𝑡 can affect rewards, feasible actions, and transition probabilities, shocks enter 𝐶 1 through these fixed problem quantities. 
+
+Step 6. Telescoping the drift. Rearranging the drift inequality gives 
+
+𝜂 sE[G 𝑡 ] ≤ E[Φ𝑡 ] − E[Φ𝑡 +1] + 𝐶 1𝜂 2s .
+
+Summing over 𝑡 = 0, . . . , 𝑇 − 1,
+
+𝜂 s 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ E[Φ0] − E[Φ𝑇 ] + 𝑇𝐶 1𝜂 2s .
+
+Since Φ𝑇 ≥ 0,
+
+𝜂 s 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ Φ0 + 𝑇𝐶 1𝜂 2s .
+
+40 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+Let 𝐶 0 = Φ 0. Dividing by 𝑇𝜂 s gives 
+
+1
+
+𝑇  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ 𝐶 0
+
+𝑇𝜂 s
+
++ 𝐶 1𝜂 s.
+
+With 𝜂 s = 𝑇 −1/2,
+
+1
+
+𝑇  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ 𝐶 0 + 𝐶 1
+
+√𝑇 .
+
+Since 𝐶 0 and 𝐶 1 are finite and independent of 𝑇 , the claimed bound follows. □
+
+# S2 Proof of Theorem 2 
+
+Proof of Theorem 2. The proof refines the drift bound from Theorem 1 using Assumption 4. Let 
+
+Δ𝑡 = E[Φ(𝜋 𝑡 , 𝜙 𝑡 )] , ¯G𝑡 = E[G 𝑡 ].
+
+The proof of Theorem 1 applies to time-varying learning rates when the synchronization condition is imposed at every long-term period as 𝑀𝜂 f,𝑡 = {𝐾 /( 1 − Γ)} 𝜂 s,𝑡 . Hence there is a finite constant 𝐶 1, independent of 𝑡 and 𝑇 ,such that 
+
+Δ𝑡 +1 ≤ Δ𝑡 − 𝜂 s,𝑡 ¯G𝑡 + 𝐶 1𝜂 2s,𝑡 .
+
+Step 1. Relate the post-short-term-update gap to Assumption 4. Assumption 4 applies to the pair (𝜋 𝑡 , 𝜙 𝑡 ),while G𝑡 is evaluated at (𝜋 𝑡 , 𝜙 𝑡 +1). We first control this difference. By the finite-horizon variation argument in the proof of Theorem 1, there exists a finite constant 𝐿 L,𝐾 ,independent of 𝑇 , such that for any long-term policy 𝜋 and any two short-term policies 𝜙 1, 𝜙 2,
+
+|L( 𝜋, 𝜙 1) − L( 𝜋, 𝜙 2)| ≤ 𝐿 L,𝐾 ∥𝜙 1 − 𝜙 2 ∥1,∞.
+
+The short-term movement bound from Theorem 1 gives ∥𝜙 𝑡 +1 − 𝜙 𝑡 ∥1,∞ ≤ 𝑀 𝐵 f 𝜂 f,𝑡 = 𝐾  
+
+> 1−Γ
+
+𝐵 f 𝜂 s,𝑡 , and therefore, 
+
+|L( 𝜋 𝑡 , 𝜙 𝑡 ) − L( 𝜋 𝑡 , 𝜙 𝑡 +1)| ≤ 𝐿 L,𝐾 
+
+𝐾 
+
+1 − Γ 𝐵 f 𝜂 s,𝑡 .
+
+Let 𝑐 𝐾 = 𝐿 L,𝐾 {𝐾 /( 1 − Γ)} 𝐵 f . Then 
+
+L( 𝜋 𝑡 , 𝜙 𝑡 ) − L( 𝜋 𝑡 , 𝜙 𝑡 +1) ≥ − 𝑐 𝐾 𝜂 s,𝑡 .
+
+41 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+Adding and subtracting L( 𝜋 𝑡 , 𝜙 𝑡 ),
+
+G𝑡 = L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 +1) = {L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 )} + {L( 𝜋 𝑡 , 𝜙 𝑡 ) − L( 𝜋 𝑡 , 𝜙 𝑡 +1)} ≥ {L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 )} − 𝑐 𝐾 𝜂 s,𝑡 .
+
+As Assumption 4 gives L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 ) ≥ 𝜇 Φ(𝜋 𝑡 , 𝜙 𝑡 ), taking expectations, 
+
+¯G𝑡 ≥ 𝜇 Δ𝑡 − 𝑐 𝐾 𝜂 s,𝑡 .
+
+Step 2. Convert the drift into a contraction. Substituting the lower bound on ¯G𝑡 into the drift inequality gives 
+
+Δ𝑡 +1 ≤ Δ𝑡 − 𝜂 s,𝑡 {𝜇 Δ𝑡 − 𝑐 𝐾 𝜂 s,𝑡 } + 𝐶 1𝜂 2s,𝑡 = (1 − 𝜇𝜂 s,𝑡 )Δ𝑡 + ( 𝐶 1 + 𝑐 𝐾 )𝜂 2s,𝑡 .
+
+Let 𝐶 ′ = 𝐶 1 + 𝑐 𝐾 . Then 
+
+Δ𝑡 +1 ≤ ( 1 − 𝜇𝜂 s,𝑡 )Δ𝑡 + 𝐶 ′𝜂 2s,𝑡 .
+
+Step 3. Bound the policy distance. Choose 𝜂 s,𝑡 = 2/{ 𝜇 (𝑡 + 𝑡 0)} , where 𝑡 0 ≥ 2 is large enough so that the learning rates stay in the step size range used in the proof of Theorem 1. Let 
+
+𝜈 ≥ max 
+
+
+
+𝑡 0Δ0, 4𝐶 ′
+
+𝜇 2
+
+
+
+.
+
+We prove by induction that Δ𝑡 ≤ 𝜈 /( 𝑡 + 𝑡 0) for every 𝑡 ≥ 0. The claim holds at 𝑡 = 0 by the choice of 𝜈 . Suppose it holds at time 𝑡 , and set 𝑛 = 𝑡 + 𝑡 0. Since 𝑛 ≥ 2,
+
+Δ𝑡 +1 ≤
+
+
+
+1 − 2
+
+𝑛 
+
+ 𝜈 𝑛 + 𝐶 ′ 4
+
+𝜇 2𝑛 2 ≤ 𝜈 (𝑛 − 2)
+
+𝑛 2 + 𝜈 𝑛 2 = 𝜈 (𝑛 − 1)
+
+𝑛 2 .
+
+Since (𝑛 − 1)/ 𝑛 2 ≤ 1/( 𝑛 + 1), we obtain 
+
+Δ𝑡 +1 ≤ 𝜈 𝑛 + 1 = 𝜈 𝑡 + 1 + 𝑡 0
+
+.
+
+Thus Δ𝑡 = 𝑂 (1/( 𝑡 + 𝑡 0)) .
+
+Step 4. Sum the performance gaps. Return to the drift inequality Δ𝑡 +1 ≤ Δ𝑡 − 𝜂 s,𝑡 ¯G𝑡 + 𝐶 1𝜂 2s,𝑡 . Rearranging, we have 
+
+¯G𝑡 ≤ Δ𝑡 − Δ𝑡 +1
+
+𝜂 s,𝑡 
+
++ 𝐶 1𝜂 s,𝑡 .
+
+42 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+Using 𝜂 s,𝑡 = 2/{ 𝜇 (𝑡 + 𝑡 0)} ,
+
+¯G𝑡 ≤ 𝜇 (𝑡 + 𝑡 0)
+
+2 (Δ𝑡 − Δ𝑡 +1) + 2𝐶 1
+
+𝜇 (𝑡 + 𝑡 0) .
+
+Summing over 𝑡 = 0, . . . , 𝑇 − 1, 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+¯G𝑡 ≤ 𝜇 
+
+2 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+(𝑡 + 𝑡 0)( Δ𝑡 − Δ𝑡 +1) + 2𝐶 1
+
+𝜇  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+1
+
+𝑡 + 𝑡 0
+
+.
+
+The weighted telescoping sum satisfies  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+(𝑡 + 𝑡 0)( Δ𝑡 − Δ𝑡 +1) = 𝑡 0Δ0 + 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =1
+
+Δ𝑡 − ( 𝑇 − 1 + 𝑡 0)Δ𝑇 .
+
+Since Δ𝑇 ≥ 0, 𝑇 −1∑︁ 
+
+> 𝑡 =0
+
+(𝑡 + 𝑡 0)( Δ𝑡 − Δ𝑡 +1) ≤ 𝑡 0Δ0 + 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =1
+
+Δ𝑡 .
+
+Using the bound from Step 3, 𝑇 −1∑︁ 
+
+> 𝑡 =1
+
+Δ𝑡 ≤ 𝜈  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =1
+
+1
+
+𝑡 + 𝑡 0
+
+.
+
+Therefore, 𝑇 −1∑︁ 
+
+> 𝑡 =0
+
+¯G𝑡 ≤ 𝜇𝑡 0
+
+2 Δ0 +
+
+ 𝜇𝜈 
+
+2 + 2𝐶 1
+
+𝜇 
+
+ 𝑇 −1∑︁ 
+
+> 𝑡 =0
+
+1
+
+𝑡 + 𝑡 0
+
+.
+
+The harmonic sum is bounded by a logarithm. Since 𝑡 0 is fixed with respect to 𝑇 , there is a finite constant 𝐶 2,independent of 𝑇 , such that for every 𝑇 ≥ 2, 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+¯G𝑡 ≤ 𝐶 2 log 𝑇 𝜇 .
+
+Dividing by 𝑇 gives 
+
+1
+
+𝑇  
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+E[G 𝑡 ] ≤ 𝐶 2 log 𝑇 𝜇𝑇 .
+
+This proves the accelerated average-gap bound. □
+
+# S3 Used-Car Case Study Details 
+
+This section reports implementation details for the used-car inventory–pricing case study in the main text. 
+
+43 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+S3.1 Simulation Environment Properties 
+
+Table S1 summarizes the customer attributes used in the simulation model. Preferred class and budget capture heterogeneity in vehicle fit and affordability, while price sensitivity and urgency determine how customers respond to prices and time pressure. Seasonal adjustments allow the customer population to evolve over operating periods, making demand nonstationary within the simulation experiments. 
+
+Table S1: Customer attributes in the demand model. 
+
+Attribute Distribution / Definition Interpretation 
+
+Preferred class Categorical over budget, mid-range, and pre-mium, with seasonally varying class shares Captures differences in customers’ vehicle-class preferences. Budget 𝑏 𝑖 𝑏 𝑖 ∼ Uniform (𝐵 min  
+
+> 𝑐
+
+, 𝐵 max  
+
+> 𝑐
+
+), with class-specific ranges of $8,000–$16,000 for bud-get, $15,000–$28,000 for mid-range, and $25,000–$50,000 for premium Represents affordability constraints that vary by customer segment and vehicle class. Price sensitivity 𝛽 𝑖 Baseline sensitivity 𝛽 (0) 
+
+> 𝑖
+
+∼ Beta (1.5, 1.5),adjusted seasonally as 
+
+𝛽 𝑖 = clip 
+
+
+
+𝛽 (0) 
+
+> 𝑖
+
+− 0.15 sin (𝜗 𝑡 ), 0, 1
+
+
+
+Controls how strongly purchase propensity de-clines as price rises above the reference level. Customers become less price-sensitive during peak-season periods and more price-sensitive during low-season periods. Urgency 𝜁 𝑖 Baseline urgency 𝜁 (0) 
+
+> 𝑖
+
+∼ Beta (2, 5), ad-justed seasonally as 
+
+𝜁 𝑖 = clip 
+
+
+
+𝜁 (0) 
+
+> 𝑖
+
++ 0.10 sin (𝜗 𝑡 ), 0, 1
+
+
+
+Captures time pressure or immediacy of need. Higher urgency increases purchase propensity at a given price. 
+
+We translate these attributes into purchase probabilities using a reduced-form binary logit specification, consistent with logit-based demand models in discrete-choice and inventory-pricing research (Pérez and López-Ospina, 2022; Meza et al., 2024). The utility index combines class fit, reference-price sensitivity, an asymmetric penalty when the posted price exceeds the customer’s budget, and urgency. The reference-price component is motivated by prior research on reference-dependent choice (Caputo et al., 2020; Wang et al., 2025b). The probability that customer 𝑖 purchases vehicle class 𝑐 at posted price 𝑝 𝑐 is 
+
+𝑃 (buy ) = 𝜎 𝛼 0 + 𝛼 fit − 𝛽 eff 
+
+𝑝 𝑐 − 𝑝 ref 
+
+𝑝 ref 
+
+− 𝛾 max 
+
+
+
+0, 𝑝 𝑐 − 𝑏 𝑖 
+
+𝑝 ref 
+
+
+
++ 𝛿𝜁 𝑖 
+
+!
+
+, (S1) where 𝜎 (·) is the logistic sigmoid, 𝛼 0 is a baseline intercept, 𝛼 fit captures match quality between the customer’s preferred class and the offered vehicle class, 𝛽 eff = 𝛽 𝑖 (1 − 𝜒𝜁 𝑖 ) adjusts price sensitivity downward as urgency increases, 𝛾 penalizes prices exceeding the customer’s budget 𝑏 𝑖 , 𝛿 captures the direct positive effect of urgency on purchase likelihood, and 𝑝 ref is the segment-specific reference price used to normalize deviations. These 
+
+44 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+coefficients are modeling assumptions and are used across all policy comparisons. Equation (S1) captures four effects: a preference-match bonus when the offer aligns with the customer’s preferred class (Pérez and López-Ospina, 2022); a reference-price penalty when the posted price exceeds 𝑝 ref 
+
+(Caputo et al., 2020; Wang et al., 2025b); a soft affordability penalty when the posted price exceeds 𝑏 𝑖 (Meza et al., 2024); and an urgency effect that increases transaction propensity while compressing price sensitivity (den Boer and Keskin, 2022; Xu et al., 2023). The urgency–sensitivity interaction is a reduced-form specification consistent with empirical evidence that time-pressured buyers are less price-responsive (Ngo et al., 2024; Silalahi et al., 2025). We treat 𝜒 as a calibrated modeling parameter. 
+
+S3.2 Market Primitives and Customer Demand 
+
+The retailer sells three vehicle classes C = {budget , mid , premium }. Each class 𝑐 has acquisition cost 𝑤 𝑐 ,per-period holding cost ℎ𝑐 , and admissible selling-price range [ 𝑝 min  
+
+> 𝑐
+
+, 𝑝 max  
+
+> 𝑐
+
+]. The baseline parameterization is summarized in Table S2. 
+
+Table S2: Vehicle class parameters used in the case study. 
+
+Class Acquisition cost 𝑤 𝑐 Holding cost ℎ𝑐 / period Price range [ 𝑝 min  
+
+> 𝑐
+
+, 𝑝 max  
+
+> 𝑐
+
+]
+
+Budget $8,000 $200 [$10,000, $15,000] Mid-range $15,000 $400 [$18,000, $25,000] Premium $25,000 $600 [$30,000, $40,000] 
+
+Seasonal arrivals. Customer volume follows a seasonal arrival process with a 52-period cycle. For each class 
+
+𝑐 , define 
+
+𝑚 𝑐,𝑡 = max 
+
+n
+
+𝜀, 1 + 𝑎 𝑐  
+
+> 1
+
+sin (𝜗 𝑡 ) + 𝑏 𝑐  
+
+> 1
+
+cos (𝜗 𝑡 ) + 𝑎 𝑐  
+
+> 2
+
+sin (2𝜗 𝑡 ) + 𝑏 𝑐  
+
+> 2
+
+cos (2𝜗 𝑡 )
+
+o
+
+, 𝜗 𝑡 = 2𝜋𝑡 
+
+52 ,
+
+where 𝜀 > 0 prevents degenerate zero-demand periods. Let 𝜋 0 
+
+> 𝑐
+
+be the baseline class-share vector. The aggregate seasonal multiplier is ¯𝑚 𝑡 = Í𝑐 ∈ C 𝜋 0 
+
+> 𝑐
+
+𝑚 𝑐,𝑡 . Given a base arrival rate ¯𝑁 , the number of customers in period 
+
+𝑡 is 𝑁 𝑡 = max {𝑁 min , ⌊ ¯𝑁 ¯𝑚 𝑡 ⌉} . Conditional on 𝑁 𝑡 , customer preferred classes are sampled with probabilities proportional to 𝜋 0 
+
+> 𝑐
+
+𝑚 𝑐,𝑡 and then normalized across classes. 
+
+Customer attributes. Each arriving customer 𝑖 has a preferred class 𝑐 𝑖 , budget 𝑏 𝑖 , price-sensitivity score 𝛽 𝑖 ,and urgency score 𝜁 𝑖 . Budgets are sampled from class-specific ranges: 
+
+𝑏 𝑖 ∼ Uniform (𝐵 min  
+
+> 𝑐 𝑖
+
+, 𝐵 max  
+
+> 𝑐 𝑖
+
+),
+
+45 Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+with default ranges $8,000–$16,000 for budget customers, $15,000–$28,000 for mid-range customers, and $25,000–$50,000 for premium customers. Price sensitivity is generated from a Beta-distributed baseline score and mapped to a calibrated sensitivity range: 
+
+˜𝛽 𝑖 ∼ Beta (𝑎 𝛽 , 𝑏 𝛽 ), 𝛽 𝑖 = 𝛽 min + ( 𝛽 max − 𝛽 min )clip { ˜𝛽 𝑖 − 0.15 sin (𝜗 𝑡 ), 0, 1}.
+
+Urgency is generated as 
+
+˜𝜁 𝑖 ∼ Beta (2, 5), 𝜁 𝑖 = clip { ˜𝜁 𝑖 + 0.10 sin (𝜗 𝑡 ), 0, 1}.
+
+Thus, customers are less price-sensitive and more urgent during high-season periods, and more price-sensitive and less urgent during low-season periods. 
+
+Purchase probability. Purchase probabilities follow Equation (S1) . If the preferred class is unavailable, the customer may substitute toward available nearby classes, with stronger substitution between adjacent classes. The realized purchase is generated by comparing the purchase probability against an exogenous uniform random draw. 
+
+S3.3 Inventory Pipeline, Profit, and Rewards 
+
+Inventory dynamics. At the beginning of period 𝑡 , the replenishment policy selects a class-specific target inventory position 𝑆 𝑐,𝑡 . The inventory position is 
+
+IP 𝑐,𝑡 = 𝐼 oh  
+
+> 𝑐,𝑡
+
++ 𝐼 oo  
+
+> 𝑐,𝑡
+
+,
+
+where 𝐼 oh  
+
+> 𝑐,𝑡
+
+is on-hand inventory and 𝐼 oo  
+
+> 𝑐,𝑡
+
+is in-transit inventory. The order quantity is 
+
+𝑞 𝑐,𝑡 = max {0, 𝑆 𝑐,𝑡 − IP 𝑐,𝑡 }.
+
+Orders enter a replenishment pipeline and arrive after lead time 𝐿 . Until delivery, in-transit inventory is observed by the long-term policy through IP 𝑐,𝑡 but is not available for sale. Within each period, events unfold in the following order: 1. Orders scheduled to arrive in period 𝑡 are added to on-hand inventory. 2. The long-term replenishment policy observes the period-level state and selects targets 𝑆 𝑐,𝑡 .3. Replenishment orders 𝑞 𝑐,𝑡 enter the pipeline. 4. Customers arrive sequentially. For each arrival, the short-term pricing policy posts prices, the demand model 
+
+> 46 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+determines whether a sale occurs, and completed sales deplete on-hand inventory. 5. Holding costs, ordering costs, and lost-sale penalties are assessed at the end of the period. This sequence makes the long-term policy commit to replenishment before observing realized demand in the current period. The long-term policy therefore learns to anticipate near-term demand from lagged signals such as prior sales, conversion rates, and the seasonal demand indicator, rather than reacting to current-period demand directly. 
+
+Profit. Let S𝑐,𝑡 be the set of sold class-𝑐 vehicles in period 𝑡 , and let 𝑝 𝑖 be the transaction price of sold vehicle 
+
+𝑖 . Period profit is 
+
+Π𝑡 =∑︁ 
+
+> 𝑐 ∈ C
+
+∑︁ 𝑖 ∈ S 𝑐,𝑡 
+
+( 𝑝 𝑖 − 𝑤 𝑐 ) − ∑︁ 
+
+> 𝑐 ∈ C
+
+ℎ𝑐 𝐼 + 
+
+> 𝑐,𝑡
+
+− 𝐹 1
+
+(∑︁ 
+
+> 𝑐 ∈ C
+
+𝑞 𝑐,𝑡 > 0
+
+)
+
+−∑︁ 
+
+> 𝑐 ∈ C
+
+𝜆 𝑐 ℓ𝑐,𝑡 .
+
+Here 𝐼 + 
+
+> 𝑐,𝑡
+
+is post-sales on-hand inventory, 𝐹 is the fixed ordering cost incurred whenever at least one order is placed, and 𝜆 𝑐 ℓ𝑐,𝑡 is the lost-sale penalty for unserved class-𝑐 demand. Acquisition cost is charged when a vehicle is sold rather than when it is ordered, which keeps realized period profit aligned with realized sales and avoids large procurement outflows dominating the learning signal before the corresponding inventory can generate revenue. 
+
+Long-term-policy reward. The long-term policy receives normalized period profit, 𝑟 LT  
+
+> 𝑡
+
+= Π 𝑡 /𝜅 , where 𝜅 is a numerical scaling constant. The normalization is used only for PPO training stability. All reported results use unnormalized dollar-denominated profit Π𝑡 .
+
+Short-term-policy reward. The short-term policy acts at the customer-arrival timescale. Its dense shaping reward for customer interaction 𝑛 is 
+
+𝑟 ST  
+
+> 𝑛
+
+= ( 𝑝 𝑐 − 𝑤 𝑐 )1{sale } − 𝜆 𝐼 ∑︁ 
+
+> 𝑐 ∈ C
+
+ℎ𝑐 
+
+𝑁 𝑡 
+
+𝐼 𝑐 − 𝜆 lost 1{stockout }.
+
+The first term rewards realized margin, the second amortizes period holding cost into a customer-arrival inventory-pressure signal, and the third penalizes failed sales when the relevant class is unavailable. This reward is not added to the long-term reward. It is a dense shaping signal used to guide within-period pricing, while the reported economic outcome remains period profit Π𝑡 .
+
+> 47 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+S3.4 Factorial Design and Policy Contrasts 
+
+Using the four policies, we interpret performance differences through a 2 × 2 design over the replenishment and pricing layers. This design links each comparison to the value of RL pricing, the value of RL replenishment, and the additional value created when both layers are learned jointly. Let 𝑃 (·) denote mean profit over a given analysis window. The average gain from RL pricing, averaging over the two replenishment policies, is 
+
+Δpricing = 12 [𝑃 (OUL +RL ) − 𝑃 (OUL +Fixed ) + 𝑃 (HRL ) − 𝑃 (RL +Fixed )] .
+
+The average gain from RL replenishment, averaging over the two pricing policies, is 
+
+Δreplen = 12 [𝑃 (RL +Fixed ) − 𝑃 (OUL +Fixed ) + 𝑃 (HRL ) − 𝑃 (OUL +RL )] .
+
+The interaction contrast is 
+
+Δcoord = 𝑃 (HRL ) − 𝑃 (OUL +RL ) − 𝑃 (RL +Fixed ) + 𝑃 (OUL +Fixed ).
+
+A positive Δcoord indicates that the gain from adapting one layer is larger when the other layer is also adaptive. 
+
+S3.5 Shock Schedules and Common Random Numbers 
+
+The experiments combine two disruption channels, supply and demand. Each channel can be inactive or active, giving the four shock settings in the main paper: no shocks, supply-only shocks, demand-only shocks, and joint demand–supply shocks. 
+
+Supply shocks. During a supply shock, fulfilled orders are reduced before entering the pipeline. In the fractional-cap version, 
+
+𝑞 ful  
+
+> 𝑐,𝑡
+
+=  𝑓 𝑐,𝑡 𝑞 𝑐,𝑡 
+
+ , 𝑓 𝑐,𝑡 ∈ ( 0, 1].
+
+The symmetric version uses a shared fulfillment fraction across classes. The asymmetric version assigns class-specific fulfillment fractions, for example from a fixed set such as {0.1, 0.5, 0.8}, and permutes the assignment across shock events. This creates uneven scarcity across vehicle classes. Supply shocks may also increase lead times by drawing realized lead times from a wider shock-specific range. 
+
+> 48 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+Demand shocks. During a demand shock, the customer count in period 𝑡 is multiplied by an event-specific demand factor 𝑚 𝑑,𝑡 :
+
+𝑁 shock  
+
+> 𝑡
+
+= max {𝑁 min , ⌊𝑚 𝑑,𝑡 𝑁 𝑡 ⌉} .
+
+Values 𝑚 𝑑,𝑡 > 1 represent demand surges, and values 𝑚 𝑑,𝑡 < 1 represent demand contractions. Demand shocks also reweight the class mix of arrivals, so different events emphasize different vehicle segments. 
+
+Timing and observability. Shocks are exogenous and are not observed before they occur. Once a shock is realized, its effects become visible through the operating state. Supply shocks appear through realized fulfillment, pipeline delays, and inventory availability. Demand shocks appear through realized customer volume, class mix, and conversion behavior. Thus, the first affected period cannot be anticipated mechanically, but later decisions can adapt to the realized operating condition. 
+
+Common random numbers. All policies are evaluated using common random numbers. For each seed, the simulator generates the same customer arrivals, customer attributes, purchase draws, shock realizations, and fulfillment randomness across all four policies. The only difference is the policy. This paired design reduces sampling noise and supports within-seed comparisons of period profit, disruption response, and coordination effects. 
+
+S3.6 Policies and Training Protocol 
+
+OUL+Fixed. The non-learning benchmark combines an order-up-to-level replenishment rule with fixed-markup pricing. For each class 𝑐 , the OUL target is computed from estimated period demand, lead time, and a target service level: 
+
+𝑆 OUL  
+
+> 𝑐,𝑡
+
+= b𝐷 𝑐,𝑡 (𝑅 + b𝐿 ) + 𝑧 𝛼 b𝜎 𝑐,𝑡 √︁ 𝑅 + b𝐿, 
+
+where 𝑅 is the review period, b𝐷 𝑐,𝑡 is a moving-average estimate of demand per period, b𝜎 𝑐,𝑡 is the corresponding demand-variability estimate, and 𝑧 𝛼 is the safety factor for the target service level. Fixed prices are set at a 30% markup over acquisition cost and clipped to the feasible price range. 
+
+OUL+RL. OUL+RL keeps the OUL replenishment rule but replaces fixed pricing with the short-term PPO policy. It identifies the value of adaptive customer-arrival pricing when replenishment remains rule-based. 
+
+RL+Fixed. RL+Fixed replaces the OUL replenishment rule with the long-term PPO policy but keeps fixed-markup pricing. It identifies the value of adaptive replenishment when pricing is fixed. 
+
+> 49 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+HRL. HRL learns both layers. The long-term policy selects period-level base-stock targets 𝑆 𝑐,𝑡 . The short-term policy observes the current inventory state and arriving-customer attributes and sets class-level prices within the feasible price ranges. Assortment is derived deterministically from available inventory and posted margins. In-stock classes are ranked by 𝑝 𝑐 − 𝑤 𝑐 , and the highest-ranked feasible offers are shown to the customer. This keeps the short-term action as pricing while allowing inventory scarcity to affect the offered set. 
+
+Evaluation windows. Each scenario is evaluated over 30 independent replications. Experiment 1 uses 3,000 operating-period runs for no shocks, demand-only shocks, supply-only shocks, and joint shocks. Experiment 2 uses 5,500 operating-period runs and introduces a prolonged high-intensity disruption cluster over periods 3,000–3,300. Unless stated otherwise, reported economic comparisons use the post-initialization window beginning at period 450. 
+
+Training stabilization. The HRL training schedule uses an initialization phase before the main evaluation window. The first 350 periods stabilize the short-term pricing layer. The next 100 periods allow the long-term layer to adapt against the stabilized short-term policy. Full joint learning begins at period 450. The same post-initialization convention is used for the main economic comparisons across policies, so reported results focus on substantive operating behavior rather than early training transients. 
+
+Statistical reporting. Tables report seed-level means with 95% confidence intervals unless otherwise specified. Pairwise comparisons are based on within-seed differences, using the common-random-number structure. Time-series plots report rolling means across replications, with confidence bands summarizing cross-seed variation. The coordination contrast reported in the main text is 
+
+Δcoord = 𝑃 (HRL ) − 𝑃 (OUL +RL ) − 𝑃 (RL +Fixed ) + 𝑃 (OUL +Fixed ),
+
+computed over the relevant full-horizon, shock, or recovery window. 
+
+# S4 Additional Numerical Illustration 
+
+This section presents two controlled numerical illustrations of the convergence mechanisms in Theorems 1 and 2. The first considers baseline convergence under synchronized updates in a bounded two-timescale environment. The second considers faster learning when poor decisions produce more visible objective losses. These experiments clarify the mechanisms behind the bounds rather than estimate hidden constants or verify asymptotic rates. 
+
+> 50 Cho et al.: Two-Timescale HRL for Resilient Operations
+
+S4.1 Environments 
+
+Both environments have finite long-term and short-term action spaces, a fixed within-period horizon (K=20), and use the synchronized finite-state population policy-space update analyzed in the main paper. The long-term state space and both action spaces are −2, −1, 0, 1, 2. The projection operator Π maps a scalar to the nearest element of this set. For panel (a), which illustrates Theorem 1, the environment is a bounded two-timescale system without additional sharpness. The short-term reward is 
+
+𝑟 (𝑥, 𝑢, 𝑎 ) = −0.20 {𝑎 − ( 0.7𝑥 + 0.5𝑢 )} 2,
+
+the long-term cost is 𝑐 (𝑥, 𝑢 ) = 0.40 (𝑢 − 0.5𝑥 )2, and the next long-term state is 
+
+𝑥 + = Π {round (0.6𝑥 + 0.4 ¯ 𝑎 + 𝜀 )} ,
+
+where ¯𝑎 is the average within-period short-term action and 𝜀 ∈ {− 1, 0, 1} has probabilities 0.2, 0.6, 0.2.For panel (b), which illustrates Theorem 2, the reward and cost create a sharper quadratic landscape around the optimal long-term commitment. Writing 𝑚 (𝑥 ) = 𝑥 , the short-term reward is 
+
+𝑟 (𝑥, 𝑢, 𝑎 ) = −1.30 {𝑎 − 𝑚 (𝑥 )} 2 − 0.90 (𝑎 − 𝑢 )2,
+
+the long-term cost is 𝑐 (𝑥, 𝑢 ) = 1.10 {𝑢 − 𝑚 (𝑥 )} 2, and the next long-term state is 
+
+𝑥 + = Π {round (0.5𝑥 + 0.5 ¯ 𝑎 + 𝜀 )} ,
+
+where 𝜀 ∈ {− 1, 0, 1} has probabilities 0.1, 0.8, 0.1.
+
+S4.2 Oracle Benchmark and Reported Metric 
+
+Because the environments are finite and fully specified, the oracle benchmark is computed exactly by finite-state dynamic programming (Puterman, 2014). The oracle is the optimal stationary joint policy (𝜋 ∗, 𝜙 ∗). At the long-term level, it chooses the maximizing long-term action. Within each long-term period, it chooses the maximizing short-term action conditional on the long-term action and the remaining continuation value. The learned policy is the policy-space PPO-style update used in the convergence analysis. At each long-term 
+
+> 51
+
+Cho et al.: Two-Timescale HRL for Resilient Operations 
+
+period 𝑡 , we evaluate the post-short-term-update pair (𝜋 𝑡 , 𝜙 𝑡 +1) using 
+
+Gnum  
+
+> 𝑡
+
+= L( 𝜋 ∗, 𝜙 ∗) − L( 𝜋 𝑡 , 𝜙 𝑡 +1).
+
+Figure 1 reports the running average 𝑡 −1 Í𝑡 −1 
+
+> 𝜏 =0
+
+Gnum  
+
+> 𝜏
+
+, averaged over 30 random initializations. Evaluation is exact in the finite environments, and across-initialization variation is negligible at the plotted scale, so confidence bands are omitted for readability. 
+
+S4.3 Results 0 250 500 750 1000 1250 1500 1750 2000 
+
+> Slow periods
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Average objective gap
+
+(a) Theorem 1 0 250 500 750 1000 1250 1500 1750 2000  
+
+> Slow periods
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> Average objective gap
+
+(b) Theorem 2 
+
+Figure S1: Controlled numerical illustrations of Theorems 1 and 2. Each panel reports the running average post-short-term-update optimality gap, averaged over 30 random initializations. 
+
+Figure S1 reports the running-average gap in the two environments. Panel (a) uses a bounded two-timescale environment without additional sharpness and shows a steadily decreasing running-average gap, consistent with the baseline mechanism in Theorem 1. Panel (b) uses a sharper reward-and-cost structure in which poor decisions produce more visible objective losses. Its larger initial gap reflects the stronger penalty for suboptimal decisions rather than better absolute performance. The resulting clearer learning signal supports faster correction, and the running-average gap decreases more rapidly. The panels illustrate the mechanisms underlying Theorems 1 and 2; they do not estimate hidden constants or verify asymptotic rates. 
+
+52
