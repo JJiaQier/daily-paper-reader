@@ -1,0 +1,585 @@
+Title: On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics
+
+URL Source: https://arxiv.org/pdf/2607.22036v1
+
+Published Time: Mon, 27 Jul 2026 00:27:40 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 
+
+Pietro S. Oliveto ⋆[0000 −0001 −8164 −6767] , Zhenyu Wang [0009 −0007 −6118 −0737] ,Peizhou Wu [0009 −0000 −3242 −5423] , and Mengqing Xu [0009 −0007 −8755 −0871] 
+
+Southern University of Science and Technology, 518055 Shenzhen, China 
+
+olivetop@sustech.edu.cn, wangzy20233@mail.sustech.edu.cn wupz2023@mail.sustech.edu.cn, xumq2025@mail.sustech.edu.cn 
+
+Abstract. Selection Hyper-heuristics (HHs) automate algorithmic de-sign by selecting from a set of low-level heuristics which one to apply at each stage of the optimisation process. Several impressive results have been recently rigorously proven regarding the performance of selection hyper-heuristics (HHs) for standard benchmark functions. However, the learning mechanisms employed by these HHs are considerably simplified compared to the machine learning techniques typically used in real world applications. In this paper we analyse a Reinforcement Learning Hyper-heuristic (RLHH) from the literature. The only previous result available proved that for a wide range of parameter settings, RLHH does not learn to select heuristics appropriately for the standard LeadingOnes bench-mark function. In this paper, we rigorously prove that with appropriate parameter values RLHH equipped with two random local search opera-tors, RLS 1 and RLS 2 optimises the LeadingOnes benchmark function in the best possible expected runtime achievable with the two operators up to lower order terms. Experiments show that for realistic problem sizes it is faster than the Generalised Random Gradient HH which was previously proven to also have optimal expected runtime up to lower order terms. 
+
+Keywords: Hyper-heuristics · Reinforcement Learning · Runtime Anal-ysis · Theory 
+
+# 1 Introduction 
+
+Hyper-heuristics (HHs) are automated algorithm design techniques for optimi-sation problems [9,47,23]. They work at a higher level of abstraction than ran-domised search heuristics by either generating offline a heuristic for the problem at hand using heuristic components ( generation HH) or online by selecting which heuristic to apply directly at each stage of the optimisation process from a set of available low level heuristics ( selection HH). The aim is to relieve the practi-tioner of the task of identifying which algorithm and related parameter settings  
+
+> ⋆
+
+Pietro S. Oliveto is the corresponding author. arXiv:2607.22036v1 [cs.NE] 24 Jul 2026 2 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+to apply to the given optimisation problem. Furthermore, different heuristics, or even different parameter settings may perform better at different stages of the optimisation process. Numerous successful applications of HHs have been reported in several do-mains [38,50,51,33,30,2,29,8]. Although the field building a theoretical under-standing of HHs is still in its infancy, several advances have been made recently regarding the theoretical foundations of selection HHs [36,37,5,19,16]. See [43] for a survey of earlier results. Selection HHs typically consist of two components: 1) a heuristic method-ology, also referred to as the learning mechanism , that selects which heuris-tic to be applied in the next step, and 2) a move-acceptance methodology to decide whether to accept the new solution. Concerning the move acceptance component it has been shown how simple move acceptance hyper-heuristics (MAHH) are very effective at escaping local optima. The MAHH switching with some probability p between an elitist strict improvement acceptance rule and a non-elitist rule that accepts any generated solution can optimise the standard Cliff d benchmark function in the best known expected runtime of 
+
+O(n3/d 2 + n log n) [36]. A variant of the MAHH that switches between accepting strict improvements and only accepting worsening moves has been shown to opti-mise the Jump m function in an impressive expected runtime of O(( n3/m ) log n)
+
+function evaluations [5]. Impressive results have also been shown when the performance of the HH depends on the learning mechanism used to determine the most appropriate low-level heuristic to be applied at each stage of the optimisation process. In particular, the Generalised Random Gradient (GRG) HH has been proven to optimise the standard LeadingOnes benchmark function in the optimal ex-pected runtime (up to the leading constant) achievable by any unary unbiased search heuristic if equipped with a sufficient number of low-level Randomised Local Search (RLS) heuristics [35]. Since the result depends on setting its learn-ing period τ parameter appropriately, an Adaptive Random Gradient (ARG) was introduced later that also runs in optimal expected runtime, dispensing the user from having to identify an appropriate value for τ [20]. These algorithms have also been shown to be effective for other classes of functions [34]. Indeed, GRG has the best known expected runtime for the multimodal TwoRates benchmark function [37]. All the mentioned HHs use very simple learning mechanisms, the most so-phisticated being the random gradient one that selects an operator uniformly at random and continues applying it so long as the operator succeeds at identifying an improving solution within the learning period τ . These, however, are very different from the more sophisticated machine learning mechanisms typically employed by HHs in real-world applications [48,12,46,10,42,39,4,45,6,22,27]. One exception is the work by Alanazi and Lehre [3] which analysed a reinforcement learning HH (RLHH) from the HH literature [42]. The RLHH assigns weights to each low level heuristic which are increased by a rewarding additive term α if the applied heuristic identifies an improvement and are decreased by a penalty On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 3
+
+term β otherwise. Then the operator to be applied is decided at each step via roulette wheel selection. The analysis of Alanazi and Lehre though only provided negative results by focusing on identifying parameter ranges for which the RLHH is inefficient. In particular, they analysed the RLHH for the LeadingOnes benchmark func-tion equipped with m low-level heuristics among which only one has a positive probability of identifying improvements. In this scenario they derived parameter settings for which the RLHH provably cannot distinguish the effective operator from the rest, thus runs in the same expected runtime as an algorithm that at each step selects an operator uniformly at random (i.e., simple random HH [13]). In this paper we aim to continue building the theoretical foundations of HH using reinforcement learning mechanisms. We prove that with appropriate parameter settings the RLHH equipped with two operators, RLS 1 which flips one bit and RLS 2 which flips two bits without replacement, runs in the best possible expected runtime achievable using the two operators (i.e. ≈ 0.42329 n2)for LeadingOnes . An experimental analysis reveals that RLHH is faster than the GRG HH for realistic problem sizes. For space limitations we cannot include the proofs in this manuscript. 
+
+# 2 Preliminaries 
+
+In this section, we formally define the Reinforcement Learning Hyper-Heuristic (RLHH) algorithm and the benchmark function used for the analysis. We also introduce the mathematical tools that will be used in our runtime analysis. 
+
+2.1 Algorithm 
+
+The Reinforcement Learning Hyper-heuristic (RLHH) framework analyzed in this work is a selection hyper-heuristic that dynamically manages a portfolio of m low-level heuristics H = {h1, . . . , h m}. Unlike static selection mechanisms, RLHH aims to automatically learn the optimal heuristic to be applied at different stages of the optimization process by maintaining a weight wi for each heuristic. The pseudocode for the RLHH framework as considered in [3] is given in Algo-rithm 1. At each iteration, the algorithm selects a heuristic hi with a probability proportional to its current weight pi = wi/ Pmj=1 wj . If the applied heuristic generates a strict fitness improvement (i.e., f (s′) > f (s)), it is rewarded by in-creasing its weight by an additive term α, capped at a maximum value wmax .Conversely, if the heuristic fails to strictly improve the fitness, it is penalized by subtracting a term β, bounded below by wmin . Other choices for the update rules (e.g., multiplicativex updates rather than additive) and for the selection rules (e.g., selecting the heuristic with highest weight i.e., max choice ) have been ap-plied in the literature. Here we follow the scheme analysed by Alanazi and Lehre described in Algorithm 1 [3]. In our analysis, we consider a portfolio of two standard mutation operators (i.e., m = 2 ) commonly used in pseudo-Boolean optimization; h1 = RLS 1 which 4 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+Algorithm 1 Reinforcement Learning Hyper-heuristic (RLHH) [42,3] 
+
+1: procedure RLHH (α, β, wmin , wmax , w)2: s ← Unif( S); w(0) [m] ← w
+
+3: while stopping conditions not satisfied do 
+
+4: Pick i ∈ [m], with probability p(t) 
+
+> i
+
+= w(t) 
+
+> i
+> Pmj=1 w(t)
+> j
+
+5: s′ ← hi(s)
+
+6: w(t+1)  
+
+> i
+
+←
+
+(
+
+min( w(t) 
+
+> i
+
++ α, w max ), if f (s′) > f (s)max( w(t) 
+
+> i
+
+− β, w min ), otherwise 
+
+7: if f (s′) > f (s) then 
+
+8: s ← s′
+
+9: return s
+
+flips exactly one bit chosen uniformly at random, and h2 = RLS 2 which flips exactly two distinct bits chosen uniformly at random. The only available runtime analysis of the RLHH has shown that if the parameters are set such that α is at most as large as β (i.e. α ≤ β), then the HH will not be able to distinguish between the low level heuristics, thus at each step chooses one uniformly at random [3]. For the hyper-heuristic to be effective, the reward term α should be able to counteract the weight decrease due to the expected number of failures before a success. We configure the RLHH parameters as follows. Reward term α = 1+1 / log n,penalty term β = 1 /n , initial weight w(0) 1 = w(0) 2 = log n, upper bound wmax =  
+
+> n
+> log 1+ γn
+
+, where γ ∈ (0 , 1) is a strictly positive constant and lower bound wmin = 1 .Considering that a basic randomised local search heuristic (i.e., RLS 1) always has an improvement probability of at least 1/n unless it is trapped on a local optima, thus succeeds in n expected steps, we set the penalty term to β =1/n and the reward term to α = 1 + 1 / log n (slightly larger than n times β). Thus, as long as the HH is not trapped on a local optima the weight of RLS 1
+
+always increases in expectation. Yet, if some other low-level heuristic has a higher success probability, its weight will increase faster. Since the operators are all initialised with the same weight value, we let the initial weight grow slightly with the problem size (i.e., w(0) 1 = w(0) 2 = log n) so that the first operator to improve does not gain a large weight advantage which may strongly bias (maybe incorrectly) the process in its favour. An upper bound on the weights, wmax ,is required so that when the best operator for the current optimisation stage changes, the time for the respective weights to increase and decrease will not be too large. At the same time wmax should also not be too small, to avoid that the weight of RLS 1 eventually catches up with that of the current best operator by reaching the upper bound due to its positive drift (by design). In this case it would not be possible to distinguish the weights because, once at the boundary, the weight of the best operator cannot increase further. Our analyses will show that with a setting of wmax = n  
+
+> log 1+ γn
+
+, γ ∈ (0 , 1) a constant, the RLHH optimises On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 5
+
+LeadingOnes in optimal expected runtime up to lower order terms. The lower bound on the weight can be simply set to any constant and we choose wmin = 1 .
+
+2.2 Benchmark Function 
+
+We analyze the performance of the RLHH on the same standard pseudo-Boolean benchmark function LeadingOnes (LO) used in the previous work in the liter-ature [3]. The function is defined over the search space S = {0, 1}n as 
+
+LO (s) = 
+
+> n
+
+X
+
+> i=1
+> i
+
+Y
+
+> j=1
+
+sj .
+
+where sj is the value of the j-th bit in the bit string s. The LO value of a bit-string is the number of consecutive leading 1-bits in the bit-string, thus the global optimum is the all-ones string s∗ = (1 , . . . , 1) since we are maximizing the function. To successfully improve a candidate solution s with current fitness LO (s) = 
+
+i < n , an algorithm must necessarily mutate the (i + 1) -th bit (the first 0-bit in the string). Any mutations applied to the leading prefix of i ones will destroy the prefix and strictly decrease the fitness. Meanwhile, mutations applied to the trailing suffix (bits from position i + 2 to n) are entirely invisible to the current fitness evaluation, acting as neutral moves. The unary unbiased black box complexity of LeadingOnes is Θ(n2) [31] and evolutionary algorithms using standard bit mutation match this performance. The standard (1+1) EA (with mutation rate 1 
+
+> n
+
+) has an expected runtime of e−12 n2 − o(n2) ≈ 0.85914 n2 − o(n2)
+
+[7]. By implementing a fitness-dependent mutation rate, the expected runtime of the (1+1) EA decreases to ≈ (1 ± o(1))0 .68 n2 [7]. RLS 1 has an expected runtime of 0.5n2 fitness function evaluations [11]. The best expected runtime achievable by unbiased (1+1) black box algorithms is ≈ (1 ±o(1))0 .388 n2 [21,14]. The Generalised Random Gradient (GRG) and the Adaptive Random Gradient selection HHs with a sufficiently large constant sized low level heuristic set |H| =
+
+k = O(1) have been shown to match this optimal performance [35,18,20]. If the heuristic set is limited to H = {RLS 1, RLS 2}, then the best possible expected runtime is (1 + o(1)) · 0.42329 n2 [35]. Here we show that RLHH matches this optimal performance. We point out that other classes of randomised search heuristics with higher arity operators, including Estimation of Distribution Algorithms and Convex Search Algorithms, can run in o(n2) expected runtime [1,26,41,17]. 
+
+2.3 Mathematical Tools 
+
+To rigorously analyze the expected runtime and the stochastic dynamics of the weight adaptation mechanism of the RLHH algorithm, we rely on several fun-damental tools from probability theory and stochastic processes. 6 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+Theorem 1 (Chernoff Bounds [40]). Let X = Pni=1 Xi be the sum of inde-pendent Poisson trials such that E[X] = μ. Then for any 0 < δ < 1Pr( X ≤ (1 − δ)μ) ≤ exp 
+
+
+
+− δ2μ
+
+2
+
+
+
+,
+
+and for any δ > 0,
+
+Pr( X ≥ (1 + δ)μ) ≤
+
+ eδ
+
+(1 + δ)1+ δ
+
+μ
+
+.
+
+Theorem 2 (Doob’s Maximal Inequality [24]). Let (Zt)t≥0 be a stochastic process adapted to a filtration (Ft)t≥0. For any constant δ > 0,(i) Submartingale bound: If (Zt)t≥0 is a non-negative submartingale, then for any finite time horizon T ≥ 0, the probability that the maximum of the process reaches or exceeds δ is bounded by 
+
+Pr 
+
+
+
+max  
+
+> 0≤t≤T
+
+Zt ≥ δ
+
+
+
+≤ E[ZT ]
+
+δ .
+
+(ii) Supermartingale bound: If (Zt)t≥0 is a non-negative supermartingale, then the probability that the supremum of the process reaches or exceeds δ
+
+over infinite time is bounded by 
+
+Pr 
+
+
+
+sup 
+
+> t≥0
+
+Zt ≥ δ
+
+
+
+≤ E[Z0]
+
+δ .
+
+Theorem 3 (Freedman’s Inequality[25], [49]). Let (Yt)t≥1 be a martingale difference sequence with respect to a filtration (Ft)t≥0. Suppose there exists a constant R such that Yt ≤ R almost surely for all t ≥ 1. Let Mk = Pkt=1 Yt be the associated martingale, and let Vk = Pkt=1 Var( Yt | F t−1) be the predictable quadratic variation. For any ∆ > 0 and v > 0,
+
+Pr ( ∃k ≥ 1 : Mk ≥ ∆ and Vk ≤ v) ≤ exp 
+
+
+
+− ∆2
+
+2( v + R∆/ 3) 
+
+
+
+.
+
+Theorem 4 (Additive Drift Theorem[28,32]). Let (Xt)t≥0 be a stochastic process adapted to a filtration (Ft)t≥0 over a state space S ⊆ R. Let T be the first hitting time of the region (−∞ , a ]. If X0 ≥ a and there exists a constant 
+
+δ > 0 such that for all t < T , E[Xt − Xt+1 | F t] ≥ δ, then 
+
+E[T | X0] ≤ X0 − aδ .
+
+Theorem 5 (Law of Total Expectation / Tower Property [40]). Let 
+
+(Ω, F, Pr) be a probability space, and let F1 and F2 be two sub-σ-algebras of F
+
+such that F1 ⊆ F 2. For any random variable X with finite expectation ( E[|X|] <
+
+∞), it holds almost surely that: 
+
+E[E[X | F 2] | F 1] = E[X | F 1].On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 7
+
+In the context of discrete-time stochastic processes with a natural filtration (Ft)t≥0,this implies that for any time steps s ≤ t, conditioning on the historical state Fs
+
+absorbs the intermediate conditioning on Ft,
+
+E[E[X | F t] | F s] = E[X | F s].
+
+2.4 Notation 
+
+Throughout this paper, the optimization process is modeled as a discrete-time stochastic process. We denote the current time step, which exactly corresponds to the number of fitness evaluations, by t ∈ N0, and the candidate solution maintained by the algorithm at step t by s(t) ∈ { 0, 1}n. The fitness value of the current solution is typically denoted by i = LO (s(t)). To rigorously ground our probabilistic arguments, we let Ft be the natural filtration representing the complete historical trajectory of the algorithmic state (including all past solutions, weights, and operator selections) up to step t.Regarding the operator selection mechanism, w(t) 
+
+> j
+
+represents the current weight of heuristic hj (where j ∈ { 1, 2} respectively correspond to RLS 1 and 
+
+RLS 2), and p(t) 
+
+> j
+
+= w(t) 
+
+> j
+
+/(w(t)1 + w(t)2 ) defines the selection probability of that heuristic at step t. Furthermore, we define Pj (i) as the success probability that applying heuristic hj to a solution with fitness i yields a strict fitness improve-ment. Finally, ∆sel j denotes the conditional expected one-step change in the weight of heuristic hj , given that it was selected for application at the current step. We say that an event occurs asymptotically almost surely (a.a.s.) if its probability is at least 1 − o(1) .
+
+# 3 RLHH has Optimal Runtime for Leading Ones 
+
+In this section, we rigorously prove that the RLHH algorithm achieves the opti-mal expected runtime for the LeadingOnes function. To understand the algo-rithmic dynamics, we first evaluate the state-dependent success probabilities of the two mutation operators at any given fitness level i = LO (s).For operator RLS 1, a strict fitness improvement occurs if and only if the first 
+
+0-bit is flipped. Thus, its success probability is uniformly bounded by P1(i) = 1/n . For operator RLS 2, a success requires flipping the first 0-bit alongside any of the n − i − 1 trailing bits. The exact probability of this joint event evaluates to: 
+
+P2(i) = (n − i − 1) 
+
+ n
+
+> 2
+
+ = 2( n − i − 1) 
+
+n(n − 1) .
+
+Comparing these transition probabilities reveals a strict phase transition in the optimal search strategy. Solving P2(i) > P 1(i) yields i < n/ 2. Consequently, 
+
+RLS 2 is preferable during the first half of the optimization process, whereas 
+
+RLS 1 becomes more effective once i > n/ 2. As established in the literature, the optimal strategy for an algorithm equipped with these two operators is to apply 8 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+RLS 2 exclusively for optimizing the first n/ 2 bits, and then permanently switch to RLS 1 for the remainder of the optimization [35]. To demonstrate that the RLHH algorithm learns and executes this optimal operator sequence a.a.s., we divide our mathematical analysis into three subse-quent subsections. First, we analyze Phase 1 ( i < n/ 2), proving that the param-eter adaptation mechanism rapidly establishes a strict dominance of RLS 2 a.a.s. during the initial stage of optimization. Next, we examine Phase 2 ( i ≥ n/ 2), demonstrating that as the fitness crosses the theoretical threshold, the algorithm successfully reverses its weight distribution to maintain the absolute dominance of RLS 1 a.a.s.. Finally, we synthesize the bounded times from these two distinct phases to compute the total expected optimization time, concluding that RLHH has the optimal expected runtime up to a lower-order o(n2) term. 
+
+3.1 Dominance of RLS 2 in Phase 1 
+
+In this subsection, we analyze the runtime behavior of the RLHH algorithm on the LeadingOnes problem during Phase 1, defined as the interval where the fitness satisfies 0 ≤ LO (s) < n 
+
+> 2
+
+. In this region, the operator RLS 2 possesses a higher success probability than the operator RLS 1. The analysis demonstrates that the dynamic weight adaptation mechanism successfully identifies and ex-ploits RLS 2 with a selection probability of p2 = 1 − o(1) , incurring an o(n2)
+
+time overhead compared to the optimal expected runtime. The stochastic dynamics of Phase 1 are established through a sequence of supporting lemmata. First, Lemma 1 derives the conditional drifts of the oper-ator weights based on their state-dependent success probabilities, showing that when the respective operators are selected w2 grows asymptotically faster than 
+
+w1 in expectation. Lemma 2 ensures that the selection probability p(t)2 remains bounded away from zero for Phase 1. Building on this, Lemma 3 proves that the weight w2 rapidly reaches its upper limit wmax = n  
+
+> log 1+ γn
+
+within an o(n2) time overhead. Concurrently, Lemma 4 constructs a non-negative supermartingale to bound the multiplicative growth of w1 during the climbing stage of w2, ensuring 
+
+w1 remains sub-polynomial. Finally, Lemma 5 applies the law of total expecta-tion, Doob’s inequality and Freedman’s inequality to show that the dominance of RLS 2 is robustly maintained a.a.s. until the fitness reaches n/ 2.We put everything together in Theorem 6 to formally establish that RLHH optimises the first n/ 2 leading ones in expected time TOpt n/ 2 + o(n2), where 
+
+TOpt n/ 2 is the exact expected hitting time for the pure RLS 2 algorithm to tra-verse the same fitness distance. We start by analysing the expected single-step changes of the operator weights conditional on the operators being selected for reproduction. 
+
+Lemma 1. For the RLHH algorithm with reward parameter α = 1 + 1 / log n
+
+and penalty parameter β = 1 /n optimizing the LeadingOnes function, let ∆sel 
+
+> 1
+
+and ∆sel  
+
+> 2
+
+denote the expected one-step weight changes of the operators RLS 1 and On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 9
+
+RLS 2, conditioned on being selected. The weight drifts always satisfy 
+
+∆sel  
+
+> 1
+
+= 1
+
+n log n + 1
+
+n2 , and ∆sel  
+
+> 2
+
+= O
+
+ 1
+
+n
+
+
+
+.
+
+Furthermore, for any fitness level i ≤ n/ 2 − ϵn with any small constant ϵ > 0,there exists a constant c > 0 such that the weight drift of RLS 2 is lower-bounded by 
+
+∆sel  
+
+> 2
+
+≥ cn .
+
+By defining a composite process Ut = 2 w(t)2 − w(t)1 and constructing an expo-nential potential function Zt = exp( −λU t) that operates as a non-negative su-permartingale, we rigorously bound the probability that w1 ever exceeds twice the value of w2 over a polynomial time horizon by applying Doob’s maximal inequality (Theorem 2) to Zt.
+
+Lemma 2. For the RLHH algorithm optimizing the LeadingOnes function with initial weights w(0) 1 = w(0) 2 = log n, α = 1 + 1 / log n, β = 1 /n , consider a polynomial time horizon T = poly( n). Assuming the fitness satisfies LO (s(t)) ≤
+
+n/ 2 − ϵn for a constant ϵ > 0 for all t ≤ T , the probability that w(t)1 ≥ 2w(t)2
+
+occurs at any step t ∈ [0 , T ] is bounded by 
+
+Pr 
+
+
+
+∃t ∈ [0 , T ] : w(t)1 ≥ 2w(t)2
+
+
+
+= n−Ω(1) .
+
+To prove that the RLHH algorithm achieves the optimal Phase 1 runtime in Theorem 6, the selection probability of RLS 2 must rapidly approach 1. We first show that the weight w2 climbs to its upper bound wmax in o(n2) steps with probability 1 − o(1) . Within this time with overwhelming probability at most  
+
+> n
+> 2
+
+− ϵn leading ones are optimized for a constant ϵ > 0. Lemma 1, thus ensures an Ω(1 /n ) drift for w2 during the climbing stage. 
+
+Lemma 3. For the RLHH algorithm optimizing the LeadingOnes function with parameters wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1, α = 1 + 1 / log n,
+
+β = 1 /n , with probability at least 1 − O 
+
+ 1log γ/ 2 n
+
+
+
+, the weight w2 reaches wmax 
+
+within tmax = n2  
+
+> log 1+ γ/ 2n
+
+steps, and the fitness satisfies LO (s(t)) ≤ n/ 2 − ϵn 
+
+during this entire climbing period. 
+
+While Lemma 3 proves that the weight w2 rapidly reaches wmax , establishing a selection probability of p2 = 1 − o(1) also requires that w1 remains compara-tively small during the climbing stage of w2. Relying on the o(n2) time bound established in Lemma 3, we analyze the multiplicative increase of w1.We divide the climbing process of the weight of RLS 2 from w2 = log n to 
+
+wmax into m phases of multiplicatively increasing length and for each phase we construct a non-negative supermartingale that allows us to prove using Freed-man’s inequality that with exponentially small probability in the length of the 10 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+phase, the weight never drops below half the value it had at the beginning of the phase. Then we construct another martingale for each phase to show that the probability that w2 reaches the end of the phase in more than twice its expected time is also exponentially small. Finally using the calculated bounds for w2 we show that w1 remains sub-polynomial i.e., much smaller than wmax .
+
+Lemma 4. For the RLHH algorithm optimizing the LeadingOnes function with initial weights w(0) 1 = w(0) 2 = log n, α = 1 + 1 / log n, β = 1 /n , let τ be the first time step where w(τ )2 reaches wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1.At time τ , the weight w1 is bounded by w(τ )1 = O(log 2 n) with probability at least 
+
+1 − O 
+
+ 1log n
+
+
+
+.
+
+To complete the analysis of Phase 1, we prove that once the weight w2 reaches 
+
+wmax , it stably maintains its dominant position until the algorithm successfully reaches the fitness level n/ 2. Because the dynamics of w1 and w2 are coupled, we analyze them sequentially: we first unconditionally bound the maximum possible growth of w1 assuming w2 does not drop by more than half its value. Afterwards we use this established bound on w1 to prove via Freedman’s inequality that w2
+
+still does not drop by half its value with high probability. 
+
+Lemma 5. For the RLHH algorithm optimizing the LeadingOnes function with parameters wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1, α = 1 + 1 / log n,
+
+β = 1 /n , suppose w2 has reached wmax . With probability at least 1 − n−1/2+ o(1) ,the weights maintain the strict bounds w(t)2 ≥ wmax /2 and w(t)1 ≤ √wmax for all subsequent steps until Phase 1 concludes. Consequently, the selection probability robustly satisfies p(t)2 = 1 − o(1) throughout this entire period. 
+
+We now prove the main result for Phase 1. 
+
+Theorem 6. For the RLHH algorithm optimizing the LeadingOnes function with parameters w(0) 1 = w(0) 2 = log n, wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1,
+
+wmin = 1 , α = 1 + 1 / log n, β = 1 /n , let Tphase1 be the total number of fitness evaluations required to reach a fitness of at least n/ 2 from a uniformly distributed random initial string. The expected runtime is strictly bounded by 
+
+E[Tphase1 ] = TOpt n/ 2 + o(n2),
+
+where TOpt n/ 2 is the expected runtime for the theoretically optimal RLS 2 algo-rithm to traverse the same fitness distance. 
+
+3.2 Dominance of RLS 1 in Phase 2 
+
+In this section, we bound the expected runtime of RLHH during Phase 2. For the purpose of analysis, we reset the time counter to t = 0 at the transition point and pessimistically consider a worst-case initial weight distribution, where 
+
+w(0) 1 = wmin and w(0) 2 = wmax .On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 11 
+
+First, Lemma 6 uses the Artificial Fitness Level Method [44] to establish that the algorithm quickly reaches a sufficiently high fitness level where RLS 2 starts to lose its advantage quickly. Then, Lemma 7 proves that once the algorithm reaches this high-fitness region, at least one of the weights will rapidly hit a boundary. Once at least one boundary is hit, Lemma 5 guarantees that RLS 1
+
+will rapidly become dominant and maintain its dominance until the end of the optimization process. We put these lemmata together in Theorem 7 to establish that RLHH opti-mizes the remaining fitness levels from n/ 2 to n in expected time TOpt n/ 2→n +
+
+o(n2), where TOpt n/ 2→n is the exact expected hitting time for the pure RLS 1
+
+algorithm to traverse this fitness distance. 
+
+Lemma 6. For the RLHH algorithm optimizing the LeadingOnes function, assume the algorithm has reached the beginning of Phase 2 with fitness LO (s(0) ) = 
+
+n/ 2. The expected time to reach a fitness of at least n/ 2 + n/ log n is bounded by 
+
+E[Tbuf ] ≤ 2n2  
+
+> log n
+
+.
+
+We now bound the expected time required for either weight to reach its boundary. In particular, we define a potential function that captures the distance of the two weights from the respective boundaries. Then we apply the additive drift theorem to calculate the expected time for the potential function to reach zero which will imply that one of the two boundaries has been reached. 
+
+Lemma 7. For the RLHH algorithm optimizing the LeadingOnes function with parameters wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1, wmin = 1 , α =1 + 1 / log n, β = 1 /n , assume the algorithm has reached the beginning of Phase 2 with fitness LO (s(0) ) = n/ 2. Let τ be the first time step where either the condition w(t)1 = wmax or w(t)2 = wmin is triggered. The expected hitting time is bounded by E[τ ] = O
+
+ n2 
+
+> log γn
+
+
+
+.
+
+In the following lemma, we prove that once either weight hits its respective boundary, the system rapidly stabilizes into a new regime that strictly favors 
+
+RLS 1 (e.g., p1 = 1 − o(1) ). We split the proof into two cases. For the case where w1 has hit the upper boundary, we first use Freedman’s inequality to show that w1 never drops by more than half its value. Using this bound on w1, we calculate the expected multiplicative decrease of w2 assuming pessimistically that at the beginning of the phase its value is wmax . Then the law of total expectation and a Markov inequality allow us to show that a.a.s. 
+
+w2 drops down to at least o(wmax ) in o(n2) steps. Finally, we apply Doob’s inequality to show that w2 remains o(wmax ) until the global optimum is found. For the second case where w2 has hit the lower boundary, we first use Doob’s inequality to show that w2 never increases above log 2 n. Then we use this bound on the weight to calculate the additive drift of w1 which allows us to derive the expected time for w1 to reach a high enough value to guarantee a selection probability of p1 = 1 − o(1) . A Markov inequality and a Freedman’s inequality show that p1 = 1 − o(1) is sustained until the end of the phase. 12 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+Lemma 8. For the RLHH algorithm optimizing the LeadingOnes function with parameters wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1, wmin = 1 , α =1+1 / log n, β = 1 /n , suppose at time τ the weights satisfy either w(τ )1 = wmax or 
+
+w(τ )2 = wmin . With probability at least 1−O 
+
+ 1log 2 n
+
+
+
+, within an additional tstab =  
+
+> n2
+> log γ/ 2n
+
+steps, the algorithm establishes a dominance regime where the selection probability of RLS 1 satisfies p(t)1 = 1 − o(1) , and this regime is maintained until Phase 2 concludes. 
+
+We now put all the lemmata together to prove the main result for Phase 2. 
+
+Theorem 7. For the RLHH algorithm optimizing the LeadingOnes function with parameters w(0) 1 = w(0) 2 = log n, wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1,
+
+wmin = 1 , α = 1 + 1 / log n, β = 1 /n , let Tphase2 be the total number of fitness evaluations required to reach the global optimum LO (s) = n starting from a fitness of n/ 2. The expected runtime is strictly bounded by 
+
+E[Tphase2 ] = TOpt n/ 2→n + o(n2),
+
+where TOpt n/ 2→n is the exact expected hitting time for the theoretically optimal pure RLS 1 algorithm to traverse the second half of the search space. 
+
+3.3 Total Expected Runtime 
+
+In this subsection, we summarize the runtime analyses of Phase 1 and Phase 2 to establish the overall expected runtime of the RLHH algorithm. We show that the weight adaptation successfully matches the performance of the theoretically optimal operator sequence, accumulating only a sub-quadratic time overhead across the entire optimization process. 
+
+Theorem 8. For the RLHH algorithm optimizing the LeadingOnes function with parameters w(0) 1 = w(0) 2 = log n, wmax = n  
+
+> log 1+ γn
+
+for a constant 0 < γ < 1,
+
+wmin = 1 , α = 1 + 1 / log n, β = 1 /n , let T be the total number of fitness evaluations required to reach the global optimum LO (s) = n from a uniformly distributed random initial string. The expected runtime is strictly bounded by 
+
+E[T ] = TOpt n/ 2 + TOpt n/ 2→n + o(n2) = 1 + ln 2 4 n2 + o(n2).
+
+# 4 Experimental Evaluation 
+
+In this section, we empirically evaluate the performance of the RLHH algorithm on the LeadingOnes function for realistic problem sizes and compare it against the Greedy Random Gradient (GRG) HH which also has optimal expected run-time up to lower order terms [35]. We equip both HHs with the heuristic set 
+
+H = {RLS 1, RLS 2}.On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 13 10 3 10 4 10 5 10 6 10 7 10 8 10 9 10 10 
+
+Problem Size ( n)     
+
+> 0.42
+> 0.43
+> 0.44
+> 0.45
+> 0.46
+> 0.47
+> 0.48
+> 0.49
+> 0.50
+> Avg. Runtime ( T /n2)
+> 2-opt RLS 1γ=0.9GRG
+> γ=1.0
+
+Fig. 1. Average runtime normalized by n2 for the RLHH algorithm ( γ ∈ { 0.9, 1.0})compared against GRG, RLS 1, and the theoretical 2-opt optimal strategy on the 
+
+LeadingOnes function. 
+
+We simulate the algorithms across a wide range of problem sizes, from n =10 3 to n = 9 · 10 9 and for each problem size we take the average number of function evaluations over 700 runs. To allow to experiment with large problem sizes we apply the same inverse transform sampling method previously used for GRG in [35] and sample the expected waiting times to make an improvement of exactly d bits, for all possible values of d and for each operator instead of executing the operator itself. For the RLHH algorithm, we utilize the theoretically derived parameter set-tings: α = 1 + 1 / log n, β = 1 /n , initial weights w(0) 1 = w(0) 2 = log n, and the upper bound wmax = n/ log 1+ γ n. Our theoretical analysis indicates that wmax 
+
+should be as small as possible, thus γ as close to 1 as possible. This respectively decreases the runtimes derived in Lemmata 3, 7 and 8 and the relevant failure probabilities. Indeed, preliminary tuning confirms this for these problem sizes. Thus, we test the algorithm with γ = 0 .9 and γ = 1 .0. For the GRG we set 
+
+τ = 0 .6n ln n which provided the best performance in Lissovoi et al. [35]. Figure 1 displays the average runtime normalized by n2 (i.e., the leading con-stants) versus the problem size. We observe that the runtimes of all three algo-rithms exhibit a clear, monotonic downward trend, steadily approaching the best possible expected runtime using the two operators of 1+ln 2 4 n2 ≈ 0.423 n2 (i.e., 2-opt indicated in blue). The theoretical performance of the best randomised local search heuristic for the problem (i.e. RLS 1 with expected runtime 0.5n2)is depicted in yellow. The configuration γ = 1 .0 has the best average runtime, consistently out-performing GRG for all problem sizes greater than n = 2 · 10 3. For the largest problem size, n = 9 · 10 9, the two algorithms have average runtimes of 0.425 n214 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 
+
+and 0.426 n2 slightly larger than the best possible 0.423 n2. While our formal proof conservatively requires γ < 1 to mathematically guarantee that w1 = o(wmax ) at the conclusion of Phase 1, the practical growth rate of the weight (bounded by 
+
+ec log γ n) is sufficiently slow. Consequently, the experiments indicate that setting 
+
+γ = 1 .0 provides an excellent balance between rapid weight adaptation and the stability of the dominance regimes in practice. On the other hand, the configura-tion with γ = 0 .9 consistently outperforms the other two algorithms for smaller problem sizes and eventually becomes only slightly worse than GRG. The only other reinforcement learning heuristic for which a theoretical run-time analysis is available is the theory-driven designed one introduced by Doerr et al. [15]. The authors proved optimal performance for OneMax and provided experiments for LeadingOnes . The best average runtime they reported with their chosen parameters is 0.45 n2 for n = 10 4 which is beaten by all three algo-rithms in Figure 1. 
+
+# 5 Conclusion 
+
+In this paper, we presented a rigorous runtime analysis of the Reinforcement Learning Hyper-heuristic (RLHH) for the standard LeadingOnes benchmark function. This is the first time a rigorous positive result is presented regarding a hyper-heuristic using a reinforcement learning mechanism from the literature. The only previous theoretical analysis had considered the RLHH equipped with only one useful operator having positive improvement probability [3]. The au-thors proved that for a wide range of parameter values (i.e., α ≤ β) RLHH is ineffective for LeadingOnes by showing that its behaviour is similar to that of a Simple Random HH that at each step selects an operator uniformly at random (i.e. the algorithm does not learn to identify the only good operator). Our analysis proves that RLHH equipped with a low-level heuristic set H =
+
+{RLS 1, RLS 2} and appropriate parameter values adapts the weights optimally throughout the process, thus optimises LeadingOnes in an expected runtime of  
+
+> 1+ln 2 4
+
+n2 +o(n2) perfectly matching, up to the leading constant, the best possible offline-designed sequence of these operators. The proof of the result relies on tracking the stochastic weight dynamics via various martingale processes and drift analyses. An empirical analysis shows that the algorithm is effective for realistic problem sizes even outperforming the Generalised Random Gradient (GRG) HH previously shown to also have optimal expected runtime. Future research should extend the analysis to larger heuristic set sizes and to wider classes of functions. Furthermore the comparative performance using alternative update and selection rules from the literature should also be analysed such as multiplicative updates or the max choice selection rule. 
+
+# References 
+
+> 1. Afshani, P., Agrawal, M., Doerr, B., Doerr, C., Larsen, K.G., Mehlhorn, K.: The query complexity of finding a hidden permutation. In: Brodnik, A., López-Ortiz,
+
+On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 15 A., Raman, V., Viola, A. (eds.) Space-Efficient Data Structures, Streams, and Algorithms, pp. 1–11. Springer (2013) 2. Ahmed, L., Mumford, C., Kheiri, A.: Solving urban transit route design problem using selection hyper-heuristics. European Journal of Operational Research 274 (2), 545–559 (2019) 3. Alanazi, F., Lehre, P.K.: Limits to learning in reinforcement learning hyper-heuristics. In: European Conference on Evolutionary Computation in Combina-torial Optimization. pp. 170–185. Springer (2016) 4. Bai, R., Burke, E., Kendall, G.: Heuristic, meta-heuristic and hyper-heuristic ap-proaches for fresh produce inventory control and shelf space allocation. Journal of the Operational Research Society 59 (10), 1387–1397 (2008) 5. Bendahi, A., Doerr, B., Fradin, A., Lutzeyer, J.F.: Speeding up hyper-heuristics with markov-chain operator selection and the only-worsening acceptance operator. In: Proc. of IJCAI ’25 (2025) 6. Blazewicz, J., Burke, E., Kendall, G., Mruczkiewicz, W., Oguz, C., A., S.: A hyper-heuristic approach to sequencing by hybridization of dna sequences. Annals of Operations Research 207 , 27–41 (2011) 7. Böttcher, S., Doerr, B., Neumann, F.: Optimal fixed and adaptive mutation rates for the leadingones problem. In: Parallel Problem Solving from Nature (PPSN’10). pp. 1–10 (2010) 8. Branke, J., Nguyen, S., Pickardt, C.W., Zhang, M.: Automated design of produc-tion scheduling heuristics: a review. IEEE Transactions on Evolutionary Compu-tation 20 (1), 110–124 (2016) 9. Burke, E.K., Gendreau, M., Hyde, M., Kendall, G., Ochoa, G., Özcan, E., Qu, R.: Hyper-heuristics: A survey of the state of the art. Journal of the Operational Research Society 64 (12), 1695–1724 (2013) 10. Burke, E., Kendall, G., Soubeiga, E.: A tabu-search hyperheuristic for timetabling and rostering. Journal of Heuristics 9(6), 451–470 (2003) 11. Buzdalov, M., Buzdalova, A.: Can OneMax help optimizing LeadingOnes using the EA+RL method? In: IEEE Congress on Evolutionary Computation (CEC’15). pp. 1762–1768. IEEE (2015) 12. Cowling, P., Chakhlevitch, K.: Hyperheuristics for managing a large collection of low level heuristics to schedule personnel. In: Proceedings of the IEEE Congress on Evolutionary Computation (CEC2003). pp. 1214–1221 (2003) 13. Cowling, P., Kendall, G., Soubeiga, E.: A hyperheuristic approach to scheduling a sales summit. In: Practice and Theory of Automated Timetabling (PATAT’01). pp. 176–190. Springer (2001) 14. Doerr, B.: Better runtime guarantees via stochastic domination. In: Evolutionary Computation in Combinatorial Optimization (EvoCOP’18). pp. 1–17 (2018) 15. Doerr, B., Doerr, C., Yang, J.: k-bit mutation with self-adjusting k outperforms standard bit mutation. In: Parallel Problem Solving from Nature (PPSN ’16). pp. 824–834 (2016) 16. Doerr, B., Dremaux, A., Lutzeyer, J., Stumpf, A.: How the move acceptance hyper-heuristic copes with local optima: Drastic differences between jumps and cliffs. In: Proceedings of the Genetic and Evolutionary Computation Conference (GECCO ’23). p. 990–999 (2023) 17. Doerr, B., Krejca, M.S.: Significance-based estimation-of-distribution algorithms. In: Proceedings of the Genetic and Evolutionary Computation Conference (GECCO’18). pp. 1483–1490. ACM (2018) 16 P. S. Oliveto, Z. Wang, P. Wu and M. Xu 18. Doerr, B., Lissovoi, A., Oliveto, P.S., Warwicker, J.A.: On the runtime analysis of selection hyper-heuristics with adaptive learning periods. In: Proc of GECCO ’18. p. 1015–1022 (2018) 19. Doerr, B., Lutzeyer, J.F.: Hyper-heuristics can profit from global variation op-erators. arXiv preprint arXiv:2407.14237 (2024), https://arxiv.org/abs/2407. 14237 
+
+20. Doerr, B., Oliveto, P.S., Warwicker, J.A.: Selection hyper-heuristics can automat-ically adjust the learning period to optimally solve pseudo-boolean problems. Ar-tificial Intelligence 357 , 104560 (2026) 21. Doerr, C., Wagner, M.: Simple on-the-fly parameter selection mechanisms for two classical discrete black-box optimization benchmark problems. In: Proceedings of the Genetic and Evolutionary Computation Conference (GECCO’18). pp. 943–950 (2018) 22. Dowsland, K., Soubeiga, E., Burke, E.: A simulated annealing hyperheuristic for determining shipper sizes for storage and transportation. European Journal of Operational Research 179 (3), 759–774 (2007) 23. Drake, J.H., Kheiri, A., Özcan, E., Burke, E.K.: Recent advances in selection hyper-heuristics. European Journal of Operational Research 285 (2), 405–428 (2020) 24. Durrett, R.: Probability: theory and examples, vol. 49. Cambridge university press (2019) 25. Freedman, D.A.: On tail probabilities for martingales. the Annals of Probability pp. 100–118 (1975) 26. Friedrich, T., Kötzing, T., Krejca, M.S.: EDAs cannot be balanced and sta-ble. In: Proceedings of the Genetic and Evolutionary Computation Conference (GECCO’16). pp. 1139–1146. ACM (2016) 27. Gibbs, J., Kendall, G., Özcan, E.: Scheduling english football fixtures over the holiday period using hyper-heuristics. In: Parallel Problem Solving from Nature (PPSN’10). pp. 496–505 (2010) 28. He, J., Yao, X.: Drift analysis and average time complexity of evolutionary algo-rithms. Artificial Intelligence 127 (1), 57–85 (2001) 29. Kendall, G., Li, J.: Competitive travelling salesmen problem: A hyper-heuristic approach. Journal of the Operational Research Society 64 (2), 208–216 (2013) 30. Kheiri, A., Keedwell, E.: A hidden markov model approach to the problem of heuristic selection in hyper-heuristics with a case study in high school timetabling problems. Evolutionary Computation 25 (3), 473–501 (2017) 31. Lehre, P.K., Witt, C.: Black-box search by unbiased variation. Algorithmica 64 (4), 623–642 (2012) 32. Lengler, J.: Drift analysis. In: Doerr, B., Neumann, F. (eds.) Theory of Randomized Search Heuristics in Discrete Search Spaces, chap. 2, pp. 89–126. Springer (2019) 33. Li, J., Kendall, G.: A hyperheuristic methodology to generate adaptive strategies for games. IEEE Transactions on Computational Intelligence and AI in Games 
+
+9(1), 1–10 (2017) 34. Lissovoi, A., Oliveto, P., Warwicker, J.A.: How the duration of the learning period affects the performance of random gradient selection hyper-heuristics. In: Proc. of AAAI-20. pp. 2376–2383 (2020) 35. Lissovoi, A., Oliveto, P.S., Warwicker, J.A.: Simple hyper-heuristics control the neighbourhood size of randomised local search optimally for leadingones. Evolu-tionary Computation 28 (3), 437–461 (2020) 36. Lissovoi, A., Oliveto, P.S., Warwicker, J.A.: When move acceptance selection hyper-heuristics outperform metropolis and elitist evolutionary algorithms and when not. Artificial Intelligence 314 , 103804 (2023) On the Runtime Analysis of Reinforcement Learning Hyper-Heuristics 17 37. Ma, Y., Oliveto, P.S., Warwicker, J.: Random gradient hyper-heuristics can learn to escape local optima in multimodal optimisation. In: Proceedings of GECCO ’25. p. 1622–1630 (2025) 38. Martins, M.S., El Yafrani, M., Delgado, M.R., Wagner, M., Ahiod, B., Lüders, R.: Hseda: A heuristic selection approach based on estimation of distribution algo-rithm for the travelling thief problem. In: Genetic and Evolutionary Computation (GECCO ’17). pp. 361–368 (2017) 39. McClymont, K., Keedwell, E.: Markov chain hyper- heuristic (mchh): an online se-lective hyper-heuristic for multi- objective continuous problems. In: Proceedings of the 13th Annual Conference on Genetic and Evolutionary Computation (GECCO ’11). pp. 2003–2010 (2011) 40. Mitzenmacher, M., Upfal, E.: Probability and computing: Randomization and probabilistic techniques in algorithms and data analysis. Cambridge university press (2017) 41. Moraglio, A., Sudholt, D.: Principled design and runtime analysis of abstract con-vex evolutionary search. Evolutionary Computation 25 (2), 205–236 (2017) 42. Nareyek, A.: Choosing search heuristics by non-stationary reinforcement learning. In: Metaheuristics: Computer decision-making, pp. 523–544. Springer (2003) 43. Oliveto, P.S.: Rigorous performance analysis of hyper-heuristics. In: Pillay, N., Qu, R. (eds.) Automated Design of Machine Learning and Search Algorithms, pp. 45–71. Springer International Publishing, Cham (2021) 44. Oliveto, P.S.: Time complexity analysis of stochastic search algorithms. In: Marti, R., Pardalos, P.M., Resende, M.G.C. (eds.) Handbook of Heuristics, chap. 37, pp. 1131–1172. Springer, 2nd edn. (2025) 45. Özcan, E., Misir, M. Ochoa, G., Burke, E.: A reinforcement learning – great-deluge hyper-heuristic for examination timetabling. International Journal of Ap-plied Metaheuristic Computing 1(1), 39–59 (2010) 46. P., R., Gaw, A., Kwan, R.: Distributed choice function hyper-heuristics for timetabling and scheduling. In: Proceedings of the 5th International Conference on the Practice and Theory of Automated Timetabling (PATAT ’05), LNCS 3616. pp. 51–70 (2005) 47. Pillay, N., Qu, R.: Hyper-heuristics: theory and applications. Springer (2018) 48. Thabtah, F., Cowling, P.: Mining the data from a hyperheuristic approach us-ing associative classification. Expert Systems with Applications: An International Journal 34 (2), 1093–1101 (2008) 49. Tropp, J.A.: Freedman’s inequality for matrix martingales. Electronic Communi-cations in Probability 16 , 262–270 (2011) 50. Walker, D.J., Keedwell, E.: Towards many-objective optimisation with hyper-heuristics: Identifying good heuristics with indicators. In: Parallel problem solving from nature (PPSN ’16). pp. 493–502 (2016) 51. Wu, X., Consoli, P., Minku, L., Ochoa, G., Yao, X.: An evolutionary hyper-heuristic for the software project scheduling problem. In: Parallel problem solving from nature (PPSN ’16). pp. 37–47 (2016)
