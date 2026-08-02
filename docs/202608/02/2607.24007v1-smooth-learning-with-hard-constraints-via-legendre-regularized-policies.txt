@@ -1,0 +1,1443 @@
+Title: Smooth Learning with Hard Constraints via Legendre-Regularized Policies
+
+URL Source: https://arxiv.org/pdf/2607.24007v1
+
+Published Time: Tue, 28 Jul 2026 01:31:55 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# Smooth Learning with Hard Constraints via Legendre-Regularized Policies 
+
+Zikun Lin*, Rui Chen †, and Yijie Wang ‡
+
+We revisit contextual optimization from the perspective of policy class design. A desirable policy class should be expressive enough to learn rich context-decision relationships, should enforce hard feasibility constraints rather than soft penalty terms, and should remain smooth enough for gradient-based training on downstream decision losses. Existing approaches usually emphasize only part of these requirements. We propose Legendre-regularized policies, which parameterize decisions as solutions of regularized optimization problems over the original feasible region. This construction yields policies that are feasible by construction and differentiable with respect to learned latent parameters. We prove that the associated optimizer map is single-valued, maps onto the relative interior of the feasible set, admits an explicit Jacobian, is Lipschitz continuous, and can be made arbitrarily smooth. We also establish a universal approximation result showing that the proposed class can approximate any continuous feasible policy on compact context sets. The framework unifies explicitly regularized optimizers and implicit perturbation-based smooth optimizers. Experiments on contextual newsvendor and resource allocation problems show that our approach improves prescriptive performance relative to the benchmark methods. 
+
+## 1. Introduction 
+
+A central problem in data-driven decision-making is to learn a policy that maps contextual infor-mation to a feasible decision with low downstream cost. In population form, this problem can be written as min  
+
+> π∈Π
+
+E(x,ξ )ℓ(π(x); ξ), (1) where x ∈ Rk1 denotes the side information that is available before making the decision, ξ ∈ Rk2
+
+denotes the uncertain parameter governing downstream performance, ℓ(·; ξ) : S → R is the cost function, S ⊆ Rn is a set representing the deterministic feasible region, and Π is a class of policies mapping each context x to a feasible decision w ∈ S. The key question is therefore how to design the policy class in (1). A desirable policy class must satisfy three requirements at once: it must  
+
+> ∗
+
+Department of Systems Engineering and Engineering Management, The Chinese University of Hong Kong, Hong Kong, China. Email: zklin@se.cuhk.edu.hk . 
+
+> †
+
+School of Data Science, The Chinese University of Hong Kong, Shenzhen, Guangdong, China. Email: 
+
+rchen@cuhk.edu.cn . 
+
+> ‡
+
+School of Economics and Management, Tongji University, Shanghai, China. Email: yijiewang@tongji.edu.cn .
+
+1arXiv:2607.24007v1 [math.OC] 27 Jul 2026 2 Author: Smooth Learning via Legendre-Regularized Policies 
+
+be expressive enough to capture the dependence of good decisions on context, it must enforce the hard constraints (as opposed to soft constraints or penalized violations) defining S, and it must be smooth enough for gradient-based training. Existing approaches emphasize different parts of these requirements. The decision rule approach seeks to learn a direct mapping from contextual covariates to optimal decisions, optimizing an empirical risk metric over a predefined hypothesis class (Brandt et al. 2009, Ban and Rudin 2019). This approach is natural from a policy-learning perspective, but feasibility is difficult to guarantee for flexible models when S is high-dimensional or polyhedral. Predict-then-optimize methods take the opposite route: they preserve the downstream optimization model, but train the statistical model for prediction rather than for the decision loss (Bertsimas and Kallus 2020, Bertsimas et al. 2023, Kannan et al. 2024, 2025, Wang et al. 2026b). Decision-focused learning attempts to combine both advantages by training the predictive model through the downstream decision loss (Amos and Kolter 2017, Agrawal et al. 2019). However, when the decision is obtained by solving an optimization problem, the induced optimizer map is often non-smooth or set-valued. For example, in linear optimization over a polyhedral feasible region, the map from predicted costs to optimal decisions is piecewise constant, leading to zero or undefined gradients in large regions of the parameter space (Bolte et al. 2021). This has motivated surrogate losses and differentiable optimization layers (Berthet et al. 2020, Elmachtoub and Grigas 2022), as well as hard-constrained feasibility maps that project or reparameterize raw model outputs into the feasible set (Chen et al. 2023, Schneider and Kuhn 2026). This paper proposes a policy class that meets the three requirements by making the optimizer itself smooth. We study Legendre-regularized policies of the form 
+
+πg (x) = wF,ϕ (g(x)) , wF,ϕ (z) ∈ arg min  
+
+> w∈S
+
+{⟨ F z, w ⟩ + ϕ(w)}.
+
+Here g is a learned model, and ϕ is a fixed Legendre-type regularizer chosen so that the resulting optimizer is well-defined and smooth. We formalize the required conditions on ϕ through the notion of an admissible Legendre regularizer in Section 2.1. The output of g is not an infeasible candidate decision to be repaired, nor does it need to be interpreted as a prediction of ξ. Instead, it serves as latent intermediate parameters, which are coefficients of a regularized optimization problem whose solution is the prescribed decision. The resulting solution map has the desired property for learning. Under mild conditions (defining admissible Legendre regularizers), it is single-valued, lies in the relative interior S◦, is differentiable with an explicit Jacobian, and is Lipschitz continuous in the latent parameters. With smoother regularizers, the policy map can inherit higher-order smoothness, which gives continuous and stable sensitivities of the decision with respect to the learned latent parameters. This is stronger than the Author: Smooth Learning via Legendre-Regularized Policies 3
+
+almost-everywhere differentiability available from many projection-based maps: first-order meth-ods can often still be applied in the latter case, but gradients may not exist and may change discontinuously across active regions (Schneider and Kuhn 2026). In contrast, the Jacobian of wF,ϕ 
+
+is controlled by the regularizer through the Hessian of its convex conjugate, yielding a more struc-tured object for backpropagation, sensitivity analysis, and higher-order optimization methods. At the same time, one can show that parameterizing decisions as solutions of regularized optimization problems does not sacrifice expressive power: since the image of wF,ϕ is S◦, composing it with a uni-versal approximator yields a policy class that can uniformly approximate any continuous feasible policy on a compact context set. The framework also unifies several smoothing mechanisms. Standard choices, such as logarith-mic or entropic regularization, give admissible Legendre regularizers for the feasible regions, and lead to optimization layers with tractable derivatives. Meanwhile, perturbation-based smooth opti-mizers (Berthet et al. 2020) can also be interpreted as implicit Legendre-regularized policies. This extends the framework beyond analytically specified regularizers to oracle-based smoothing schemes, which is useful when an explicit regularization is inconvenient or inefficient but an opti-mization oracle over S is available. The contribution of our paper can be summarized as follows: 1. We propose a Legendre-regularized policy framework for decision-focused learning. We show that the induced solution map is single-valued, feasible by construction, continuously differ-entiable with an explicit Jacobian, Lipschitz continuous, and maps onto the relative interior of S. We also show that our Legendre-type assumptions on the regularizer are necessary for these desirable properties of the corresponding solution map. 2. We provide a unified framework that integrates existing explicit and implicit smooth optimiz-ers. In particular, both analytically specified Legendre regularizers and perturbation-induced regularizers can be treated as instances of our proposed Legendre-regularized policies. 3. We show that this Legendre-regularized policy framework preserves expressive power: when the latent model class G is a universal approximator, Legendre-regularized policies can uniformly approximate any continuous feasible policy on a compact context set. 4. We conduct extensive experiments on contextual newsvendor and resource allocation problems to demonstrate the effectiveness of the proposed framework. 
+
+Notations . For a set S, we denote by aff( S) its affine hull, cl( S) its closure, S◦ its relative interior, and int( S) its interior when the ambient space is clear, and we denote by IS (·) and 1S (·)its associated extended-valued and 0-1 indicator functions, respectively, defined as IS (w) = 0 and 
+
+1S (w) = 1 if w ∈ S, and IS (w) = + ∞ and 1S (w) = 0 otherwise. For an extended-real-valued function 
+
+ϕ : Rn → R ∪ {−∞ , +∞} , dom( ϕ) denotes its effective domain, i.e., dom( ϕ) := {w ∈ Rn : ϕ(w) <4 Author: Smooth Learning via Legendre-Regularized Policies 
+
++∞} , and ϕ∗ denotes its convex conjugate, i.e., ϕ∗(·) := sup w{⟨· , w ⟩ − ϕ(w)}. For an integer k ≥ 1and a set X, Ck(X) denotes the class of functions with continuous (partial) derivatives up to order 
+
+k on X, and C∞(X) denotes smooth functions with continuous (partial) derivatives of all orders on 
+
+X. Let N (μ, σ 2) denote the Gaussian distribution with mean μ and variance σ2, and Φ( ·) denote the cumulative distribution function of N (0 , 1). 
+
+1.1. Related Literature 
+
+Policy learning. A large literature studies data-driven policies that map covariates directly to decisions, including parametric decision rules (Brandt et al. 2009, Ban and Rudin 2019, Bazier-Matte and Delage 2020), piecewise-affine decision rules (Zhang et al. 2026), kernel and forest-based prescriptive methods (Bertsimas and Koduri 2022, Kallus and Mao 2023), and neural decision rules (Zhang et al. 2020, Oroojlooyjadid et al. 2020, Qi et al. 2023). However, policy learning methods do not automatically ensure feasibility; therefore, a recent line of work aims to enforce feasibility by composing an unconstrained predictor with a projection or radial map onto the feasible set (Chen et al. 2023, Schneider and Kuhn 2026). Our construction shares this goal but uses a different mechanism: instead of geometrically correcting a raw decision, we parameterize feasible decisions as solutions of Legendre-regularized optimization problems. This optimizer-based parameterization yields Jacobians governed by the regularizer through convex duality. Moreover, with sufficiently smooth Legendre regularizers, the resulting policy map can be made smooth to higher order, and in standard smooth-regularizer cases even C∞, which is stronger than the almost-everywhere differentiability typical of projection-based maps over polyhedral sets. 
+
+End-to-end learning. End-to-end learning, also known as decision-focused learning, trains pre-dictive models through the downstream optimization problem so that model parameters are chosen for decision quality rather than prediction accuracy alone (Donti et al. 2017, Wilder et al. 2019, Elmachtoub and Grigas 2022). A common approach is to differentiate through an optimization layer, as in differentiable quadratic or convex optimization layers (Amos and Kolter 2017, Agrawal et al. 2019). This strategy is powerful when the original solution map is smooth; however, many decision problems have non-smooth or set-valued optimizers. In linear optimization over a poly-hedral feasible region, for example, the map from predicted costs to optimal decisions is piecewise constant and provides little useful gradient information. Existing work addresses this issue through surrogate losses such as SPO+ and related decision-aware objectives (Elmachtoub et al. 2020, Mandi et al. 2020, Elmachtoub and Grigas 2022, Loke et al. 2022, Liu and Grigas 2021), or through perturbed and Fenchel–Young smooth optimizers (Berthet et al. 2020). Many such surrogates are tailored to particular downstream structures, most notably linear objectives in the Smart Predict-then-Optimize (SPO) framework (Mandi et al. 2020, Elmachtoub and Grigas 2022). Our approach Author: Smooth Learning via Legendre-Regularized Policies 5
+
+shifts the focus from designing a surrogate loss for a fixed non-smooth optimizer to designing a smooth feasible policy class directly. Because the smoothing is applied to the decision map rather than to a problem-specific loss surrogate, Legendre-regularized policies can be trained on general (sub)differentiable decision losses. 
+
+Regularization as smoothing. Regularization is a widely used mechanism for smoothing non-smooth optimization problems. For non-smooth convex functions that can be represented as point-wise maxima, Nesterov (2005) shows that adding a strongly convex function to the inner opti-mization problem yields a smooth approximation with a Lipschitz-continuous gradient. Related regularization-based smoothing techniques have also been studied in online linear optimiza-tion (Abernethy et al. 2014). In structured prediction, SparseMAP adds a quadratic regularizer to maximum a posteriori (MAP) inference to obtain a unique solution map that is differentiable almost everywhere (Niculae et al. 2018), while the Fenchel–Young framework provides a general treatment of prediction maps induced by convex regularizers (Blondel et al. 2020). In decision-focused learn-ing, quadratic and ℓ2-norm regularizers have been used to smooth linear optimizer maps (Wilder et al. 2019, Wang et al. 2026a). These methods address their zero or undefined gradients and enable differentiation through the KKT conditions. Our work builds on this regularization-as-smoothing principle but focuses on the design of the resulting policy class. In particular, Legendre regu-larization ensures that every latent parameter produces a solution in the relative interior of the feasible region. The resulting solution map covers the entire relative interior and is differentiable everywhere, and can be made arbitrarily smooth under stronger regularity conditions. 
+
+## 2. Legendre-Regularized Policies 
+
+We now introduce a class of contextual decision policies that are feasible by construction and differentiable with respect to learned parameters. The basic idea is to avoid learning decisions directly. Instead, the learned model outputs parameters of a regularized optimization problem, and the policy is obtained by solving this optimization problem over the original feasible region. Let g : X → Rk be a prediction model, where X denotes the context space. Given a fixed feasible region S, a classical plug-in policy for a linear downstream objective has the form 
+
+x 7 → w⋆(g(x)) , w⋆(z) ∈ arg min  
+
+> w∈S
+
+z⊤w. 
+
+When S has a non-smooth boundary (e.g., S is polyhedral), the map z 7 → w⋆(z) is generally set-valued and non-smooth. This creates difficulties for gradient-based end-to-end training. Our approach replaces the non-smooth optimizer w⋆(·) with a smooth regularized optimizer. Throughout this section, assume that the deterministic feasible region S is a nonempty closed convex set with its affine hull aff( S) = {w ∈ Rn : Aw = b}, where A ∈ Rp×n has full row rank and 0 ≤ p ≤ n − 1. Note that, in the case when S is full dimensional, aff( S) = Rn, A is absent, and p = 0. 6 Author: Smooth Learning via Legendre-Regularized Policies 
+
+Let r = n − p, and let N ∈ Rn×r be a matrix whose columns form an orthonormal basis of ker( A). Fix any point ¯ w in the relative interior S◦ of S. Then every feasible point w ∈aff( S) can be written uniquely as w = ¯ w + N y , for some y ∈ Rr . Define the reduced feasible region 
+
+Y := {y ∈ Rr : ¯ w + N y ∈ S◦}.
+
+Then Y provides a representation of S◦ up to an affine transformation. 
+
+2.1. Admissible Legendre Regularizers 
+
+We impose the following regularity conditions on the regularizer. 
+
+Definition 1. A proper lower semicontinuous convex function ϕ : Rn → R ∪ { +∞} is called an 
+
+admissible Legendre regularizer for S if S◦ = (dom( ϕ)) ◦, and the reduced function 
+
+ψ(y) := ϕ( ¯ w + N y )satisfies the following conditions: 1. ψ is μ-strongly convex for some μ > 0; 2. ψ is essentially smooth (i.e., ψ is differentiable on Y , and lim i→∞ |∇ ψ(yi)| = + ∞ for all sequences {yi}∞ 
+
+> i=1
+
+⊆ Y converging to any boundary point of Y ); 3. Its convex conjugate ψ∗ is twice differentiable on Rr .In the full-dimensional case when A is absent ( n = r, N = In), conditions 1-3 reduce to the simpler conditions that ϕ is μ-strongly convex, essentially smooth, and has a twice continuously differ-entiable convex conjugate. Note that admissible Legendre regularizers are convex functions of Legendre type (Rockafellar 1970) due to conditions 1 and 2. Below we summarize some useful properties of admissible Legendre regularizers. 
+
+Lemma 1. Let ψ : Rr → R ∪ { +∞} be a μ-strongly convex and essentially smooth function with 
+
+Y = int(dom( ψ)) . Then the following properties hold: 
+
+1. ψ∗ : Rr → R is differentiable; 
+
+2. ∇ψ∗ : Rr → Y is 1/μ -Lipschitz continuous; 
+
+3. ∇ψ is continuous and bijective from Y to Rr with (∇ψ)−1 = ∇ψ∗;
+
+4. For all k ∈ Z+, ψ∗ ∈ Ck(Rr ) if ψ ∈ Ck(Y ).Proof. Properties 1-3 follow from standard convex analysis (Rockafellar 1970[Theorem 25.5, Theorem 26.5], Rockafellar and Wets 2009[Proposition 12.60]). Note that ∇2ψ(y) is positive definite (and therefore non-singular) for all y ∈ Y due to strong convexity of ψ. Then property 4 follows from property 3 and the inverse function theorem. □
+
+As a special case of property 4 in Lemma 1, a sufficient (but not necessary) condition for condition 3 in Definition 1 is ψ ∈ C2(Y ), provided that the remaining conditions in Definition 1 are satisfied. Author: Smooth Learning via Legendre-Regularized Policies 7
+
+2.2. Legendre-Regularized Policy Class 
+
+Let F ∈ Rn×k with k ≥ r, and define B := N ⊤F ∈ Rr×k. We assume that rank( B) = r (e.g., F = In
+
+in which case k = n and B = N ⊤, or F = N in which case k = r and B = Ir ). Given an admissible Legendre regularizer ϕ, define the regularized optimization layer 
+
+wF,ϕ (z) ∈ arg min  
+
+> w∈Rn
+
+{⟨ F z, w ⟩ + ϕ(w)} . (2) Since ϕ has its effective domain contained in S, this is equivalently a strongly convex optimiza-tion problem over the original feasible region S. A Legendre-regularized policy (LRP) is then a composition 
+
+πg (x) := wF,ϕ (g(x)) , g ∈ G ,
+
+where G is a chosen class of prediction models, such as neural networks, that map side information to a latent parameter vector in Rk. The induced policy class is ΠF,ϕ (G) := {wF,ϕ ◦ g : g ∈ G} .
+
+This policy class differs from the class of plug-in policies (i.e., {w⋆ ◦ g : g ∈ G} ) in an important way. For an LRP πg , the model output g(x) need not be interpreted as a prediction of the uncer-tain objective coefficients in a linear optimization problem over S. Instead, g(x) parameterizes a regularized optimization problem whose solution is the decision. Thus, the downstream loss used for training can be any (sub)differentiable decision loss ℓ(w; ξ), not only a linear cost. 
+
+2.3. Examples 
+
+We provide a few examples of admissible Legendre regularizers in the case when S is a polytope (i.e., a bounded polyhedron) of the form S = {w : Aw = b, Cw ≥ d} with C ∈ Rm×n and Cw ≥ d
+
+being facet-defining for S, in which case S◦ = {w : Aw = b, Cw > d }.
+
+2.3.1. LRP -Log. A classic example is the logarithmic barrier 
+
+ϕlog (w) = −τ
+
+> m
+
+X
+
+> j=1
+
+log( Cj w − dj ) + I{w:Aw =b}(w), (3) where τ > 0, Cj denotes the j-th row of C, the function is extended by + ∞ whenever Cj w − dj ≤ 0for some j, and I{w:Aw =b} : Rn → { 0, +∞} . Note that the indicator function can be easily encoded as constraints in the solution of (2). 8 Author: Smooth Learning via Legendre-Regularized Policies 
+
+2.3.2. LRP -Ent. Another useful example is the entropic regularizer 
+
+ϕent (w) = τ
+
+> m
+
+X
+
+> j=1
+
+(Cj w − dj ) log( Cj w − dj ) + I{w:Aw =b}(w), (4) where τ > 0, 0 log 0 := 0, and the function is extended by + ∞ whenever Cj w − dj < 0 for some j.Unlike the logarithmic barrier, this regularizer does not diverge in value at the boundary. However, its gradient diverges as any slack approaches zero, and hence the corresponding ψ is essentially smooth. 
+
+2.3.3. LRP -Ptb. Moreover, regularizers can be made implicit. We next show an example of an admissible Legendre regularizer that does not require an algebraic description of S, but a linear optimization oracle over S. Given a full-dimensional polyhedral S and some well-behaved noise vector Z (e.g., Z ∼ N (0 , τ 2 · In)), Berthet et al. (2020) show that the following perturbed minimum 
+
+wptb (z) := EZ
+
+wZ
+
+> ptb
+
+(z) with wZ
+
+> ptb
+
+(z) ∈ arg min  
+
+> w∈S
+
+⟨z + Z, w ⟩
+
+can be written as a regularized minimum 
+
+wptb (z) ∈ arg min  
+
+> w∈S
+
+[⟨z, w ⟩ + ϕptb (w)] ,
+
+with ϕptb being the convex conjugate of F (z) = EZ [max w∈S ⟨z − Z, w ⟩]. Furthermore, under the assumptions in Berthet et al. (2020), ϕptb is strongly convex and Legendre-type (implying essen-tial smoothness) with its convex conjugate ϕ∗ 
+
+> ptb
+
+= F being twice differentiable. Therefore, wptb =
+
+wIn,ϕ ptb is an LRP with ϕptb being an admissible Legendre-regularizer implicitly defined as the convex conjugate of an expected parametric maximum. Nevertheless, stochastic gradient/Jacobian information can be evaluated by Monte-Carlo methods (Berthet et al. 2020). 
+
+2.3.4. Unbounded S. In the case when the feasible region S = {w : Aw = b, Cw ≥ d} is unbounded, the logarithmic barrier (3) or the entropic regularizer (4) no longer implies a strongly convex ψ. But one may simply add to them a strongly convex real-valued differentiable function (e.g., ∥w∥22) so that the corresponding ψ becomes strongly convex, and then the augmented ϕ
+
+becomes an admissible Legendre regularizer. 
+
+2.4. Resulting Solution Map 
+
+The following result summarizes the basic properties of the resulting solution map. 
+
+Theorem 1. Suppose ϕ is an admissible Legendre regularizer for S. Then the following hold: 
+
+1. For every z ∈ Rk, the optimization problem (2) defining wF,ϕ (z) has a unique optimal solution, and the unique optimal solution wF,ϕ (z) ∈ S◦;Author: Smooth Learning via Legendre-Regularized Policies 9
+
+2. The solution map admits the representation 
+
+wF,ϕ (z) = ¯ w + N ∇ψ∗(−Bz ).
+
+Consequently, wF,ϕ is differentiable, with Jacobian 
+
+Jw F,ϕ (z) = −N ∇2ψ∗(−Bz )B;3. The map wF,ϕ is Lipschitz continuous. In particular, for z1, z 2 ∈ Rk,
+
+∥wF,ϕ (z1) − wF,ϕ (z2)∥2 ≤ ∥B∥2
+
+μ ∥z1 − z2∥2 ≤ ∥F ∥2
+
+μ ∥z1 − z2∥2;4. The image of wF,ϕ is S◦. If k = r, then wF,ϕ is bijective from Rr onto S◦, and its inverse w−1
+
+> F,ϕ
+
+is continuous and satisfies 
+
+w−1
+
+> F,ϕ
+
+( ¯ w + N y ) = −B−1∇ψ(y).
+
+If, in addition, ψ ∈ Ck(Y ) for some integer k ≥ 2, then wF,ϕ ∈ Ck−1(Rr ) and w−1 
+
+> F,ϕ
+
+∈ Ck−1(S◦).Proof. Using the reduced representation w = ¯ w + N y , the regularized optimization problem becomes min y {⟨ F z, ¯w + N y ⟩ + ψ(y)}, which is equivalent to min  
+
+> y
+
+{⟨ Bz, y ⟩ + ψ(y)} . (5) Since ψ is strongly convex and essentially smooth, this problem has a unique minimizer which lies in int(dom ψ) = Y . Therefore wF,ϕ (z) ∈ S◦.The first-order condition of (5) is Bz + ∇ψ(y) = 0, which is equivalent to −Bz = ∇ψ(y). By property 3 of Lemma 1, y = ∇ψ∗(−Bz ). Therefore, 
+
+wF,ϕ (z) = ¯ w + N ∇ψ∗(−Bz ).
+
+Since ψ∗ is twice differentiable, differentiating the above expression gives 
+
+Jw F,ϕ (z) = −N ∇2ψ∗(−Bz )B. 
+
+Due to property 2 of Lemma 1, 
+
+∥wF,ϕ (z1) − wF,ϕ (z2)∥2 = ∥N [∇ψ∗(−Bz 1) − ∇ ψ∗(−Bz 2)] ∥2 ≤ ∥N ∥2 · ∥ B∥2
+
+μ ∥z1 − z2∥2.
+
+Since N has orthonormal columns, ∥N ∥2 = 1 and ∥B∥2 = ∥N ⊤F ∥2 ≤ ∥ F ∥2.Finally, let w = ¯ w + N y be an arbitrary point in S◦. Since B has full row rank, there exists z ∈ Rk
+
+such that Bz = −∇ ψ(y). Then y satisfies the first-order condition for the reduced problem (5), so 
+
+w = wF,ϕ (z). Thus the image of wF,ϕ is S◦. If k = r and B is non-singular, this z is unique and is given by z = −B−1∇ψ(y). The stated continuity and differentiability conclusions follow from the corresponding smoothness of ∇ψ and property 4 of Lemma 1. □10 Author: Smooth Learning via Legendre-Regularized Policies 
+
+Furthermore, one can show that the assumptions we made for an admissible Legendre regularizer 
+
+ϕ (assumptions 1-3 in Definition 1) are necessary for some properties in Theorem 1 to hold. For simplicity, we assume that Y = S◦ is bounded and full-dimensional, n = r, and N = F = In.
+
+Proposition 1. Let Y ⊆ Rn be a nonempty bounded open convex set, and ψ : Rr → R ∪ { +∞} 
+
+be a proper lower semicontinuous convex function with Y = int(dom( ψ)) . For z ∈ Rn, define the solution map 
+
+¯wψ (z) ∈ arg min 
+
+> w∈Rn
+
+{⟨ z, w ⟩ + ψ(w)}. (6) 
+
+Assume the following properties of ¯wψ :(i) For all z ∈ Rn, ¯wψ (z) is uniquely defined, i.e., the right-hand side of (6) always has a unique minimizer; (ii) The map ¯wψ : Rn → Y is bijective and L-Lipschitz continuous for some L > 0;(iii) The map ¯wψ is differentiable everywhere. Then function ψ is μ-strongly convex with μ = 1 /L , essentially smooth, and ψ∗ is twice differentiable on Rn.Proof. We first show that ψ is differentiable on Y and ∂ψ (y) = ∅ for y / ∈ Y . Let y ∈ Rn with 
+
+∂ψ (y)̸ = ∅, u, v ∈ ∂ψ (y) be two arbitrary subgradients of ψ at y. Consider problem (6) with z = −u
+
+and z = −v. Then, by the first-order condition 0 ∈ z + ∂ψ (w) of (6), y optimizes both problems (6) with z = −u and z = −v, respectively, i.e., y = ¯ wψ (−u) = ¯ wψ (−v). By assumption (ii), y ∈ Y
+
+and u must be equal to v, i.e., ∂ψ (y) must be a singleton. Since for arbitrarily chosen y ∈ Y ,such arguments hold, by convexity of ψ, ψ is differentiable on Y . Furthermore, by the first-order condition of (6), 
+
+z + ∇ψ( ¯ wψ (z)) = 0 , z ∈ Rn. (7) Note that the optimal objective value of the right-hand side of (6) is −ψ∗(−z) and cl( Y ) is compact. By assumptions (i) and (ii), and the extended-real-valued extension of Danskin’s theorem (Bertsekas 1971[Proposition A.22]), ψ∗ is differentiable with ∇ψ∗(−z) = ¯ wψ (z) for all z ∈ Rn. More-over, due to assumption (iii), ∇ψ∗ is differentiable everywhere, i.e., ψ∗ is twice differentiable on Rn.Since ¯ wψ (−· ) = ∇ψ∗(·), strong convexity of ψ(= ψ∗∗ ) follows from assumption (ii) and Rockafellar and Wets (2009)[Proposition 12.60]. Moreover, by assumption (ii) and (7), ∂ψ = − ¯w−1 
+
+> ψ
+
+: Y → Rn is bijective. Following Rockafellar (1970)[Corollary 26.3.1], ψ is essentially smooth. □
+
+Proposition 1 demonstrates why the Legendre-type assumptions are necessary. If one wants a regularized optimizer that is uniquely defined for every finite parameter, parameterizes the rela-tive interior of the feasible region through a Lipschitz bijection, and is differentiable everywhere, Author: Smooth Learning via Legendre-Regularized Policies 11 −4 −2 0 2 4                                           
+
+> latent z1
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+> 4
+> latent  z2
+> (a) Plug-in policy (SPO)
+> c⊤w⋆(z)
+> −4 −2 024
+> latent z1
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+> 4
+> latent  z2
+> (b) SPO +surrogate
+> ℓSPO +(z) (surrogate scale)
+> −4 −2 024
+> latent z1
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+> 4
+> latent  z2
+> (c) Quadratic regularization
+> c⊤wquad (z)
+> −4 −2 024
+> latent z1
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+> 4
+> latent  z2
+> (d) LRP-Log
+> c⊤wlog (z)
+> −4 −2 024
+> latent z1
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+> 4
+> latent  z2
+> (e) LRP-Ent
+> c⊤went (z)
+> −4 −2 024
+> latent z1
+> −4
+> −3
+> −2
+> −1
+> 0
+> 1
+> 2
+> 3
+> 4
+> latent  z2
+> (f) LRP-Ptb
+> c⊤wptb (z)
+> 0
+> 1
+> 2
+> 3
+> 0
+> 5
+> 10
+> 15
+> 0
+> 1
+> 2
+> 3
+> 0
+> 1
+> 2
+> 3
+> 0
+> 1
+> 2
+> 3
+> 0
+> 1
+> 2
+> 3
+
+Figure 1 Loss landscapes over S = [0 , 1] 2 with true cost c = (1 , 2). Panels (a), (c), (d), (e), and (f) show the downstream loss c⊤w(z) induced by the plug-in policy, quadratic regularization, LRP -Log, LRP -Ent, and 
+
+LRP -Ptb, respectively. Panel (b) shows the SPO + surrogate value. Dashed lines mark discontinuities, kink locations, or active-set changes; the three LRP panels in the bottom row have no such finite latent boundary and produce smooth interior policies. 
+
+then the reduced regularizer must be strongly convex, essentially smooth, and have a twice differ-entiable convex conjugate. This separates our construction from other non-Legendre regularized approaches, for instance, the quadratic smoothing approach for decision-focused combinatorial opti-mization (Wilder et al. 2019), where a small squared-norm penalty is added to a linear optimization problem to obtain a quadratic program. Such a quadratic term, together with the hard constraints, does not lead to an admissible Legendre regularizer. Specifically, when S is full-dimensional and bounded, with 
+
+ϕ(w) = τ
+
+2 ∥w∥22 + IS (w), τ > 0,
+
+the gradient of ϕ remains bounded as w approaches the boundary of S. Hence ϕ is not essentially smooth. In fact, the optimizer is the Euclidean projection of −z/τ onto S, so different values of z,along directions in the normal cone, may correspond to the same solution lying on the boundary of S. Thus, this map is not a bijection from the latent space onto S◦. Moreover, for polyhedral S,this projection map is only piecewise affine: it is smooth inside a fixed active set, but its Jacobian is piecewise constant and changes discontinuously when the active set changes. 12 Author: Smooth Learning via Legendre-Regularized Policies 
+
+Figure 1 illustrates this distinction on a two-dimensional example. Let S = [0 , 1] 2 and let the true linear downstream cost be c⊤w with c = (1 , 2). For a latent vector z ∈ R2, the plug-in policy induces the discontinuous surface c⊤w⋆(z), while the SPO + surrogate is continuous but piecewise linear (Elmachtoub and Grigas 2022). Quadratic regularization smoothens the optimizer inside active regions, but the induced downstream loss still has kinks when the solution changes the active set. Specifically, the baselines are given by 
+
+w⋆(z) :=  1(−∞ ,0] (zi)2 
+
+> i=1
+
+∈ arg min 
+
+> w∈[0 ,1] 2
+
+⟨z, w ⟩;
+
+ℓSPO+ (z) := 
+
+> 2
+
+X
+
+> i=1
+
+max {ci − 2zi, 0} = max 
+
+> w∈[0 ,1] 2
+
+⟨c − 2z, w ⟩;
+
+wquad (z) :=   max  min {− zi, 1}, 0 2 
+
+> i=1
+
+∈ arg min 
+
+> w∈[0 ,1] 2
+
+n
+
+⟨z, w ⟩ + 12 ∥w∥22
+
+o
+
+.
+
+In contrast, the three LRP variants introduced in Section 2.3, LRP -Log, LRP -Ent, and LRP -Ptb, produce smooth interior maps onto this box. Under a unit regularization ( τ = 1) and a standard Gaussian perturbation, these maps are given by 
+
+wlog (z) := 2
+
+zi + 2 + pz2 
+
+> i
+
++ 4 
+
+!2
+
+> i=1
+
+∈ arg min 
+
+> w∈(0 ,1) 2
+
+n
+
+⟨z, w ⟩ − 
+
+> 2
+
+X
+
+> i=1
+
+log wi −
+
+> 2
+
+X
+
+> i=1
+
+log(1 − wi)
+
+o
+
+;
+
+went (z) := 
+
+ 11 + exp( zi)
+
+2
+
+> i=1
+
+∈ arg min 
+
+> w∈[0 ,1] 2
+
+n
+
+⟨z, w ⟩ +
+
+> 2
+
+X
+
+> i=1
+
+[wi log wi + (1 − wi) log(1 − wi)] 
+
+o
+
+;
+
+wptb (z) :=  P (zi + Zi ≤ 0) 2 
+
+> i=1
+
+=  Φ( −zi)2 
+
+> i=1
+
+= EZ
+
+wZ
+
+> ptb
+
+(z) ,
+
+where wZ
+
+> ptb
+
+(z) =  1(−∞ ,0] (zi + Zi)2 
+
+> i=1
+
+∈ arg min 
+
+> w∈[0 ,1] 2
+
+⟨z + Z, w ⟩, Z ∼ N (0 , I 2).
+
+Here 0 log 0 := 0. Clearly from Figure 1, LRP-induced downstream loss landscapes c⊤wlog (z), 
+
+c⊤went (z), and c⊤wptb (z) are smoother, and have no finite active-set boundaries in the latent space. 
+
+2.5. Expressive Power of LRPs 
+
+Finally, we show that the Legendre-regularized policy class Π F,ϕ (G) preserves the universal approx-imation property of the original model class G, demonstrating the strong expressive power of LRPs. 
+
+Assumption 1 (Universal approximation) . Let X ⊆ Rk1 be compact. For every continuous function h : X → Rk and every ϵ > 0, there exists g ∈ G such that 
+
+sup 
+
+> x∈X
+
+∥g(x) − h(x)∥2 ≤ ϵ. 
+
+Proposition 2. Suppose ϕ is an admissible Legendre regularizer for S, and Assumption 1 holds for some compact X and the model class G. Let π : X → S be any continuous feasible policy. Then for every ϵ > 0, there exists an LRP ˆπ ∈ ΠF,ϕ (G) such that 
+
+sup 
+
+> x∈X
+
+∥ˆπ(x) − π(x)∥2 ≤ ϵ. Author: Smooth Learning via Legendre-Regularized Policies 13 
+
+Proof. Fix ¯ w ∈ S◦. Define 
+
+M := sup 
+
+> x∈X
+
+∥π(x) − ¯w∥2.
+
+Since X is compact and π is continuous, M < +∞. Choose δ ∈ (0 , 1) sufficiently small such that 
+
+δM ≤ ϵ/ 2, and define 
+
+π′(x) := (1 − δ)π(x) + δ ¯w. 
+
+Because S is convex, π(x) ∈ S, and ¯ w ∈ S◦, we have π′(x) ∈ S◦ for all x ∈ X . Moreover, π′ : X → S◦
+
+is continuous and sup 
+
+> x∈X
+
+∥π′(x) − π(x)∥2 = δ sup 
+
+> x∈X
+
+∥ ¯w − π(x)∥2 ≤ ϵ/ 2.
+
+Define y(x) := N ⊤(π′(x) − ¯w). Since the columns of N form an orthonormal basis of ker( A), we have ¯ w + N y (x) = π′(x) ∈ S◦ and hence y(x) ∈ Y . Since π′ is continuous and ∇ψ is continuous on 
+
+Y , the map 
+
+h(x) := −B⊤(BB ⊤)−1∇ψ(y(x)) is continuous. Moreover, Bh (x) = −∇ ψ(y(x)). Therefore, by Theorem 1 and property 3 in Lemma 1, we have 
+
+wF,ϕ (h(x)) = ¯ w + N ∇ψ∗(−Bh (x)) = ¯ w + N y (x) = π′(x).
+
+By the universal approximation assumption, choose g ∈ G such that sup 
+
+> x∈X
+
+∥g(x) − h(x)∥2 ≤ μϵ 
+
+2∥B∥2
+
+.
+
+Define ˆ π(x) := wF,ϕ (g(x)) ∈ ΠF,ϕ (G). Following the Lipschitz continuity of wF,ϕ from Theorem 1, sup 
+
+> x∈X
+
+∥ˆπ(x) − π(x)∥2 ≤ sup 
+
+> x∈X
+
+∥wF,ϕ (g(x)) − wF,ϕ (h(x)) ∥2 + sup 
+
+> x∈X
+
+∥π′(x) − π(x)∥2
+
+≤ ∥B∥2
+
+μ sup 
+
+> x∈X
+
+∥g(x) − h(x)∥2 + ϵ/ 2
+
+≤ ϵ. 
+
+□
+
+## 3. Numerical Experiments 
+
+We evaluate the LRP framework on three contextual stochastic optimization problems: a single-product newsvendor problem, a two-stage resource allocation problem with box constraints, and a two-stage resource allocation problem with group-budget constraints. The newsvendor design is adapted from the numerical experiments of Zhang et al. (2026), and the Piecewise Affine Decision Rule (PADR) benchmark is based on the decision-rule method proposed therein. The resource allocation design and the residual-based Sample Average Approximation (SAA) benchmarks are adapted from the Data-Driven SAA (DD-SAA) framework of Kannan et al. (2025). We compare these benchmarks with three LRP variants defined in Section 2.3: LRP -Log, LRP -Ent, and LRP -Ptb. 14 Author: Smooth Learning via Legendre-Regularized Policies 
+
+3.1. Experimental Protocol 
+
+Data splitting and performance evaluation. For each problem setting, consistent with recent machine-learning evaluations that select configurations using held-out validation data and assess the selected configuration on a separate test set over repeated runs (Hazimeh and Ponomareva 2023, Marx et al. 2023), we first generate five independent tuning replications for hyperparameter selec-tion and, after selection, 50 fresh independent confirmation replications for final reporting. Each replication consists of an i.i.d. data set D = {(xi, ξ i)}|D|  
+
+> i=1
+
+partitioned in proportions 0 .5/0.25 /0.25. In every replication, the training subset Dtr is used to estimate model parameters, and the vali-dation subset Dval is used for method-specific within-training choices, such as early stopping and checkpoint selection, when applicable. In a tuning replication, the third subset is denoted by Dtune 
+
+and is used to score candidate configurations; in a confirmation replication, it is denoted by Dtest 
+
+and is reserved for final performance assessment. Since not all tested methods guarantee feasibility, to ensure the final solution is feasible, for every method a, let eπa(x) denote its raw decision and let bπa(x) denote the restored decision used for evaluation. Specifically, with Sra denoting the corresponding first-stage feasible set, 
+
+bπa(x) := argmin 
+
+> w∈Sra
+
+12 ∥w − eπa(x)∥22 ,
+
+and both tuning-set and test-set costs are evaluated using bπa(x). 
+
+Hyperparameter tuning. For each problem setting, all methods use the same outer tuning proto-col. Each candidate configuration is evaluated over the five tuning replications, and the candidate with the lowest mean tuning-set cost is selected. The corresponding search domains and finite candidate sets are reported in Appendix A.2. For LRP -Log, LRP -Ent, LRP -Ptb, and PADR, hyperparameter tuning uses the same sequen-tial Gaussian-process Bayesian-optimization procedure with expected improvement and a common prespecified total budget of candidate evaluations within each problem setting (Jones et al. 1998, Snoek et al. 2012). For the residual-based SAA benchmarks, the active tuning choices form small finite sets and are exhaustively enumerated using the same tuning score. After selection, each configuration is held fixed throughout the 50 confirmation replications. 
+
+LRP variants. The three tested LRP methods use the same prediction architecture for learning the latent model gθ : X → Rk and differ only in the regularizer used in the optimization layer. Specifically, gθ is a multilayer perceptron with three fully connected hidden layers of widths 16, 32, and 16, a ReLU activation after each hidden layer, and a linear output layer of width k. All networks are trained with Adam using mini-batches of size 50 and validation patience 100, for Author: Smooth Learning via Legendre-Regularized Policies 15 
+
+at most 10 ,000 epochs in the newsvendor experiment and 2 ,000 epochs in the resource allocation experiments. For ϕ ∈ { ϕlog , ϕ ent , ϕ ptb }, the corresponding LRP is 
+
+πθ,ϕ (x) := wF,ϕ 
+
+ gθ (x).
+
+The parameter τ retains the meaning introduced in Section 2.3: it scales the explicit regularizers ϕlog 
+
+and ϕent , while for ϕptb it is the standard deviation of the Gaussian perturbation Z. During training, the smoothing parameter at epoch e is τe = max {τmin , τ 0δ⌊e/s ⌋}, where τ0, τmin , the decay factor δ,and the update interval s are tuned jointly with the remaining method-specific hyperparameters; the value associated with the validation-selected checkpoint is used for evaluation. The predictor is trained by minimizing empirical decision regret: min 
+
+> θ
+
+1
+
+|D tr |
+
+X
+
+> (xi,ξ i)∈D tr
+
+
+
+ℓ (πθ,ϕ (xi); ξi) − min  
+
+> w∈S
+
+ℓ(w; ξi)
+
+
+
+.
+
+In both the newsvendor and resource allocation experiments, the outer loss is convex and piecewise linear in the decision. At non-differentiable points of the loss function, we select a valid Clarke sub-gradient with respect to the decision and backpropagate it through the Jacobian of the regularized optimization map. 
+
+Benchmark methods. We compare against recent representative baselines rather than reimple-menting the full set of earlier contextual optimization methods. On the direct policy-learning side, we use PADR (Zhang et al. 2026), a recent state-of-the-art decision-rule method that has been shown to outperform several prominent decision-rule approaches, including neural-network and RKHS-based decision rules. PADR parameterizes each decision coordinate as the difference of two max-affine functions and fits the resulting decision rule by empirical risk minimization. On the predict-then-optimize side, we consider the residual-based SAA family of Kannan et al. (2025): Empirical Residual SAA (ER-SAA) constructs scenarios using residuals from the model fitted on the training samples, whereas Jackknife SAA (J-SAA) uses leave-one-out residuals. Jackknife-plus SAA (J +-SAA) further pairs each leave-one-out residual with its corresponding leave-one-out pre-diction, following the extended preprint (Kannan et al. 2022). Further implementation details for these three methods are presented in Appendix A.3. We do not include the standard SPO + surrogate (Elmachtoub and Grigas 2022) as a sepa-rate benchmark because it is designed for problems in which the predicted uncertainty enters as coefficients of a linear downstream objective. In our experiments, demand instead enters through inventory imbalance or recourse constraints, producing general convex, piecewise-linear losses. 16 Author: Smooth Learning via Legendre-Regularized Policies 
+
+3.2. Single-Product Newsvendor Problem 
+
+The first experiment considers a single-product newsvendor problem with contextual demand. Given context x, the decision w is an order quantity and the uncertain parameter ξ is the realized demand. The downstream loss is 
+
+ℓnv (w; ξ) = cb(ξ − w)+ + ch(w − ξ)+, (cb, c h) = (8 , 2) .
+
+Although the classical newsvendor formulation without side constraints imposes only w ≥ 0, the LRP layers are implemented on Snv = [0 , w max ] with wmax = 100 so that each regularized optimiza-tion map is well-defined for every latent input. For all methods, any negative raw order quantity is restored to zero before the unconstrained newsvendor loss is evaluated. We use the sparse max-affine newsvendor design of Zhang et al. (2026) and modify it by applying a sign-preserving power transformation to its two informative context coordinates to introduce more nonlinearity. For each observation, x = ( x1, . . . , x k1 ) has independent coordinates xj ∼ Unif[ −1, 1]. The conditional demand depends only on the first two coordinates, while the remaining k1 − 2coordinates are irrelevant noise features. For γ > 0, define spow γ (t) := sign( t)|t|γ , exj := spow γ (xj ), j = 1 , 2.
+
+Conditional demand is generated as 
+
+ξ = fnv ,γ (x) + σζ, ζ ∼ N (0 , 1) , ζ ⊥ x, 
+
+where 
+
+fnv ,γ (x) = 10 + max {5ex1 − 10 ex2, −10 ex1 + 5 ex2, 15 ex1} .
+
+We vary γ ∈ { 1, 3, 5} and σ ∈ { 1, 3} to control the nonlinearity and noise standard deviation, respec-tively. Note that under the data-generating process, fnv ,γ (x) ≤ 25, and the largest noise standard deviation is 3. Since cb/(cb + ch) = 0 .8, the conditional population-optimal order quantity is at most 25 + 3Φ −1(0 .8) ≈ 27 .53. Thus, the maximum order quantity wmax = 100 is a deliberately loose upper bound that provides a compact domain for the LRP maps without altering the population-optimal newsvendor policy. Under this box constraint, all three LRP maps admit closed-form expressions and can therefore be evaluated efficiently; their explicit formulas are provided in Appendix A.4. For each confirmation replication, the newsvendor test cost is 
+
+[Cost nv (a) = 1
+
+|D test |
+
+X
+
+> (xi,ξ i)∈D test
+
+h
+
+cb
+
+ ξi − bπa(xi) 
+
+> +
+
++ ch
+
+ bπa(xi) − ξi
+
+
+
+> +
+
+i
+
+.
+
+Table 1 reports the test costs across the 50 confirmation replications for the newsvendor exper-iment under the specified values of |D| , k1, γ, and σ, while Figure 2 visualizes the distributions Author: Smooth Learning via Legendre-Regularized Policies 17 
+
+Table 1 Out-of-sample costs for the single-product newsvendor experiment. Here, |D| , k1, γ, and σ denote the total sample size, context dimension, nonlinearity degree, and noise standard deviation, respectively. Entries are mean ± standard deviation over 50 independent confirmation replications; lower values are better. 
+
+Setting ( |D| , k 1, γ, σ ) LRP-Log LRP-Ent LRP-Ptb PADR ER-SAA J-SAA J+-SAA (1000 , 20 , 3, 1) 4.611 ± 0.506 4.731 ± 0.560 4.758 ± 0.535 6.719 ± 0.981 11 .862 ± 0.671 11 .858 ± 0.648 11 .858 ± 0.647 ( 500 , 20 , 3, 1) 6.640 ± 0.995 6.995 ± 1.256 6.823 ± 1.084 10 .500 ± 1.619 12 .105 ± 0.804 12 .079 ± 0.762 12 .082 ± 0.768 (2000 , 20 , 3, 1) 3.612 ± 0.196 3.737 ± 0.224 3.765 ± 0.287 5.538 ± 0.650 11 .604 ± 0.428 11 .601 ± 0.420 11 .601 ± 0.420 (1000 , 6, 3, 1) 3.332 ± 0.208 3.435 ± 0.237 3.488 ± 0.284 3.808 ± 0.252 11 .270 ± 0.728 11 .625 ± 0.634 11 .625 ± 0.634 (1000 , 20 , 1, 1) 3.927 ± 0.261 3.789 ± 0.238 3.893 ± 1.048 3.996 ± 0.630 10 .074 ± 0.529 10 .071 ± 0.516 10 .072 ± 0.517 (1000 , 20 , 5, 1) 6.019 ± 1.475 6.007 ± 1.391 5.638 ± 0.557 7.897 ± 1.257 11 .332 ± 0.873 11 .600 ± 0.759 11 .599 ± 0.761 (1000 , 20 , 3, 3) 10 .921 ± 0.758 10 .996 ± 0.884 11 .044 ± 0.923 11 .926 ± 0.901 14 .067 ± 0.846 14 .070 ± 0.827 14 .070 ± 0.830 2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(a) Base 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(b) | | = 500 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(c) | | = 2000 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(d) k1 = 6 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(e) γ = 1 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(f) γ = 5 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+16 
+
+(g) σ = 3 
+
+> Test cost
+
+LRP-Log LRP-Ent LRP-Ptb PADR ER-SAA J-SAA J + -SAA 
+
+Figure 2 Out-of-sample cost distributions for the single-product newsvendor experiment. Each box summa-rizes test costs over 50 independent confirmation replications. Panel (a) shows the baseline setting (|D| , k 1, γ, σ ) = (1000 , 20 , 3, 1); panels (b)–(g) change only the parameter indicated in the panel title while holding the remaining parameters at their baseline values. Within each panel, methods follow the legend order from left to right. The center line is the median, the box spans the interquartile range, the whiskers extend to the most extreme observations within 1.5 interquartile ranges of the lower and upper quartiles, and points beyond the whiskers are shown individually; lower values are better. 
+
+underlying these summary statistics. The seven panels use a common vertical scale: panel (a) is the baseline setting ( |D| , k 1, γ, σ ) = (1000 , 20 , 3, 1), and each remaining panel changes only the parameter indicated in its title. Across all settings, the LRP variants substantially outperform the residual-based SAA methods and generally outperform PADR. Their advantage over PADR is particularly pronounced when the context dimension or the nonlinearity of the demand function 18 Author: Smooth Learning via Legendre-Regularized Policies 
+
+increases. For example, the best LRP reduces the mean cost relative to PADR by approximately 12 .5% when k1 = 6, compared with 31 .4% when k1 = 20 in the baseline setting. Similarly, this reduction increases from approximately 5 .2% when γ = 1 to 31 .4% and 28 .6% when γ = 3 and 
+
+γ = 5, respectively. These findings are consistent with the expressive-power result in Section 2: when combined with a flexible latent model, the LRP construction can represent rich nonlinear context-decision relationships while maintaining feasibility. The results also show that the LRP methods benefit substantially from larger sample sizes. Finally, although larger noise increases the costs of all methods, the LRP variants retain their performance advantage when σ = 3. 
+
+3.3. Resource Allocation with Box Constraints 
+
+The second experiment considers the two-stage resource allocation model used in the DD-SAA computational study of Kannan et al. (2025), augmented with the first-stage box constraint 0 ≤
+
+w ≤ wmax , where wmax = 100 · 1n ∈ Rn
+
+> ++
+
+. Let I denote the resource set, with |I| = n, and let J
+
+denote the demand-class set. For a first-stage decision w and realized uncertain parameter ξ, define 
+
+ℓra (w; ξ) :=  cra ⊤w + R(w, ξ ),
+
+where 
+
+R(w, ξ ) = min 
+
+> v,u
+
+(
+
+q⊤u : X
+
+> j∈J
+
+vij ≤ ρiwi, i ∈ I , X
+
+> i∈I
+
+κij vij + uj ≥ ξj , j ∈ J , v ≥ 0, u ≥ 0
+
+)
+
+.
+
+The first-stage feasible set is 
+
+Sbox ra = {w ∈ Rn : 0 ≤ w ≤ wmax } .
+
+We use the same 20-resource, 30-demand-class base instance as in the DD-SAA computational study of Kannan et al. (2025), retaining its first-stage cost vector cra , yield coefficients ρ, service-rate coefficients κ, recourse cost vector q, and demand-model parameter-generation procedure. Contexts are generated from the sparse folded-normal model of Kannan et al. (2025). Specifically, 
+
+x follows the multivariate folded-normal distribution used therein, only its first three coordinates are informative, and conditional demand is generated as 
+
+ξj = αj +
+
+> 3
+
+X
+
+> ℓ=1
+
+βjℓ xγℓ + σζ j , ζj
+
+> iid
+
+∼ N (0 , 1) , ζ ⊥ x, j ∈ J .
+
+In each replication, the parameters αj , βjℓ , and the folded-normal covariance matrix are generated independently according to the original procedure and then held fixed for all observations in that replication; the same generated instance and data split are used for all methods within that repli-cation. The exponent γ corresponds to the model-degree parameter denoted by p in Kannan et al. Author: Smooth Learning via Legendre-Regularized Policies 19 
+
+Table 2 Out-of-sample costs for resource allocation with box constraints. Here, |D| , k1, γ, and σ denote the total sample size, context dimension, nonlinearity degree, and noise standard deviation, respectively. Entries are mean ± standard deviation over 50 independent confirmation replications; lower values are better.                                                                                                                                                                                
+
+> Setting ( |D| , k 1, γ, σ )LRP-Log LRP-Ent LRP-Ptb PADR ER-SAA J-SAA J+-SAA (200 ,3,3,5) 1387 .6±237 .11378 .1±235 .21378 .2±236 .51526 .1±242 .81559 .0±239 .41630 .8±243 .01631 .4±243 .2(100 ,3,3,5) 1493 .0±360 .71438 .0±357 .61444 .5±356 .31877 .6±467 .21663 .1±357 .41662 .4±356 .31663 .4±356 .7(500 ,3,3,5) 1417 .9±136 .71490 .6±145 .01403 .4±140 .41916 .3±256 .81586 .0±133 .11660 .5±137 .81660 .7±137 .9(200 ,10 ,3,5) 1493 .9±241 .71451 .5±236 .41983 .3±293 .51842 .1±289 .21595 .8±240 .71653 .3±244 .71654 .1±245 .2(200 ,3,1,5) 964 .1±24 .5952 .2±22 .9982 .3±36 .51009 .5±42 .9947 .1±22 .7947 .1±22 .7947 .1±22 .7
+> (200 ,3,5,5) 5856 .8±2773 .45822 .5±2777 .55888 .4±2779 .66258 .5±2783 .16465 .3±2754 .86457 .9±2754 .36462 .2±2754 .2(200 ,3,3,15) 1421 .3±239 .61414 .2±236 .31410 .2±233 .71548 .4±247 .81564 .7±238 .81633 .7±244 .21634 .3±244 .4
+
+(2025); we use γ ∈ { 1, 3, 5}, corresponding to linear, cubic, and quintic dependence on the infor-mative context coordinates. The parameter σ ∈ { 5, 15 } is the conditional noise standard deviation. We use the homoscedastic specification, so Var( ξj | x) = σ2 for every j ∈ J . Because the feasible region and regularizers are separable across resources, all three LRP maps admit coordinatewise closed-form expressions and can be evaluated efficiently. The explicit formulas are provided in Appendix A.4. For each confirmation replication, the box-constrained resource allocation test cost is 
+
+[Cost box ra (a) = 1
+
+|D test |
+
+X
+
+> (xi,ξ i)∈D test
+
+h cra ⊤ bπa(xi) + R bπa(xi), ξ i
+
+i
+
+.
+
+Table 2 reports the test costs across the 50 confirmation replications for the resource allocation experiment with box constraints. A complementary distributional view of these results is provided in Figure 3 in Appendix A. Across six of the seven settings, an LRP variant achieves the lowest mean test cost. The advantage over the benchmark methods is particularly evident in settings with higher-dimensional contexts and nonlinear dependence. 
+
+3.4. Resource Allocation with Group-Budget Constraints 
+
+To test more general feasible regions, the third experiment uses the same two-stage recourse model and demand generator as Section 3.3, but modifies the box-only first-stage feasible region by adding two group-budget constraints. With |I| = n = 20, define ¯s1 = 0 .40 
+
+> 20
+
+X
+
+> i=1
+
+wmax  
+
+> i
+
+, ¯s2 = 0 .45 
+
+> 20
+
+X
+
+> i=1
+
+wmax  
+
+> i
+
+,
+
+and set 
+
+Sgb ra =
+
+(
+
+w ∈ Rn : 0 ≤ wi ≤ wmax  
+
+> i
+
+∀i, 
+
+> 10
+
+X
+
+> i=1
+
+wi ≤ ¯s1,
+
+> 20
+
+X
+
+> i=11
+
+wi ≤ ¯s2
+
+)
+
+.
+
+With wmax  
+
+> i
+
+= 100 for all i and ten resources in each group, each group has aggregate box capacity 1000; hence ¯ s1 = 800 and ¯ s2 = 900 equal 80% and 90% of their respective group capacities. This experiment assesses the methods under nonseparable linear first-stage constraints. The downstream loss and test-cost definition are the same as in Section 3.3; only the first-stage feasible set changes. 20 Author: Smooth Learning via Legendre-Regularized Policies 
+
+Table 3 Out-of-sample costs for resource allocation with group-budget constraints. Here, |D| , k1, γ, and σ
+
+denote the total sample size, context dimension, nonlinearity degree, and noise standard deviation, respectively. Entries are mean ± standard deviation over 50 independent confirmation replications; lower values are better.                                                                                                                                                                                
+
+> Setting ( |D| , k 1, γ, σ )LRP-Log LRP-Ent LRP-Ptb PADR ER-SAA J-SAA J+-SAA (200 ,3,3,5) 1499 .0±262 .41458 .2±262 .11560 .9±262 .01897 .2±352 .21606 .5±263 .11674 .5±264 .31675 .2±264 .4(100 ,3,3,5) 1543 .5±399 .81518 .0±392 .61600 .1±401 .71880 .7±437 .01710 .6±389 .41709 .4±388 .11710 .5±388 .4(500 ,3,3,5) 1487 .8±151 .61474 .0±151 .21711 .8±192 .71882 .1±213 .01710 .6±147 .31710 .4±147 .11710 .6±147 .2(200 ,10 ,3,5) 1551 .3±266 .31516 .4±262 .11567 .7±265 .51835 .0±293 .51696 .0±266 .51694 .6±264 .51695 .5±265 .1(200 ,3,1,5) 964 .8±23 .9951 .0±22 .8981 .5±27 .91017 .5±53 .2947 .1±22 .7947 .1±22 .7947 .1±22 .7
+> (200 ,3,5,5) 6050 .3±2809 .66032 .3±2812 .36381 .6±2811 .86379 .8±2808 .96563 .0±2797 .16553 .7±2796 .66558 .8±2796 .5(200 ,3,3,15) 1509 .7±261 .11486 .0±265 .11531 .0±262 .71569 .5±258 .61677 .7±265 .71677 .4±265 .41678 .1±265 .5
+
+All three LRP variants use latent dimension k = n and produce decisions in the original feasible region Sgb ra . Details on evaluating and differentiating the corresponding optimization layers are provided in Appendix A.4. Table 3 presents the out-of-sample costs from 50 independent confirmation replications under group-budget constraints. The corresponding cost distributions are shown in Figure 4 in Appendix A. Across six of the seven settings, LRP -Ent achieves the lowest mean test cost among all methods. The only exception is the linear setting with γ = 1, where the residual-based SAA meth-ods perform slightly better. Overall, these results show that the LRP framework remains effective when the feasible region contains nonseparable group-budget constraints, with its advantage being particularly evident under complex context-demand relationships. 
+
+## 4. Concluding Remarks 
+
+This paper introduces Legendre-regularized policies for learning contextual decisions under hard constraints. Our results demonstrate that an appropriate regularizer can simultaneously enforce hard constraints, provide stable gradients, and preserve the expressive power of the underlying prediction model. Several directions merit further investigation. One direction is to develop scalable algorithms for evaluating and differentiating Legendre-regularized optimization layers in large-scale problems. Another is to study how the choice of the regularizer and smoothing parameter affects statistical performance and computational efficiency. Extending the framework to settings with nonconvex or discrete feasible regions is also an important direction. 
+
+## References 
+
+Jacob Abernethy, Chansoo Lee, Abhinav Sinha, and Ambuj Tewari. Online linear optimization via smooth-ing. In Conference on Learning Theory , pages 807–823. PMLR, 2014. Akshay Agrawal, Brandon Amos, Shane Barratt, Stephen Boyd, Steven Diamond, and J Zico Kolter. Dif-ferentiable convex optimization layers. Advances in Neural Information Processing Systems , 32, 2019. Brandon Amos and J Zico Kolter. Optnet: Differentiable optimization as a layer in neural networks. In 
+
+International Conference on Machine Learning , pages 136–145. PMLR, 2017. Author: Smooth Learning via Legendre-Regularized Policies 21 Gah-Yi Ban and Cynthia Rudin. The big data newsvendor: Practical insights from machine learning. Oper-ations Research , 67(1):90–108, 2019. Thierry Bazier-Matte and Erick Delage. Generalization bounds for regularized portfolio selection with market side information. INFOR: Information Systems and Operational Research , 58(2):374–401, 2020. Quentin Berthet, Mathieu Blondel, Olivier Teboul, Marco Cuturi, Jean-Philippe Vert, and Francis Bach. Learning with differentiable perturbed optimizers. Advances in Neural Information Processing Systems ,33:9508–9519, 2020. Dimitri P Bertsekas. Control of uncertain systems with a set-membership description of the uncertainty. 
+
+PhD thesis, Massachusetts Institute of Technology, 1971. Dimitris Bertsimas and Nathan Kallus. From predictive to prescriptive analytics. Management Science , 66 (3):1025–1044, 2020. Dimitris Bertsimas and Nihal Koduri. Data-driven optimization: A reproducing kernel hilbert space approach. Operations Research , 70(1):454–471, 2022. Dimitris Bertsimas, Christopher McCord, and Bradley Sturt. Dynamic optimization with side information. 
+
+European Journal of Operational Research , 304(2):634–651, 2023. Mathieu Blondel, Andr´ e FT Martins, and Vlad Niculae. Learning with Fenchel-Young losses. Journal of Machine Learning Research , 21(35):1–69, 2020. J´ erˆ ome Bolte, Tam Le, Edouard Pauwels, and Tony Silveti-Falls. Nonsmooth implicit differentiation for machine-learning and optimization. Advances in Neural Information Processing Systems , 34:13537– 13549, 2021. Michael W Brandt, Pedro Santa-Clara, and Rossen Valkanov. Parametric portfolio policies: Exploiting characteristics in the cross-section of equity returns. The Review of Financial Studies , 22(9):3411–3447, 2009. Wenbo Chen, Mathieu Tanneau, and Pascal Van Hentenryck. End-to-end feasible optimization proxies for large-scale economic dispatch. IEEE Transactions on Power Systems , 39(2):4723–4734, 2023. Priya Donti, Brandon Amos, and J Zico Kolter. Task-based end-to-end model learning in stochastic opti-mization. Advances in Neural Information Processing Systems , 30, 2017. Adam N Elmachtoub and Paul Grigas. Smart “predict, then optimize”. Management Science , 68(1):9–26, 2022. Adam N Elmachtoub, Jason Cheuk Nam Liang, and Ryan McNellis. Decision trees for decision-making under the predict-then-optimize framework. In International Conference on Machine Learning , pages 2858–2867. PMLR, 2020. Hussein Hazimeh and Natalia Ponomareva. Mind the (optimality) gap: a gap-aware learning rate scheduler for adversarial nets. In International Conference on Artificial Intelligence and Statistics , pages 3018– 3033. PMLR, 2023. 22 Author: Smooth Learning via Legendre-Regularized Policies 
+
+Donald R Jones, Matthias Schonlau, and William J Welch. Efficient global optimization of expensive black-box functions. Journal of Global optimization , 13(4):455–492, 1998. Nathan Kallus and Xiaojie Mao. Stochastic optimization forests. Management Science , 69(4):1975–1994, 2023. Rohit Kannan, G¨ uzin Bayraksan, and James R. Luedtke. Data-driven sample average approximation with covariate information, 2022. Rohit Kannan, G¨ uzin Bayraksan, and James R. Luedtke. Residuals-based distributionally robust opti-mization with covariate information. Mathematical Programming , 207(1):369–425, 2024. doi: 10.1007/ s10107-023-02016-z. Rohit Kannan, G¨ uzin Bayraksan, and James R Luedtke. Data-driven sample average approximation with covariate information. Operations Research , 73(6):3245–3259, 2025. Heyuan Liu and Paul Grigas. Risk bounds and calibration for a smart predict-then-optimize method. In 
+
+Advances in Neural Information Processing Systems , volume 34, pages 22083–22094, 2021. Gar Goei Loke, Qinshen Tang, and Yangge Xiao. Decision-driven regularization: A blended model for predict-then-optimize. Available at SSRN 3623006 , 2022. Jayanta Mandi, Peter J Stuckey, Tias Guns, et al. Smart predict-and-optimize for hard combinatorial optimization problems. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 34, pages 1603–1610, 2020. Charlie Marx, Sofian Zalouk, and Stefano Ermon. Calibration by distribution matching: Trainable kernel calibration metrics. Advances in Neural Information Processing Systems , 36:25910–25928, 2023. Yurii Nesterov. Smooth minimization of non-smooth functions. Mathematical programming , 103(1):127–152, 2005. Vlad Niculae, Andre Martins, Mathieu Blondel, and Claire Cardie. SparseMAP: Differentiable sparse struc-tured inference. In International Conference on Machine Learning , pages 3799–3808. PMLR, 2018. Afshin Oroojlooyjadid, Lawrence V Snyder, and Martin Tak´ aˇ c. Applying deep learning to the newsvendor problem. Iise Transactions , 52(4):444–463, 2020. Meng Qi, Yuanyuan Shi, Yongzhi Qi, Chenxin Ma, Rong Yuan, Di Wu, and Zuo-Jun Shen. A practical end-to-end inventory management model with deep learning. Management Science , 69(2):759–773, 2023. R. Tyrrell Rockafellar. Convex Analysis , volume 18. Princeton University Press, 1970. R. Tyrrell Rockafellar and Roger J.-B. Wets. Variational Analysis , volume 317. Springer Science & Business Media, Berlin, Heidelberg, 2009. ISBN 978-3-540-62772-2. Philipp J. Schneider and Daniel Kuhn. Soft-radial projection for constrained end-to-end learning. arXiv preprint arXiv:2602.03461 , 2026. Author: Smooth Learning via Legendre-Regularized Policies 23 Jasper Snoek, Hugo Larochelle, and Ryan P Adams. Practical Bayesian optimization of machine learning algorithms. Advances in Neural Information Processing Systems , 25, 2012. Yijie Wang, Hao Gao, Campbell R Harvey, Yan Liu, and Xinyuan Tao. Machine learning meets Markowitz. Technical report, National Bureau of Economic Research, 2026a. Yijie Wang, Prateek R Srivastava, Grani A Hanasusanto, and Chin Pang Ho. On data-driven prescriptive analytics with side information: A regularized Nadaraya–Watson approach. Manufacturing & Service Operations Management , 2026b. Bryan Wilder, Bistra Dilkina, and Milind Tambe. Melding the data-decisions pipeline: Decision-focused learning for combinatorial optimization. In Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 33, pages 1658–1665, 2019. Yiyang Zhang, Junyi Liu, and Xiaobo Zhao. Data-driven piecewise affine decision rules for stochastic pro-gramming with covariate information. Operations Research , 2026. Zihao Zhang, Stefan Zohren, and Stephen Roberts. Deep learning for portfolio optimization. arXiv preprint arXiv:2005.13665 , 2020. 24 Author: Smooth Learning via Legendre-Regularized Policies 
+
+Appendix A: Additional Experimental Details and Results A.1. Computational Environment. 
+
+All experiments were implemented in Python 3.11 using PyTorch 2.7.1 and run without GPU accel-eration on a server equipped with two Intel Xeon Platinum 8575C processors and approximately 378 GiB of usable memory. The PADR optimization subproblems were solved using Gurobi 12.0.3, whereas the recourse and deterministic-equivalent SAA problems in the resource allocation exper-iments were solved using HiGHS 1.8.0 through scipy.optimize.linprog .
+
+A.2. Hyperparameter Search Domains. 
+
+Table 4 reports the search domains used by the tuning procedure. For LRP -Ptb, τ0 and τmin denote the initial and minimum Gaussian perturbation standard deviations, respectively.  
+
+> Table 4 Hyperparameter search domains used in the numerical experiments. Intervals are continuous unless a parameter is explicitly identified as integer-valued.
+
+Method and experiment Search domain 
+
+LRP variants: newsvendor 
+
+Smoothing levels: τ0 ∈ [10 −2, 50], τmin ∈ [10 −6, τ 0]. 
+
+Smoothing schedule: δ ∈ [0 .5, 1], integer update interval s ∈ { 1, . . . , 1000 }.
+
+Optimization: learning rate in [10 −3, 1], weight decay in [0 , 2]. 
+
+Perturbation computation: LRP -Ptb is evaluated using the exact Gaussian expectation. 
+
+LRP variants: resource allocation 
+
+Smoothing levels: τ0 ∈ [10 −2, 10], τmin ∈ [10 −6, τ 0]. 
+
+Smoothing schedule: δ ∈ [0 .5, 1], integer update interval s ∈ { 1, . . . , 1000 }.
+
+Optimization: learning rate in [10 −4, 10 −1], weight decay in [0 , 2]. 
+
+Perturbation computation: Under box constraints, LRP -Ptb is evaluated using the exact Gaussian expectation. Under group-budget constraints, the expectation is estimated using 50 independently drawn Gaussian perturbations per input, resampled at each layer evaluation. PADR: all experiments 
+
+Policy complexity: (K1, K 2) ∈ { 0, . . . , 40 }2 \ { (0 , 0) }.
+
+Active-piece control: ϵ, ϵ sh ∈ { 0, . . . , 3000 }, shrinking ratio in [0 , 1]. 
+
+ESMM run control: number of random starts in {1, . . . , 10 }, number of iterations in 
+
+{1, . . . , 100 }.
+
+Sampling schedule: α ∈ { 1, . . . , 500 }, β, N 0 ∈ { 0, . . . , 20 }.
+
+Coefficient control: coefficient bound μ ∈ [10 −3, 100], proximal weight η ∈ [0 , 1]. 
+
+Subsampling: sampling indicator in {false , true }.Residual-based SAA Regression model: ordinary least squares for ER-SAA, J-SAA, and J +-SAA. 
+
+Conditional scale: ER-SAA enumerates the identity and estimated diagonal specifications; J-SAA and J +-SAA use the identity specification. 
+
+A.3. Benchmark Method Details. 
+
+PADR. Let ¯ x = ( x, 1) denote the context augmented with an intercept. PADR parameterizes each coordinate of its raw decision as 
+
+eπPADR ,i (x) = max 
+
+> r=1 ,...,K 1
+
+a⊤ 
+
+> ir
+
+¯x − max 
+
+> s=1 ,...,K 2
+
+b⊤ 
+
+> is
+
+¯x, i = 1 , . . . , n, Author: Smooth Learning via Legendre-Regularized Policies 25 
+
+where K1 and K2 are the numbers of max-affine pieces; when either number is zero, the correspond-ing term is omitted. The coefficients are estimated using the enhanced stochastic majorization-minimization algorithm of Zhang et al. (2026), which repeatedly selects ϵ-active affine pieces and solves the resulting convex majorization subproblem. The structural and algorithmic parameters are selected using the common tuning protocol described in Section 3.1. In the resource allocation experiments, violations of the first-stage constraints are penalized during fitting, and the resulting raw decisions are restored before the tuning-set and test-set costs are computed. 
+
+DD-SAA. We then present the details of the residual-based SAA family of methods. Let bftr and 
+
+bQtr denote the conditional-mean and conditional-scale models fitted on Dtr , let bf −i and bQ−i denote the corresponding leave-one-out fits obtained after omitting observation i, and let Ξ := Rk2 
+
+> +
+
+denote the admissible uncertainty set used to restore the residual scenarios. Define 
+
+beER  
+
+> i
+
+=  bQtr (xi)−1 ξi − bftr (xi), beloo  
+
+> i
+
+=  bQ−i(xi)−1 ξi − bf −i(xi).
+
+The corresponding conditional scenarios are 
+
+bξER  
+
+> i
+
+(x) = proj Ξ
+
+ bftr (x) + bQtr (x)beER 
+
+> i
+
+
+
+,
+
+bξJi (x) = proj Ξ
+
+ bftr (x) + bQtr (x)beloo 
+
+> i
+
+
+
+,
+
+bξJ+ 
+
+> i
+
+(x) = proj Ξ
+
+ bf −i(x) + bQ−i(x)beloo 
+
+> i
+
+
+
+.
+
+Setting bQtr ≡ bQ−i ≡ Ik2 for every i yields the homoscedastic specialization, in which the scenarios are formed by adding empirical or leave-one-out residuals to the corresponding point predictions. In all reported experiments, bftr and bf −i are ordinary least-squares regressions with intercepts and all 
+
+k1 context coordinates. J-SAA and J +-SAA use the homoscedastic specialization, whereas ER-SAA tunes between the identity scale and an estimated diagonal scale. The projection onto Ξ is coor-dinatewise truncation at zero. Given scenarios {bξai (x)}|D tr | 
+
+> i=1
+
+for a ∈ { ER , J, J +}, the corresponding decision satisfies 
+
+bπa(x) ∈ arg min 
+
+> w∈S
+
+1
+
+|D tr |
+
+> |D tr |
+
+X
+
+> i=1
+
+ℓ w; bξai (x).
+
+A.4. Computation of the LRP Optimization Layers 
+
+Newsvendor problem. For the one-dimensional box Snv = [0 , w max ], all three regularized optimizer maps have closed-form expressions. For a latent scalar z ∈ R and smoothing parameter τ > 0, they are 
+
+wI1,ϕ log (z) = 2τ w max 
+
+wmax z + 2 τ + p(wmax z)2 + 4 τ 2 ,wI1,ϕ ent (z) = wmax 
+
+1 + exp( z/τ ) ,26 Author: Smooth Learning via Legendre-Regularized Policies 
+
+wptb (z) = wmax Φ( −z/τ ).
+
+The first two expressions are the minimizers induced by ϕlog and ϕent , respectively. For LRP -Ptb, the perturbed linear oracle is evaluated at z + Z with Z ∼ N (0 , τ 2), so its population expectation is wmax Φ( −z/τ ). 
+
+Resource allocation with box constraints. For Sbox ra , we take F = In, so k = n, and all three LRP maps are separable across resources. For a latent vector z ∈ Rn and each i ∈ I , the coordinate maps are 
+
+wIn,ϕ log (z) 
+
+> i
+
+= 2τ w max 
+
+> i
+
+wmax  
+
+> i
+
+zi + 2 τ + p(wmax  
+
+> i
+
+zi)2 + 4 τ 2 ,
+
+wIn,ϕ ent (z) 
+
+> i
+
+= wmax 
+
+> i
+
+1 + exp( zi/τ ) ,
+
+wptb (z) 
+
+> i
+
+= wmax  
+
+> i
+
+Φ( −zi/τ ).
+
+The first two expressions apply ϕlog and ϕent coordinatewise. For LRP -Ptb, the perturbed box oracle selects wmax  
+
+> i
+
+when zi + Zi < 0 and zero otherwise, where Zi
+
+> iid
+
+∼ N (0 , τ 2), so the displayed formula is the exact population expectation. 
+
+Resource allocation with group-budget constraints. Let I1 = {1, . . . , 10 } and I2 = {11 , . . . , 20 }.Because the group-budget constraints couple resource coordinates, the corresponding LRP maps are not coordinatewise separable. For LRP -Log, we apply the logarithmic barrier directly to all box and group-budget inequalities defining Sgb ra . The optimizer is computed by a damped Newton iteration from a strict interior point, and its vector–Jacobian product is obtained by differentiating the first-order optimality conditions. For LRP -Ent, we use the extended feasible set 
+
+Sext ra =
+
+wext = ( w⊤, s 1, s 2)⊤ : 0 ≤ wi ≤ wmax  
+
+> i
+
+∀i ∈ I , 0 ≤ sg ≤ ¯sg , X
+
+> i∈I g
+
+wi + sg = ¯ sg , g = 1 , 2
+
+ .
+
+Every w ∈ Sgb ra has the unique extension sg = ¯ sg − P 
+
+> i∈I g
+
+wi, so projection onto the first n coordi-nates is a bijection onto Sgb ra . This representation converts the group-budget inequalities into affine inequalities while retaining the bounded-coordinate structure used by the entropic layer. We take 
+
+F ext = ( In, 0n×2)⊤, so the latent dimension remains k = n, and the slack coordinates have zero linear coefficients, and the policy returns the first n coordinates. Conditional on the equality multipliers 
+
+λ = ( λ1, λ 2), the bounded-variable entropic optimizer satisfies 
+
+wi(λg ) = wmax 
+
+> i
+
+1 + exp (( zi + λg )/τ ) , i ∈ I g ,sg (λg ) = ¯sg
+
+1 + exp ( λg /τ ) , g = 1 , 2.Author: Smooth Learning via Legendre-Regularized Policies 27 
+
+The multipliers are computed by a damped Newton iteration to enforce the two equality constraints, and the vector–Jacobian product is obtained by differentiating this equality-constrained KKT system. For LRP -Ptb, each perturbed linear oracle decomposes into two continuous-knapsack problems and is solved exactly by a groupwise greedy algorithm. Both the perturbation expectation and its vector–Jacobian product are estimated from the same 50 freshly drawn Gaussian perturbations using the Gaussian score estimator. 
+
+A.5. Additional Results 
+
+Figures 3 and 4 display the distributions underlying Tables 2 and 3, respectively. Both figures use the same experimental settings and method ordering as the corresponding tables. 1.2 
+
+> 1.6
+> 2
+
+(a) Base 
+
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+
+(b) | | = 100 
+
+> 1.2
+> 1.6
+> 2
+> 2.4
+> 2.8
+
+(c) | | = 500 
+
+> 1.2
+> 1.6
+> 2
+> 2.4
+
+(d) k1 = 10 
+
+> 0.9
+> 1
+> 1.1
+
+(e) γ = 1 
+
+> 4
+> 8
+> 12
+
+(f) γ = 5 
+
+> 1.2
+> 1.6
+> 2
+
+(g) σ = 15         
+
+> Test cost (×10 3)
+> LRP-Log LRP-Ent LRP-Ptb PADR ER-SAA J-SAA J+-SAA
+
+Figure 3 Out-of-sample cost distributions for the resource allocation experiment with box constraints. Each box summarizes test costs over 50 independent confirmation replications. Panel (a) shows the baseline setting (|D| , k 1, γ, σ ) = (200 , 3, 3, 5); panels (b)–(g) change only the parameter indicated in the panel title while holding the remaining parameters at their baseline values. Within each panel, methods follow the legend order from left to right. Each panel uses its own vertical scale, with test costs reported in thousands. The center line is the median, the box spans the interquartile range, the whiskers extend to the most extreme observations within 1.5 interquartile ranges of the lower and upper quartiles, and points beyond the whiskers are shown individually; lower values are better. 28 Author: Smooth Learning via Legendre-Regularized Policies 1.2 
+
+> 1.6
+> 2
+> 2.4
+
+(a) Base  
+
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+
+(b) | | = 100 
+
+> 1.2
+> 1.6
+> 2
+> 2.4
+
+(c) | | = 500 
+
+> 1.2
+> 1.6
+> 2
+> 2.4
+
+(d) k1 = 10 
+
+> 0.9
+> 1
+> 1.1
+> 1.2
+
+(e) γ = 1 
+
+> 4
+> 8
+> 12
+
+(f) γ = 5 
+
+> 1.2
+> 1.6
+> 2
+
+(g) σ = 15         
+
+> Test cost (×10 3)
+> LRP-Log LRP-Ent LRP-Ptb PADR ER-SAA J-SAA J+-SAA
+
+Figure 4 Out-of-sample cost distributions for the resource allocation experiment with group-budget constraints. Each box summarizes test costs over 50 independent confirmation replications. Panel (a) shows the baseline setting ( |D| , k 1, γ, σ ) = (200 , 3, 3, 5); panels (b)–(g) change only the parameter indicated in the panel title while holding the remaining parameters at their baseline values. Within each panel, methods follow the legend order from left to right. Each panel uses its own vertical scale, with test costs reported in thousands. The center line is the median, the box spans the interquartile range, the whiskers extend to the most extreme observations within 1.5 interquartile ranges of the lower and upper quartiles, and points beyond the whiskers are shown individually; lower values are better.

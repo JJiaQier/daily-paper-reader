@@ -1,0 +1,296 @@
+Title: SCOPE: Supply-Chain Operations through Coupled Policies for End-to-End Coordination
+
+URL Source: https://arxiv.org/pdf/2607.28488v1
+
+Published Time: Fri, 31 Jul 2026 01:20:17 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# SCOPE : Supply-Chain Operations through Coupled Policies for End-to-End Coordination 
+
+## Yunhao Liang 1 Xianqi Cao 1 Pujun Zhang ∗,1,2
+
+## Yuan Qu ∗,1,2 Yongzhi Qi 3 Ningxuan Kang 3 Max Z.J. Shen 1,2
+
+> 1
+
+The University of Hong Kong, Hong Kong SAR, China 
+
+> 2
+
+OptiMax AI, Hong Kong SAR, China 
+
+> 3
+
+JD.com, China 
+
+Abstract 
+
+Can supply-chain AI move beyond isolated decision mod-ules toward unified operational planning? A complete replen-ishment plan specifies which products each location carries, which upstream facility supplies it, how often it is replen-ished, and how deliveries are routed. These decisions are operationally coupled: the selected assortment changes the demand and load passed to later stages; source assignment and replenishment frequency reshape the delivery requests; and route feasibility and cost, in turn, determine the system value of the earlier choices. Yet in modern supply chains, these decisions are often handled by separate departments and opti-mized through separate systems, which can lead to stockouts, inventory exposure, and avoidable transportation. We propose 
+
+SCOPE : Supply-Chain Operations through Coupled Policies for End-to-End Coordination, a composite policy model that represents supply-chain entities as tokens, contextualizes them through a shared operational representation, and maps each token type to the corresponding decision interface. Each de-cision builds on the partial plan formed by earlier decisions while the completed plan is evaluated using a shared system-level utility. We instantiate this framework in urban fresh-retail replenishment, where service frequency, assortment, capacity pressure, and road-network routing interact strongly, and eval-uate it on real operational data from Dingdong and JD.com, two large-scale supply chains operating at different replen-ishment echelons. Across both settings, SCOPE consistently outperforms methods that optimize each decision stage sepa-rately, as well as practice-oriented baselines commonly used in supply-chain operations. These results show that learning and coordinating cross-department operational couplings lead to more effective end-to-end supply-chain decisions. 
+
+## 1 Introduction 
+
+Supply chains are the operating systems of modern society: they coordinate products, capacity, inventory, and service commitments across organizations, facilities, and regions (Mentzer et al. 2001), and their failures threaten economic se-curity, public health, and the availability of essential goods (Baumgartner, Malik, and Padhi 2020; The White House 2021; Christopher and Peck 2004; Tang 2006). Yet the com-putational tools that operate these systems remain dominated by an older paradigm: each department solves its own opti-mization program, a demand forecaster here, a route solver there, while the system-level consequences of their interact-ing decisions are left unmodeled. Recent literature has there-Manufacturer  Distributor      
+
+> demand demand
+> Retailer
+> demand
+> Customer
+> replenishment replenishment replenishment
+> Assortment Replenish Cycle Routing Plan Delivery
+> Latent Operational Couplings
+
+Figure 1: Latent operational coupling in a replenishment supply chain. Assortment and replenishment-cycle decisions shape the demand released to logistics and hence the routing plan and delivery outcome; downstream execution costs, in turn, determine the system value of upstream choices. fore called for integrating machine learning into supply-chain operations (Baryannis, Dani, and Antoniou 2019; Brintrup et al. 2020). We argue that the central AI challenge is not to forecast demand or optimize a downstream route more accu-rately, but to learn the couplings through which departmental decisions determine each other’s outcomes and coordinate them under system-level objective. In the real modern supply chain, platforms are organized into functional decision layers: merchandising teams decide what products to carry, replenishment teams decide when and how often inventory moves, and logistics teams decide how vehicles and routes serve the resulting demand. This decomposition is organizationally natural but algorithmically incomplete, echoing a long literature on decentralized supply chains and incentive misalignment (Cachon 2003; Cachon and Zipkin 1999; Lariviere and Porteus 2001): decisions that are locally optimal for one layer routinely shift cost, risk, or capacity burden onto another. Existing tools mirror this decomposition: assortment mod-els, partial inventory–routing programs, and neural route solvers optimize local decision surfaces under fixed or hand-specified cross-stage relationships(Kök, Fisher, and Vaidyanathan 2015; Coelho, Cordeau, and Laporte 2014; Shaabani 2022). What they lack is a system view of the decision pipeline: existing methods optimize departments in isolation, ignoring upstream effects on downstream problems and whole system value. We call this missing cross-stage de-pendency latent operational coupling (Figure 1). For exam-arXiv:2607.28488v1 [cs.AI] 30 Jul 2026 ple, a high-demand product may become unattractive once its capacity consumption and routing burden are priced in, while a longer replenishment cycle may reduce transporta-tion cost but increase inventory exposure and lost-sales risk; similar tradeoffs arise throughout the pipeline. Because they are not directly observed, locally reasonable decisions can silently transfer cost and risk across the system (Forrester 1997; Sterman 1989; Lee, Padmanabhan, and Whang 1997). Existing methods either optimize within a fixed downstream instance or hand-specify fragments of the coupling; they do not learn and coordinate it across the whole supply-chain pipeline. 
+
+The present work. We formulate retail replenishment as a decision-learning problem with latent operational coupling. Assortment, source assignment, and replenishment interval decisions determine which demand is served, where it orig-inates, and when it is released. Through known operational rules, these decisions induce the routing instances and fea-sible route sets that logistics must handle. We formalize an upstream plan through its induced system value, namely the best complete-pipeline utility attainable after completing its remaining decisions. To our best knowledge, SCOPE (Supply-Chain Operations through Coupled Policies for End-to-End Coordination) is the first learned decision framework to jointly reason over supply-chain entities and produce coordinated end-to-end operational plans under a shared system-level objective. It is designed around two objectives: (1) learning the latent op-erational couplings through which upstream choices reshape downstream problems and attainable system value, and (2) translating these couplings into complete, inspectable op-erational decisions. SCOPE encodes products, facilities, de-mand, geography, capacity, and cost context in a shared op-erational representation, while each policy interface extends the partial plan formed by preceding decisions. This design is related to multi-task representation learning (Caruana 1997; Ruder 2017; Bommasani et al. 2021), but targets end-to-end operational planning. We validate SCOPE on two operational regimes chosen to place the same couplings at different structural positions. The first uses FreshRetailNet-50K, a public fresh-retail dataset (Wang et al. 2025). The second, through collaboration with JD.com, uses a nationwide warehouse network in which se-lected demand must first be assigned from regional distri-bution centers (RDCs) to front distribution centers (FDCs). We train separate dataset-specific checkpoints of the same architecture: the experiments test whether the backbone-and-interface design absorbs a topological change through a single added interface, so the claim is structural reuse. Every method is evaluated as a complete pipeline against de-composed baselines with rule-based upstream decisions and strong classical, industrial, metaheuristic, and neural route solvers, together with matched ablations and proxy stress tests. In summary, our contributions are: 1. Problem: a new decision-learning formulation of retail replenishment, in which upstream decisions induce down-stream routing problems and complete plans are evaluated under a shared system-level utility; 2. Model: we introduce SCOPE model, which represents supply-chain entities as tokens, contextualizes them through a shared operational representation, and maps each token type to a corresponding decision interface for end-to-end coordination; 3. Concept: latent operational coupling, a modeling lan-guage for the implicit cross-stage dependencies among decisions over supply-chain entities; 4. Results: on real Dingdong and JD.com data, SCOPE out-performs strong decomposed pipelines at both warehouse and store levels and remains robust across broad proxy settings. 
+
+Social impact. This work is a collaboration with JD.com, one of the world’s largest e-commerce companies, whose na-tionwide fulfillment network motivated the problem: depart-mental optimizers for selection, replenishment, and logistics interact daily, yet no learned representation connects their decisions. Together we identified two objectives grounded in real operational needs. Learning operational couplings im-proves cross-department visibility, letting planners see how assortment and service-frequency choices propagate into capacity pressure, inventory exposure, and routing burden before costs materialize. Complete-pipeline decision learn-ing supports joint improvement of replenishment frequency, warehouse assignment, and route execution. The FreshRe-tailNet experiments are fully reproducible from public data, and the JD evaluation preserves an auditable protocol de-spite data-sharing constraints, so that research on coupled supply-chain decision learning can continue beyond this col-laboration. 
+
+## 2 Related Work 
+
+Route-centric vehicle-routing solvers. Vehicle routing spans classical formulations, constructive heuristics, and rich VRP variants (Dantzig and Ramser 1959; Clarke and Wright 1964; Laporte 1992; Toth and Vigo 2014; Vidal et al. 2013). Representative route optimizers include nearest-neighbor construction (Rosenkrantz, Stearns, and Lewis 1977), indus-trial toolkits such as OR-Tools (Furnon and Perron 2025), and metaheuristics such as Hybrid Genetic Search (Vi-dal 2022). Recent neural methods learn route-construction policies through attention, multi-start reinforcement learn-ing, mixture-of-experts, or unified node–edge representa-tions(Kool, van Hoof, and Welling 2019; Kwon et al. 2020; Zhou et al. 2024; Meng et al. 2025). We include representa-tive methods from these families as route components in our baseline pipelines. We include representative methods from these families in our baseline pipelines. 
+
+Machine learning for supply-chain operations. Recent surveys document growing applications of machine learning in supply-chain management (Baryannis, Dani, and Antoniou 2019; Younis, Sundarakani, and Alsharairi 2022). Existing work mainly addresses prediction and visibility, including supply-chain risk prediction(Baryannis, Dani, and Antoniou 2019), supplier-disruption prediction(Brintrup et al. 2020), and graph learning for hidden-link prediction and planning benchmarks(Aziz et al. 2021; Kosasih and Brintrup 2021; Wasi, Islam, and Akib 2024). A separate line learns policies Shared operational 
+
+encoder 
+
+> cost embedding
+> Assortment selection
+> facility × SKU
+> Selected
+> SKUs
+> Replenishment cycle
+> Adaptive T*
+> Logistics
+> Aggregate
+> Multi-day rollout
+> evaluate the
+> complete
+> pipeline
+> Road-network
+> Cost context
+
+Operational 
+
+state  
+
+> SINGLE DEPOT MULTI-RDC
+
+. . . . . .               
+
+> Demand + SKU
+> features
+> Depot/RDC
+> Token Type Sequence
+> Operational Unit Store/FDC
+> Adapter Interface
+> Feature + Type Embedding
+> (demand, inventory, location, time .....)
+> ... Transformer
+> Encoder
+> Shared Representation E
+> E = [ E depot , E operational, Estore ]
+> ... ...
+> Aselection
+> Acycle
+> Alogistic
+> CVRP
+> Execute
+> cveh αhold cveh /α
+> 045 90
+> Daily Inventory and dispatch
+> induced replenishment
+> instances
+> Net system value
+> -Transport Cost
+> + Selected Products Value
+> -Service Cost
+> -Inventory Cost Select
+> staged training: assortment supervision · cycle counterfactuals · router
+
+Figure 2: SCOPE as a coupled supply-chain policy-optimization framework. A shared operational decision backbone supports department-facing policy interfaces for assortment selection, replenishment-cycle planning, and routing under a unified opera-tional objective. for individual operational layers, including lost-sales, dual-sourcing, multi-echelon, and beer-game inventory problems (Gijsbrechts et al. 2022; Oroojlooyjadid et al. 2022; Boute et al. 2022), as well as end-to-end replenishment(Qi et al. 2020). Chang et al. (2025) learn hidden production functions from transaction-level supply-chain graphs. These methods, however, do not jointly coordinate decisions across supply-chain departments. 
+
+Integrated supply-chain decision models. Operations re-search has long recognized that supply-chain decisions are coupled, including assortment planning (Kök, Fisher, and Vaidyanathan 2015), joint location–inventory models (Shen, Coullard, and Daskin 2003), inventory-routing (Coelho, Cordeau, and Laporte 2014), perishable inventory-routing (Shaabani 2022), and integrated assortment–inventory or assortment–shelf-space–supplier models (Martínez-de Al-béniz and Kunnumkal 2022; Sajadi and Ahmadi 2022). Shen (2007) surveys the broader integrated supply-chain design literature, including models in which facility-location deci-sions account jointly for inventory and distribution costs. Supply-chain coordination further studies how decentralized decisions can be aligned through contracts or related mech-anisms (Cachon 2003). These works establish the value of coordination, but typically hand-specify the coupling, cover only subsets of the operational pipeline, and rely on business quantities unavailable in many operational datasets. 
+
+Positioning. Unlike route-centric solvers, we treat routing instances as outputs of learned upstream decisions and evalu-ate the complete supply-chain pipeline. Unlike prior supply-chain machine learning, we learn latent operational couplings and place them in joint policy optimization across depart-ments. Unlike integrated optimization models, we learn a shared operational representation from demand, product, geography, and cost context, while handling unavailable business quantities through explicit proxies. SCOPE there-fore formulates supply-chain operations as coupled decision learning, where multiple decision interfaces are built on a shared representation and optimized toward a unified system-level objective. 
+
+## 3 SCOPE Framework 
+
+3.1 Problem Formulation 
+
+Retail replenishment comprises four dependent planning stages. A stage denotes decision dependency, not elapsed time. Stage 1 selects the assortment, which determines the demand and load considered when choosing a supply source. Stage 2 assigns supply origins, which changes the source-dependent inputs to interval planning and routing. Stage 3 chooses replenishment intervals, where an interval is the number of days between successive planned replenishments. This decision determines service days and visit loads. Stage 4 constructs routes for the resulting requests. Each nonter-minal decision therefore changes the problem faced by later stages and the utility attainable by the complete plan. Downstream locations are indexed by i, upstream supply nodes by j, and SKUs by p. A scenario s contains facilities, physical road distances, demand dip , SKU attributes, eligible supply links, vehicle limits, and replenishment units. The cost context c specifies the dispatch, travel, and inventory exposure tradeoffs known at planning time. For each location i, assortment Ai contains exactly KSKUs, and A collects all local assortments. Source plan σ
+
+assigns each location to one eligible upstream node: σi ∈ J i,where σi = j means that j supplies i. Locations are parti-tioned into fixed replenishment units Mz . Requests within a unit are released on the same service days. Interval Tz con-trols their frequency and accumulated demand. We use T for the complete interval plan and T (s) for its feasible set. Let wp collect the available weight and volume load factors or proxies for SKU p. The selected daily load and nominal load for one replenishment visit are 
+
+¯qi(A) = X
+
+> p∈Ai
+
+dip wp,
+
+qi(A, T ) = Tz ¯qi(A), i ∈ M z .
+
+(1) A short interval creates frequent deliveries; a long interval creates larger loads and greater inventory exposure. These quantities are planning proxies and may differ from realized freight. Given (A, σ, T ), let R(s; A, σ, T ) be the feasible set of complete route plans over the planning horizon. It enforces the selected requests, assigned origins, service days, physical road distances, and vehicle weight and volume limits. Thus, 
+
+A determines what demand moves, σ determines where it originates, and T determines when and at what visit load it is delivered. These decisions jointly determine the routing problems and their feasible routes. Let Y(s) contain exactly the complete plans y =(A, σ, T, R ) satisfying |Ai| = K and σi ∈ J i for every 
+
+i, T ∈ T (s), and R ∈ R (s; A, σ, T ). We evaluate y by the daily proxy utility 
+
+U (s, c ; y) = V (A) − Lcov (A) − Crt (R; c) − Cinv (A, T ; c),
+
+(2) where V measures assortment value, Lcov penalizes expected demand outside the selected assortment, Crt is transportation cost, and Cinv measures interval-induced inventory exposure. All horizon totals are divided by the horizon length before entering U . Lcov is an uncovered-demand proxy, distinct from realized lost sales in a dynamic inventory simulation. For each decision prefix below, Y(s | · ) contains the com-plete plans in Y(s) that preserve the decisions already fixed. We use the same operational completion value at all three boundaries: 
+
+Qs,c (A) := max  
+
+> y∈Y (s|A)
+
+U (s, c ; y),Qs,c (A, σ ) := max  
+
+> y∈Y (s|A,σ )
+
+U (s, c ; y),Qs,c (A, σ, T ) := max   
+
+> y∈Y (s|A,σ,T )
+
+U (s, c ; y).
+
+(3) The three lines evaluate one value concept. The remaining decisions are (σ, T, R ), (T, R ), and R, respectively. Thus, each earlier decision changes both the remaining comple-tion problem and the complete-plan value attainable from it. We call this dependence operational coupling . Assort-ment changes the demand and load passed to later decisions; source assignment changes origins and source-dependent in-puts; and interval planning changes service days, visit loads, and feasible routes. Alternative completion problems and their optimized values are not recorded in operational data and are costly to compute. For one scenario, the operational problem is 
+
+y∗(s, c ) ∈ arg max  
+
+> y∈Y (s)
+
+U (s, c ; y), (4) whose optimal value is max A: |Ai|=K ∀i Qs,c (A). Repeat-ing this search as conditions change motivates a conditional policy Πθ :
+
+θ∗ ∈ arg max  
+
+> θ
+
+E(s,c )∼P [U (s, c ; Π θ (s, c ))] s.t. Πθ (s, c ) ∈ Y (s). (5) Equation (5) defines the policy-level target. SCOPE approxi-mates this target with staged surrogates and selects among the resulting composite policies using validation pipeline utility. 
+
+3.2 Model Overview 
+
+SCOPE operationalizes this coupling with a conditional com-posite policy. Each stage extends the current decision con-figuration: A conditions source assignment, interval plan-ning, and routing; σ further conditions interval planning and routing; and T completes the input to routing. SCOPE then groups the selected requests by assigned source and service day, and a neural routing policy produces R. The resulting complete plan is evaluated by the common utility U . Figure 1 links this flow to Eq. (4). 
+
+Scenario representation and sequential policies. A shared operational backbone Bθ maps facilities and physical road distances from s to E = Bθ (s). This embedding set contains 
+
+hi for downstream locations and hj for upstream nodes. A second encoder maps c to zc = eθ (c). The shared repre-sentation supplies scenario context; cross-stage dependence enters through the explicit conditioning on earlier decisions. We use θ for all trainable parameters. Superscripts A, σ, T , and R label an assortment scorer, source scorer, interval classifier, and autoregressive routing decoder. The complete policy follows the same order as the formulation: 
+
+A = πAθ (s, E, zc),σ = πσθ (s, E, zc, A ),T = πTθ (s, E, zc, A, σ ),R = πRθ (s, E, A, σ, T ).
+
+(6) These steps return Πθ (s, c ) = ( A, σ, T, R ). SCOPE does not calculate the ideal completion value in Eq. (3). Instead, stage-specific surrogates train the conditional policies, and valida-tion utility selects their composition. The same construction applies to other staged systems in which each earlier decision reshapes the remaining problem. The assortment scorer combines hi, projected SKU at-tributes up = Pθ (xp), cost context, and demand, value, and load features, then selects the top K SKUs. For source as-signment, the scorer compares eligible nodes using facility embeddings, link features, and selected load. Interval selec-tion pools these features within Mz and chooses one candi-date τ ∈ { 1, . . . , T max }.
+
+Routing problem construction and solution. Before de-coding, SCOPE groups the selected requests by service day and assigned origin. Each resulting routing subproblem spec-ifies its active locations, loads, vehicle limits, and physical distance matrix. City scenarios use fixed spatial grouping; warehouse routing subproblems are partitioned by σ. The decoder uses capacity masks and multi-start decoding, re-taining the lowest-cost route among its feasible rollouts un-der the implemented metric. It therefore serves as a feasible approximate executor, and its realized utility need not attain the maximum in Eq. (3). 
+
+3.3 Model Training 
+
+SCOPE approximates Eq. (5) with policy-specific surrogates and validation pipeline utility. 
+
+Upstream supervision. The assortment policy first learns from SKU targets that combine coverage, value, load, and inventory exposure proxies. It then evaluates one-for-one swaps through the complete downstream pipeline and retains a swap only when proxy utility improves while the required coverage and value are preserved. These comparisons pro-vide local preferences among nearby assortments. The source policy considers only eligible nodes and uses the nearest feasible node as a geometric warm-start target. This promotes a physically plausible assignment but does not identify the source plan with the highest operational com-pletion value. For each training scenario and cost context, SCOPE also evaluates candidate intervals with one interval shared by all active units. The best globally fixed interval pro-vides a common warm-start label, while the deployed policy predicts a separate interval for each unit. This scan supplies no unit-specific alternative labels. Assortment replacements and global interval candidates receive pipeline comparisons; source assignment receives feasibility-constrained geometric supervision. 
+
+Router specialization. For each day-specific routing sub-problem ρ, OR-Tools is used offline to produce a reference sequence rref  
+
+> ρ
+
+. The route decoder is trained by imitation: 
+
+LR = − X
+
+> ρ
+
+X
+
+> m
+
+log πRθ (rref  
+
+> ρ,m
+
+| rref 
+
+> ρ,<m
+
+, E, A, σ, T ). (7) Each subproblem contains the source, service day, selected requests, loads, and vehicle limits determined by the earlier decisions. Route imitation supplies no full-pipeline value tar-get for alternative decision configurations, and the resulting routes remain approximate. At inference, SCOPE executes these subproblems without OR-Tools. 
+
+Full pipeline selection. The implementation keeps a separate loss for each policy. We compare candidate checkpoints C by running the complete policy on the validation set: 
+
+bθ ∈ arg max 
+
+> θ∈C
+
+1
+
+|D val |
+
+X
+
+> (s,c )∈D val
+
+U (s, c ; Π θ (s, c )) . (8) Branch-specific surrogates fit candidate policies. Validation utility U then selects among the resulting composite check-points without supplying gradients to the policy heads. Proxy definitions, normalization, and surrogate targets appear in the experimental protocol or appendix. Thus, SCOPE co-ordinates the conditional policies using complete-pipeline evaluations without explicitly estimating Qs,c in Eq. (3). 
+
+## 4 Experiments 
+
+Replenishment recurs at every echelon of a supply chain in the same abstract form, a shared decision grammar: an upstream supply node serves a set of downstream demand nodes, and the operator must decide what to serve, how often to replenish, and how to route the deliveries. This recurring structure motivates our evaluation along three dimensions. (i) Coupling : do the latent operational couplings among departmental decisions matter, i.e., does learning these couplings and optimizing the complete assortment–cycle– routing pipeline jointly outperform decomposed pipelines that pair rule-based upstream decisions with strong route solvers? (ii) Generality : does the same joint model remain effective across supply-chain scales and echelons? (iii) Mech-anism and limits : which learned interfaces drive the gains, and under which cost regimes do they fail? The main results address coupling and generality; the ablations and robust-ness studies isolate the underlying mechanisms and failure regimes. 
+
+4.1 Data 
+
+We ground this evaluation in fresh retail, where assortment, replenishment frequency, inventory exposure, and distribu-tion are tightly coupled (van Donselaar et al. 2006; Minner and Transchel 2010; Shaabani 2022), using two industrial level operational datasets at different supply-chain echelons. At the depot-to-store echelon, FreshRetailNet-50K (Wang et al. 2025) is a rare public record of large-scale fresh-retail operations from Dingdong, spanning 898 stores, 18 cities, 865 SKUs, and 90 days. At the upper echelon of supply chain scenario, our JD.com data capture a nationwide, indus-trial multi-warehouse network with 8 RDCs, 43 FDCs, 1,110 SKUs, and 91 dated snapshots. Such facility-level inventory, demand, and network records are rarely available for aca-demic evaluation; they expose warehouse-scale assortment and an assignment-dependent multi-depot topology, provid-ing a stringent test of whether the same model generalizes beyond last-leg replenishment. Under the NDA, identities are masked and business quantities rescaled while the oper-ational decision structure is preserved. Figure 3 previews the public dataset’s heterogeneity in store–SKU coverage, cate-gory mix, demand, and stockout signals. Full dataset details are provided in the Supplementary Material. 
+
+4.2 Experimental Setup 
+
+Every method is evaluated as a complete assortment– cycle–routing pipeline over the full planning horizon, un-der one shared objective. We report mean reference-adjusted operational value Uref (larger is better), together with transportation-plus-inventory cost, demand coverage, and ve-hicles per day. SCOPE is one learned joint pipeline; baselines are decomposed pipelines that cross three assortment rules (TopDemand-K, TopValue-K, Random-K), globally scanned fixed cycles (BestFix / Daily), and seven route executors rang-ing from nearest-neighbor and OR-Tools (Furnon and Perron 2025) to recent neural routers (Vidal 2022; Kool, van Hoof, and Welling 2019; Kwon et al. 2020; Zhou et al. 2024; Meng et al. 2025). The top-K assortment rules mirror JD.com’s de-ployed prediction-then-ranking practice (Shen et al. 2025), so Dingdong (depot–store) JD.com (RDC–FDC) Pipeline Assort. Cycle T Uref ↑ Gap ↓ Cov. ↑ T Uref ↑ Gap ↓ Cov. ↑
+
+SCOPE ✓ ✓ ✓ 206329.79 – 0.948 ✓ 293547.12 – 0.427 
+
+TopDemand assortment with best global fixed cycle 
+
+TopDemand–OR-Tools TopDemand-K BestFix 6 206276.14 53.65 0.948 2 288734.46 4812.65 0.429 TopDemand–NN TopDemand-K BestFix 6 206271.86 57.93 0.948 2 287021.11 6526.01 0.429 TopDemand–HGS TopDemand-K BestFix 7 206253.31 76.48 0.948 2 288736.72 4810.39 0.429 TopDemand–UniteFormer TopDemand-K BestFix 7 206248.27 81.51 0.948 3 287320.33 6226.78 0.429 TopDemand–AM TopDemand-K BestFix 7 206227.23 102.56 0.948 4 282564.81 10982.30 0.429 TopDemand–POMO TopDemand-K BestFix 7 206197.59 132.20 0.948 4 285398.48 8148.64 0.429 TopDemand–MVMoE TopDemand-K BestFix 7 206180.81 148.98 0.948 3 284890.42 8656.70 0.429 
+
+Daily replenishment baselines 
+
+Daily–HGS TopDemand-K Daily 1 205932.38 397.41 0.948 1 283074.28 10472.83 0.429 Daily–OR-Tools TopDemand-K Daily 1 205931.78 398.01 0.948 1 283074.28 10472.83 0.429 Daily–NN TopDemand-K Daily 1 205911.85 417.94 0.948 1 280156.60 13390.51 0.429 
+
+Alternative assortment policies with best global fixed cycle 
+
+TopValue–OR-Tools TopValue-K BestFix 6 205569.95 759.84 0.945 2 288973.15 4573.96 0.427 TopValue–HGS TopValue-K BestFix 6 205556.16 773.63 0.945 2 288973.15 4573.96 0.427 Random–OR-Tools Random-K BestFix 6 170016.63 36313.15 0.888 5 65370.22 228176.90 0.103 Random–HGS Random-K BestFix 7 170003.01 36326.78 0.888 5 65371.79 228175.32 0.103 Table 1: Complete-pipeline results on depot-to-store (Dingdong, 18 90-day scenarios) and RDC-to-FDC (JD.com, 18 91-day real-FDC subset scenarios). Uref is larger-is-better; Gap = U SCOPE  
+
+> ref
+
+−U method ref . BestFix is one global fixed cycle over T = 1 , . . . , 7,not a per-episode oracle; T is the selected cycle on each dataset. A checkmark denotes a learned decision; Gap “–” means not applicable. they are industrial baselines. Cost coefficients follow reported Chinese cold-chain vehicle costs and textbook carrying-cost conventions (Feng et al. 2024; Pan et al. 2024; Silver, Pyke, and Peterson 1998). Remaining details are in the Supplemen-tary Material. 
+
+4.3 Main Results Across Two Replenishment Echelons 
+
+Table 1 reports the complete-pipeline comparison on both echelons. Across the Dingdong scenarios, SCOPE achieves the highest Uref (206329.79), exceeding every decomposed combination of a top-ranked assortment rule, a globally opti-mized fixed cycle, and a strong classical or neural router. This is a demanding comparison: prediction-then-ranking assort-ment is used in JD.com’s deployed fulfillment practice (Shen et al. 2025), while OR-Tools, HGS, and the learned routers are competitive routing methods. Yet, with TopDemand-K and BestFix held fixed, replacing OR-Tools with any of the six al-ternative routers changes the gap only from 53 .65 to 148 .98 ;by comparison, imposing daily replenishment increases it to 398 .01 , and changing the assortment policy increases it further. Thus, optimizing strong departmental policies sepa-rately is insufficient: once assortment and cycle have formed the routing instance, a stronger router cannot recover value lost through their interaction. SCOPE ’s consistent lead pro-vides direct evidence for the first question, that learning the latent operational couplings among assortment, replenish-ment frequency, and routing matters. The JD.com results then test whether this finding persists beyond the last leg. Despite moving to a larger RDC-to-FDC network with warehouse-scale SKU volumes and assignment-based instance forma-tion, SCOPE again ranks first, reaching 293547.12 and out-performing the strongest decomposed pipeline by 4573 .96 
+
+(1.58%) at essentially the same coverage. The same pattern is more pronounced there: daily replenishment loses 10472 .83 ,whereas changing the router within a fixed upstream policy cannot close the gap. Standing out on both a public depot-to-store benchmark and a proprietary industrial RDC-to-FDC network shows that the benefit is not tied to one dataset, scale, or replenishment echelon, answering the second ques-tion on generality. Full matrices and implementation details are provided in the Supplementary Material. 
+
+4.4 Ablations 
+
+Table 2 reports matched decision ablations on both datasets, each replacing one learned interface or one training stage while keeping the rest of the pipeline fixed. The decision ablations reveal a consistent pattern across the two replen-ishment echelons. Removing the learned interfaces pro-duces the largest performance degradation on both Dingdong (−426 .36 ) and JD.com ( −14520 .74 ), while removing coun-terfactual cycle supervision causes a further substantial loss on JD.com ( −4687 .86 ). Replacing the learned assortment policy with TopDemand-K has a smaller but consistently negative effect. These results suggest that system value arises from learning the latent operational couplings among assort-Dingdong (depot–store) JD.com (RDC–FDC) Variant Change Uref ↑ ∆ Cov. ↑ Uref ↑ ∆ Cov. ↑
+
+SCOPE full staged pipeline 206329.79 0.00 0.948 293547.12 0.00 0.427 w/o assortment interface replace with TopDemand-K 206275.89 -53.90 0.948 293261.53 -285.59 0.429 w/o service-cycle interface fixed daily cycle ( T =1 ) 205903.42 -426.36 0.948 279026.38 -14520.74 0.427 w/o learned-router remove reference-route warm-up 206319.11 -10.68 0.948 292738.46 -808.65 0.427 w/o cycle supervision remove counterfactual training 206292.13 -37.65 0.948 288859.25 -4687.86 0.427 Direct joint training train all modules from scratch 173907.60 -32422.18 0.894 293472.61 -74.50 0.427 Table 2: Decision ablations under the same protocols as Table 1 (Dingdong: 18 90-day scenarios; JD.com: 18 91-day scenarios). 
+
+Uref is larger-is-better; ∆ is the signed change relative to full SCOPE . Assignment remains part of the learned JD.com pipeline but is not treated as a separate ablation. 
+
+Figure 3: FreshRetailNet-50K exhibits the heterogeneity that couples the three decisions: (a) skewed store-SKU footprint across 18 cities, (b) city-specific category mix, (c) long-tailed per-series demand volatility, (d) non-stationary demand with a censored stockout signal. ment, replenishment, and routing decisions. The ablations therefore support the central claim of Table 1: end-to-end performance depends on coordinating these interdependent decisions rather than optimizing each department in isola-tion. The training ablation highlights a practical difficulty in real supply-chain optimization. Because assortment, replen-ishment cycle, and routing jointly determine the final system outcome, a performance drop is difficult to attribute to any single decision module or to a poor combination of the three. On Dingdong, direct joint training from scratch converges to a substantially worse, lower-coverage policy, losing 32422.18 value units and reducing coverage from 0.948 to 0.894. On JD.com, however, direct joint training finishes only 74.50 behind staged SCOPE . Together, these results validate the training ablation by showing that the optimization strategy can materially affect the learned joint policy, although the magnitude of its effect varies across data regimes. 
+
+4.5 Robustness and Failure Regimes 
+
+To test whether the gains depend on proxy calibration, we keep each checkpoint fixed and perturb the assortment-value, route-cost, holding-cost, and load scales. SCOPE ranks first in 30 of 35 value–cost settings and all seven load settings on Dingdong, and in all 35 value–cost settings and five of seven load settings on JD.com. Losses on Dingdong occur only at a 0.25 × assortment-value scale, where the objective approaches routing alone; those on JD.com occur when load perturbations change the induced capacity regime. Thus, the coupling advantage is robust across broad proxy ranges but can weaken when upstream value becomes negligible or the capacity regime shifts. Complete grids and numerical results are reported in the Supplementary Material. 
+
+## 5 Conclusion 
+
+This paper studies supply-chain operations as a coordinated decision-learning problem and introduces SCOPE , a com-posite policy model that represents supply-chain entities as typed tokens, contextualizes them through a shared opera-tional representation, and realizes assortment, source assign-ment, replenishment-cycle planning, and routing as sequen-tially coupled decision interfacese. SCOPE addresses two central objectives: learning the latent operational couplings through which upstream decisions reshape downstream prob-lems, and using these couplings to produce complete, in-spectable plans under a shared system-level utility—whereas prior methods typically optimize a fixed downstream instance or hand-specify only part of the coupling. To demonstrate these capabilities, we evaluated SCOPE on city-scale Ding-dong replenishment and a nationwide JD.com warehouse network, where it consistently outperformed decomposed op-erational pipelines across two replenishment echelons. More broadly, this work suggests a path toward supply-chain AI systems that improve whole-pipeline reliability. 
+
+## References 
+
+Aziz, A.; Kosasih, E. E.; Griffiths, R.-R.; and Brintrup, A. 2021. Data Considerations in Graph Representation Learning for Supply Chain Networks. arXiv preprint arXiv:2107.10609 .Baryannis, G.; Dani, S.; and Antoniou, G. 2019. Predicting Supply Chain Risks Using Machine Learning: The Trade-Off between Performance and Interpretability. Future Genera-tion Computer Systems , 101: 993–1004. Baumgartner, T.; Malik, Y.; and Padhi, A. 2020. Reimagining Industrial Supply Chains. McKinsey & Company. Bommasani, R.; Hudson, D. A.; Adeli, E.; et al. 2021. On the Opportunities and Risks of Foundation Models. arXiv preprint arXiv:2108.07258 .Boute, R. N.; Gijsbrechts, J.; van Jaarsveld, W.; and Van-vuchelen, N. 2022. Deep Reinforcement Learning for Inven-tory Control: A Roadmap. European Journal of Operational Research , 298(2): 401–412. Brintrup, A.; Pak, J.; Ratiney, D.; Pearce, T.; Wichmann, P.; Woodall, P.; and McFarlane, D. 2020. Supply Chain Data Analytics for Predicting Supplier Disruptions: A Case Study in Complex Asset Manufacturing. International Journal of Production Research , 58(11): 3330–3341. Cachon, G. P. 2003. Supply Chain Coordination with Con-tracts. In Handbooks in Operations Research and Man-agement Science: Supply Chain Management , volume 11, 227–339. Elsevier. Cachon, G. P.; and Zipkin, P. H. 1999. Competitive and Cooperative Inventory Policies in a Two-Stage Supply Chain. 
+
+Management Science , 45(7): 936–953. Caruana, R. 1997. Multitask Learning. Machine Learning ,28: 41–75. Chang, S.; Lin, Z.; Yan, B.; Bembde, S.; Xiu, Q.; Wong, C. H.; Qin, Y.; Kloster, F.; Luo, X.; Palleti, R.; and Leskovec, J. 2025. Learning Production Functions for Supply Chains with Graph Neural Networks. Proceedings of the AAAI Con-ference on Artificial Intelligence , 39(27): 27878–27886. Christopher, M.; and Peck, H. 2004. Building the Resilient Supply Chain. The International Journal of Logistics Man-agement , 15(2): 1–14. Clarke, G.; and Wright, J. W. 1964. Scheduling of Vehi-cles from a Central Depot to a Number of Delivery Points. 
+
+Operations Research , 12(4): 568–581. Coelho, L. C.; Cordeau, J.-F.; and Laporte, G. 2014. Thirty Years of Inventory Routing. Transportation Science , 48(1): 1–19. Dantzig, G. B.; and Ramser, J. H. 1959. The Truck Dispatch-ing Problem. Management Science , 6(1): 80–91. Feng, Q.; Hua, W.; Chen, C.; Shi, X.; and Ma, J. 2024. Optimization of Cold Chain Logistics Distribution Paths for Community Buying Considering Cost and Time Window: The Case of J Center. Managerial and Decision Economics ,45(8): 5249–5264. Forrester, J. W. 1997. Industrial Dynamics. Journal of the Operational Research Society , 48: 1037–1041. Furnon, V.; and Perron, L. 2025. OR-Tools Routing Library. Gijsbrechts, J.; Boute, R. N.; Van Mieghem, J. A.; and Zhang, D. J. 2022. Can Deep Reinforcement Learning Improve Inventory Management? Performance on Lost Sales, Dual-Sourcing, and Multi-Echelon Problems. Manufacturing & Service Operations Management , 24(3): 1349–1368. Kök, A. G.; Fisher, M. L.; and Vaidyanathan, R. 2015. Assortment Planning: Review of Literature and Industry Practice. In Retail Supply Chain Management , 175–236. Springer. Kool, W.; van Hoof, H.; and Welling, M. 2019. Attention, Learn to Solve Routing Problems! In International Confer-ence on Learning Representations .Kosasih, E. E.; and Brintrup, A. 2021. A Machine Learning Approach for Predicting Hidden Links in Supply Chain with Graph Neural Networks. International Journal of Production Research , 60: 5380–5393. Kwon, Y.-D.; Choo, J.; Kim, B.; Yoon, I.; Gwon, Y.; and Min, S. 2020. POMO: Policy Optimization with Multiple Optima for Reinforcement Learning. In Advances in Neural Information Processing Systems .Laporte, G. 1992. The Vehicle Routing Problem: An Overview of Exact and Approximate Algorithms. European Journal of Operational Research , 59(3): 345–358. Lariviere, M. A.; and Porteus, E. L. 2001. Selling to the Newsvendor: An Analysis of Price-Only Contracts. Manu-facturing & Service Operations Management , 3(4): 293–305. Lee, H. L.; Padmanabhan, V.; and Whang, S. 1997. Infor-mation Distortion in a Supply Chain: The Bullwhip Effect. 
+
+Management Science , 43(4): 405–570. Martínez-de Albéniz, V.; and Kunnumkal, S. 2022. A Model for Integrated Inventory and Assortment Planning. Manage-ment Science , 68(7): 5049–5067. Meng, D.; Cao, Z.; Gao, J.; Wu, Y.; and Hou, Y. 2025. Unite-Former: Unifying Node and Edge Modalities in Transformers for Vehicle Routing Problems. In Advances in Neural Infor-mation Processing Systems .Mentzer, J. T.; DeWitt, W.; Keebler, J. S.; Min, S.; Nix, N. W.; Smith, C. D.; and Zacharia, Z. G. 2001. Defining Supply Chain Management. Journal of Business Logistics ,22(2): 1–25. Minner, S.; and Transchel, S. 2010. Periodic Review Inventory-Control for Perishable Products under Service-Level Constraints. OR Spectrum , 32(4): 979–996. Oroojlooyjadid, A.; Nazari, M.; Snyder, L. V.; and Takáč, M. 2022. A Deep Q-Network for the Beer Game: Deep Rein-forcement Learning for Inventory Optimization. Manufac-turing & Service Operations Management , 24(1): 285–304. Pan, S.; Liao, H.; Zheng, G.; Huang, Q.; and Shan, M. 2024. Cold Chain Distribution Route Optimization for Mixed Vehi-cle Types of Fresh Agricultural Products Considering Carbon Emissions: A Study Based on a Survey in China. Sustain-ability , 16(18): 8207. Qi, M.; Shi, Y.; Qi, Y.; Ma, C.; Yuan, R.; Wu, D.; and Shen, Z.-J. M. 2020. A Practical End-to-End Inventory Manage-ment Model with Deep Learning. Management Science , 69: 759–773. Rosenkrantz, D. J.; Stearns, R. E.; and Lewis, P. M. 1977. An Analysis of Several Heuristics for the Traveling Salesman Problem. SIAM Journal on Computing , 6(3): 563–581. Ruder, S. 2017. An Overview of Multi-Task Learning in Deep Neural Networks. arXiv preprint arXiv:1706.05098 .Sajadi, S. J.; and Ahmadi, A. 2022. An Integrated Opti-mization Model and Metaheuristics for Assortment Plan-ning, Shelf Space Allocation, and Inventory Management of Perishable Products: A Real Application. PLOS ONE , 17(3): e0264186. Shaabani, H. 2022. A Literature Review of the Perishable Inventory Routing Problem. The Asian Journal of Shipping and Logistics .Shen, Z.-J. M. 2007. Integrated Supply Chain Design Mod-els: A Survey and Future Research Directions. Journal of Industrial and Management Optimization , 3(1): 1–27. Shen, Z.-J. M.; Coullard, C.; and Daskin, M. S. 2003. A Joint Location-Inventory Model. Transportation Science , 37(1): 40–55. Shen, Z.-J. M.; Sun, S.; Qi, Y.; Hu, H.; Kang, N.; Zhang, J.; Wang, X.; and Lin, X. 2025. JD.com Improves Fulfillment Efficiency with Data-Driven Integrated Assortment Planning and Inventory Allocation. INFORMS Journal on Applied Analytics , 55(5): 386–398. Silver, E. A.; Pyke, D. F.; and Peterson, R. 1998. Inventory Management and Production Planning and Scheduling . John Wiley & Sons, 3rd edition. Sterman, J. D. 1989. Modeling Managerial Behavior: Mis-perceptions of Feedback in a Dynamic Decision Making Ex-periment. Management Science .Tang, C. S. 2006. Perspectives in Supply Chain Risk Man-agement. International Journal of Production Economics ,103(2): 451–488. The White House. 2021. Building Resilient Supply Chains, Revitalizing American Manufacturing, and Fostering Broad-Based Growth. 100-Day Reviews under Executive Order 14017. Toth, P.; and Vigo, D., eds. 2014. Vehicle Routing: Problems, Methods, and Applications . SIAM. van Donselaar, K.; van Woensel, T.; Broekmeulen, R.; and Fransoo, J. 2006. Inventory Control of Perishables in Super-markets. International Journal of Production Economics ,104(2): 462–472. Vidal, T. 2022. Hybrid Genetic Search for the CVRP: Open-Source Implementation and SWAP* Neighborhood. Com-puters & Operations Research , 140: 105643. Vidal, T.; Crainic, T. G.; Gendreau, M.; and Prins, C. 2013. Heuristics for Multi-Attribute Vehicle Routing Problems: A Survey and Synthesis. European Journal of Operational Research , 231(1): 1–21. Wang, Y.; Gu, J.; Long, L.; Li, X.; Shen, L.; Fu, Z.; Zhou, X.; and Jiang, X. 2025. FreshRetailNet-50K: A Stockout-Annotated Censored Demand Dataset for Latent Demand Recovery and Forecasting in Fresh Retail. arXiv preprint arXiv:2505.16319 .Wasi, A. T.; Islam, M. S.; and Akib, A. R. 2024. Supply-Graph: A Benchmark Dataset for Supply Chain Planning Using Graph Neural Networks. ArXiv , abs/2401.15299. Younis, H.; Sundarakani, B.; and Alsharairi, M. 2022. Ap-plications of Artificial Intelligence and Machine Learning within Supply Chains: Systematic Review and Future Re-search Directions. Journal of Modelling in Management ,17(3): 916–940. Zhou, J.; Cao, Z.; Wu, Y.; Song, W.; Ma, Y.; Zhang, J.; and Chi, X. 2024. MVMoE: Multi-Task Vehicle Routing Solver with Mixture-of-Experts. In International Conference on Machine Learning .
