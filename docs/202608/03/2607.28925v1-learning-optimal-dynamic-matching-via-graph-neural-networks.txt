@@ -1,0 +1,672 @@
+Title: Learning Optimal Dynamic Matching via Graph Neural Networks
+
+URL Source: https://arxiv.org/pdf/2607.28925v1
+
+Published Time: Mon, 03 Aug 2026 00:18:00 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Learning Optimal Dynamic Matching via Graph Neural Networks 
+
+# Genta Okada 1, Shunya Noda 1, Junpei Komiyama 2, Akira Matsushita 1
+
+> 1
+
+The University of Tokyo 
+
+> 2
+
+Mohamed bin Zayed University of Artificial Intelligence 
+
+Abstract 
+
+Dynamic matching markets require decisions about whom to match and when: matching now yields value but removes participants who may create better future opportunities. We develop a value-based reinforcement-learning framework for this problem on finite, evolving weighted graphs. We study an infinite-horizon continuous-time model with stochastic ar-rivals, node-type transitions, edge realizations, and exoge-nous exits. We prove an event-time reduction: without loss of optimality, the planner acts immediately after each exoge-nous event and then waits for the next one. We further show that the optimal edge-wise Q-function is characterized by a single continuation-value function on post-decision residual graphs, reducing the learned object from state-action values to graph values. Exact action selection still requires com-binatorial matching optimization; we approximate the value with a graph neural network, train it by temporal-difference learning, and use it in a forward-greedy matching heuristic. In a binary-type benchmark, the learned policy substantially outperforms immediate and threshold-greedy rules by pre-serving common nodes for rare arrivals of valuable matches while forming lower-value matches only in thick pools. In a kidney paired donation benchmark, it performs similarly to immediate greedy when exits are unpredictable, recovers the logic of patient matching when warnings are reliable, and out-performs the better of Immediate Greedy and Patient Greedy across intermediate warning probabilities. These results show that residual-graph value learning yields state-dependent dy-namic matching policies that adapt to realized connectivity and exit information. 
+
+# 1 Introduction 
+
+Matching problems are central to market design and have been studied in economics, operations research, and com-puter science. Matching theory has provided some of the most successful and practically deployed tools for allocat-ing agents, objects, and opportunities, ranging from school choice and labor markets to organ exchange. Much of the classical literature studies static problems in which the set of nodes (representing agents or objects) and edges (represent-ing feasible or valuable matches) are fixed. Many important applications, however, are inherently dynamic, meaning that the composition of the pool evolves over time as new nodes arrive and existing nodes leave. In such environments, op-timal matching requires more than simply choosing which currently feasible matches to execute. A planner must also decide when to execute them, trading off immediate match value against the option value of preserving market thickness and the risk that current participants leave the market. To see the tradeoff, consider kidney paired donation, where incompatible patient–donor pairs are connected when they can form a two-way exchange. Executing an available ex-change immediately reduces the risk that a patient leaves unmatched. Yet it also removes both pairs from the pool and may foreclose valuable exchanges with future arrivals, especially for hard-to-match patients. Waiting can therefore improve match quality by preserving market thickness, but it exposes current patients to delay and departure risk. The same tension arises in ride sharing: assigning a driver im-mediately reduces rider waiting, whereas a delay may yield a closer driver and avoid an inefficient long-distance pickup (Castillo, Knoepfle, and Weyl 2025). Analogous tradeoffs appear in online dating and other platform markets. Opti-mal policies must balance immediate match value against the continuation value from future opportunities. Dynamic matching is computationally challenging: con-tinuation values depend on the combinatorial composition and realized structure of the pool, so even with known ar-rival and edge-value distributions, deriving an optimal state-dependent policy remains difficult. Existing work clarifies the timing tradeoff but does not directly solve the state-dependent problem here. Classical online matching typically requires immediate and irrevocable decisions upon arrival, leaving no endogenous choice of how long to preserve the pool (see, e.g., Huang, Tang, and Wajc 2024). Dynamic-matching stud-ies analyze waiting, thickness, and abandonment, but their guarantees exploit random-graph or asymptotic structure, or type-level relaxations, rather than the realized graph (Ander-son et al. 2017; Akbarpour, Li, and Gharan 2020; Ashlagi et al. 2019; Aouad and Saritaç 2022). Recent approximate dynamic programming and GNN methods broaden compu-tational scope, yet rely on structured value approximations or online bipartite arrival models (You and Vossen 2024; Hay-deri et al. 2024). What remains difficult is learning how each finite residual graph—including realized connectivity, evolv-ing node states, and exit information—shapes continuation value. This gap motivates a flexible, simulation-based approach that learns continuation values directly from realized graph states. This paper proposes a value-based computational arXiv:2607.28925v1 [cs.LG] 31 Jul 2026 framework for dynamic matching using deep reinforcement learning with graph neural networks (GNNs). We study an infinite-horizon continuous-time model with stochastic en-try, type changes, edge realizations, and exogenous exit. We derive an event-time reduction: after each exogenous event, it is without loss to choose a matching immediately and then wait until the next event. The event-time reduction removes the need to optimize over arbitrary intervention times and yields a Bellman system in which each decision trades off the immediate payoff from matching against the continuation value of the post-decision residual graph. We approximate this residual-graph value function by a GNN and train it with a temporal-difference procedure (Sutton 1988), a simulation-based approximate dynamic-programming method. This design is motivated by recent progress in automated mechanism design, where neural networks are used to represent and optimize mechanisms over large design spaces (Dütting et al. 2019). GNNs pro-vide a scalable class of message-passing architectures for graph-structured inputs and are especially well suited to dy-namic matching because unmatched participants and feasi-ble matches form a graph, and the value of a pool should be invariant to arbitrary labels assigned to participants. Once learned, the value function guides a forward-greedy approx-imation to the matching-level Bellman maximization, avoid-ing exhaustive search over feasible matchings. We evaluate the method in two environments. The first is a stylized binary-type benchmark designed to isolate the timing tradeoff in dynamic matching: although there are only two node types, good performance requires preserv-ing some common, slow-exiting nodes as future partners for rare and perishable arrivals. In this benchmark, the learned policy discovers a state-dependent timing rule that selec-tively preserves common nodes for future rare arrivals while executing lower-value matches when the pool is sufficiently thick. It substantially outperforms both immediate greedy and threshold-greedy benchmarks, showing that the frame-work can discover sophisticated matching policies beyond fixed, hand-designed heuristics. The second environment is a kidney paired donation (KPD) benchmark with heterogeneous patient–donor types, stochastic compatibility, edge values, and exogenous exit. In this environment, the learned policy uses both the informa-tiveness of exit signals and the realized structure of the pool to determine when and whom to match. When exits are unpre-dictable, it behaves similarly to immediate greedy, because waiting provides little protection against sudden departures. When a critical-status flag reliably warns of exit, it recov-ers the central logic of patient matching (Akbarpour, Li, and Gharan 2020), preserving noncritical nodes to maintain mar-ket thickness while prioritizing nodes at imminent risk. The learned policy is not restricted to either heuristic, however: it can match hard-to-match nodes before they become critical and select among feasible critical-node matches according to their effects on the residual pool. In intermediate envi-ronments, where exit warnings arrive only probabilistically, it adapts the degree of waiting to the available information and outperforms both baselines. These results show that the framework can discover state-dependent matching policies tailored to the exit-information structure, rather than merely selecting the better of two fixed rules. More broadly, it pro-vides a computational laboratory for studying how alloca-tion, timing, and information interact in dynamic matching markets. Our work contributes to online and dynamic matching by learning continuation values for finite, realized weighted graphs. Recent studies have applied GNNs and related neu-ral architectures to non-static matching problems (Begnardi et al. 2023; Hayderi et al. 2024; Liu et al. 2025; Hu, Feng, and Li 2025; Xing et al. 2025). Recent work also develops optimization-based and data-driven timing policies, includ-ing supply-aware simulation and learned switching between Greedy and Patient rules (Aouad and Saritaç 2022; Chen et al. 2025; Eom and Toriello 2025; Liu, Ward, and Zhang 2026; Zhou, Zhu, and Shen 2026). Our distinction is in the learned object: we learn a graph-level continuation value for each realized post-decision residual graph. With an appropri-ate graph encoder, decisions can adapt directly to the realized pool, connectivity, node and edge attributes, type changes, and exit information. 
+
+# 2 Problem 
+
+We study an infinite-horizon dynamic matching problem in continuous time t ∈ R≥0. A planner discounts fu-ture payoffs at rate δ > 0. The environment is defined as 
+
+E = ( X , ρ, F, λ, μ, q, c, δ ). The set of node types X is finite. We use the term “exogenous event” to denote changes in the state (i.e., entry and exit of nodes, and type changes of nodes). These events are stochastic and occur at random times regard-less of the planner’s matching decisions. New entrants arrive at rate λ > 0, and their types are independently drawn from 
+
+ρ ∈ ∆( X ). For each pair of types (x, y ) ∈ X 2, F (· | x, y ) is a probability distribution on R≥0 ∪ {⊥} , where ⊥ denotes infeasibility; a realization u ∈ R≥0 denotes a feasible edge of weight u. We assume F (· | x, y ) = F (· | y, x ) for all 
+
+(x, y ) ∈ X 2 and R 
+
+> R≥0
+
+uF (d u | x, y ) < ∞. Each unmatched node of type x ∈ X has a Poisson clock with rate μ(x) > 0
+
+and transition kernel q(· | x) ∈ ∆( X ∪ {†} ) over new types and exogenous exit. If a node of type x exits exogenously, the planner incurs penalty c(x) ≥ 0. Throughout, all Poisson processes are independent, and all newly created edge values are conditionally independent given the current node types. This transition kernel enables us to model exit information explicitly. Specifically, an observable critical-warning signal can be included as part of the node type. A noncritical type may either transition to the corresponding critical type or exit directly when its clock rings, while a critical type may exit at a different hazard rate. Varying the probability of the transition to the critical type therefore captures environments ranging from uninformed exit, in which no warning is ob-served before departure, to informed exit, in which a warning reliably arrives before departure. Motivated by this interpre-tation, we do not redraw edge weights after type transitions in any of our applications. A state is a finite typed weighted graph G =(N, E, x, w ) ∈ G, where N ⊂ N is a finite node set, 
+
+E ⊆  N
+
+> 2
+
+ is the set of feasible edges, x : N → X assigns a type to each node, and w : E → R≥0 assigns a realized weight to each feasible edge. Note that the Markov state cannot be summarized by the profile of node types alone. Even when two pools have the same multiset of node types, they may have different realized feasible edges and different realized edge weights, and there-fore different continuation values. For example, in KPD, a two-way exchange requires both cross-donations to pass pair-specific virtual crossmatches, so coarse patient–donor types alone do not determine whether the exchange is feasible. Hence the relevant state variable is the realized weighted graph itself. Given a state G, the exogenous dynamics act as follows. New nodes enter according to a Poisson process with rate λ.When a new node i∗ /∈ N enters, its type y is drawn from 
+
+ρ. For each existing node j ∈ N , a fresh edge realization 
+
+˜wi∗j ∼ F (· | y, x j ) is drawn independently. If ˜wi∗j = ⊥,no edge is created; otherwise {i∗, j } is added to the feasible-edge set with weight ˜wi∗j .Each remaining node i ∈ N has an independent Poisson clock with rate μ(xi). When the clock of node i rings, z ∼
+
+q(· | xi) is drawn. If z = †, then node i exits exogenously, the planner incurs a penalty c(xi), and node i together with all incident edges is removed from the graph. If z = y ∈ X ,then node i changes type from xi to y. All existing feasible edges and realized weights, including those incident to i, are left unchanged. For a state G = ( N, E, x, w ), a feasible matching is 
+
+M(G) := {m ⊆ E : e ∩ e′ = ∅ ∀ distinct e, e ′ ∈ m}.
+
+The empty matching ∅ is allowed. If the planner chooses a matching m ∈ M (G), it receives immediate payoff 
+
+W (G, m ) := X
+
+> e∈m
+
+we.
+
+Let ν(m) denote the set of matched nodes in m. The residual graph after matching m is G ⊖ m, defined as the induced subgraph obtained by deleting all nodes in ν(m) together with all incident edges. An admissible policy is a non-anticipative, possibly ran-domized rule that chooses feasible matchings at stopping times adapted to the filtration generated by past exogenous events and past actions. Any private randomization used by the planner is assumed independent of the primitive Poisson clocks and edge draws. For an admissible policy π, let (σk, M k)k≥0 denote the sequence of matching interventions it generates, where σk is a stopping time, Gσk is the graph observed immediately be-fore that intervention, and Mk ∈ M (Gσk ). Let (ηℓ, X ℓ)ℓ≥1
+
+denote the sequence of exogenous exit events, where Xℓ is the type of the exiting node immediately before exit at time 
+
+ηℓ. The expected discounted payoff from the initial graph G
+
+is 
+
+Jπ (G) = EπG
+
+X
+
+> k≥0
+
+e−δσ k W (Gσk , M k) − X
+
+> ℓ≥1
+
+e−δη ℓ c(Xℓ)
+
+
+
+.
+
+Let U (G) denote the optimal value of the full continuous-time problem from a pre-decision graph G,
+
+U (G) := sup 
+
+> π
+
+Jπ (G).
+
+# 3 Method 
+
+3.1 Event-time Reduction 
+
+We first present a few analytical results to simplify our learn-ing problem. Let 0 = τ0 < τ 1 < τ 2 < · · · denote the sequence of exogenous event times (i.e., entry and exit of nodes, and type changes of nodes). For an event-time pol-icy, let Gn be the pre-decision graph observed immediately after the n-th exogenous event, let mn ∈ M (Gn) be the matching chosen at time τn, and let Rn := Gn ⊖ mn be the (post-decision) residual graph .For a residual graph R = ( N, E, x, w ), define the total hazard by Λ( R) := λ + P 
+
+> i∈N
+
+μ(xi). The waiting time to the next exogenous event, conditional on R, satisfies 
+
+∆n := τn+1 − τn ∼ Exp(Λ( R)) ,
+
+where Exp(Λ( R)) denotes the exponential distribution with rate Λ( R). The associated event mark ξn, which identifies the next exogenous event, takes values in 
+
+Ξ( R) := {ent } ∪ { (i, z ) : i ∈ N (R), z ∈ X ∪ {†}} .
+
+Under competing Poisson hazards, the probability of the en-try event is 
+
+P(ξn = ent | Rn = R) = λ
+
+Λ( R) ,
+
+and for each node i ∈ N (R) and mark z ∈ X ∪ {†} , the probability of the event that node i’s clock rings and yields mark z is 
+
+P(ξn = ( i, z ) | Rn = R) = μ(xi) q(z | xi)Λ( R) .
+
+Moreover, ∆n and ξn are independent conditional on Rn.Let T (R, ξ n) denote the random next pre-decision graph obtained from R after applying event mark ξn together with the auxiliary edge draws, if any, induced by entry. Define the payoff of an exit event as 
+
+rex (R, ξ n) := 
+
+−c(xi), if ξn = ( i, †),
+
+0, otherwise. For such an event-time policy, the value Jπ (G0) can be written as 
+
+Jπ (G0)= EπG0
+
+ ∞X
+
+> n=0
+
+e−δτ n
+
+
+
+W (Gn, m n) + e−δ∆n rex (Rn, ξ n)
+
+
+
+.
+
+Let V (R) denote the post-decision value obtained when the planner takes no further matching action from graph R until the next exogenous event. Then 
+
+V (R) = Ee−δ∆R  rex (R, ξ R) + U (T (R, ξ R))  R ,
+
+(1) where ∆R ∼ Exp(Λ( R)) and ξR is the corresponding event mark. Since ∆R and ξR are independent conditional on R,
+
+V (R) = Γ( R) E[rex (R, ξ R) + U (T (R, ξ R)) | R] , (2) 
+
+Γ( R) := Λ( R)
+
+δ + Λ( R) .
+
+Lemma 1 (No profitable interior delay) . Fix a residual graph 
+
+R ∈ G . Any plan that waits until a positive interior time to execute a planned matching, unless an exogenous event arrives first, has continuation value at most 
+
+max 
+
+
+
+V (R), max 
+
+> m∈M (R)\{∅}
+
+ W (R, m ) + U (R ⊖ m)
+
+.
+
+(3) Lemma 1 shows that the first planned matching interven-tion at a strictly positive interior time can be weakly im-proved by either waiting for the next exogenous event or executing that matching immediately and continuing opti-mally. In other words, making a matching decision between exogenous events does not improve the value. We now apply this observation recursively. Since every nonempty match-ing removes at least two nodes, the recursion terminates af-ter finitely many immediate interventions. This yields the following event-time reduction. 
+
+Theorem 2 (Event-time reduction) . For every pre-decision graph G ∈ G ,
+
+U (G) = max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} . (4) Note that max m∈M (G) in (4) includes the empty match-ing m = ∅. Theorem 2 states that the optimal policy can be represented as a sequence of event-time decisions: after each exogenous event, the planner chooses one matching imme-diately and then waits until the next exogenous event. The planner never needs to plan a delayed match that executes at an interior time between exogenous events. Since M(G)
+
+is finite for each finite graph, an optimal event-time policy exists. Together, (2) and (4) form the Bellman system for the event-time Markov decision problem. 
+
+3.2 Reduction to Residual-graph Values 
+
+The post-decision formulation above implies a useful equiv-alent edge-wise representation. Within a single event epoch, starting from a graph G, the planner may repeatedly choose either a feasible edge e ∈ E(G) or the stop action ⊥. Choos-ing edge e yields immediate payoff we and transitions instan-taneously to the residual graph G ⊖ { e}. Choosing ⊥ yields no immediate matching payoff and hands the process over to the exogenous dynamics. Let Q(G, e ) for e ∈ E(G) and Q(G, ⊥) denote the optimal action values in this edge-wise representation. 
+
+Theorem 3 (Reduction to residual-graph values) . For every graph G ∈ G , the following identities hold: 
+
+Q(G, e ) = we + U (G ⊖ { e}), for e ∈ E(G), (5) 
+
+Q(G, ⊥) = V (G). (6) 
+
+Moreover, 
+
+U (G) = max 
+
+
+
+{Q(G, ⊥)} ∪ { Q(G, e ) : e ∈ E(G)}
+
+
+
+= max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} . (7) Thus the optimal edge-wise Q-function is characterized by the single post-decision value function V , but recovering it requires evaluating U through the matching maximization in (7). If Rn is the realized residual graph at event epoch n,
+
+ξn is the realized next event mark, and Gn+1 = T (Rn, ξ n)
+
+is the realized next pre-decision graph, then a natural TD update for the exact Bellman system is 
+
+Vn+1 (Rn) − Vn(Rn)= αn
+
+
+
+Γ( Rn)
+
+
+
+rex (Rn, ξ n) + Un(Gn+1 )
+
+
+
+− Vn(Rn)
+
+
+
+,
+
+where αn ∈ (0 , 1) is a step size and 
+
+Un(G) = max  
+
+> m∈M (G)
+
+{W (G, m ) + Vn(G ⊖ m)} .
+
+This formulation avoids parameterizing the full state-action space of edge-wise Q-values, but retains a combinatorial maximization, which we approximate below. 
+
+3.3 Value Approximation 
+
+Even after applying these reductions, the learning problem remains very large. The possible combinations of existing node types grow combinatorially with the size of the pool. Moreover, in many applications, realized edge values are naturally continuous. For example, in kidney exchange, an edge value can summarize multiple clinical determinants of expected transplant outcomes. A tabular representation of V
+
+is therefore infeasible. This motivates approximating the value function with a GNN. The role of the neural network is not to impose a structural interpretation on hidden units. Rather, it provides a scalable parametric class for representing continuation val-ues on variable-size graphs. GNNs are natural in this setting because they share parameters across nodes and use the real-ized edge structure in message passing. Before pooling, their node representations are equivariant to node relabeling; after pooling, they produce permutation-invariant graph-level rep-resentations. Thus, they can use the realized graph structure directly while using far fewer parameters than an unrestricted representation of graph values. We approximate the post-decision value function by a GNN Vθ : G → R defined on residual graphs. Each residual graph R = ( N, E, x, w ) is encoded by node features and a directed edge list containing both orientations of every fea-sible undirected edge. The directed edges may additionally carry edge features, including the realized weight we. The node features encode type information relevant for type tran-sitions, exits, and compatibility with future arrivals. When realized edge weights are informative for continuation value, an edge-aware message-passing operator can condition on these features. The residual-value reduction and training pro-cedure do not otherwise depend on this encoding choice. For the reported experiments, the value network consists of three graph-convolution layers, global additive pooling, and a two-layer readout. Let dx denote the node-feature di-mension and let h denote the hidden dimension. The first graph-convolution layer maps dx input features to h hid-den units, and the next two layers map h to h. Each graph-convolution layer is followed by a ReLU nonlinearity. If zi
+
+denotes the final embedding of node i, the graph represen-tation is zR = P  
+
+> i∈N(R)
+
+zi. The additive pooling operation makes the graph-level representation invariant to node re-labeling and allows the same network to be evaluated on residual graphs of different sizes. The pooled embedding is passed through a fully connected hidden layer with ReLU activation and then through a scalar output layer. The imple-mented value function has the form 
+
+Vθ (R) = a⊤σ(Az R + b) + b0 + κ, 
+
+where σ is ReLU and κ is a learned scalar offset. Throughout the experiments, we set h = 64 .
+
+3.4 Matching Policy 
+
+Given Vθ , exact plug-in action selection maximizes 
+
+F Gθ (m) := W (G, m ) + Vθ (G ⊖ m) over m ∈ M (G).This remains combinatorial because the nonlinear GNN term need not decompose into edge weights. We there-fore use forward-greedy ascent. For a partial matching m
+
+and H = G ⊖ m, adding e ∈ E(H) changes F Gθ by 
+
+we + Vθ (H ⊖ { e}) − Vθ (H). Hence the procedure adds an edge maximizing we + Vθ (H ⊖ { e}) if this score ex-ceeds Vθ (H), deletes its endpoints, and repeats; otherwise it stops. Let mθ (G) denote its output. Each accepted edge increases the same plug-in Bellman objective, so the output has no profitable feasible single-edge addition under F Gθ ,but it need not be globally optimal because earlier choices are not revisited and a profitable combination may have no profitable first edge. Under the fixed evaluation policy and after initialization, each event-time pre-decision graph is obtained by a single-node arrival, exit, or type change from the residual graph at which the previous search stopped. Thus forward local re-optimization fits the one-at-a-time Poisson event structure, although this provides no optimality guarantee. All reported simulations use this heuristic and assess its performance against benchmark policies. 
+
+3.5 Training 
+
+Training uses the residual-graph decomposition in Theo-rem 3, with its exact matching maximization replaced by the forward-greedy procedure. The agent maintains an on-line value network Vθ and a target network V¯θ , where ¯θ is a delayed copy of the online parameters θ. The online net-work is used for action selection, while the target network is used only for evaluation. A training episode first runs the simulator for a warm-up period and then records one tran-sition per exogenous event. Each experience has the form 
+
+(Rn, γ n, r ex  
+
+> n
+
+, G n+1 ), where Rn is the post-decision residual graph, γn = Γ( Rn) is the state-dependent effective discount factor, rex  
+
+> n
+
+is the realized exogenous-event reward, and Gn+1 
+
+is the next pre-decision graph. For each sampled next pre-decision graph G, the online network selects mθ (G) using the procedure above. The tar-get network then evaluates the plug-in value of the selected matching: 
+
+bU (G) = W (G, m θ (G)) + V¯θ
+
+ G ⊖ mθ (G).
+
+This approximate pre-decision value gives the TD target 
+
+yn = γn
+
+
+
+rex  
+
+> n
+
++ bU (Gn+1 )
+
+
+
+.
+
+The online network is trained to predict this target at the sampled post-decision residual graph. Experiences are stored in a prioritized replay buffer (Schaul et al. 2016). A minibatch of size 32 is sampled using proportional prioritization with exponent 0.6. The importance-sampling exponent is annealed from 0.4 toward 1.0. Priorities are updated after each gradient step using the absolute TD error, clipped at one and shifted by 0.01 . The network minimizes the importance-weighted squared TD er-ror 
+
+L(θ) = 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+ωi (Vθ (Ri) − yi)2 ,
+
+where ωi is the importance-sampling weight of sample i. The network parameters are updated by stochastic gradient steps using the Adam optimizer (Kingma and Ba 2015). Exploration is performed by an ε-greedy version of the same edge-wise matching procedure. With probability ε,the agent chooses the stop action with a benchmark-specific probability and otherwise samples uniformly from the cur-rently feasible edges. With probability 1 − ε, it takes the greedy action under Vθ . The exploration rate is multiplied by a decay factor after each gradient update and is bounded below by a minimum value. Our training procedure shares several components with DQN (Mnih et al. 2015), including an evolving ε-greedy be-havior policy, experience replay, and a lagged target network. Unlike DQN, however, we learn a post-decision residual-graph value function rather than a state-action Q-function. 
+
+# 4 Binary Type Benchmark 
+
+4.1 Setting 
+
+We first study a simple stylized benchmark with two node types and deterministic edge weights. The discount rate is 
+
+δ = 0 .002 . There are two node types, X = {h, l }, where h
+
+denotes a rare, high-value and more perishable type, while 
+
+l denotes a common, lower-value and more persistent type. Nodes arrive at rate λ = 2 .0, with ρ(l) = 0 .7 and ρ(h) = 0.3. Unmatched nodes exit exogenously with type-specific hazards μ(l) = 0 .1 and μ(h) = 0 .5, with zero exit penalty, and no type transitions. Edges are generated independently conditional on node types. The edge existence probabilities are ϕhh = 0 .05 , ϕhl = 0 .95 , and ϕll = 0 .8. Edge weights are specified by node types: whh = 5 , whl = 5 , and wll = 1 .
+
+4.2 Results 
+
+Table 1 reports normalized discounted rewards. “Immediate Random” selects a uniformly random feasible edge when-ever one exists, while “Immediate Greedy” immediately ex-ecutes a maximum-weight matching. “Immediate Threshold Table 1: Normalized performance relative to Immediate Random and Omniscient Bound Environment Immediate Random Immediate Greedy Immediate Threshold Greedy Patient Greedy GNN Tabular Optimal Binary 0.00 0.01 0.27 – 0.61 0.61 KPD (uninformed) 0.00 0.12 0.12 – 0.12 –KPD (informed) 0.00 0.12 0.12 0.40 0.44 – 
+
+> Note. Within each environment, rewards are normalized so Immediate Random equals 0 and Omniscient Bound equals 1. The latter observes all future arrivals, edge realizations, and exits and solves the offline matching problem.
+
+Figure 1: Reward composition by match type in the binary benchmark Greedy (TG)” greedily matches edges above an optimally chosen threshold; under homogeneous exit rates, it is a 2-approximation and optimal among greedy policies (Aouad and Saritaç 2022; Arnosti and Simon 2025). “GNN” is the forward-greedy, value-guided policy above. For the binary benchmark, exact tabular value iteration gives “Tabular Op-timal”; it is infeasible for KPD. The central dynamic tradeoff is how aggressively to use l-nodes. Type-h nodes are rare and relatively perishable, while 
+
+h–l matches are both likely and valuable. Accordingly, the planner benefits from preserving l-nodes as potential part-ners for future h-nodes. Matching every available l–l edge too quickly sacrifices these future opportunities. Preserva-tion should not be absolute, however: once sufficiently many 
+
+l-nodes have accumulated in the pool, the marginal value of an additional reserve is small, and executing some low-value 
+
+l–l matches becomes desirable. A good policy must therefore condition its willingness to form l–l matches on the current thickness of the pool. Figure 1 shows that the GNN policy achieves this balance more effectively than Greedy or Threshold Greedy. Greedy uses l-nodes too readily, whereas Threshold Greedy forms exclusively h–l matches, consistent with preserving l-nodes even when the pool is already thick enough to make some 
+
+l–l matching worthwhile. GNN balances these two: most of its realized matches are the valuable h–l matches, but it also matches l–l when the market is sufficiently thick. Conse-quently, relative to Threshold Greedy, GNN obtains a similar reward contribution from h–l matches while also extracting substantial value from l–l matches. This state-dependent use of l-nodes is reflected in its substantially higher normalized performance in Table 1, which is virtually identical to that of Tabular Optimal. Thus, despite relying on function approxi-mation and forward-greedy action selection, GNN achieves near-optimal performance in this benchmark. Overall, the binary-type benchmark shows that the pro-posed method learns more than a myopic preference for high current edge weights. Even in this minimal two-type environ-ment, the learned value function guides a policy that manages market thickness in a dynamically meaningful way. 
+
+# 5 Kidney Paired Donation 
+
+5.1 Setting 
+
+The kidney paired donation (KPD) benchmark is meant to create a simple but clinically interpretable dynamic match-ing problem. Each node represents an incompatible patient– donor pair, and feasible edges represent possible two-way exchanges. Node types retain the main coarse sources of het-erogeneity in KPD: patient ABO type, sensitization, donor ABO type, donor age, and donor sex. Feasible edges are re-alized through ABO compatibility and virtual crossmatch, while an edge-specific HLA draw contributes to their value. The type distribution and rewards are calibrated from coarse empirical and clinical regularities. Patient ABO and sensitization frequencies follow the standard kidney-exchange simulation calibration of Roth, Sönmez, and Ün-ver (2007), with high sensitization motivated by observed waiting-time heterogeneity in KPD pools (Holscher et al. 2018). Donor age and sex are chosen to match broad living-donor patterns (Lentine et al. 2023). The KPD-entry filter reflects the clinical fact that exchange pools are populated by pairs with blood-type or crossmatch incompatibility (Roth, Sönmez, and Ünver 2007; Leeser et al. 2012); ABO com-patibility follows the standard transplant compatibility chart (United Network for Organ Sharing 2026). Edge values use the KLY ( kidney life-years ) regression coefficients of Milner et al. (2016). Donor age and sex are encoded in the endpoint node types, whereas HLA match quality is drawn at the edge level. KLY is an estimate of the kidney life-years expected from a transplant; thus it provides a clinically interpretable proxy for the value of a feasible exchange. For the KPD value network, an architecture ablation found that edge-weight features left evaluation reward unchanged but reduced training stability, so we report the encoding based on node features and feasible-edge structure. This choice affects only continuation-value approximation: real-ized weights still enter immediate payoffs and all forward-greedy edge scores exactly. Because donor age and sex re-main available through endpoint features, the only incremen-tal information in edge weights is edge-specific HLA. This HLA information did not improve performance, plausibly because any feasible exchange is highly valuable relative to HLA variation among feasible edges, so residual-pool value depends mainly on connectivity and exit information. The simulation parameters are chosen so that residual graphs contain enough simultaneous feasible edges for pol-icy choices to matter. In particular, the arrival rate and crossmatch-pass probabilities are set to produce a dense enough pool, while exit hazards keep the problem dynamic. We evaluate both an uninformed-exit KPD environment and an informed-exit variant in which a critical flag gives the planner advance warning that a node is likely to leave soon. The complete parameterization is given in Appendix B. 
+
+5.2 Results 
+
+The discounted rewards achieved are presented in Table 1. In the uninformed-exit KPD benchmark, Immediate Greedy, Immediate Threshold Greedy, and GNN achieve similar per-formance. Within this benchmark, it is difficult for a plan-ner to control market thickness, and the learned continua-tion value offers little gain over repeatedly implementing the highest-value currently available exchanges when exit risk is unobservable. In the informed-exit KPD benchmark, we add Patient Greedy as a baseline. It waits while all nodes are noncrit-ical; once a critical node appears, it immediately chooses the highest-weight feasible edge incident to a critical node. Because every exit is preceded by a warning, waiting while all nodes are noncritical preserves market thickness with-out risking an unobserved departure; the critical transition signals that further delay has become costly. This imple-ments the logic of patient policies (Akbarpour, Li, and Gha-ran 2020; Kakimura and Zhu 2026): preserve the pool while waiting is safe and intervene when exit becomes imminent. The GNN follows the same broad timing pattern and there-fore often makes similar choices, helping explain why it per-forms similarly to Patient Greedy and why both substantially outperform Immediate Greedy, which removes nodes before better future matching opportunities develop. However, we observe two state-dependent deviations from Patient Greedy that may help explain the GNN’s modest reward advantage. First, when a critical node is present, the GNN sometimes chooses a slightly lower-weight edge incident to the critical node to avoid leaving another node isolated and potentially unmatchable. Second, it sometimes matches hard-to-match pairs before they become critical. For example, type-O pa-tients can receive only from type-O donors, so their pairs are less likely to gain new feasible edges; once a valuable edge is available, waiting may add discounting costs without materially improving future opportunities. Finally, we examine whether the learned policy adapts flex-ibly to intermediate exit-information environments. When the clock of a noncritical node rings, the node becomes criti-cal with probability p and exits immediately with probability 
+
+1 − p. We refer to p as the exit-warning probability . The case p = 0 corresponds to uninformed exit, whereas p = 1 
+
+Figure 2: Discounted reward by exit-warning probability corresponds to informed exit. As p increases, a patient policy should become more attractive. Figure 2 reports the results. Patient Greedy performs poorly for small p because many nodes exit unmatched with-out exit warning, whereas the policy matches only after a critical node arises. By contrast, Immediate Greedy does not use the critical flag and is insensitive to p. The optimal threshold is zero for every p, so Immediate Threshold Greedy coincides with Immediate Greedy throughout. In our simu-lations, Patient Greedy becomes comparable to Immediate Greedy only around p = 0 .96 . GNN outperforms the better of the two baselines. When warnings are relatively rare, it behaves more like an immediate policy; when warnings are reliable, it recovers the logic of patient matching. These re-sults suggest that GNN successfully learns a matching policy that adapts to the degree of exit information available in the environment. 
+
+# 6 Conclusion 
+
+We proposed a graph neural reinforcement-learning frame-work for dynamic matching on evolving weighted graphs. An event-time reduction shows that the planner can choose a matching immediately after each exogenous event and then wait for the next, expressing the problem through post-decision residual-graph values and shifting learning from state-action to graph values. A GNN approximates these val-ues, while forward-greedy search handles combinatorial ac-tion selection. The learned policy captures state dependence absent from fixed rules. In the binary-type benchmark, it balances cur-rent match value against market thickness; in KPD, it adapts to exit-warning information and residual-pool structure. It matches or outperforms Greedy and Patient Greedy. Al-though these comparisons do not establish optimality, they show that residual-graph value guidance can exploit econom-ically meaningful state dependence. 
+
+# Acknowledgments 
+
+We are grateful to Itai Ashlagi, Michihiro Kandori, Yash Kanoria, and Fuhito Kojima for helpful comments. This work has been supported by JST PRESTO Grant Number JP-MJPR2368 and JST ERATO Grant Number JRMJER2301, Japan. All remaining errors are our own. 
+
+# References 
+
+Akbarpour, M.; Li, S.; and Gharan, S. O. 2020. Thickness and information in dynamic matching markets. Journal of Political Economy , 128(3): 783–815. Anderson, R.; Ashlagi, I.; Gamarnik, D.; and Kanoria, Y. 2017. Efficient dynamic barter exchange. Operations Re-search , 65(6): 1446–1459. Aouad, A.; and Saritaç, Ö. 2022. Dynamic stochastic match-ing under limited time. Operations Research , 70(4): 2349– 2383. Arnosti, N.; and Simon, F. 2025. Greedy dynamic matching. arXiv:2507.04551. Ashlagi, I.; Burq, M.; Jaillet, P.; and Manshadi, V. 2019. On matching and thickness in heterogeneous dynamic markets. 
+
+Operations Research , 67(4): 927–949. Begnardi, L.; Baier, H.; van Jaarsveld, W.; and Zhang, Y. 2023. Deep reinforcement learning for two-sided online bi-partite matching in collaborative order picking. In Yanikoglu, B.; and Buntine, W. L., eds., Asian Conference on Machine Learning, ACML 2023, 11-14 November 2023, Istanbul, Turkey , Proceedings of Machine Learning Research, 121– 136. PMLR. Castillo, J. C.; Knoepfle, D.; and Weyl, E. G. 2025. Matching and pricing in ride hailing: wild goose chases and how to solve them. Management Science , 71(5): 4377–4395. Chen, Y.; Kanoria, Y.; Kumar, A.; and Zhang, W. 2025. Feature-based dynamic matching. Operations Research ,74(2): 788–803. Dütting, P.; Feng, Z.; Narasimhan, H.; Parkes, D.; and Ravin-dranath, S. S. 2019. Optimal auctions through deep learning. In International Conference on Machine Learning , 1706– 1715. PMLR. Eom, M.; and Toriello, A. 2025. Batching and greedy poli-cies: How good are they in dynamic matching? Manufactur-ing & Service Operations Management , 28(2): 479–495. Hayderi, A.; Saberi, A.; Vitercik, E.; and Wikum, A. 2024. MAGNOLIA: matching algorithms via GNNs for online value-to-go approximation. In Salakhutdinov, R.; Kolter, Z.; Heller, K. A.; Weller, A.; Oliver, N.; Scarlett, J.; and Berkenkamp, F., eds., Forty-first International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 , Proceedings of Machine Learning Research, 17759–17782. PMLR / OpenReview.net. Holscher, C. M.; Jackson, K.; Chow, E. K. H.; Thomas, A. G.; Haugen, C. E.; DiBrito, S. R.; Purcell, C.; Ronin, M.; Wa-terman, A. D.; Garonzik Wang, J.; Massie, A. B.; Gentry, S. E.; and Segev, D. L. 2018. Kidney exchange match rates in a large multicenter clearinghouse. American Journal of Transplantation , 18(6): 1510–1517. Hu, Y.; Feng, S.; and Li, S. 2025. BMG-Q: localized bipar-tite match graph attention Q-learning for ride-pooling order dispatch. IEEE Transactions on Intelligent Transportation Systems , 26(10): 15407–15421. Huang, Z.; Tang, Z. G.; and Wajc, D. 2024. Online matching: A brief survey. ACM SIGecom Exchanges , 22(1): 135–158. Kakimura, N.; and Zhu, D. 2026. Dynamic bipartite match-ing markets with stochastic arrivals and departures. Mathe-matics of Operations Research, forthcoming. Kingma, D. P.; and Ba, J. 2015. Adam: a method for stochas-tic optimization. In International Conference on Learning Representations .Leeser, D. B.; Aull, M. J.; Afaneh, C.; Dadhania, D.; Charl-ton, M.; Walker, J. K.; Hartono, C.; Serur, D.; Del Pizzo, J. J.; and Kapur, S. 2012. Living donor kidney paired dona-tion transplantation: experience as a founding member center of the National Kidney Registry. Clinical Transplantation ,26(3): E213–E222. Lentine, K. L.; Smith, J. M.; Miller, J. M.; Bradbrook, K.; Larkin, L.; Weiss, S.; Handarova, D. K.; Temple, K.; Israni, A. K.; and Snyder, J. J. 2023. OPTN/SRTR 2021 annual data report: kidney. American Journal of Transplantation , 23(2 Suppl 1): S21–S120. Liu, P.; Wei, H.; Hou, X.; Shen, J.; He, S.; Shen, Q.; Chen, Z.; Borisyuk, F.; Hewlett, D.; Wu, L.; Veeraraghavan, S.; Tsun, A.; Jiang, C.; and Zhang, W. 2025. LinkSAGE: optimizing job matching using graph neural networks. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.1 , KDD ’25, 2448–2457. New York, NY, USA: Association for Computing Machinery. ISBN 9798400712456. Liu, W.; Ward, A. R.; and Zhang, X. 2026. Data-driven matching for impatient and heterogeneous demand and sup-ply. Mathematics of Operations Research, forthcoming. Milner, J.; Melcher, M. L.; Lee, B.; Veale, J.; Ronin, M.; D’Alessandro, T.; Hil, G.; Fry, P. C.; and Shannon, P. W. 2016. HLA matching trumps donor age: donor-recipient pairing characteristics that impact long-term success in living donor kidney transplantation in the era of paired kidney exchange. 
+
+Transplantation Direct , 2(7): e85. Mnih, V.; Kavukcuoglu, K.; Silver, D.; Rusu, A. A.; Veness, J.; Bellemare, M. G.; Graves, A.; Riedmiller, M. A.; Fidje-land, A.; Ostrovski, G.; Petersen, S.; Beattie, C.; Sadik, A.; Antonoglou, I.; King, H.; Kumaran, D.; Wierstra, D.; Legg, S.; and Hassabis, D. 2015. Human-level control through deep reinforcement learning. Nat. , 518(7540): 529–533. Roth, A. E.; Sönmez, T.; and Ünver, M. U. 2007. Effi-cient kidney exchange: coincidence of wants in markets with compatibility-based preferences. American Economic Re-view , 97(3): 828–851. Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2016. Prioritized experience replay. In International Conference on Learning Representations .Sutton, R. S. 1988. Learning to predict by the methods of temporal differences. Machine Learning , 3(1): 9–44. United Network for Organ Sharing. 2026. Organ transplant: donor and recipient ABO blood type compatibility chart. PDF. Accessed 2026-04-16. Xing, X.; Peng, Y.; Wan, L.; and Luo, F. 2025. Optimization of two-passenger ride-pooling orders based on ST-GNN and path optimization. PLOS ONE , 20(12): e0337415. You, F.; and Vossen, T. 2024. An approximate dynamic programming approach to dynamic stochastic matching. IN-FORMS Journal on Computing , 36(4): 1006–1022. Zhou, R.; Zhu, D.; and Shen, H. 2026. A learning-based hy-brid decision framework for matching systems with user de-parture detection. In Human Interface and the Management of Information , volume 16706 of Lecture Notes in Computer Science , 633–651. Springer. 
+
+# A Proofs 
+
+A.1 Proof of Lemma 1 
+
+Proof. Let ∆R ∼ Exp(Λ( R)) be the waiting time to the next exogenous event, let ξR be its mark, and write 
+
+YR := rex (R, ξ R) + U (T (R, ξ R)) .
+
+Consider a plan that schedules matching M ∈ M (R) at time 
+
+Σ if no exogenous event occurs first. With the convention 
+
+e−a·∞ = 0 for a > 0, its continuation value is 
+
+Ee−δ∆R YR1{∆R ≤ Σ} R
+
++ E
+
+"e−δΣ W (R, M ) + U (R ⊖ M )
+
+×1{Σ < ∆R} R
+
+#
+
+.
+
+Condition on a realization (Σ , M ) = (s, m ). Since 
+
+(Σ , M ) is independent of (∆ R, ξ R) conditional on R, and since ∆R ∼ Exp(Λ( R)) ,
+
+Ee−δ∆R YR 1{∆R ≤ s} R, Σ = s, M = m
+
+=
+
+Z s
+
+> 0
+
+e−δt Λ( R)e−Λ( R)t dt · E[YR | R]=
+
+Z s
+
+> 0
+
+e−(δ+Λ( R)) tΛ( R) d t
+
+
+
+E[YR | R].
+
+By (1), 
+
+V (R) = 
+
+Z ∞
+
+> 0
+
+e−(δ+Λ( R)) tΛ( R) d t · E[YR | R].
+
+Therefore 
+
+Ee−δ∆R YR1{∆R ≤ s} R, Σ = s, M = m
+
+=  1 − e−(δ+Λ( R)) sV (R). (8) Similarly, let Am := W (R, m ) + U (R ⊖ m). Then 
+
+Ee−δs Am1{s < ∆R} R, Σ = s, M = m (9) 
+
+= e−δs P(∆ R > s | R)Am
+
+= e−(δ+Λ( R)) sAm.
+
+Combining (8) and (9) shows that, conditional on (Σ , M ),the plan has value 
+
+V (R) + e−(δ+Λ( R))Σ  W (R, M ) + U (R ⊖ M ) − V (R).
+
+This is a convex combination of V (R) and W (R, M ) + 
+
+U (R ⊖ M ), and is therefore bounded above by the larger of the two. Taking expectations over (Σ , M ) gives (3). 
+
+A.2 Proof of Theorem 2 
+
+Proof. We prove (4) by induction on the number of nodes 
+
+n := |N (G)|.
+
+Base case If n ≤ 1, then no nonempty matching is fea-sible, so M(G) = {∅} . Hence the planner cannot obtain any immediate matching payoff and must wait until the next exogenous event. Therefore 
+
+U (G) = V (G) = W (G, ∅) + V (G ⊖ ∅ ),
+
+which is exactly (4). 
+
+Induction step Fix n ≥ 2, and assume that (4) holds for every graph with fewer than n nodes. Let G be a graph with 
+
+|N (G)| = n, and let π be any admissible policy. Condition on a realization of the private randomization used by π. After conditioning, the policy becomes determin-istic between exogenous events. Along the counterfactual path on which no exogenous event occurs after the current date, π therefore induces a deterministic sequence of match-ing actions scheduled at deterministic times. Since every nonempty matching removes at least two nodes, there can be only finitely many nonempty matching actions before the next exogenous event on this counterfactual path. Let m0 ∈ M (G) be the union of all matchings that π
+
+executes at the current time 0. Because matched nodes are removed immediately, these matchings are pairwise disjoint, so their union is again a matching in G. Let R0 := G⊖m0. If 
+
+π takes no further matching action before the next exogenous event, then its continuation value from the current date is exactly 
+
+W (G, m 0) + V (R0)
+
+≤ max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} .
+
+Now suppose instead that π schedules a further matching action before the next exogenous event. Let σ > 0 be the first strictly positive scheduled intervention time on the no-event path, and let m1 ∈ M (R0) be the matching that π plans to execute at time σ. Since nothing happens between time 
+
+0 and time σ on the no-event path, m1 is feasible in R0.Applying Lemma 1 to the graph R0 with the deterministic choice (Σ , M ) = ( σ, m 1) yields 
+
+Jπ (G) ≤ max 
+
+(W (G, m 0) + V (R0),W (G, m 0) + W (R0, m 1)+ U (R0 ⊖ m1)
+
+)
+
+(10) 
+
+= max 
+
+(W (G, m 0) + V (R0),W (G, m 0 ∪ m1)+ U (G ⊖ (m0 ∪ m1)) 
+
+)
+
+.
+
+The first term is already bounded above by the right-hand side of (4). Since m1̸ = ∅, the graph G1 := G ⊖ (m0 ∪ m1) has strictly fewer than n nodes. Hence the induction hypothesis implies 
+
+U (G1) = max  
+
+> ˆm∈M (G1)
+
+{W (G1, ˆm) + V (G1 ⊖ ˆm)} .Substituting this into the second term of (10) gives 
+
+W (G, m 0 ∪ m1) + U (G1)= W (G, m 0 ∪ m1) + max  
+
+> ˆm∈M (G1)
+
+{W (G1, ˆm) + V (G1 ⊖ ˆm)}
+
+= max 
+
+> ˆm∈M (G1)
+
+W (G, m 0 ∪ m1) + W (G1, ˆm)+ V (G1 ⊖ ˆm)
+
+
+
+≤ max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} .
+
+Combining the preceding bounds shows that, conditional on the realized private randomization of π,
+
+Jπ (G) ≤ max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} .
+
+Since the right-hand side does not depend on the realization of the private randomization, the same inequality holds after integrating over that randomization. Because π was arbitrary, we conclude that 
+
+U (G) ≤ max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} .
+
+For the reverse inequality, fix any m ∈ M (G). The policy that executes m immediately at the current event time and then waits until the next exogenous event is admissible and yields value 
+
+W (G, m ) + V (G ⊖ m).
+
+Taking the maximum over m ∈ M (G) gives 
+
+U (G) ≥ max  
+
+> m∈M (G)
+
+{W (G, m ) + V (G ⊖ m)} .
+
+This proves (4). Finally, M(G) is finite for every finite graph G, so the maximum in (4) is attained. Choosing, for example, the lexi-cographically smallest maximizer after each realized exoge-nous event defines an optimal event-time policy. By con-struction, that policy acts only immediately after exogenous events and takes exactly one matching decision at each such event time. 
+
+A.3 Proof of Theorem 3 
+
+Proof. If the planner chooses e ∈ E(G), then it receives payoff we immediately and moves deterministically to G ⊖{e}. Since this transition is instantaneous, no discount is incurred between G and G ⊖ { e}. Therefore 
+
+Q(G, e ) = we + U (G ⊖ { e}), e ∈ E(G),
+
+which proves (5). If the planner chooses ⊥, then no further matching action is taken in the current event epoch and the process enters the post-decision waiting stage from the same graph G. By definition, 
+
+Q(G, ⊥) = V (G),
+
+which proves (6). Now consider any feasible finite sequence of edge actions 
+
+e1, e 2, . . . , e K , ⊥ starting from G. Because the endpoints of 
+
+ek are deleted as soon as ek is chosen, no later edge can share an endpoint with any earlier edge. Hence the edges 
+
+e1, . . . , e K are pairwise disjoint, and 
+
+m := {e1, . . . , e K } ∈ M (G).
+
+Since all edge choices occur instantaneously within the same event epoch, the value of the sequence is 
+
+> K
+
+X
+
+> k=1
+
+wek + V (G ⊖ m) = W (G, m ) + V (G ⊖ m).
+
+This value depends only on the underlying matching m, not on the order in which its edges are chosen. Conversely, fix any matching m ∈ M (G), and write it as m = {e1, . . . , e K } in an arbitrary order. Since the edges in m are pairwise disjoint, the sequence e1, e 2, . . . , e K , ⊥ is feasible and yields value W (G, m ) + V (G ⊖ m). Therefore maximizing over feasible edge-action sequences is equiv-alent to maximizing over feasible matchings. By Theo-rem 2, U (G) = max m∈M (G) {W (G, m ) + V (G ⊖ m)},and hence 
+
+U (G) = max 
+
+
+
+{Q(G, ⊥)} ∪ { Q(G, e ) : e ∈ E(G)}
+
+
+
+.
+
+This proves (7). Finally, the formulas above show that once V is known, one recovers U from (4) and then recovers Q(G, e ) and Q(G, ⊥)
+
+from (5)–(6). Conversely, given the optimal Q-function, one recovers V (G) from Q(G, ⊥) and U (G) from the maximum over Q(G, ⊥) and the values Q(G, e ) for e ∈ E(G). Thus the optimal edge-wise Q-function is uniquely determined by the single post-decision value function V .
+
+# B Kidney Exchange Simulation Details 
+
+This appendix gives the full parameterization of the KPD environments used in the experiments. Each node is an in-compatible patient–donor pair. Let B := {O, A, B, AB } be the set of ABO blood types. A patient type is P = ( bP , s ) ∈B × { L, H }, where s = L denotes a lower-sensitized patient and s = H denotes a highly sensitized patient. A donor type is D = ( bD , a, g ) ∈ B × { 30 , 45 , 60 } × { F, M }, where the donor-age support is represented by coarse age-band mid-points. The node type is X = ( P, D ).The patient ABO probabilities are (0 .48 , 0.34 , 0.14 , 0.04) 
+
+for (O, A, B, AB ). These are the classical kidney-exchange simulation frequencies in Roth, Sönmez, and Ünver (2007, Table 1), rounded to two decimal places. The donor ABO probabilities are (0 .45 , 0.40 , 0.11 , 0.04) for (O, A, B, AB );we use a similar donor-side margin so that blood types O and 
+
+A dominate while keeping the model low-dimensional. The sensitization probabilities are σL = 0 .70 and σH = 0 .30 .This two-class split keeps the benchmark coarse while pre-serving the empirically important fact that highly sensitized patients are difficult to match; this difficulty is also visible in waiting-time evidence from KPD pools (Holscher et al. 2018). Donor age probabilities are (0 .30 , 0.45 , 0.25) for age bands (30 , 45 , 60) , and donor sex probabilities are γF = 0 .55 
+
+and γM = 0 .45 . These values are deliberately smoothed but are chosen to reflect the broad empirical regularities that middle-aged donors are common and women are overrepre-sented among living kidney donors (Lentine et al. 2023). New pairs arrive according to a Poisson process with rate 
+
+λ = 10 .0. This rate is not meant as a direct registry esti-mate. It is chosen to make residual graphs contain enough simultaneous feasible edges for nontrivial policy choices in the simulated benchmark. The same design goal also guides the crossmatch and exit-rate choices described below. The arrival distribution combines the above marginals with a KPD-entry filter. The filter is κ(bP , b D , s ) = 1 if donor ABO type bD is incompatible with patient ABO type bP ,
+
+κ(bP , b D , s ) = ηH if the pair is ABO-compatible but s = H,and κ(bP , b D , s ) = 0 if the pair is ABO-compatible and s =
+
+L, with ηH = 0 .20 . This reflects the clinical logic that KPD pools are primarily populated by blood-type or crossmatch incompatible pairs (Roth, Sönmez, and Ünver 2007, p. 828). The positive mass on ABO-compatible, highly sensitized pairs captures the fact that immunologic incompatibility can also bring pairs into exchange; in a founding-center NKR study, Leeser et al. (2012) report that incompatibility was attributable to blood type in 54 .4% of enrolled pairs and to donor-specific sensitization in 43 .2% . Formally, 
+
+ρ (( bP , s ), (bD , a, g ))  = πPbP σsπDbD αaγg
+
+Z × κ(bP , b D , s ),
+
+where Z normalizes ρ to sum to one. For two nodes Xi = (( bPi , s i), (bDi , a i, g i)) and Xj =(( bPj , s j ), (bDj , a j , g j )) , a two-way exchange induces two di-rected living-donor transplants. A directed transplant first requires ABO compatibility; we use the standard compati-bility rule that type O donors can donate to any ABO type, whereas type O recipients can receive only from type O
+
+donors (United Network for Organ Sharing 2026). Condi-tional on ABO compatibility, the transplant passes a virtual crossmatch with probability ϕL = 0 .90 for lower-sensitized patients and ϕH = 0 .50 for highly sensitized patients. These crossmatch probabilities are benchmark parameters. They preserve the ordering that highly sensitized patients are harder to match, while keeping the simulated pool dense enough for policy learning rather than almost always edge-less. The ordering is consistent with the positive-crossmatch patterns reported in Roth, Sönmez, and Ünver (2007, p. 839). Conditional on directed feasibility, the transplant receives an edge-specific HLA match score H ∈ {0, 25 , 50 , 75 }
+
+with probabilities (0 .20 , 0.30 , 0.30 , 0.20) . This coarse sup-port covers the clinically meaningful range emphasized by Milner et al. (2016), who compare outcomes at 0 and 75 
+
+HLA match points and estimate how HLA quality affects ex-pected kidney life years. The directed transplant value uses their linear KLY specification, omitting the biological-sibling term because KPD exchanges are typically between unrelated donor–recipient pairs: 
+
+uKLY (p, d ; H) := 23 .465 + 0 .039 H − 0.050 a
+
++ 0 .303 × 1{g = M }.
+
+The coefficients are the intercept, HLA-point effect, donor-age effect, and donor-male effect reported by Milner et al. (2016). An undirected edge between i and j is feasible if both directed transplants are feasible; if so, its weight is the sum of the two directed KLY values: 
+
+wij := uKLY 
+
+ (bPi , s i), (bDj , a j , g j ); Hij 
+
+
+
++ uKLY 
+
+ (bPj , s j ), (bDi , a i, g i); Hji 
+
+. (11) If either directed transplant is infeasible, the undirected edge is absent. In the baseline KPD environment, unmatched nodes exit exogenously with μ(x) = 1 .0, q(† | x) = 1 , and c(x) = 0 
+
+for all x ∈ X . The exit penalty remains zero to keep rewards focused on realized transplants. Together with λ = 10 .0 and the crossmatch probabilities above, this exit rate keeps the pool dynamic while still leaving enough edges for meaningful matching choices. The KPD input choice described in the main text af-fects only the value network. The weights in (11) remain in 
+
+W (G, m ) and in the forward-greedy score we +Vθ (G⊖{ e}).Donor age and sex are endpoint features, so their KLY con-tributions are available to the network; Hij and Hji are the only edge-specific payoff components. In the architecture ab-lation, supplying wij as an edge feature produced essentially unchanged evaluation reward but less stable training. The scale of the KLY calibration is consistent with this result. A directed transplant is worth at least 23 .465 −0.050 ×
+
+60 = 20 .465 KLY, so every feasible two-way exchange is worth at least 40 .93 KLY. By comparison, the combined edge-specific HLA contribution ranges from 0 to 2×0.039 ×
+
+75 = 5 .85 KLY, while an exogenous exit yields zero reward. Thus, in this benchmark, the main variation in continuation value is driven by whether future feasible exchanges remain available and by exit risk, rather than by fine HLA-based differences among feasible edges. The informed-exit environment augments each node with an observable critical flag h ∈ { 0, 1}. All arrivals enter with 
+
+h = 0 . If h = 0 , the node’s clock rings at rate μ0 = 1 .0
+
+and deterministically changes the flag to h = 1 without redrawing or deleting incident edges. If h = 1 , the node’s clock rings at rate μ1 = 100 .0 and triggers exogenous exit with zero penalty. Edge sampling for new arrivals ignores the critical flag, so critical and noncritical nodes use the same compatibility and value rules. This makes the flag a pure survival annotation: the planner observes a warning that a node is about to leave, but the node’s matching opportunities do not change at the flag transition. Finally, the continuous-time discount rate is δ = 0 .002 , matching the value used in the simulation configuration.

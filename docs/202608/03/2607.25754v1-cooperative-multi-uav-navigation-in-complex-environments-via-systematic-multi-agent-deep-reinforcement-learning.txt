@@ -1,0 +1,575 @@
+Title: Cooperative Multi-UAV Navigation in Complex Environments via Systematic Multi-Agent Deep Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2607.25754v1
+
+Published Time: Wed, 29 Jul 2026 01:16:00 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> 1
+
+# Cooperative Multi-UAV Navigation in Complex Environments via Systematic Multi-Agent Deep Reinforcement Learning 
+
+Yu Su and Nabil Aouf School of Science and Technology City St George’s University of London London, United Kingdom Email: Yu.Su@city.ac.uk, nabil.aouf@city.ac.uk 
+
+Abstract —Cooperative navigation of multi-agent UAVs in com-plex environments faces key challenges such as local optima traps, sparse rewards, learning imbalance among agents, and insufficient cross-scenario generalisation capabilities. This paper proposes a multi-agent deep reinforcement learning framework that systematically addresses these issues through coordinated exploration, demonstration exploitation, safe curriculum schedul-ing, and structure-aware generalisation mechanisms. Firstly, the proposed perception mechanism combines memory of previously visited states, estimates of directional novelty, and backpropagation of penalties, enabling the agent to proactively detect and escape from local optima. Secondly, the hierarchical collaborative demonstration buffer and the tiered behaviour cloning scheme manage trajectories in layers based on the degree of team collaboration, and apply differential supervision directly to the actor network, thereby enhancing the efficiency of demonstration utilisation under sparse collaborative signals. Fur-thermore, the safety-aware dual-condition curriculum scheduling mechanism, whilst advancing the training phase, actively re-views mastered scenarios through back-testing and experience pre-filling, effectively suppressing catastrophic forgetting and achieving concurrent assurance of both task performance and flight safety. Regarding generalisation, local geometric features deterministically computed from sensor readings are abstracted into a domain parameter, through which a structure-aware gating network and mixture-of-experts mechanism condition the policy on local structural patterns rather than scenario-specific coordinate memory, enabling cross-scenario transfer without exposure to the target environment. The framework is further validated under a mixed static–dynamic obstacle setting, demonstrating robust adaptabil-ity to dynamic environmental disturbances. Simulation results confirm strong performance across collaboration success rate, navigation robustness, zero-shot cross-scenario generalisation, and dynamic environment adaptability. 
+
+Index Terms —Unmanned aerial vehicles (UAVs), cooperative navigation, multi-agent reinforcement learning, local optima mitigation, cross-scenario generalisation 
+
+I. I NTRODUCTION 
+
+A. Research Background 
+
+In applications such as disaster response, industrial in-spection, and warehouse automation, multiple UAVs are re-quired to perform cooperative navigation in complex and constrained environments typically characterised by intricate spatial structures, severe occlusions, and the absence of global positioning information. Under these conditions, agents are prone to becoming trapped by local structures, whilst dynamic interactions among multiple agents introduce non-stationarity and potential learning imbalance. Enabling efficient explo-ration under partial observability, avoiding local optima, and improving coordinated decision-making therefore remain key challenges in multi-UAV autonomous navigation. Intrinsic motivation-based exploration strategies improve learning efficiency by encouraging agents to visit unseen states. Curiosity-driven methods use state-transition predic-tion errors as intrinsic rewards [1], novelty-based approaches quantify state rarity via random network distillation [2], and memory-based methods incorporate visitation history and multi-scale novelty signals to reduce redundant behaviour [3]. Whilst these methods promote broader state coverage, they lack explicit task-relevant guidance and offer no targeted mechanism for escaping local optima in structurally con-strained environments. To improve spatial awareness and long-term planning, map-based and memory-driven navigation methods have been widely adopted. Occupancy grid mapping provides proba-bilistic environmental representations for structured spatial reasoning [4], neural map representations capture spatial de-pendencies in partially observable settings [5], and coverage-driven strategies leverage visitation history to reduce redundant exploration [6]. However, these methods focus on environmen-tal representation rather than active intervention, and agents may still converge to suboptimal paths in complex maze structures. Multi-agent coordination methods address interaction and cooperation in shared environments. Centralised training with decentralised execution (CTDE)-based approaches im-prove training stability by allowing critics to access global state whilst maintaining decentralised execution [7], communication-based methods enable information exchange for coordinated decision-making [8], and value factorisation approaches decompose global value functions to improve joint policy optimisation [9]. Nevertheless, these methods remain susceptible to systemic stagnation under strong inter-agent coupling and provide no targeted response to learning imbal-ance across agents. In policy generalisation and cross-scenario transfer, domain randomisation improves robustness through diverse environ-ment perturbations during training [10], whilst meta-learning enables rapid adaptation from limited interaction samples [11]. Context-conditioned policy methods abstract structural or dy-namic features into domain parameters to support deployment arXiv:2607.25754v1 [cs.RO] 28 Jul 2026 2
+
+in new scenarios without retraining [12], [13], and mixture-of-experts models blend sub-policy outputs through a gating mechanism to improve multi-task adaptability [14]. However, these methods primarily target generalisation over physical dynamics or task objectives, with little attention given to environments characterised by geometric repeatability. These limitations collectively motivate the development of a framework that coordinates multi-agent training and structure-aware generalisation under sparse reward conditions, enabling reliable collaborative drone navigation in complex structural environments characterised by dynamic obstacles and local optima traps. 
+
+B. Previous Work 1) Intrinsic Motivation-based Exploration Methods: 
+
+Curiosity-driven methods use state-transition prediction errors as intrinsic exploration signals [1], random network distillation measures state novelty by comparing the outputs of a fixed randomly initialised network and a predictor network [2], and count-based or pseudo-count methods assign higher intrinsic rewards to infrequently visited states to promote broader state-space coverage [15]. Whilst these approaches have demon-strated effectiveness in sparse-reward settings, the decoupling of intrinsic rewards from task objectives may direct agents towards task-irrelevant regions; in structurally constrained environments with multiple suboptimal paths, agents may remain trapped in local stagnation despite strong exploratory capability. 
+
+2) Map-based and Memory-driven Navigation Methods: 
+
+Map-based methods typically combine classical planning al-gorithms such as A* [16] or Dijkstra [17] to achieve stable path planning and obstacle avoidance in reconstructable envi-ronments, and visibility-graph extensions have been proposed for 3D constrained UAV path planning [18]; however, these ap-proaches require complete environmental prior knowledge and cannot support real-time multi-agent coordination. Memory-driven methods encode historical observations via recurrent neural networks or external memory modules; the Neural Map approach [5] builds spatial cognition through learn-able memory structures, whilst attention-augmented memory models further improve the extraction of salient historical information [5]. These methods rely on relatively accurate environmental modelling and incur substantial computational overhead for map construction and maintenance; more funda-mentally, their focus on environmental representation rather than active intervention leaves agents without an effective mechanism for escaping suboptimal paths in complex maze structures. 
+
+3) Multi-agent Coordination and Deadlock Avoidance: 
+
+Value decomposition methods such as VDN [19] and QMIX [9] factorise the global value function into local value functions to model joint behaviour, whilst policy-gradient methods introduce a centralised critic to improve training stability [7]. In terms of specific coordination mechanisms, existing work commonly employs cooperative reward design, conflict penalties, or priority-based action scheduling to reduce collision and deadlock rates. Nevertheless, under strong inter-agent coupling, these methods remain prone to stable yet suboptimal behavioural patterns such as persistent loops or mutual path blocking; moreover, when individual agents lag significantly in learning progress, existing approaches lack dedicated mechanisms for addressing inter-agent learning im-balance, limiting overall cooperative efficiency [20], [21]. 
+
+4) Policy Generalisation and Cross-scenario Transfer: 
+
+Domain randomisation [10] and meta-learning [11] improve policy generalisation through training diversity and rapid task adaptation, respectively. Context-conditioned policy methods abstract structural or dynamic environment features into do-main parameters to support cross-scenario deployment without retraining [12], [13], and mixture-of-experts models blend multiple sub-policy outputs via a gating mechanism to im-prove adaptability across multi-task settings [14]. However, these methods target generalisation over variations in phys-ical dynamics or task objectives; the structural regularity arising from recurring local geometric patterns in maze-like environments has received little targeted treatment, and local structure perception has not been integrated into multi-agent cooperative training, limiting effective cross-scenario transfer in such settings [22], [23]. 
+
+C. Present Work 
+
+Achieving reliable cooperative navigation in structurally constrained environments remains challenging due to the simultaneous presence of local optima, sparse cooperative success signals, and learning imbalance across agents. Whilst prior work has addressed individual aspects of this prob-lem, intrinsic motivation methods decouple exploration signals from task objectives, map-based methods offer no active intervention for trapped agents, and multi-agent coordina-tion methods remain susceptible to systemic stagnation under strong inter-agent coupling. No existing approach provides a unified framework that jointly resolves these limitations, and their compounding interaction in complex maze environments constitutes the central motivation of the present work. To address the shared deficiency of intrinsic motivation and map-based methods in handling local optima, this work pro-poses an online local-optima diagnosis and graded behavioural intervention mechanism that is explicitly conditioned on the task objective. Rather than superimposing an auxiliary explo-ration signal onto the policy gradient, the proposed mechanism operates directly at the action-execution layer, applying inde-pendent real-time intervention to each agent without introduc-ing any additional trainable parameters. By integrating visited-state memory, directional novelty estimation, and movement-history analysis, the mechanism identifies local stagnation with high precision and, upon detection, overrides the policy output to actively steer the agent towards unvisited regions. To further address the reward vacuum that conventional distance-based shaping creates when an agent is forced to detour through a corridor, a LiDAR-derived passage-constraint indicator is introduced to dynamically adjust the reward structure during occlusion phases, ensuring that meaningful learning signal is preserved even when the goal is obstructed. The mechanism is parameter-free and operates independently for each agent, rendering it scalable to an arbitrary number of vehicles. 3
+
+To remedy the fundamental limitation of existing LfD [24] and GAIL [25] approaches, which treat all demonstration data homogeneously without regard to cooperative task completion, this work constructs a hierarchical demonstration buffer in which trajectories are stratified according to team-level task achievement. Trajectories corresponding to full cooperative arrival and partial arrival are stored in separate buffers, each governed by a fine-grained quota management scheme that operates at both the scenario level and the start–goal pair level, ensuring that high-quality cooperative trajectories across varying difficulty conditions are retained in a balanced manner. Behavioural cloning supervision is applied directly to the actor network with differentiated weighting, eliminating the cumu-lative approximation error introduced by the two-stage policy-distillation paradigm that relies on an auxiliary network as an intermediary. This design encodes cooperative completion degree as a first-class attribute of the demonstration data, and addresses learning imbalance among agents at both the data-management and policy-optimisation levels. To overcome the susceptibility of existing multi-agent co-ordination methods to systemic stagnation and catastrophic forgetting across training scenarios, this work introduces a safety-aware dual-condition curriculum scheduling mecha-nism. Curriculum advancement requires both a cooperative success rate threshold and a collision rate ceiling to be satisfied simultaneously, preventing the policy from exploiting high-risk behaviours to achieve superficially favourable success metrics and thereby enforcing concurrent guarantees on task performance and flight safety. Upon passing each stage, the framework immediately conducts a retrospective full evalu-ation over all previously mastered scenarios and proactively prefills the experience replay buffer with freshly collected tra-jectories from those scenarios, providing a principled counter-measure against catastrophic forgetting. At the reward level, a synchronisation-aware team reward is introduced that activates cooperative bonuses only when all agents are concurrently within the goal neighbourhood, and imposes explicit penalties proportional to inter-agent arrival time disparities, encouraging the emergence of coordinated approach behaviour. This stands in contrast to existing CTDE approaches, which rely passively on a centralised critic’s access to global state information to foster cooperation, and extends naturally to teams of arbitrary size through the use of intra-group arrival time variance as the synchronisation penalty signal. The present work proposes a cooperative multi-UAV nav-igation framework for partially observable complex environ-ments, built upon execution-level local-optima escape, hierar-chical cooperative demonstration utilisation, direct behavioural cloning supervision, and safety-aware training scheduling. The framework systematically addresses agent stagnation in struc-turally constrained environments, inefficient exploitation of demonstration data under sparse cooperative success signals, and learning imbalance and catastrophic forgetting during multi-agent training, providing a principled and scalable solu-tion to the problem of autonomous cooperative navigation in complex constrained environments. To address the limitation of existing generalisation methods in exploiting the geometric repeatability of maze environ-ments, this work proposes a structure-aware generalisation mechanism that abstracts the recurring local geometric struc-tures of mazes into a domain parameter ω, computed deter-ministically from sensor readings at each timestep without requiring manual annotation or any prior knowledge of the cur-rent scenario. Through a structure-aware gating network and a mixture-of-experts mechanism, the policy learns behavioural strategies conditioned on local geometric features rather than scenario-specific coordinate memory, enabling direct transfer to unseen mazes composed of structural patterns encountered during training without retraining. The proposed framework is further validated in maze environments containing moving obstacles, demonstrating robust adaptability to dynamic envi-ronmental disturbances. 
+
+D. Contributions 
+
+The main contributions of this work are summarised as follows:  
+
+> •
+
+A task-objective-aware online local-optima diagnosis and execution-level behavioural intervention mechanism is proposed, which integrates visited-state memory, direc-tional novelty estimation, and movement-history analy-sis to accurately identify agent stagnation and actively override the policy output without introducing any addi-tional trainable parameters. A LiDAR-derived passage-constraint indicator is further introduced to eliminate the reward vacuum that arises in maze corridors under conventional distance-based shaping.  
+
+> •
+
+A hierarchical demonstration buffer is proposed in which trajectories are stratified according to team-level cooper-ative task completion. Full cooperative arrival and partial arrival trajectories are stored in separate buffers, each governed by a fine-grained quota management scheme operating at both the scenario level and the start–goal pair level, systematically alleviating learning imbalance across agents at the data-management level.  
+
+> •
+
+A direct graded behavioural cloning scheme is proposed that supervises the actor network using cooperative and individual demonstration data with differentiated weight-ing, without relying on any auxiliary intermediary net-work. This eliminates the cumulative approximation error inherent in indirect policy-distillation paradigms and im-proves the efficiency of demonstration exploitation under sparse cooperative success signals.  
+
+> •
+
+A safety-aware dual-condition curriculum scheduling mechanism is proposed that requires both a cooperative success rate threshold and a collision rate ceiling to be jointly satisfied for stage advancement. Combined with retrospective full evaluation and experience prefill-ing, the mechanism enforces concurrent guarantees on task performance and flight safety whilst providing a principled countermeasure against catastrophic forgetting across training scenarios.  
+
+> •
+
+A structure-aware generalisation mechanism is proposed that abstracts recurring local geometric patterns into a do-main parameter deterministically computed from sensor readings, through which a structure-aware gating network 4
+
+and mixture-of-experts mechanism condition the policy on local structural features rather than scenario-specific coordinate memory, enabling cross-scenario transfer to unseen mazes without exposure to the target environment. II. M ETHODOLOGY 
+
+This chapter presents the complete methodological frame-work for the proposed cooperative multi-UAV navigation system. The problem is first formalised as a multi-agent partially observable Markov decision process, followed by a description of the overall framework architecture based on multi-agent soft actor-critic (MASAC) and the interac-tions among its constituent modules. The reward function design is then introduced to establish a unified learning signal foundation for all subsequent mechanisms. Building on this, the local optima diagnosis and execution-level intervention mechanism, the hierarchical cooperative demonstration buffer with graded behavioural cloning, and the safety-aware dual-condition curriculum scheduling mechanism are presented in turn, systematically addressing the core challenges of cooper-ative navigation from the perspectives of local optima escape, demonstration exploitation, and coordinated multi-agent train-ing, respectively. Finally, the structure-aware generalisation mechanism and the complete training procedure are described, whereby recurring local geometric patterns are abstracted into domain parameters and combined with a mixture-of-experts architecture to enable cross-scenario transfer to unseen environments without retraining. 
+
+A. Problem Formulation 
+
+The cooperative navigation task is formalised as a decentralised partially observable Markov decision process (Dec-POMDP) [26], defined by the tuple 
+
+⟨N , S, {O i}, {A i}, T , R, γ ⟩, where N = {1, . . . , N }
+
+denotes the set of N UAV agents. At each timestep t, the true environment state st ∈ S is not directly accessible to any individual agent. Each agent 
+
+i receives a local observation oit ∈ Oi derived from its onboard sensors, and selects an action ait ∈ A i according to its decentralised policy πi(ait | oit−K:t), conditioned on a fixed-length observation history of length K to mitigate partial observability. The action spaces are continuous and identical across agents. Agents operate without explicit inter-agent com-munication; each policy relies solely on local observations. Under the CTDE paradigm, the centralised critic accesses the global state st, constructed by concatenating all agents’ local observations: 
+
+st = o1 
+
+> t
+
+∥ o2 
+
+> t
+
+∥ · · · ∥ oNt
+
+ ∈ RN ·|O| (1) whilst each decentralised actor conditions only on its own observation history during execution. The state transition st+1 ∼ T (· | st, at) is governed by the joint action at = ( a1 
+
+> t
+
+, . . . , a Nt ). The team receives a joint reward rt decomposed into a shared team term and individual agent terms, as detailed in Section II-C.                                 
+
+> TABLE I COMPOSITION OF THE LOCAL OBSERVATION VECTOR (dobs = 33 )
+> Obs. Index Component Description
+> 1-3 Goal vector Relative displacement to goal, normalised by dmax
+> 4-6 Velocity Agent velocity vector, normalised by vmax
+> 7-14 LiDAR readings Minimum range per sector, nor-malised to [0 ,1]
+> 15-22 LiDAR frame delta Per-sector range difference be-tween consecutive frames; posi-tive values indicate an approach-ing obstacle 23-25 Previous action Action executed at the preceding timestep 26-29 Visitation memory Local stagnation features for the optima diagnosis module 30-33 Domain parameter ωLocal geometric structural fea-tures for the generalisation mod-ule
+
+The objective is to find decentralised policies {πi}Ni=1 that maximise the expected discounted cumulative return: 
+
+J({πi}) = E
+
+" TX
+
+> t=0
+
+γtrt
+
+#
+
+(2) where γ ∈ (0 , 1) is the discount factor and T is the episode horizon. The structural complexity of the environment, the sparsity of cooperative success signals, and the absence of inter-agent communication collectively render this optimisa-tion problem non-trivial, motivating the mechanisms devel-oped in the following sections. 
+
+B. Overall Framework 
+
+The proposed framework builds upon MASAC and op-erates under the CTDE paradigm. Each UAV maintains an independent mixture-of-experts actor (MoE Actor) network, which relies solely on its own local observation history dur-ing execution. A centralised critic accesses the global state, constructed by concatenating all agents’ local observations during training, to provide global value estimates for each agent’s policy update. No explicit inter-agent communication is assumed, and the architecture scales to an arbitrary number of agents. Each agent’s local observation vector has dimension 33, as detailed in Table I, comprising goal direction and distance, velocity, LiDAR sector readings, LiDAR frame difference, previous action, visitation memory, and the structural domain parameter ω. To mitigate partial observability, the observation history is supplied to the actor as a fixed-length sequence of length K via a sliding window. A shared LSTM encoder extracts temporal features from this sequence, after which a structure-aware gating network generates expert mixture weights conditioned on ω, and the weighted outputs of N sub-policy expert heads are fused to produce the final continuous action. At the data management level, the framework maintains three categories of buffer. A standard experience replay buffer 5
+
+> Fig. 1. Overall architecture of the proposed cooperative multi-UAV navigation framework.
+
+R stores all environment interaction trajectories. A cooperative success buffer Dcoop applies fine-grained per-scenario and per-start–goal-pair quota management, retaining only high-quality trajectories in which all agents successfully reach their respec-tive goals. An individual demonstration buffer Di is main-tained independently for each agent and stores supplementary trajectories in which at least one agent reaches its goal. During each training update, the three buffers are sampled jointly with differentiated weights: the replay buffer provides environment exploration signal, whilst the demonstration buffers supervise the actor network directly via behavioural cloning. A curriculum scheduler governs stage advancement using dual conditions on cooperative success rate and collision rate, and triggers retrospective evaluation and experience pre-filling over all previously mastered scenarios upon each stage tran-sition. An execution-level local optima intervention module operates independently of the policy network without any additional trainable parameters, and directly overrides the policy output upon detection of agent stagnation. The overall framework architecture is illustrated in Fig. 1. 
+
+C. Reward Function Design 
+
+The total reward assigned to agent i at timestep t decom-poses into an individual shaping term and a shared team term: 
+
+rt = rteam  
+
+> t
+
++
+
+> N
+
+X
+
+> i=1
+
+rit (3) The individual reward rit accumulates the following terms: 
+
+rit = wd ∆d∗ − wp dt
+
+| {z }
+
+> progress
+
++ wp dt β κ t + wc κt
+
+| {z }
+
+> corridor compensation
+
++ wn
+
+√nt + 1 
+
+| {z }
+
+> novelty
+
+− wℓ max(0 , ρ 0 − ρt)
+
+| {z }
+
+> loop penalty
+
+− ws1(τ1 − dℓ)+ + ws2(τ2 − dℓ)+
+
+| {z }
+
+> proximity penalty
+
++ walign αt + wprog ∆pt αt
+
+| {z }
+
+> goal alignment
+
+− wopt I[opt] 
+
+| {z }
+
+> local optima
+
+− pi
+
+> col
+
+|{z} 
+
+> collision
+
++ ri
+
+> arrive
+
+| {z } 
+
+> arrival
+
+(4) where dt is the current distance from agent i to its goal; 
+
+∆d∗ = d∗ 
+
+> t−1
+
+− dt is the improvement over the best distance achieved so far; κt ∈ [0 , 1] is a LiDAR-derived corridor confinement indicator, active only when the goal is occluded, which partially restores the distance penalty by a factor β
+
+and provides a weak forward-motion signal to eliminate the reward vacuum during forced detours; nt is the visit count of the current cell; ρt is the ratio of unique cells visited in a recent window, with ρ0 as the target uniqueness threshold; 
+
+dℓ is the minimum LiDAR range across all sectors, with 
+
+(x)+ = max(0 , x ) and τ1 > τ 2 as the two proximity warning thresholds; αt = cos ∠(vt, ˆgt) ∈ [−1, 1] is the cosine align-ment between the executed velocity and the goal direction, active only when the goal is line-of-sight visible; ∆pt is the normalised goal-progress increment; and I[opt] is triggered by the local optima diagnosis module. The collision penalty pi
+
+> col
+
+aggregates static obstacle, inter-agent, and dynamic obstacle collision terms. The arrival reward ri 
+
+> arrive
+
+is graded across three milestones: progressive, near-goal, and full arrival. All coefficients are tuneable hyperparameters. The team reward rteam  
+
+> t
+
+enforces cooperative synchronisa-tion: 
+
+rteam  
+
+> t
+
+= c1 st − c2 δt
+
+| {z }
+
+> synchronisation
+
+− c3
+
+∆TT| {z } 
+
+> arrival gap
+
++ bevent 
+
+| {z } 
+
+> cooperative events
+
+(5) where st = min i pit, with pit ∈ [0 , 1] denoting the normalised goal-progress of agent i; st ensures the synchronisation bonus activates only when all agents are advancing concurrently; 
+
+δt is the inter-agent distance gap; ∆T is the difference in arrival timesteps between agents, normalised by the episode length T , penalising asynchronous arrivals in proportion to the temporal disparity; and bevent is a sparse event bonus comprising all-agent arrival reward, all-agent near-goal reward, all-agent progressive reward, and a team collision penalty. All coefficients c1, c2, c3, and the magnitudes of bevent are tuneable hyperparameters. 6
+
+D. Local Optima Diagnosis and Execution-Level Intervention 
+
+The mechanism comprises three sub-modules, namely visited-state memory, local optima diagnosis, and execution-level intervention, operating in concert without introducing any additional parameters. The environment is discretised into a uniform grid, and an independent visitation frequency table {c(x)} is maintained for each agent, recording the cumulative visit count of each cell. At every timestep, the agent maps its current position to the corresponding cell and updates the count. The memory features are additionally encoded into a four-dimensional vec-tor and appended to the observation (indices 26-29 in Table I), enabling the policy to perceive its own historical behavioural patterns directly. At each timestep, a diagnosis is performed over a recent history window of length W by evaluating four conditions: 
+
+I[opt] = I[Chover ∨ C repeat ∨ C block ∨ C wander ] (6) where Chover holds when the spatial span of the recent tra-jectory falls below a threshold, indicating in-place hovering; 
+
+Crepeat holds when the recent unique-cell ratio ρt drops below the target threshold ρ0, indicating repeated traversal of the same region; Cblock holds when the agent is close to the goal yet exhibits near-zero mean progress alongside a low mean LiDAR range, indicating obstruction by a nearby structure; and Cwander holds when the agent is far from the goal, shows near-zero mean progress, but maintains a large trajectory span, indicating large-scale wandering around obstacles. When 
+
+I[opt] = 1 and the agent is more than a safety distance 
+
+dmin from its goal, the penalty wopt I[opt] is applied to the individual reward and the execution-level intervention timer is activated. Whilst the intervention timer is active, the policy output is directly overridden and the agent is steered towards an escape direction selected by a directional novelty scoring function. For each candidate direction ϕk, the score is computed as: 
+
+f (ϕk) = wν ν(ϕk) + wcl cl( ϕk) − wr pen( ϕk) (7) where ν(ϕk) is the directional novelty, estimated by probing cells along the candidate direction and aggregating inverse square-root visit counts; cl( ϕk) is the forward clearance de-rived from LiDAR readings; and pen( ϕk) aggregates back-tracking and revisit penalties. When a dead-end is detected, defined as the number of blocked candidate directions exceed-ing a threshold, the scoring function switches to a clearance-dominant mode, prioritising the most open direction over the most novel one. The intervention mechanism serves as an active guide during the early stages of training, steering agents away from stagnation and generating informative transitions that enrich the replay buffer. As training progresses, the policy progressively internalises the ability to avoid local optima through the accumulated reward signal and the visitation memory encoded in the observation, reducing its reliance on the intervention mechanism accordingly. 
+
+E. Hierarchical Demo Buffer with Graded Cloning 
+
+In cooperative navigation tasks, successful events in which all agents reach their respective goals are extremely sparse dur-ing the early stages of training, resulting in a lack of effective cooperative learning signals. Existing demonstration learning methods [24], [25] treat all demonstration data equally, failing to distinguish between fully cooperative completion and the success of only some agents, thereby diluting the supervisory signal from high-quality cooperative trajectories with lower-quality samples. Furthermore, existing methods typically rely on independent auxiliary policy networks to distil demonstra-tions and transfer them to the main actor, introducing cumu-lative errors from two-stage approximation. To address this, a hierarchical demonstration buffer and a graded behavioural cloning mechanism are proposed, treating the degree of coop-erative completion as the primary attribute of demonstration data, thereby mitigating learning imbalance among agents at both the data-management and policy-optimisation levels. Two independent buffers are maintained, each storing demonstration data of a different quality level. The cooperative success buffer, with total capacity Mcoop , stores complete tra-jectories in which all agents successfully reach their respective goals. The individual success buffer, with capacity Mind per agent, stores trajectories in which at least one agent succeeds, serving as a supplementary source during early training when fully cooperative samples are scarce. The cooperative success buffer employs a two-tiered quota management scheme at both the scenario level and the start–goal pair level, with per-pair capacity Mpair and per-scenario capacity Mmaze . When a quota is reached, a quality-based replacement strategy removes trajectories with lower cooperative scores, ensuring that high-quality demonstrations across scenarios of varying difficulty are retained in a balanced manner. Scenario and start–goal pair identifiers are used as explicit dimensions for buffer manage-ment, preventing successful samples from simpler scenarios in later training from overshadowing effective demonstrations from earlier, more challenging ones. At each actor gradient update, samples are drawn from both buffers and behavioural cloning supervision is applied directly to the actor network using hierarchical weights: 
+
+Li 
+
+> BC
+
+= E(o, a ∗)∼D coop 
+
+h
+
+πi(o) − a∗ 22
+
+i
+
++ λ E(o, a ∗)∼D i
+
+h
+
+πi(o) − a∗ 22
+
+i
+
+(8) where Dcoop denotes the cooperative success buffer, Di de-notes the individual success buffer for agent i, and λ < 1 is a tuneable weighting coefficient reflecting the lower cooperative quality of partial success demonstrations relative to fully cooperative ones. The effective cloning coefficient βcoop is adapted dynamically throughout training, increasing linearly from an initial value βmin to a maximum βmax in propor-tion to the occupancy of Dcoop . This schedule introduces a modest cloning signal during early training to avoid over-constraining exploration, whilst progressively strengthening the supervision as cooperative demonstrations accumulate. The cloning supervision is applied directly to the actor network without routing through a separately trained auxiliary policy network as an intermediary, thereby eliminating the cumulative approximation error inherent in two-stage policy distillation and improving demonstration exploitation efficiency under sparse cooperative success signals. The total actor loss is the 7
+
+sum of the SAC policy gradient loss and the behavioural cloning loss: 
+
+Li 
+
+> actor
+
+= Li 
+
+> SAC
+
++ βcoop Li 
+
+> BC
+
+(9) The centralised critic is updated by minimising the dif-ference between the current value estimate and the boot-strapped target value computed from replay buffer samples, which include successful trajectories stored alongside standard interactions. Through this mechanism, the critic implicitly learns to assign higher value estimates to states and actions along successful cooperative paths, complementing the explicit behavioural cloning supervision applied to the actor. 
+
+F. Safety-aware Dual-condition Curriculum Scheduling 
+
+The training process is organised as a sequence of pro-gressively more demanding scenario stages. Unlike existing curriculum learning methods that advance stages based solely on task success rate, the proposed mechanism requires both the all-agent cooperative success rate η and the collision rate 
+
+ξ to jointly satisfy η ≥ τη and ξ ≤ τξ before advancement is permitted, where τη and τξ are independently configurable per scenario. When the success rate criterion is met but the collision rate remains above its ceiling, stage advancement is blocked, compelling the policy to reduce collision risk whilst sustaining task performance, thereby enforcing concur-rent guarantees on both objectives and preventing the policy from exploiting high-risk behaviours to achieve superficially favourable success metrics. Upon each stage advancement, a retrospective evaluation is immediately conducted over all previously mastered scenarios. Any scenario falling below its threshold is reinstated into the training queue, and fresh trajectories are collected from all passed scenarios at a rate of Kprefill episodes per scenario and injected into the replay buffer, ensuring representative historical data is retained following each transition. During normal training, a fraction phist of episodes are drawn from previously mastered scenarios to maintain continual reinforce-ment of acquired behaviours alongside the learning of new ones. Together with the retrospective evaluation and experi-ence pre-filling, this constitutes a principled countermeasure against catastrophic forgetting across training scenarios. 
+
+G. Structure-aware Generalisation Mechanism 
+
+Complex constrained environments can be characterised by a finite repertoire of recurring local geometric patterns that exhibit similar sensor-level feature distributions across spatially distinct scenarios. Existing generalisation methods target variations in physical dynamics or task objectives rather than local geometric repeatability, causing policies to implic-itly memorise coordinate-specific information from training scenarios. The proposed mechanism addresses this by ab-stracting recurring local geometric patterns into a domain parameter computed deterministically from real-time onboard sensor readings, enabling structure-aware cross-scenario trans-fer without prior knowledge of the target environment. The components of the domain parameter ω should be selected as local geometric features that recur within the target environment type, are computable in real time from onboard sensors, and are mutually distinguishable from one another. The specific choice of features depends on the structural characteristics of the deployment scenario. In the maze test scenarios used in this work, the most representative local struc-tural variations can be categorised into four types: dead-end structures, single-wall structures characterised by pronounced lateral occlusion differences, narrow entrance structures with only a small number of consecutive clear directions, and open-area structures in which the majority of directions remain clear. These four structural types are mutually distinguishable at the LiDAR-reading level and collectively capture the predominant local geometric variations in maze environments. They are therefore selected as the domain parameter components for validating the proposed mechanism. At each timestep, the domain parameter ω ∈ [0 , 1] 4 is computed deterministically from the 8-sector normalised Li-DAR readings of the current frame, requiring neither manual annotation nor any prior knowledge of the current scenario. The four components ωdead , ωwall , ωnarrow , and ωopen quan-tify the degree of dead-end structure, lateral occlusion asym-metry, narrow-entrance constriction, and overall openness, respectively, corresponding to the four local structural types identified above. Let bk ∈ { 0, 1} denote whether the k-th LiDAR sector is occluded by an obstacle, determined by whether the normalised LiDAR reading falls below a threshold 
+
+θ; nblock = P 
+
+> k
+
+bk denotes the number of occluded sectors; and g denotes the maximum number of consecutive clear sectors. The four components are defined as: 
+
+
+
+ωdead = clip   nblock −53 , 0, 1 · clip  1 − g−12 , 0, 1
+
+ωwall = ¯bleft − ¯bright 
+
+ωnarrow = clip 
+
+ min( g, 3) −12 , 0, 1
+
+
+
+· clip   nblock  
+
+> 5
+
+, 0, 1
+
+ωopen = 8−nblock 
+
+> 8
+
+(10) where ¯bleft and ¯bright denote the mean occlusion values of the left and right four LiDAR sectors, respectively. The component 
+
+ωdead approaches unity when most sectors are occluded and the maximum consecutive clear gap is minimal, and is used to represent dead-end structures. The component ωwall quantifies lateral occlusion asymmetry between the two sides; it takes a high value when one side is dominated by a wall or obstacle whilst the other remains relatively clear, and is therefore used to represent single-wall structures. The component ωnarrow 
+
+takes a high value when only two to three consecutive clear sectors exist amid heavy surrounding occlusion, and is used to represent narrow entrances or narrow passages. The component ωopen reflects the overall proportion of clear sectors among all LiDAR sectors, and is used to represent open areas. These four components are designed with explicit structural meanings and together provide a compact low-dimensional representation of the principal local geometric variations in constrained environments. The domain parameter 
+
+ω is additionally appended as the final four dimensions of the observation vector, corresponding to indices 30-33 in Table I, enabling the policy to directly perceive the current local geometric structure at the observation level. 8
+
+The actor network adopts a mixture-of-experts architecture comprising a shared LSTM encoder, a structure-aware gating network, and Ne expert heads. The shared encoder processes the observation history oit−K:t of length K through a linear projection layer, an LSTM, and a fully connected layer to produce a temporal feature representation h:
+
+h = MLP  LSTM(proj( oit−K:t))  (11) The structure-aware gating network takes ω as input and produces a mixture weight vector over the Ne expert heads via a two-layer fully connected network followed by softmax normalisation: 
+
+g = softmax  MLP gate (ω) ∈ ∆Ne−1 (12) where ∆Ne−1 denotes the Ne-dimensional probability sim-plex. Each of the Ne expert heads independently takes the shared feature h as input and produces its own action mean 
+
+μk and log standard deviation log σk via independent linear projections, for k = 1 , . . . , N e. The final action distribution mean and log standard deviation are obtained by weighted fusion of all expert outputs according to the gate weights: 
+
+
+
+μ =
+
+> Ne
+
+X
+
+> k=1
+
+gk μk
+
+log σ = clip 
+
+> Ne
+
+X
+
+> k=1
+
+gk log σk, σ min , σ max 
+
+! (13) where σmin and σmax are the lower and upper bounds applied to the log standard deviation to ensure numerical stability. The action is subsequently squashed to [−1, 1] 3 via a tanh transfor-mation. The entire forward computation path is differentiable, and the gating network and expert heads are trained end-to-end through the SAC policy gradient without requiring any expert labels or structural type supervision. Since ω is computed deterministically from sensor readings and is entirely decoupled from scenario-specific coordinates, the policy learns behavioural responses conditioned on local geometric features rather than memorising the spatial layouts of particular training scenarios. During training, the gating network learns to dynamically adjust the activation weights of different expert sub-policies according to the current local structure, whilst each expert head progressively specialises in responding to different local structural patterns. Consequently, any new scenario composed of structural patterns encountered during training can be deployed directly without retraining, achieving cross-scenario transfer. The mechanism is also scal-able: the computation of ω relies solely on onboard sensors, the number of expert heads Ne can be adjusted according to environmental complexity, and the overall framework does not depend on a specific scenario type or number of agents. 
+
+H. Training Procedure 
+
+The training procedure integrates all previously described mechanisms into a unified learning loop. Prior to training, the framework conducts a startup evaluation over all previously mastered scenarios, registers those that pass validation into the history replay queue, and pre-fills the replay buffer with trajectories collected from these scenarios, ensuring that the buffer contains representative data from mastered scenarios before training begins. At each timestep, each agent samples an action from its current policy (during the warm-up phase of Twarm steps, uniformly random actions are used to initialise the buffer). The resulting transition tuple is stored in the replay buffer with the current scenario identifier and start–goal pair iden-tifier attached to support priority sampling. The local optima intervention module operates independently at each step and directly overrides the policy output whenever the diagnosis condition I[opt] = 1 is triggered. At the end of each episode, the demonstration buffers are updated according to the outcome. If all agents reach their re-spective goals, the trajectory undergoes quality filtering based on the inter-agent arrival gap; trajectories satisfying the gap threshold are stored into the cooperative success buffer, with higher-quality trajectories stored multiple times. If exactly one agent reaches its goal and the episode belongs to the current curriculum stage scenario and its corresponding start–goal pair, that agent’s trajectory is stored into its individual success buffer. Trajectories from other scenarios or start–goal pairs are excluded to prevent behaviourally inconsistent demonstrations from contaminating the cloning supervision. Let τgap denote the maximum permissible inter-agent arrival gap, in timesteps, for a trajectory to qualify for storage in Dcoop ; trajectories with arrival gap exceeding τgap are discarded. After an initial collection phase of Tafter steps to populate the replay buffer, every Tupdate steps a policy update is performed by jointly sampling from the replay buffer, the cooperative success buffer, and the individual success buffers. The SAC policy gradient loss and the graded behavioural cloning loss are combined as Li 
+
+> actor
+
+= Li 
+
+> SAC
+
++ βcoop Li
+
+> BC
+
+,and gradient updates are applied separately to each actor and the centralised critic. The cloning coefficient βcoop increases dynamically with the occupancy of the cooperative success buffer, remaining small during early training to avoid over-constraining exploration. Every Teval episodes, a dedicated evaluation is conducted on the current curriculum stage, computing the all-agent cooperative success rate η and the collision rate ξ. If the dual condition η ≥ τη and ξ ≤ τξ is jointly satisfied, retrospective evaluation and experience pre-filling are triggered over all previously mastered scenarios, after which training advances to the next curriculum stage. During normal training, each episode is assigned to a previously mastered scenario with probability phist and to the current stage with probability 
+
+1 − phist . The complete training procedure is summarised in Algorithm 1. III. S IMULATION SETUP 
+
+Experiments are conducted using the Microsoft AirSim simulation platform [27], with Unreal Engine 4 as the 3D rendering and physics engine. Each UAV is equipped with a single-channel, horizontally omnidirectional LiDAR sensor with a range of 12 m, a rotation rate of 10 r/s, and a point cloud density of 5000 points/s, mounted 0.1 m above the 9
+
+Algorithm 1: Training procedure for cooperative multi-UAV navigation 
+
+Input: Scenarios {s1, . . . , s S } in curriculum order, thresholds {τ sη , τ sξ }; actors {πi}Ni=1 , critic Q
+
+Initialise R, Dcoop , {D i}Ni=1 ; mastered set M ← ∅ ; pre-fill R from any stages passing startup evaluation 
+
+for each environment timestep t do 
+
+ai ← Uniform( Ai) if t ≤ Twarm , else πi(oit−K:t) with local optima override if I[opt] = 1 
+
+Execute {ai}; store transition in R tagged with scenario and start–goal pair identifiers 
+
+if episode terminates then if all agents arrived and gap ≤ τgap then store trajectory → D coop 
+
+else if one agent arrived and same stage and pair then store that agent’s trajectory → D i
+
+Select next episode from M w.p. phist , else from current stage 
+
+if episode count mod Teval = 0 then 
+
+Evaluate current stage → η, ξ 
+
+if η ≥ τη and ξ ≤ τξ then 
+
+Retrospective evaluation and experience pre-fill over M; add current stage to M; advance stage 
+
+end end end if t ≥ Tafter and t mod Tupdate = 0 then 
+
+Sample minibatches from R, Dcoop , {D i}; update {πi} and Q via Li 
+
+> actor
+
+= Li 
+
+> SAC
+
++ βcoop Li
+
+> BC
+
+; adapt βcoop 
+
+end end 
+
+vehicle body. Raw LiDAR point clouds are aggregated into 8 equal angular sectors, with the minimum range per sector extracted and normalised to [0 , 1] as the perceptual input. Each UAV takes off and hovers at an altitude of 1.8 m, with a 3D continuous velocity command ai ∈ [−1, 1] 3 as the action space, corresponding to forward/backward, lateral, and vertical velocity components respectively. All training and evaluation are conducted on a workstation equipped with an NVIDIA RTX 6000 Ada Generation GPU (49 GB VRAM) under CUDA 12.8. Training uses 7 maze scenarios constructed as enclosed 3D environments in Unreal Engine 4. Scenarios maze 01 to maze 06 occupy a 20 m × 20 m area, whilst scenario maze 07 is constructed within a larger 60 m × 40 m environment to accommodate the lateral reciprocating motion of the moving obstacles. Each scenario is configured with multiple start– goal pairs, encompassing forward, reverse, and agent-swapped navigation paths, ensuring that the policy is trained across diverse spatial configurations within the same scenario and does not overfit to specific start–goal coordinates. Scenarios maze 01 to maze 03 are basic obstacle scenarios compris-ing wall structures and static obstacles. Scenarios maze 04 to maze 06 introduce more complex obstacle layouts with pronounced local optima characteristics, requiring the pol-icy to develop active stagnation-escape capabilities. Scenario maze 07 further incorporates moving obstacles to validate the framework’s adaptability in dynamic environments. The training scenario layouts are illustrated in Fig. 2 and Fig. 3. A separate test scenario, unseen during training, is reserved exclusively for evaluating cross-scenario transfer. Four metrics are used for quantitative evaluation: the all-agent cooperative success rate η, defined as the proportion of episodes in which all agents reach their respective goals within the maximum episode length T ; the collision rate ξ,   
+
+> Fig. 2. Overview of training scenarios maze 01 to maze 06 (20 m ×20 m each), numbered clockwise from the top-left. Purple and green markers indicate start and goal positions respectively. Each scenario is configured with multiple start–goal pairs; during training, start and goal positions are swapped and agent assignments are exchanged across pairs to promote generalisation and prevent overfitting to specific spatial configurations.
+
+defined as the proportion of episodes in which any colli-sion event occurs; the mean terminal distance, defined as the average distance from each agent to its goal at episode termination; and the inter-agent arrival gap, defined as the difference in arrival timesteps between agents in fully suc-cessful episodes, measuring cooperative synchronisation. In generalisation experiments, the gate weight distribution g is additionally recorded to analyse the activation patterns of the structure-aware mechanism across different local geometric structures. All hyperparameter settings are listed in Table II. 10 
+
+Fig. 3. Training scenario maze 07 with dynamic obstacles. The obstacle enclosed within the red bounding box is a moving obstacle performing lateral reciprocating motion at 1.5 m/s within a bounded region. Purple and green markers indicate start and goal positions respectively. TABLE II HYPERPARAMETER CONFIGURATION .
+
+Parameter Symbol Value 
+
+Network architecture 
+
+Observation history length K 16 Hidden layer dimension — 128 Number of expert heads Ne 4Structural parameter dim. — 4
+
+Training configuration 
+
+Warm-up steps Twarm 3,000 Policy update interval Tupdate 50 Minibatch size — 128 Discount factor γ 0.99 Soft target update coeff. — 0.001 Actor learning rate — 5 × 10 −5
+
+Critic learning rate — 5 × 10 −5
+
+Entropy coeff. learning rate — 2 × 10 −5
+
+Replay and demo buffers 
+
+Replay buffer capacity — 120,000 Coop. demo buffer capacity Mcoop 60,000 Indiv. demo buffer capacity Mind 5,000 
+
+Behavioural cloning 
+
+Initial cloning coefficient βmin 0.03 Maximum cloning coefficient βmax 0.40 Indiv. demo weight ratio λ 1/3 Arrival gap threshold τgap 100 steps 
+
+Curriculum scheduling 
+
+Evaluation interval Teval 100 episodes History mixing ratio phist 0.40 Pre-fill episodes per scenario Kprefill 15 
+
+IV. R ESULTS AND ANALYSIS 
+
+A. Overall Performance 
+
+Table III reports the evaluation results of the proposed framework across all training scenarios and the unseen test scenario, each evaluated over 20 episodes. The framework sur-passes the corresponding curriculum advancement threshold τη
+
+on all six static maze scenarios (maze 01 to maze 06), suc-cessfully completing all curriculum stages. Scenarios maze 02 and maze 06 achieve a cooperative success rate of 1.000, and maze 01 achieves 0.950, demonstrating highly reliable cooperative navigation in structurally regular environments. Scenario maze 04, which features complex obstacle layouts with pronounced local optima characteristics, yields a lower 
+
+TABLE III EVALUATION RESULTS OF THE PROPOSED FRAMEWORK ACROSS ALL SCENARIOS (20 EPISODES EACH ). η: COOPERATIVE SUCCESS RATE ; ξ:
+
+> COLLISION RATE
+
+; D IST .: MEAN TERMINAL DISTANCE .
+
+Scenario Type η ξ Dist. (m) 
+
+maze 01 Basic static 0.950 0.050 1.783 maze 02 Basic static 1.000 0.000 1.539 maze 03 Basic static 0.900 0.150 2.083 maze 04 Local optima 0.800 0.400 3.348 maze 05 Local optima 0.800 0.050 2.510 maze 06 Local optima 1.000 0.000 1.527 maze 07 Dynamic obs. 0.800 0.200 3.474 maze mix Unseen (test) 0.750 0.100 3.260 
+
+Fig. 4. Representative UAV flight trajectories in the unseen test scenario maze mix. Yellow and blue curves denote the trajectories of the two UAVs respectively; purple markers indicate start positions, green markers indicate goal positions, and obstacles enclosed within red bounding boxes are moving obstacles. 
+
+success rate (0.800) and a higher collision rate (0.400), re-flecting the greater demand placed on stagnation-escape capa-bility; nonetheless, the framework still meets the per-scenario thresholds ( τη = 0 .75 , τξ = 0 .40 ), validating the safety-aware dual-condition curriculum scheduling mechanism. Scenario maze 07 contains three moving obstacles, each performing lateral reciprocating motion within a bounded region. The framework achieves a success rate of 0.800 and a collision rate of 0.200, with a mean terminal distance of 3.474 m. Dynamic obstacles are detected in all episodes, demonstrating the framework’s adaptability in dynamic envi-ronments. On the unseen test scenario maze mix, the framework achieves a cooperative success rate of 0.750 under dynamic obstacle conditions across all episodes, with a mean collision rate of 0.100 and a mean terminal distance of 3.260 m. Fig. 4 illustrates the 3D flight trajectories of the two UAVs during a representative successful episode in maze mix. The yellow and blue curves correspond to the two UAVs respectively, with purple markers indicating start positions and green markers indicating goal positions. Both UAVs autonomously navigate around static and moving obstacles performing lateral recip-rocating motion, and reach their respective goals without any prior knowledge of the scenario, validating the cross-scenario transfer capability of the proposed framework. 
+
+B. Comparison with Baseline Methods 
+
+To evaluate the advantage of the proposed framework over existing approaches, experiments are conducted on maze 05 11                                
+
+> TABLE IV COMPARISON RESULTS ON MAZE 05 AND THE UNSEEN TEST SCENARIO MAZE MIX (20 EPISODES EACH ). η:COOPERATIVE SUCCESS RATE ;ξ:
+> COLLISION RATE ; D IST .: MEAN TERMINAL DISTANCE .
+> Scenario Method ηξDist. (m)
+> maze 05 MAPPO 0.550 0.200 2.910 MASAC 0.500 0.400 7.199 Full framework 0.800 0.050 2.510
+> maze mix MAPPO 0.300 0.350 11.341 MASAC 0.450 0.400 8.151 Full framework 0.750 0.100 3.260
+
+and the unseen test scenario maze mix against two baseline methods: MAPPO [28] and Standard MASAC, a variant of the proposed framework with all proposed mechanisms removed. All methods are trained for 1500 episodes under identical environment and collision detection conditions to ensure a fair comparison. It should be noted that MAPPO operates on a 21-dimensional observation space without the structural domain parameter ω, whilst the full framework uses a 33-dimensional observation which incorporates ω as an additional input to the structure-aware gating network. This difference in observation design is an inherent part of the proposed framework rather than an experimental inconsistency, as the construction of ω
+
+from real-time LiDAR readings constitutes one of the core contributions of this work. Results are summarised in Table IV. On the training scenario maze 05, the full framework achieves a cooperative success rate of 0.800, outperforming MAPPO (0.550) and Standard MASAC (0.500). The collision rate of the full framework (0.050) is substantially lower than that of MAPPO (0.200) and Standard MASAC (0.400), validating the effectiveness of the safety-aware dual-condition curriculum scheduling mechanism in concurrently guarantee-ing task performance and flight safety. On the unseen test scenario maze mix, the full framework achieves a zero-shot cooperative success rate of 0.750 with a mean terminal distance of 3.260 m, significantly outperforming both baselines. MAPPO suffers a notable drop in cooperative success rate from 0.550 on maze 05 to 0.300 on maze mix, a cross-scenario generalisation gap of 0.250, whereas the full framework exhibits a gap of only 0.050 (0.800 to 0.750), demonstrating that the structure-aware generalisation mech-anism substantially reduces policy dependence on the spa-tial layout of training scenarios. Standard MASAC achieves similar success rates of 0.500 and 0.450 across the two scenarios, however, both values remain substantially below the full framework, and the persistently high collision rate of 0.400 in both scenarios indicates that the policy relies on indis-criminate exploratory behaviour rather than structured naviga-tion, yielding comparably low-level performance regardless of scenario geometry. Furthermore, MAPPO records a collision rate of 0.350 on maze mix, considerably higher than the full framework (0.100), indicating that without execution-level local optima intervention and safety-aware scheduling, flight safety in complex unseen environments cannot be reliably maintained. 
+
+C. Ablation Study 
+
+To evaluate the independent contribution of each proposed mechanism, ablation experiments are conducted on maze 05 with four variants: the complete framework, w/o intervention (execution-level local optima override disabled), w/o demo (hierarchical demonstration buffer and behavioural cloning removed), and w/o MoE (MoE actor replaced by a single expert head). All variants are trained from the same random initialisation. The cooperative success rate η and collision rate 
+
+ξ across training episodes are shown in Fig. 5 and Fig. 6 respectively.      
+
+> Fig. 5. Cooperative success rate ηduring training on maze 05 for all ablation variants.
+> Fig. 6. Collision rate ξduring training on maze 05 for all ablation variants.
+
+The full framework (blue) maintains a cooperative success rate of 0.30–0.45 from the earliest training episodes, sub-stantially above all ablation variants, demonstrating that the graded behavioural cloning supervision from the hierarchical demonstration buffer provides effective early-stage guidance. After episode 600, η rises steadily to approximately 0.80 by episode 1500, whilst ξ concurrently falls from 0.60 to near zero, indicating that the policy converges to both high coop-erative task performance and safe navigation simultaneously. Removing the local optima intervention mechanism (w/o intervention, red) produces the most pronounced degrada-tion. The success rate remains near zero for the first 800 episodes, whilst ξ surges to approximately 0.90 within the first 100 episodes and sustains a high level of 0.70–0.80 12 
+
+thereafter. Without execution-level escape guidance, agents become trapped in structural dead-ends and repeatedly collide with obstacles, preventing any cooperative success signal from emerging during early exploration and delaying convergence until after episode 800, with a final η of approximately 0.40. Removing the hierarchical demonstration buffer (w/o demo, green) results in a success rate that remains near zero before episode 800, with occasional transient rises that subsequently collapse, reflecting the instability caused by the absence of behavioural cloning supervision. Notably, w/o demo exhibits a consistently lower collision rate than the other ablation variants across most of the training process, indicating that without cloning constraints the policy adopts conservative exploratory behaviour to avoid collisions at the cost of severely sparse cooperative success signals, substantially reducing sample efficiency relative to the full framework. Removing the MoE actor (w/o MoE, orange) yields a final η
+
+of approximately 0.70 on the single maze 05 training scenario, converging later than the full framework but earlier than the w/o intervention and w/o demo variants. This suggests that a single-head policy retains meaningful learning capacity within a single training scenario, and that the contribution of the MoE architecture on maze 05 manifests primarily as faster con-vergence rather than a difference in asymptotic performance. However, as demonstrated in Section IV-D, the w/o MoE variant achieves a cooperative success rate of only 0.250 on the unseen test scenario maze mix, substantially below the full framework’s 0.750, confirming that the structure-aware gating architecture is the critical component for cross-scenario gen-eralisation, a contribution that single-scenario ablation alone is insufficient to reveal. 
+
+D. Structure-aware Generalisation 
+
+Table V compares the proposed framework against the w/o MoE variant on the unseen test scenario maze mix. The full framework achieves a cooperative success rate of 0.750 under dynamic obstacle conditions throughout all episodes, with a mean terminal distance of 3.260 m. The w/o MoE variant re-places the MoE actor with a single expert head whilst retaining 
+
+ω as part of the observation input; however, its cooperative success rate drops to 0.250 and mean terminal distance rises to 17.608 m. A representative failure episode is illustrated in Fig. 7: UAV 1 becomes trapped in the local optima structure located in the upper-left region ahead of its goal, whilst UAV 2 remains confined to the lower-right corridor and fails to identify a viable navigation path. Although UAV 1 reaches its goal individually in 14 out of 20 episodes (partial success rate 0.700) and the team achieves full cooperative success in 5 episodes ( η=0.250), UAV 2 records a mean terminal distance of 31.49 m across all episodes, demonstrating that a single-head policy cannot simultaneously provide effective naviga-tional responses to two UAVs traversing structurally distinct local environments. These results indicate that incorporating 
+
+ω solely as an observation feature is insufficient for cross-scenario transfer; the structure-specialised routing provided by the MoE gating architecture is the critical factor underlying generalisation capability.                           
+
+> Fig. 7. UAV flight trajectories of the w/o MoE variant in the unseen test scenario maze mix. Orange and blue curves denote UAV 1 and UAV 2 respectively; purple markers indicate start positions, green markers indicate goal positions, grey markers indicate actual terminal positions, and red bounding boxes indicate moving obstacles. TABLE V CROSS -SCENARIO TRANSFER RESULTS ON THE UNSEEN TEST SCENARIO MAZE MIX (20 EPISODES ). η:COOPERATIVE SUCCESS RATE ;ξ:
+> COLLISION RATE ; D IST .: MEAN TERMINAL DISTANCE .
+> Variant ηξDist. (m)
+> Full framework 0.750 0.100 3.260 w/o MoE 0.250 0.050 17.608
+
+Analysis of the gate weight distributions of the full frame-work further validates the working mechanism. The mean activation weights of the four expert heads for UAV 1 are: dead-end expert 0.000, wall expert 0.026, narrow expert 0.000, and open expert 0.974, indicating that the open expert dom-inates its navigation path, reflecting a route predominantly traversing open areas, whilst the marginal activation of the wall expert suggests the presence of occasional single-sided wall structures along the way. UAV 2 exhibits a markedly different activation distribution: dead-end expert 0.036, wall expert 0.065, narrow expert 0.346, and open expert 0.553, with all four expert heads showing non-negligible activation, amongst which the narrow expert and open expert jointly dominate, indicating that its path encompasses both open areas and narrow passages, requiring the gating network to dynamically switch expert responses across distinct local structures. This automatic divergence in expert activation between the two UAVs is not manually prescribed but emerges from the gating network computing ω independently from each UAV’s real-time LiDAR readings, demonstrating that the structure-aware gating network performs fine-grained adaptive responses to the local structural differences experienced by individual agents within the same unseen scenario, rather than memorising the global spatial layout of training environments. V. C ONCLUSION 
+
+This paper proposes a multi-agent deep reinforcement learn-ing framework for cooperative UAV navigation in complex constrained environments, systematically addressing local op-tima traps, sparse cooperative reward signals, inter-agent learn-ing imbalance, and insufficient cross-scenario generalisation through four coordinated mechanisms. 13 
+
+Simulation experiments validate the effectiveness of the proposed framework and each of its constituent mechanisms. The complete framework passes the curriculum advancement thresholds across all static maze training scenarios and main-tains stable cooperative navigation performance in dynamic obstacle environments. On an unseen mixed test scenario not encountered during training, the framework achieves effec-tive zero-shot cross-scenario transfer, validating the structure-aware generalisation mechanism in practice. Comparison ex-periments against existing multi-agent reinforcement learning baselines demonstrate that the full framework achieves su-perior cooperative success rate and collision safety on both the training scenario and the unseen test scenario, with a substantially smaller cross-scenario generalisation gap than the baseline methods, confirming the overall advantage of the proposed approach. Ablation experiments further demonstrate that the local optima intervention mechanism is decisive for training efficiency during early exploration, that the hierar-chical demonstration buffer and graded behavioural cloning supervision substantially improve sample utilisation efficiency under sparse cooperative success signals, and that the MoE gating architecture is the critical component underlying cross-scenario generalisation capability, a contribution that single-scenario ablation alone is insufficient to reveal and that the generalisation experiments provide more direct evidence for. The current study is validated under a two-UAV con-figuration, and the gap between simulation and real-world deployment remains to be bridged. Future work will proceed in three directions: extending the framework to larger multi-agent teams; validating deployment on real UAV platforms; and exploring the learning of shared local geometric features across a broader range of constrained environment types, with the aim of further improving the framework’s adaptability to unseen environments. ACKNOWLEDGMENT 
+
+The authors used Claude for English language proofreading during the preparation of this manuscript. REFERENCES [1] D. Pathak, P. Agrawal, A. A. Efros, and T. Darrell, “Curiosity-driven exploration by self-supervised prediction,” in International conference on machine learning . PMLR, 2017, pp. 2778–2787. [2] Y. Burda, H. Edwards, A. Storkey, and O. Klimov, “Exploration by random network distillation,” arXiv preprint arXiv:1810.12894 , 2018. [3] A. P. Badia, P. Sprechmann, A. Vitvitskyi, D. Guo, B. Piot, S. Kap-turowski, O. Tieleman, M. Arjovsky, A. Pritzel, A. Bolt et al. ,“Never give up: Learning directed exploration strategies,” arXiv preprint arXiv:2002.06038 , 2020. [4] S. Thrun, “Probabilistic robotics,” Communications of the ACM , vol. 45, no. 3, pp. 52–57, 2002. [5] E. Parisotto and R. Salakhutdinov, “Neural map: Structured memory for deep reinforcement learning,” arXiv preprint arXiv:1702.08360 , 2017. [6] D. S. Chaplot, D. P. Gandhi, A. Gupta, and R. R. Salakhutdinov, “Object goal navigation using goal-oriented semantic exploration,” Advances in Neural Information Processing Systems , vol. 33, pp. 4247–4258, 2020. [7] R. Lowe, Y. I. Wu, A. Tamar, J. Harb, O. Pieter Abbeel, and I. Mordatch, “Multi-agent actor-critic for mixed cooperative-competitive environ-ments,” Advances in neural information processing systems , vol. 30, 2017. [8] J. Foerster, I. A. Assael, N. De Freitas, and S. Whiteson, “Learning to communicate with deep multi-agent reinforcement learning,” Advances in neural information processing systems , vol. 29, 2016. [9] T. Rashid, M. Samvelyan, C. S. De Witt, G. Farquhar, J. Foerster, and S. Whiteson, “Monotonic value function factorisation for deep multi-agent reinforcement learning,” Journal of Machine Learning Research ,vol. 21, no. 178, pp. 1–51, 2020. [10] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel, “Domain randomization for transferring deep neural networks from simulation to the real world,” in 2017 IEEE/RSJ international conference on intelligent robots and systems (IROS) . IEEE, 2017, pp. 23–30. [11] C. Finn, P. Abbeel, and S. Levine, “Model-agnostic meta-learning for fast adaptation of deep networks,” in International conference on machine learning . PMLR, 2017, pp. 1126–1135. [12] H. Liang, Y. Zhang, B. Huang, Y. Du et al. , “Causality meets locality: Provably generalizable and scalable policy learning for networked sys-tems,” Advances in Neural Information Processing Systems , vol. 38, pp. 158 980–159 030, 2026. [13] M. Beukman, D. Jarvis, R. Klein, S. James, and B. Rosman, “Dynamics generalisation in reinforcement learning via adaptive context-aware policies,” Advances in Neural Information Processing Systems , vol. 36, pp. 40 167–40 203, 2023. [14] J. Obando-Ceron, G. Sokar, T. Willi, C. Lyle, J. Farebrother, J. Foerster, G. K. Dziugaite, D. Precup, and P. S. Castro, “Mixtures of experts unlock parameter scaling for deep rl,” arXiv preprint arXiv:2402.08609 , 2024. [15] M. Bellemare, S. Srinivasan, G. Ostrovski, T. Schaul, D. Saxton, and R. Munos, “Unifying count-based exploration and intrinsic motivation,” 
+
+Advances in neural information processing systems , vol. 29, 2016. [16] P. E. Hart, N. J. Nilsson, and B. Raphael, “A formal basis for the heuristic determination of minimum cost paths,” IEEE transactions on Systems Science and Cybernetics , vol. 4, no. 2, pp. 100–107, 1968. [17] E. W. Dijkstra, “A note on two problems in connexion with graphs,” in 
+
+Edsger Wybe Dijkstra: his life, work, and legacy , 2022, pp. 287–290. [18] L. Blasi, E. D’Amato, M. Mattei, and I. Notaro, “Uav path planning in 3-d constrained environments based on layered essential visibility graphs,” 
+
+IEEE Transactions on Aerospace and Electronic Systems , vol. 59, no. 3, pp. 2359–2375, 2022. [19] P. Sunehag, G. Lever, A. Gruslys, W. M. Czarnecki, V. Zambaldi, M. Jaderberg, M. Lanctot, N. Sonnerat, J. Z. Leibo, K. Tuyls et al. ,“Value-decomposition networks for cooperative multi-agent learning,” 
+
+arXiv preprint arXiv:1706.05296 , 2017. [20] R. Azzam, M. Chehadeh, O. A. Hay, M. A. Humais, I. Boiko, and Y. Zweiri, “Learning-based navigation and collision avoidance through reinforcement for uavs,” IEEE Transactions on Aerospace and Electronic Systems , vol. 60, no. 3, pp. 2614–2628, 2023. [21] Y. Wan, X. Chen, Z. Zhao, K. Wang, and J. Tang, “Imitation and exploration: learning for vision-based communication-free multi-uav co-ordination in cluttered environments,” IEEE Transactions on Aerospace and Electronic Systems , 2025. [22] M. Liu, L. Xie, L. Xiao, and S. Guo, “Self-attention-enhanced multi-agent deep reinforcement learning for uavs target search in obstacle-dense environments,” IEEE Transactions on Aerospace and Electronic Systems , 2026. [23] X. Tong, J. Song, and W. Li, “Rapid decision-making strategy for uav swarms in complex adversarial environments using proximal policy optimization and transformer,” IEEE Transactions on Aerospace and Electronic Systems , 2025. [24] B. D. Argall, S. Chernova, M. Veloso, and B. Browning, “A survey of robot learning from demonstration,” Robotics and autonomous systems ,vol. 57, no. 5, pp. 469–483, 2009. [25] J. Ho and S. Ermon, “Generative adversarial imitation learning,” Ad-vances in neural information processing systems , vol. 29, 2016. [26] F. A. Oliehoek, C. Amato et al. , A concise introduction to decentralized POMDPs . Springer, 2016, vol. 1. [27] S. Shah, D. Dey, C. Lovett, and A. Kapoor, “Airsim: High-fidelity visual and physical simulation for autonomous vehicles,” in Field and service robotics: Results of the 11th international conference . Springer, 2017, pp. 621–635. [28] C. Yu, A. Velu, E. Vinitsky, J. Gao, Y. Wang, A. Bayen, and Y. Wu, “The surprising effectiveness of ppo in cooperative multi-agent games,” 
+
+Advances in neural information processing systems , vol. 35, pp. 24 611– 24 624, 2022.
