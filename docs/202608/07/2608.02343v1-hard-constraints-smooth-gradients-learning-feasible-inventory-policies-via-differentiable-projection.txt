@@ -1,0 +1,2089 @@
+Title: Hard Constraints, Smooth Gradients: Learning Feasible Inventory Policies via Differentiable Projection
+
+URL Source: https://arxiv.org/pdf/2608.02343v1
+
+Published Time: Tue, 04 Aug 2026 02:33:46 GMT
+
+Number of Pages: 37
+
+Markdown Content:
+# Hard Constraints, Smooth Gradients: Learning Feasible Inventory Policies via Differentiable Projection 
+
+Patrick P. Helm, Jan-Niklas Doerr 
+
+TUM School of Management, Technical University of Munich, patrick.helm@tum.de, jan.doerr@tum.de 
+
+Joren Gijsbrechts 
+
+Esade, Ramon Llull University, joren.gijsbrechts@esade.edu 
+
+Stefan Minner 
+
+TUM School of Management, Technical University of Munich, stefan.minner@tum.de Munich Data Science Institute (MDSI), Technical University of Munich 
+
+Abstract. Many operational problems are constrained sequential decision processes with large, combinatorial action spaces and interdependent feasibility constraints. Mixed-integer linear programs (MILPs) handle such constraints flexibly but scale poorly in stochastic environments. Deep reinforcement learning (DRL) promises scalable decision rules, but existing methods either penalize constraints rather than enforce them, or rely on feasibility mechanisms that break down once constraints interact. We bridge this gap by embedding a differentiable convex optimization module inside the policy: a differentiable decision rule (e.g., a neural network) proposes continuous action targets, a quadratic program (QP) projects them onto the relaxed feasible set, and a dual-informed integer mapping restores integrality while preserving feasibility. Given a differentiable simulator, the policy trains end to end from sampled trajectories using pathwise gradients, while handling hard constraints with similar flexibility to an MILP. We show that our feasibility enforcement has bounded error relative to an exact integer projection and ensures the entire feasible action space is reachable. We apply the method to multi-echelon production–inventory planning under shared resource and material constraints. Our policy attains an average optimality gap below 1% on small instances. It further outperforms state-of-the-art echelon base-stock policies by up to 9.75% and a rolling-horizon multi-stage stochastic program by at least 7 .7% in larger networks. On an industry-scale case study from ASML, it reduces average cost by up to 3 .22% relative to the best-known benchmark policy. Our results show that traditional inventory policies struggle in tightly capacitated systems with high demand variability, while our learning-based approach remains cost-effective. The benefits are therefore largest precisely where planning is hardest and most relevant. More broadly, our work shows that DRL can deliver economically significant savings in sequential decision problems with interdependent hard constraints, which are widespread in practice. 
+
+Funding: This work received financial support from Deutsche Forschungsgemeinschaft (DFG) – Projektnummer 277991500. 
+
+Key words: deep reinforcement learning, differentiable optimization, multi-echelon inventory planning, capacity constraints 
+
+## 1. Introduction 
+
+Deep Reinforcement Learning (DRL), which uses deep neural networks to optimize sequential decisions under uncertainty, is emerging as a complement to classical Operations Research (OR) tools. Reported gains in large-scale supply chain applications include a 12% inventory reduction at Amazon without revenue loss (Madeka et al. 2022), lower out-of-stock rates and turnover times at Alibaba (Liu et al. 2023, Xie et al. 2026), and a 40% cost reduction at JD.com (Qi et al. 2023). These results show that DRL can handle scale and stochasticity in real supply chains, but they are for settings without hard combinatorial action constraints. arXiv:2608.02343v1 [cs.AI] 3 Aug 2026 2 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+> dimension 1
+> dimension 2
+
+(a) Shared downstream resource. 
+
+> Action space
+> target action
+> projected action
+> projection step
+> shared constraint
+> individual constraints
+> feasible action set
+> dimension 1
+> dimension 2
+
+(b) Individual downstream resources.  
+
+> Figure 1 Feasible action sets for a two-dimensional action space with shared and individual constraints. In (a), a shared constraint limits sum of actions, so scaling restores feasibility. In (b), dedicated constraints limit individual actions. The active constraints depend on the target, so restoring fea-sibility requires solving an optimization problem.
+
+For constrained problems, however, mixed-integer linear programs (MILPs) remain the workhorse, as they encode operational requirements directly in the formulation and rely on a solver to guarantee feasibility. State-of-the-art DRL algorithms generally lack this capability. This is a central gap, because many OR problems involve sequential decisions which jointly compete for shared resources. Besides constraints, a second defining feature of many sequential OR problems is that the transitions and costs are differentiable with respect to the state and action. This enables reliable policy optimization via pathwise gradients, which are more sample-efficient and less noisy than statistical policy-gradient estimates. Exemplary applications include queueing-network control (Che et al. 2024), financial hedging (Buehler et al. 2019), predictive process control (Drgoˇ na et al. 2022), and inventory management (B¨ ottcher et al. 2023). In the absence of constraints, Hindsight Differentiable Policy Optimization (HDPO) is the leading approach for learning parameterized differentiable policies for these problems (Madeka et al. 2022, Alvo et al. 2025). Incorporating hard action constraints into differentiable policies nevertheless remains an open challenge. Lagrangian relaxation penalizes violations but does not enforce strict feasibility (Eisenach et al. 2024, Liu et al. 2025), while the differentiable scaling mechanism of Alvo et al. (2025) applies only when scaling is sufficient to restore feasibility. Figure 1 illustrates this limitation. In panel (a), a single joint constraint can be made feasible by scaling the target action toward the origin. In panel (b), multiple constraints are present so it is not clear a priori which ones are binding after feasibility is enforced. In general, identifying the active constraints requires solving an optimization problem, which must itself be differentiable for gradients to flow during training. To address action feasibility under state-dependent, interdependent constraints, we propose a differentiable policy with three sequential modules (Figure 2). First, a differentiable decision rule (in our case a neural network) maps the system state to continuous action targets. Second, a convex differentiable projection module maps these targets onto the feasible set of the continuous relaxation and provides analytical sensi-tivities via implicit differentiation of its optimality conditions. We use a quadratic program (QP) rather than a linear program (LP) relaxation because strong convexity yields a unique optimizer that varies smoothly Helm et al.: Learning Feasible Policies via Differentiable Projection 3
+
+with the QP inputs, whereas LP optima are prone to degeneracy and discontinuous jumps that destabilize sensitivity-based learning (Wilder et al. 2019). We show that the projection sensitivities flowing through the action target are nonexpansive, and thus do not cause gradient instability in the backward pass. Third, a dual-informed integer mapping converts the continuous projected action into feasible discrete decisions by using the projection’s dual variables to prioritize items. Because discrete operations do not provide useful learning signals, we provide surrogate gradients via a straight-through estimator (STE) (Bengio et al. 2013), enabling end-to-end gradient propagation. Because the constraints enter the policy only through the specification of the projection, additional or alternative resource structures leave the architecture untouched. The policy thereby retains the formulation-driven workflow of MILPs, where operational requirements are added to the model rather than to the algorithm. We provide three theoretical guarantees concerning the discrete policy output. First, the two-step mapping stays close to the exact integer projection, both in the projection distance and in the resulting decision, which supports avoiding per-state integer programming. Second, the integer mapping is complete: every feasible action is selected on a positive-measure set of target actions, and hence within reach of a smoothly parameterized decision rule, whereas naive flooring can leave actions that fully utilize some resource unreachable. Third, when the target overshoots the projected action in every coordinate, the mapping returns an action that is limited in at least one coordinate, so the decision rule can push the action up against binding resource limits. We apply this method to inventory management, which is one of the most developed OR applications, where DRL already has real-world impact (Gijsbrechts et al. 2026). Specifically, we consider production– inventory planning in multi-echelon supply networks with finite resources. This setting combines a com-binatorial action space with interdependent hard constraints. Manufacturers must coordinate production decisions across products and locations while accounting for inventory positions, shared capacities, material flows, and long lead times (de Kok et al. 2018). The problem arises, for example, in semiconductor manufac-turing at ASML (Fleuren et al. 2025), on whose benchmark we later validate our method. No optimal policy structure or universally well-performing heuristic is known for this problem, precisely because the combina-torial constrained action space is not natively handled by existing methods. In this setting, as in many other OR problems, the differentiable projection module decomposes into independent subproblems, because the resource constraints tend to be local (e.g., tied to machines, production facilities, and bill-of-material structure). We exploit this structure to scale our method to large instances with local constraints. Our method attains an average optimality gap below 1% on 3-item instances without instance-specific hyperparameter tuning. On 10-item instances based on the supply network from Tempelmeier and Derstroff (1996), we create cost savings of up to 9.75% compared to the state-of-the-art echelon base-stock policy 4 Helm et al.: Learning Feasible Policies via Differentiable Projection  
+
+> 𝑥 1𝑡
+> 𝑥 2𝑡
+> z𝑡
+> x∗
+> 𝑡 x∗
+> 𝑡 x𝑡
+> State
+> proposed decision
+> continuous feasible decision
+> integer feasible decision
+> QP gradients
+> straight-through gradients
+
+forward 
+
+backward  
+
+> Figure 2 Overview of the proposed differentiable policy. A neural network proposes action targets, which are first projected onto the relaxed feasible set by a QP, and then mapped to discrete decisions. Gradients flow end-to-end using surrogate gradients for the non-differentiable integer mapping.
+
+of van Dijck et al. (2026) and consistently outperform a rolling-horizon multi-stage stochastic program by at least 7.7% . The advantage is strongest in tightly capacitated networks with high demand variability and resources shared across echelons, where the base-stock policy struggles. We further evaluate the policy on the 14-item instance of the 2025 ASML Research Challenge, a realistic industry benchmark (van Dijck et al. 2025). Across two demand settings, our policy reduces average cost by 3.22% and 2.54% relative to the best-known policy for this problem, namely a forecast-based echelon base-stock policy with min-max relative shortfall allocation (van Dijck et al. 2026), and first-order stochastically dominates the baseline in the realized-cost distribution. Whereas the baselines require forecasts of future demand to make decisions, our method learns a data-driven mapping from demand features directly to production decisions. An ablation study confirms that all three modules are essential: ignoring the projection sensitivities causes training divergence, and replacing the dual-informed integer map with naive floor rounding increases cost by up to 
+
+15 .8% , which is consistent with our theoretical results. In sum, our main contributions are: 
+
+• A differentiable policy architecture that produces feasible discrete production decisions under interde-pendent action constraints. It combines a differentiable decision rule (e.g., a neural network), a convex projection onto the continuous feasible set, and a dual-informed integer mapping into a single end-to-end differentiable policy trained via pathwise gradients without per-state mixed-integer optimization. 
+
+• Theoretical guarantees on the projection and integer-mapping modules. We bound the optimality and decision-distance gaps introduced by integer mapping, show that every feasible integer action is reachable from a positive-measure target region, and provide a sufficient condition on the target under which the policy chooses a frontier action. 
+
+• Numerical validation across three sets of experiments of increasing scale and complexity: small instances with known optimal policies, a literature benchmark based on Tempelmeier and Derstroff (1996), and a realistic industry-scale instance from the 2025 ASML Research Challenge including an ablation study of the policy modules. Helm et al.: Learning Feasible Policies via Differentiable Projection 5
+
+## 2. Literature 
+
+Our work connects three streams of literature: capacitated multi-echelon inventory planning defines the application domain (Section 2.1), DRL for (constrained) inventory control provides the methodological context (Section 2.2), and decision-focused learning supplies the technical backbone (Section 2.3). We review each in turn and position our contribution at their intersection (Section 2.4). 
+
+2.1. Multi-Echelon Inventory Planning in Capacitated Networks 
+
+The resource-constrained production–inventory application we consider in this paper belongs to the class of capacitated multi-echelon inventory planning problems. While capacitated inventory problems have been extensively studied in the literature (Song et al. 2020), their extension to multi-echelon settings has largely been analyzed for specific network structures (de Kok et al. 2018). In convergent or serial systems, most contributions focus on echelon base-stock policies, which are optimal in uncapacitated systems under standard assumptions (Clark and Scarf 1960). Near-optimal base-stock levels in capacitated systems have been derived heuristically by Huh et al. (2016) and using infinitesimal perturbation analysis by Glasserman and Tayur (1995). Recently, van Dijck et al. (2024) propose a balanced echelon base-stock policy for capacitated assembly systems and demonstrate promising performance in a case study from ASML. In divergent and general networks, allocation policies determine how upstream stock is distributed across downstream demand streams. van der Heijden et al. (1997) find that balanced stock rationing performs best in pure divergent systems, especially when downstream service is highly differentiated. de Kok and Fransoo (2003) extend this to balanced linear rationing for general supply networks and show that it outperforms other policies. However, it remains unclear how these allocation rules can be extended to settings with shared resource constraints. General capacitated networks have predominantly been addressed in the multi-level dynamic lot-sizing literature under deterministic demand (Tempelmeier and Derstroff 1996, Malicki and Minner 2026). How-ever, Thevenin et al. (2021) demonstrate that deterministic MILPs are inadequate under stochastic demand and propose rolling-horizon stochastic programming (SP), which yields substantial cost reductions. Fleuren et al. (2025) extend this to stochastic lead times and new product introductions, reporting state-of-the-art per-formance on a case study from ASML. However, van Dijck et al. (2026) show that this approach breaks down at industry scale: on the 2025 ASML Research Challenge, rolling-horizon multi-stage SP is outperformed by an optimized forecast-based echelon base-stock policy with a shortfall-minimizing allocation rule, while requiring multiple orders of magnitude more compute. Since this base-stock policy is the best-known policy for the studied problem class, we use it as our main benchmark alongside rolling-horizon SP in Section 6. 6 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+2.2. Deep Reinforcement Learning for Inventory Control 
+
+Inventory control is one of the most developed application areas for DRL in OR, where real-world impact is already visible (Gijsbrechts et al. 2026). Early work used DRL mainly as a flexible policy-learning tool for classical inventory settings (Oroojlooyjadid et al. 2022, Gijsbrechts et al. 2022). These studies show that DRL can learn competitive replenishment policies without explicitly deriving problem-specific rules. While the discrete action encodings used in these early approaches make hard constraints easy to enforce through masking, they are intractable to scale when many items or locations must be managed jointly. Kaynov et al. (2024) instead relies on random rationing to enforce feasibility in a one-warehouse multiple-retailer (OWMR) setting, which enables a more scalable action representation. While this nudges the policy to learn feasible actions, the allocation does not provide a direct gradient signal for learning. Harsha et al. (2025) explicitly treats combinatorial constrained action spaces by replacing the parametric policy with a stochastic MILP guided by a neural value function. While proving successful for three-echelon distribution systems with up to 6 locations, the method relies on a MILP with an embedded neural network for action selection, which makes computational effort grow with the expressiveness needed for accurate predictions. A separate research stream uses pathwise gradients from differentiable simulators for end-to-end inventory policy learning. Madeka et al. (2022) propose HDPO for inventory control and demonstrate state-of-the-art performance in data-driven optimization with lost sales and stochastic lead times based on a large-scale case study at Amazon. Eisenach et al. (2024) extend this to settings with dynamic storage capacity using a Lagrangian relaxation, where a second neural network predicts state-dependent dual prices to steer the policy toward feasibility. Liu et al. (2025) generalize this idea to dual-sourcing settings with multiple suppliers. Both approaches effectively maintain inventory levels close to capacity in expectation. However, these methods rely on penalizing violations, which does not guarantee feasibility of individual actions, making them incompatible with hard constraints. Since order quantities typically need to be integer in practice, different approaches have been proposed for making discrete decision-making differentiable. B¨ ottcher et al. (2023) learn near-optimal policies on a range of dual-sourcing problems and show that straight-through gradient estimators are effective at smoothing non-differentiable rounding. In contrast, Alvo et al. (2025) train policies in a continuous surrogate system and rely on post-processing at deployment time to obtain discrete decisions, which consistently outperforms the policy of Gijsbrechts et al. (2022) on a variety of settings. For the OWMR setting, they propose a differentiable scaling-based feasibility enforcement mechanism, which is effective for a single constraint but does not generalize to settings with more complex interdependent action constraints (see Figure 1). 
+
+2.3. Decision-Focused Learning and Differentiable Optimization 
+
+Decision-focused learning (DFL) studies the integration of machine learning and constrained optimization into a single decision pipeline. In contrast to classical predict-then-optimize, DFL methods train models with Helm et al.: Learning Feasible Policies via Differentiable Projection 7
+
+respect to downstream decision quality after the learned outputs have been processed by an optimization problem. In our setting, the main purpose of the optimization is enforcing hard interdependent action constraints. In their recent survey, Mandi et al. (2024) distinguish two main ways of obtaining gradients when the downstream decision problem is discrete or otherwise non-differentiable: replacing the decision loss by a surrogate, or differentiating through a relaxed optimization problem. We focus on the contributions most relevant to our setting and refer to Mandi et al. (2024) for more context. Surrogate decision losses avoid differentiating the exact decision map by replacing the downstream loss with a tractable proxy. Examples include the SPO+ loss for predict-then-optimize problems (Elmachtoub and Grigas 2022) and Fenchel–Young losses for structured prediction (Blondel et al. 2020). Hoppe et al. (2025) recently apply this idea to DRL by embedding combinatorial optimization in the policy. This is not applicable to HDPO, since pathwise gradients rely on differentiating the realized trajectory cost through the simulator, which includes the embedded optimization, and therefore cannot easily be replaced by a surrogate. We therefore build on differentiable optimization, which propagates gradients through the solution map of a continuous constrained optimization problem. Differentiable optimization layers have been developed for QPs (Amos and Kolter 2017), cone programs (Agrawal et al. 2019), and LP relaxations (Wilder et al. 2019). Donti et al. (2021) enforce hard constraints on continuous decisions by combining equality completion with an inequality-correction procedure inside the network, and Paulus et al. (2021) embed integer linear programs as layers with surrogate gradients. Both target single-stage decision problems, whereas in our sequential setting the decision feeds back into the state, so gradients must additionally flow through the closed loop. Within reinforcement learning, differentiable optimization layers have mainly been used to enforce safety constraints, for example during exploration (Dalal et al. 2018). Markgraf et al. (2026) note that differentiable optimization can cause rank loss in the local Jacobian and show that shifting safety constraints from the policy to the environment can be beneficial. In our setting, hard constraints are structural instead of safety artifacts. Thus, differentiable optimization allows us to combine hard action constraints with a low-variance training signal from HDPO for complex sequential decision problems. 
+
+2.4. Research Gap 
+
+Due to the combinatorial action space and interdependent hard constraints arising in many sequential decision problems, existing methods primarily rely on MILP formulations, which become computationally prohibitive in high-dimensional settings. Scalable learning-based alternatives are not yet available, since they must simultaneously handle large action spaces, hard feasibility, and delayed cost feedback. We address this methodological gap by proposing a differentiable policy that enforces discrete feasibility through a QP projection module and an integer mapping while enabling efficient end-to-end learning via pathwise gradients. We apply the method to production–inventory planning in capacitated multi-echelon networks, 8 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+where these challenges are particularly pronounced due to tightly coupled resource constraints and long decision horizons. 
+
+## 3. Preliminaries 
+
+3.1. Problem Setting 
+
+We consider a finite-horizon, constrained Markov decision process (MDP) over periods 𝑡 ∈ { 1, . . . , 𝑇 }
+
+with a combinatorial action space and state-dependent feasibility constraints. At the start of period 𝑡 the decision maker observes a state s𝑡 ∈ S and selects a feasible action x𝑡 ∈ A ( s𝑡 ) ⊂ N𝑛  
+
+> 0
+
+, where 𝑛 denotes the action dimension. We focus on the more challenging case of discrete actions, which are relevant in most OR applications, due to the presence of indivisible units, but our method applies also to problems with continuous actions. The feasible action space A ( s𝑡 ) enforces action integrality and linear constraints that we group into two blocks. The first block contains 𝑚 𝐴 constraints with fixed coefficient matrix A ∈ R𝑚 𝐴 ×𝑛 
+
+and a state-dependent right-hand side b𝑡 = b(s𝑡 ) ∈ R𝑚 𝐴 , while the second block contains 𝑚 𝐶 constraints with fixed coefficient matrix C ∈ R𝑚 𝐶 ×𝑛 and fixed right-hand side k ∈ R𝑚 𝐶 . This enables us to account for both dynamic constraints that depend on past decisions, such as material or workforce availability, and static constraints that are given, such as capacity or budget limits. The feasible action space is then given by 
+
+A ( s𝑡 ) := x ∈ N𝑛  
+
+> 0
+
+Ax ≤ b𝑡 , Cx ≤ k , (1) whereas its continuous relaxation Arel (s𝑡 ) is defined by replacing N𝑛  
+
+> 0
+
+with R𝑛  
+
+> ≥0
+
+in (1). After choosing the action x𝑡 , an exogenous random vector 𝚵 𝑡 is realized with sample value 𝝃 𝑡 . Based on that, an immediate cost 𝑐 (s𝑡 , x𝑡 , 𝝃 𝑡 ) is incurred, and the state transitions to s𝑡 +1 = Γ (s𝑡 , x𝑡 , 𝝃 𝑡 ) ∈ S .
+
+Assumptions. We make four assumptions on the MDP. (i) Arel (s𝑡 ) is downward closed for all states s𝑡 :if x is relaxed feasible and 0 ≤ x′ ≤ x componentwise, then so is x′. Nonnegativity of A and C is a sufficient condition, and holds whenever constraints represent the consumption of limited resources, e.g., capacity, material, budget, and workforce limits. Since A ( s𝑡 ) is the intersection of its relaxation with N𝑛  
+
+> 0
+
+, the integer feasible set inherits downward closedness, and the componentwise floor of every relaxed feasible point is an element of A ( s𝑡 ). (ii) The feasible set A ( s𝑡 ) is nonempty for every reachable state. Nonnegativity of b(s𝑡 )
+
+and k is a sufficient condition, and under (i) it is also necessary, since downward closure then makes the zero action feasible. (iii) For fixed uncertainty realizations 𝝃 𝑡 , the per-period cost function 𝑐 and the transition function Γ are deterministic and differentiable almost everywhere in the state and action (s𝑡 , x𝑡 ), so that pathwise gradients can propagate through the unrolled state recursion. (iv) The stochastic process 𝚵 1: 𝑇 is exogenous: its law may depend on exogenous information included in the state, such as observed covariates, but not on the actions or the endogenous part of the state. Assumption (i) is needed only for the proposed integer mapping, and ensures that a local search suffices to restore integrality. Assumption (ii) is required for the projection to be well-defined. Assumptions (iii) and (iv) represent the standard HDPO assumptions (Alvo et al. 2025). Helm et al.: Learning Feasible Policies via Differentiable Projection 9
+
+Objective. A deterministic policy is a map 𝜋 : s ↦ → x ∈ A ( s) that assigns a feasible action to every state. While we focus on stationary policies, which are more relevant in practice, nonstationary policies can be represented by adding the time index 𝑡 to the state (cf. Alvo et al. 2025). We distinguish between the random process 𝚵 1: 𝑇 and a realized sample path 𝝃 1: 𝑇 . Conditional on an initial state s1 and a sample path realization 
+
+𝝃 1: 𝑇 , the system evolves deterministically, and the sample-path average cost of 𝜋 is 
+
+𝑉 (s1; 𝜋, 𝝃 1: 𝑇 ) := 1
+
+𝑇 
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+𝑐 (s𝑡 , 𝜋 (s𝑡 ), 𝝃 𝑡 ), s.t. s𝑡 +1 = Γ (s𝑡 , 𝜋 (s𝑡 ), 𝝃 𝑡 ) ∀𝑡 ∈ { 1, . . . , 𝑇 − 1}.
+
+We seek an optimal policy 𝜋 ∗ that minimizes the expected sample-path average cost, where the expectation is taken over the initial state and the exogenous stochastic process: 
+
+𝜋 ∗ ∈ arg min  
+
+> 𝜋
+
+ES1 ,𝚵 1: 𝑇 [𝑉 (S1; 𝜋, 𝚵 1: 𝑇 )] .
+
+3.2. Hindsight Differentiable Policy Optimization 
+
+We adopt the HDPO framework of Madeka et al. (2022), B¨ ottcher et al. (2023) and Alvo et al. (2025) to optimize the policy. We consider a parameterized differentiable policy 𝜋 𝜽 (e.g., a neural network) with parameter vector 𝜽 ∈ R𝑛 𝜽 , and define the parameter optimization problem as 
+
+𝜽 ∗ ∈ arg min  
+
+> 𝜽
+
+𝐽 (𝜽 ) with 𝐽 (𝜽 ) := ES1 ,𝚵 1: 𝑇 [𝑉 (S1; 𝜋 𝜽 , 𝚵 1: 𝑇 )] .
+
+Parameter updates use stochastic gradient descent (SGD) with learning rate 𝜂 > 0,
+
+𝜽 ′ = 𝜽 − 𝜂 ˆ∇𝐽 (𝜽 ),
+
+or a more advanced gradient-based stochastic optimizer such as Adam (Kingma and Ba 2015). To estimate 
+
+∇𝐽 (𝜽 ), we use pathwise gradients obtained by automatic differentiation through a differentiable simulator. Unlike score-function estimators such as REINFORCE (Williams 1992), pathwise gradients propagate sensitivities directly along the trajectory. This typically yields lower-variance gradient estimates under delayed costs and permits a deterministic training policy, avoiding the training–evaluation mismatch caused by stochastic exploration. In each iteration, we sample a batch of 𝑁 ∈ N trajectories under the current policy 
+
+𝜋 𝜽 , roll them out in the differentiable simulator, and backpropagate through each sample path. This yields the gradient estimator 
+
+ˆ∇𝐽 (𝜽 ) = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑛 =1
+
+∇𝑉 
+
+
+
+s(𝑛 ) 
+
+> 1
+
+; 𝜋 𝜽 , 𝝃 (𝑛 )
+
+> 1: 𝑇
+
+
+
+.
+
+Under mild regularity conditions, this estimator is unbiased for the true gradient for a fully differentiable policy (Suh et al. 2022). HDPO alternates between simulating rollouts and updating the policy parameters. 
+
+## 4. Constrained Hindsight Differentiable Policy Optimization 
+
+We develop a policy that makes HDPO compatible with the hard constraints in (1) while preserving differentiability. Starting from a potentially infeasible target action, a differentiable projection followed by an integer mapping ensure discrete feasibility while allowing gradients to flow end to end (Section 4.1). 10 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+𝑡 = 1
+
+> 𝑥 1𝑡
+> 𝑥 2𝑡
+> z1
+> x∗
+> 1
+> x∗
+> 1
+> x1
+
+s1 z1 x∗ 
+
+> 1
+
+x1 
+
+> 𝜕 x1
+> 𝜕 x∗
+> 1
+> ≈I𝜕 x∗
+> 1
+> 𝜕 z1
+> 𝜕 z1
+> 𝜕 s1
+
+𝑡 = 2  
+
+> x1𝑡
+> x2𝑡
+> z2=x∗
+> 2
+> x∗
+> 2
+> x2
+
+s2 z2 x∗ 
+
+> 2
+
+x2 
+
+> 𝜕 x2
+> 𝜕 x∗
+> 2
+> ≈I𝜕 x∗
+> 2
+> 𝜕 z2
+> 𝜕 z2
+> 𝜕 s2
+
+𝑡 = 𝑇  
+
+> 𝑥 1𝑡
+> 𝑥 2𝑡
+> z𝑇
+> x∗
+> 𝑇 x∗
+> 𝑇 x𝑇
+
+s𝑇 z𝑇 x∗ 
+
+> 𝑇
+
+x𝑇  
+
+> 𝜕 x𝑇
+> 𝜕 x∗
+> 𝑇
+> ≈I𝜕 x∗
+> 𝑇
+> 𝜕 z𝑇
+> 𝜕 z𝑇
+> 𝜕 s𝑇
+
+s2
+
+𝑐 1
+
+𝑐 2
+
+𝑐 𝑇 
+
+> +
+> +
+> 𝜕𝑐 1
+> 𝜕 x1
+> 𝜕𝑐 1
+> 𝜕 s1
+> 𝜕𝑐 2
+> 𝜕 x2
+> 𝜕𝑐 2
+> 𝜕 s2
+> 𝜕𝑐 𝑇
+> 𝜕 x𝑇
+> 𝜕𝑐 𝑇
+> 𝜕 s𝑇
+> 𝜕 s2
+> 𝜕 x1
+> 𝜕 s3
+> 𝜕 x2
+
+∇𝑉 (s1, 𝜋 𝜽 , 𝝃 1: 𝑇 )
+
+... ... ... ... ...
+
+... ...
+
+forward 
+
+backward 
+
+Figure 3 Full differentiable policy including pathwise gradients for one HDPO trajectory. 
+
+We then provide theoretical guarantees on the reachability of feasible actions and the selection of frontier actions that distinguish our integer mapping from naive flooring (Section 4.2). All proofs are provided in Appendix E. 
+
+4.1. Integer-Feasible Policy Architecture 
+
+The central challenge is that the action must satisfy hard interdependent constraints and ultimately be integer, while discrete optimization itself does not provide useful local Jacobians for HDPO. We therefore augment the neural network, which carries the learnable parameters 𝜽 and maps the state s𝑡 to a continuous target z𝑡 ∈ R𝑛 
+
+> ≥0
+
+, with two sequential modules: the differentiable projection enforces feasibility while relaxing integrality, and the integer mapping converts the result into an implementable discrete action x𝑡 ∈ A ( s𝑡 ).Figure 3 illustrates the resulting forward and backward passes within HDPO. We introduce the two modules in turn, deriving the analytical gradients of the projection (Section 4.1.1) and the straight-through gradients of the integer mapping (Section 4.1.2). 
+
+4.1.1. QP Projection and Sensitivities While z𝑡 represents the targeted action, it need not satisfy the constraints in (1). We therefore project z𝑡 to a feasible continuous action x∗ 
+
+> 𝑡
+
+by minimizing the squared weighted Euclidean distance, using weights 𝑤 𝑖 > 0 with Í𝑖 ∈ [ 𝑛 ] 𝑤 𝑖 = 1 collected in the diagonal matrix Helm et al.: Learning Feasible Policies via Differentiable Projection 11 
+
+W := diag (𝑤 𝑖 )𝑖 ∈ [ 𝑛 ] . We use [𝑙 ] to denote the index set {1, . . . , 𝑙 } for a positive integer 𝑙 . Larger weights penalize deviations in coordinate 𝑖 more strongly, so that a priori differences in scale or importance across coordinates can be encoded. The weights are exogenous to the policy and held fixed during training. We restate the relaxed action space of Section 3.1 in terms of the stacked constraint matrix M ∈ R𝑚 ×𝑛 
+
+with 𝑚 := 𝑚 𝐴 + 𝑚 𝐶 + 𝑛 , and the stacked right-hand side r𝑡 ∈ R𝑚 as 
+
+Arel (s𝑡 ) = {x ∈ R𝑛 : Mx ≤ r𝑡 }, M :=
+
+ AC
+
+−I
+
+
+
+, r𝑡 :=
+
+b𝑡 
+
+k0
+
+
+
+,
+
+where Mx ≤ r𝑡 summarizes the state-dependent, static, and nonnegativity constraints. The projected action 
+
+x∗ 
+
+> 𝑡
+
+is then given as the point in Arel (s𝑡 ) closest to the target z𝑡 in terms of the squared weighted Euclidean norm ∥ · ∥ 2
+
+> W
+
+. This projection 𝑃 𝑡 can be computed by solving the following QP: 
+
+x∗ 
+
+> 𝑡
+
+= 𝑃 𝑡 (z𝑡 ) := arg min   
+
+> x∈ A rel (s𝑡 )
+
+𝑓 𝑡 (x; z𝑡 ) with 𝑓 𝑡 (x; z𝑡 ) := 12∑︁ 𝑖 ∈ [ 𝑛 ]
+
+𝑤 𝑖 (𝑥 𝑖,𝑡 − 𝑧 𝑖,𝑡 )2 = 12 ∥x − z𝑡 ∥2
+
+> W
+
+. (2) Because W is positive definite, the objective is strongly convex (Boyd and Vandenberghe 2004). Together with nonemptiness of Arel (s𝑡 ) by Assumption (ii), this makes the projected action unique. The optimization problem can be solved with a primal-dual QP solver or a specialized algorithm for Euclidean projection onto convex sets, which returns both x∗ 
+
+> 𝑡
+
+and the optimal dual prices 𝝀 ∗ 
+
+> 𝑡
+
+associated with the constraints Mx ≤ r𝑡 .The separability of the QP gives rise to a decomposition that is central to the scalability of our approach. The constraint matrix M induces a bipartite variable–constraint graph whose connected components partition the variables into independent clusters that share no constraint. Because the objective (2) is separable across variables, the projection splits into one independent QP per cluster, each of which can be solved in parallel, so the per-step projection cost is governed by the size of the largest cluster rather than the global action dimension 𝑛 . In many applications these clusters are typically small, since constraint couplings are local, so the projection stays cheap even on large-scale instances, as demonstrated in Section 6. For HDPO, however, we need more than the projected action itself: we also need the local Jacobians of the projection map with respect to its inputs. Amos and Kolter (2017) show that the QP map is differentiable almost everywhere and subdifferentiable everywhere. Lemma 1 gives closed-form expressions for the two sensitivities for a locally fixed active set based on the general expressions in Amos and Kolter (2017). If the active constraints are linearly dependent, the target-channel Jacobian remains well defined because it does not depend on which linearly independent subset is selected. For the right-hand-side channel, on the measure-zero set where the active set is not locally fixed, the solution map is only directionally differentiable, and we use the generalized subgradient. The sensitivities with respect to the constraint coefficients can be derived analogously in case those depend on the state as well. Corollary 1 gives structural interpretations of the Jacobians: it characterizes the response to target perturbations into three regimes, establishes that the target-channel Jacobian is nonexpansive, and describes the response to a relaxation of the state-dependent constraints. 12 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+Perturbing z
+
+𝑥 1
+
+𝑥 2
+
+𝑏 
+
+𝑏 z z + 𝛿 z
+
+x∗ x∗ + 𝛿 x
+
+(a) Differentiating w.r.t the target point. Perturbing 𝑏 
+
+𝑥 1
+
+𝑥 2
+
+𝑏 
+
+𝑏 
+
+𝑏 + 𝛿 𝑏 
+
+𝑏 + 𝛿 𝑏 
+
+z
+
+x∗ x∗ + 𝛿 x
+
+(b) Differentiating w.r.t the right-hand side.  
+
+> Figure 4 Intuition for differentiating through a Euclidean projection with a single active constraint.
+
+Figure 4 illustrates the structural content of the two Jacobians. The Jacobian 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 z𝑡 describes how infinitesimal target perturbations propagate along the active face. Corollary 1(a) refines this effect coor-dinatewise: if coordinate 𝑖 is unconstrained at the optimum ( Free ), the projection acts as the identity; if coordinate 𝑖 is fully determined by the active set ( Pinned ), the projected action does not respond to its target; otherwise ( Competing ), coordinate 𝑖 shares an active constraint with another coordinate, so increasing 𝑧 𝑖,𝑡 
+
+pushes at least one coupled coordinate downward. The Jacobian 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 b𝑡 describes how relaxations of active right-hand sides enter the solution. Corollary 1(c) shows that such relaxations are absorbed one-for-one by the active constraints, with the induced change in x∗ 
+
+> 𝑡
+
+being the minimum-W-norm adjustment that achieves this absorption. 
+
+LEMMA 1 (QP Jacobians) . Let x∗ 
+
+> 𝑡
+
+be the unique minimizer of (2) , and let ˜M𝑡 and ˜r𝑡 denote the active-constraint matrix and active right-hand side at x∗ 
+
+> 𝑡
+
+, with U𝑡 := 𝜕 ˜r𝑡  
+
+> 𝜕 b𝑡
+
+. Suppose that the active constraints are linearly independent and the active set remains unchanged in a neighborhood of the solution. Then the projection map is locally differentiable in (z𝑡 , b𝑡 ), with Jacobians 
+
+𝜕 x∗
+
+> 𝑡
+
+𝜕 z𝑡 
+
+= I − W−1 ˜M⊤
+
+> 𝑡
+
+ ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+ −1 ˜M𝑡 , 𝜕 x∗
+
+> 𝑡
+
+𝜕 b𝑡 
+
+= W−1 ˜M⊤
+
+> 𝑡
+
+ ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+ −1
+
+U𝑡 .
+
+COROLLARY 1 (Structure of the QP Jacobians) . Adopt the assumptions of Lemma 1, and in addition suppose A, C ≥ 0. For any matrix H write [H]:,𝑖 for its 𝑖 th column and write e𝑖 for the 𝑖 th unit vector. 
+
+(a) Target. Each coordinate 𝑖 ∈ [ 𝑛 ] with 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+> 0 falls into one of three regimes: 
+
+• Free. If [ ˜M𝑡 ]:,𝑖 = 0, then 𝜕 x∗ 
+
+> 𝑡
+> 𝜕𝑧 𝑖,𝑡
+
+= e𝑖 and thus 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+> 𝜕𝑧 𝑖,𝑡
+
+= 1.
+
+• Otherwise it is either: Pinned , 𝜕 x∗ 
+
+> 𝑡
+> 𝜕𝑧 𝑖,𝑡
+
+= 0; or Competing , 0 < 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+> 𝜕𝑧 𝑖,𝑡
+
+< 1 and 𝜕𝑥 ∗ 
+
+> 𝑗,𝑡
+> 𝜕𝑧 𝑖,𝑡
+
+< 0 for some 𝑗 ≠ 𝑖 .
+
+(b) Nonexpansiveness. For every target perturbation Δz𝑡 , 𝜕 x∗ 
+
+> 𝑡
+> 𝜕 z𝑡
+
+Δz𝑡 W ≤ ∥ Δz𝑡 ∥W.
+
+(c) Constraint. ˜M𝑡 𝜕 x∗ 
+
+> 𝑡
+> 𝜕 b𝑡
+
+= U𝑡 , and for every perturbation Δb𝑡 , 𝜕 x∗ 
+
+> 𝑡
+> 𝜕 b𝑡
+
+Δb𝑡 = arg min y
+
+ 12 ∥y∥2 
+
+> W
+
+: ˜ M𝑡 y = U𝑡 Δb𝑡 .
+
+As a map, the projection 𝑃 𝑡 is firmly nonexpansive and hence 1-Lipschitz in ∥ · ∥ W, a classical property of metric projections onto convex sets that requires no regularity assumption (e.g., Bauschke and Combettes 2017). Corollary 1(b) is the local counterpart for the backward pass: the target-channel Jacobian is an Helm et al.: Learning Feasible Policies via Differentiable Projection 13 
+
+orthogonal projector and therefore nonexpansive. As the backward pass through the differentiable simulator multiplies the per-step Jacobians according to the chain rule, the projection neither amplifies target-side perturbations nor inflates the Lipschitz constant of the decision rule, so the target channel does not cause gradient explosion, which is a potential failure mode of HDPO (see Suh et al. 2022). Corollary 1(b) also quantifies the rank loss that Markgraf et al. (2026) identify in differentiable opti-mization layers: 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 z𝑡 has rank 𝑛 − rank ( ˜M𝑡 ), so each linearly independent active constraint removes one direction from the target channel. However, in our case, the signal is routed rather than lost. By Lemma 1, 
+
+𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 b𝑡 has rank equal to the number of active state-dependent constraints, so each direction lost to such a constraint reappears in the right-hand-side channel, where it reaches the earlier decisions that made the resource scarce. Active static constraints lose rank without compensation, which is natural, since a binding fixed capacity cannot be relaxed by any decision. In summary, the projection is unique, differentiable almost everywhere, and has stable, interpretable sensitivities with respect to the action targets. By itself, however, it does not guarantee integrality. 
+
+4.1.2. Integer Mapping To obtain an integer action x𝑡 ∈ A ( s𝑡 ) close to z𝑡 under the weighted Euclidean metric (2) without solving a separate integer program, we use a local dual-informed mapping around x∗ 
+
+> 𝑡
+
+. Denote this mapping by IM 𝑡 , so the implemented action is x𝑡 = IM 𝑡 (x∗ 
+
+> 𝑡
+
+, z𝑡 , 𝝀 ∗ 
+
+> 𝑡
+
+(z𝑡 )) . The mapping proceeds in three steps. First, initialize at the componentwise floor x𝐹 𝑡 := ⌊x∗ 
+
+> 𝑡
+
+⌋, which is integer and feasible because the relaxed feasible set is downward closed by Assumption (i). Second, compute a priority score for each coordinate, 
+
+𝜎 𝑖,𝑡 = 𝑓 𝑡 (x𝐹 𝑡 ; z𝑡 ) − 𝑓 𝑡 (x𝐹 𝑡 + e𝑖 ; z𝑡 ) − [ M⊤𝝀 ∗ 
+
+> 𝑡
+
+]𝑖 .
+
+The first two terms give the exact one-step change in the projection objective at the floor point, and the last term penalizes implied constraint usage via the dual prices. Third, sort coordinates by decreasing 𝜎 𝑖,𝑡 
+
+and traverse the list once: at each coordinate, accept the unit increment only if the resulting action remains feasible and does not increase 𝑓 𝑡 (· ; z𝑡 ). This greedy local search augments the conservative floor solution with feasibility-preserving upward moves that are most promising under the local dual information. It remains to specify how gradients pass through the integer mapping. Since the integrality mapping is piecewise constant in x∗ 
+
+> 𝑡
+
+, its exact Jacobian is zero almost everywhere and undefined at the integer boundaries, providing no useful learning signal. We therefore replace its Jacobian with a straight-through estimator (STE) (cf. B¨ ottcher et al. 2023) that treats the integer-mapping step as the identity during backpropagation, unaffected by the target z𝑡 and the dual prices 𝝀 ∗ 
+
+> 𝑡
+
+:
+
+d𝜕 x𝑡 
+
+𝜕 x∗
+
+> 𝑡
+
+:= I, d𝜕 x𝑡 
+
+𝜕 z𝑡 
+
+:= 0, d𝜕 x𝑡 
+
+𝜕 𝝀 ∗
+
+> 𝑡
+
+:= 0.
+
+This surrogate acts as a linear interpolation of the underlying step function in x∗ 
+
+> 𝑡
+
+and is analogous to differentiating the continuous relaxation of a discrete optimization problem (cf. Wilder et al. 2019). It trades 14 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+biased gradients in the backward pass for forward-pass fidelity, since integer actions are used throughout training so the visited states coincide with those at evaluation. We justify this and other choices in the ablation study in Section 6.5. 
+
+4.2. Theoretical Guarantees 
+
+We provide three structural guarantees for the proposed policy architecture: a projection error bound, a completeness property, and a frontier selection result. First, we bound the error introduced by the two-step mapping from z𝑡 to x𝑡 via x∗ 
+
+> 𝑡
+
+with respect to the optimal integer solution x𝐼 𝑡 to the discrete projection problem. Proposition 1 bounds both the projection-metric gap to the optimal integer solution and the corresponding decision distance. The bound is expressed in absolute terms for near-feasible z𝑡 to avoid distortions resulting from tiny denominators and otherwise in relative terms. Absolute bounds for far-from-feasible z𝑡 are uninformative since the slope of the quadratic projection distance becomes arbitrarily steep. This shows that the two-step mapping adds limited error in terms of the projection objective and the actual decision. This justifies the use of the tractable two-step mapping for the nondifferentiable discrete projection problem. 
+
+PROPOSITION 1 (Bounded integer mapping error) . Fix a state s𝑡 and target z𝑡 , and write 𝑓 𝑡 (x) :=
+
+𝑓 𝑡 (x; z𝑡 ). Let x∗ 
+
+> 𝑡
+
+∈ arg min x∈ A rel (s𝑡 ) 𝑓 𝑡 (x) be the relaxed QP solution from (2) , and let x𝐼 𝑡 ∈ arg min x∈ A ( s𝑡 ) 𝑓 𝑡 (x)
+
+be an optimal integer feasible solution. Define 𝑅 𝑡 := ∥z𝑡 − x∗ 
+
+> 𝑡
+
+∥W. Suppose that x𝑡 ∈ A ( s𝑡 ) is obtained from 
+
+x∗ 
+
+> 𝑡
+
+via IM 𝑡 . Then, for any 𝜌 > 0:(i) Objective gap. 
+
+𝑅 𝑡 ≤ 𝜌 ⇒ 𝑓 𝑡 (x𝑡 ) − 𝑓 𝑡 (x𝐼 𝑡 ) ≤ 12 + 𝜌, 𝑅 𝑡 > 𝜌 ⇒ 𝑓 𝑡 (x𝑡 ) − 𝑓 𝑡 (x𝐼 𝑡 )
+
+𝑓 𝑡 (x𝐼 𝑡 ) ≤ 1
+
+𝜌 2 + 2
+
+𝜌 .
+
+(ii) Decision distance. 
+
+𝑅 𝑡 ≤ 𝜌 ⇒ ∥ x𝑡 − x𝐼 𝑡 ∥W ≤ 1 +√︁ 1 + 2𝜌, 𝑅 𝑡 > 𝜌 ⇒ ∥x𝑡 − x𝐼 𝑡 ∥W
+
+𝑅 𝑡 
+
+≤ 1
+
+𝜌 +√︄ 1
+
+𝜌 2 + 2
+
+𝜌 .
+
+Second, we show that the integer mapping, in contrast to naive flooring, is complete on the entire action set by analyzing the reachability for the differentiable projection and integer mapping modules. We write 
+
+ΦIM  
+
+> 𝑡
+
+(z𝑡 ) := IM 𝑡 
+
+ 𝑃 𝑡 (z𝑡 ), z𝑡 , 𝝀 ∗ 
+
+> 𝑡
+
+(z𝑡 ), ΦF 
+
+> 𝑡
+
+(z𝑡 ) := ⌊𝑃 𝑡 (z𝑡 )⌋ ,
+
+for the QP–integer-mapping and QP–floor compositions, evaluated at a target z𝑡 . We call the minimal expressiveness requirement on such maps completeness and define it as follows. 
+
+DEFINITION 1 (C OMPLETENESS ). Fix a state s𝑡 ∈ S and let Q ⊆ A ( s𝑡 ). A measurable map R : R𝑛  
+
+> ≥0
+
+→A ( s𝑡 ), as a function of the target z𝑡 , is complete on Q if the target preimage R−1 (q) := {z𝑡 ∈ R𝑛  
+
+> ≥0
+
+: R ( z𝑡 ) = q}
+
+has positive Lebesgue measure for every q ∈ Q . It is incomplete on Q at s𝑡 if R−1 (q) has Lebesgue measure zero for some q ∈ Q .Helm et al.: Learning Feasible Policies via Differentiable Projection 15       
+
+> 𝑥 1
+> 𝑥 2
+> (0,0)
+> (0,2)
+> (2,0)
+> (0,1)
+> (1,0)
+> (1,1)
+
+(a) Floor rounding creates positive-area target regions for every feasible action except the active (1, 1), which it reaches only from the measure-zero target ray (green).       
+
+> 𝑥 1
+> 𝑥 2
+> (0,0)
+> (0,2)
+> (2,0)
+> (0,1)
+> (1,0)
+> (1,1)
+
+(b) Our integer mapping creates positive-area target regions for all integer feasible points, making them reachable from positive-measure target sets.           
+
+> Figure 5 Preimages of the integer feasible points under floor rounding (left) and our integer mapping (right) for 𝑥 1+𝑥 2≤2with 𝑥 1, 𝑥 2∈N0.
+
+Completeness requires that every feasible integer action in Q can be selected from a non-negligible set of continuous targets. This matters for learning because if an action has only a measure-zero preimage, it is practically impossible for a smoothly parameterized decision rule to select it. To locate where the two maps differ, we partition the feasible actions by constraint activity. We write 
+
+Aact (s𝑡 ) := q ∈ A ( s𝑡 ) : (Aq )𝑙 = 𝑏 𝑙,𝑡 for some 𝑙 ∈ [ 𝑚 𝐴 ], or (Cq ) 𝑗 = 𝑘 𝑗 for some 𝑗 ∈ [ 𝑚 𝐶 ]
+
+for the active boundary, i.e., the set of integer actions at which some constraint is active, and Aslack (s𝑡 ) :=
+
+A ( s𝑡 ) \ A act (s𝑡 ) for those at which none is. Proposition 2 contrasts the two compositions: our integer mapping is complete everywhere, whereas naive flooring is complete only away from the active boundary. This distinction is essential since the active boundary contains the actions that fully utilize some resource, which are of particular practical importance. Figure 5 illustrates the difference in a two-dimensional single-constraint example. Since completeness of our integer mapping holds for any positive W, the weighting rescales the target space rather than restricting the reachable action set. The incompleteness of flooring holds for every positive W as well, so it is structural and cannot be remedied by reweighting the projection. 
+
+PROPOSITION 2 (Completeness of the integer mapping and flooring) .
+
+(a) For all constraint structures (A, b𝑡 , C, k) satisfying Assumptions (𝑖 ) − ( 𝑖𝑖 ), positive weights W, and every state s𝑡 ∈ S , ΦIM  
+
+> 𝑡
+
+is complete on A ( s𝑡 ) and ΦF 
+
+> 𝑡
+
+is complete on Aslack (s𝑡 ).(b) There is a constraint structure (A, b𝑡 , C, k) satisfying Assumptions (i)-(ii), and a state s𝑡 ∈ S for which 
+
+ΦF 
+
+> 𝑡
+
+is not complete on Aact (s𝑡 ) for every set of positive weights W.
+
+Third, we show that the integer mapping selects an action on the frontier of the feasible set for ambitious targets. While completeness is an expressiveness property, it does not describe which action is selected for a given target. Proposition 3 shows that when every coordinate of the projection residual z𝑡 − x∗ 
+
+> 𝑡
+
+exceeds half 16 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+a unit, the integer mapping returns an action on the integer frontier. The integer frontier is the set of feasible actions for which some unit increment is infeasible. This is desirable in practice, because leaving resources unused is wasteful if action targets are ambitious. When the QP can be decomposed, the result naturally applies to each cluster separately. 
+
+PROPOSITION 3 (Frontier selection) . Define the integer frontier of the feasible set as 
+
+F ( s𝑡 ) := y ∈ A ( s𝑡 ) : ∃ 𝑖 ∈ [ 𝑛 ] such that y + e𝑖 ∉ A ( s𝑡 ) .
+
+If the projection residual satisfies 𝑧 𝑖,𝑡 − 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+> 12 for every 𝑖 ∈ [ 𝑛 ], then ΦIM  
+
+> 𝑡
+
+(z𝑡 ) ∈ F ( s𝑡 ).
+
+In summary, the three results of this section show that the policy’s discrete output is well behaved. The two-step mapping adds only a bounded rounding error. Furthermore, unlike naive flooring, which remains incomplete on the active boundary under every choice of weights for certain instances, our integer mapping can always reach the boundary actions that matter most in tightly constrained systems and, when the target is ambitious enough, pushes decisions onto the integer frontier. 
+
+## 5. Production–Inventory Planning in General Networks 
+
+We describe the application of our method to a centralized periodic-review production–inventory planning problem on a general multi-echelon network. The network consists of items I = I𝐶 ∪ I 𝐸 , partitioned into component items I𝐶 that feed downstream production stages and end items I𝐸 that face external customer demand ( I𝐶 ∩ I 𝐸 = ∅). Items are linked by bill-of-material (BOM) relationships encoded in the matrix 
+
+A ∈ N| I 𝐶 | × | I |  
+
+> 0
+
+, where 𝐴 𝑖, 𝑗 denotes the number of units of component item 𝑖 ∈ I 𝐶 required to produce one unit of item 𝑗 ∈ I . We assume the BOM graph is acyclic. Production is subject to deterministic item-specific lead times 𝜏 𝑖 ∈ N and shared static resource constraints. A set of resources G is available with 𝑘 𝑔 ∈ N units per period, and the consumption matrix C ∈ N| G | × | I |  
+
+> 0
+
+specifies the units 𝐶 𝑔,𝑖 of resource 𝑔 ∈ G consumed per unit of item 𝑖 ∈ I . This formulation allows for general convergent–divergent multi-echelon structures with shared resources and contains serial, assembly, and distribution networks as special cases. External demand Ξ𝑖,𝑡 ∈ N0 arises only for end items 𝑖 ∈ I 𝐸 and is modeled as an exogenous stochastic process that may be non-stationary over time, with realization 𝜉 𝑖,𝑡 observed in period 𝑡 . Excess end-item demand is backordered. Demand for components is endogenous through the BOM. An exogenous observable feature vector sfeat  
+
+> 𝑡
+
+available at the start of period 𝑡 summarizes demand-relevant covariates to forecast future demand. Costs are incurred for holding inventory at a per-period unit cost ℎ𝑖 ∈ R+ for each item 𝑖 ∈ I and for backordered end-item demand at a per-period unit penalty 𝑝 𝑖 ∈ R+ for each end item 𝑖 ∈ I 𝐸 . We do not model setup times or setup costs. At the tactical level considered here, the review period is long relative to changeover frequency, so each item is produced in nearly every period and setup time is approximately constant across periods. The setup time can therefore be subtracted from the available capacity k rather than Helm et al.: Learning Feasible Policies via Differentiable Projection 17 
+
+modeled through endogenous setup decisions. To the extent that setup costs represent the opportunity cost of the capacity consumed by changeovers (Karmarkar 1987), they are captured by the same reduction. The tactical decision is thus how much to produce rather than whether to set up. At the start of period 𝑡 , the state s𝑡 contains on-hand component inventories o𝐶 𝑡 , end-item inventory levels, outstanding pipeline orders, and demand-relevant features. The action x𝑡 ∈ N| I |  
+
+> 0
+
+specifies the integer production quantities released for all items in period 𝑡 . Production is constrained by material availability and shared resources, encoded respectively as Ax 𝑡 ≤ o𝐶 𝑡 and Cx 𝑡 ≤ k. The transition Γ and cost 𝑐 are differentiable almost everywhere and demand is exogenous, satisfying Assumptions (iii)–(iv). This instantiates the generic MDP of Section 3.1 with action dimension 𝑛 = |I| , 𝑚 𝐴 = |I 𝐶 | state-dependent constraints with right-hand side b𝑡 := o𝐶 𝑡 , and 𝑚 𝐶 = |G| state-independent constraints. Since material and resource consumption as well as on-hand inventories are nonnegative, A ≥ 0, C ≥ 0, b𝑡 ≥ 0, k ≥ 0 hold in every period, satisfying Assumptions (i)-(ii). The full MDP of the problem is described in Appendix A. Following Xie et al. (2026), we introduce an inductive bias into the policy architecture by considering a differentiable decision rule that outputs a state-dependent echelon-base stock level, from which the action targets are derived using the order-up-to rule. Appendix B gives the full construction and Section 6.5 provides the numerical justification for this choice. 
+
+## 6. Computational Study 
+
+We evaluate the proposed policy across three sets of experiments: small instances with a known optimal policy in Section 6.2, larger capacitated networks based on Tempelmeier and Derstroff (1996) in Section 6.3, and the industry-scale 2025 ASML Research Challenge in Section 6.4. An ablation study isolates the contribution of each policy module in Section 6.5. Since existing HDPO approaches are not directly applicable under hard, interdependent action constraints (Section 2), it also serves as a comparison against design choices made in earlier work. 
+
+Our Policy We use a fully connected neural network with two hidden layers and continuously differen-tiable exponential linear unit (CELU) activations (cf. B¨ ottcher et al. 2023). The width is 32 for the small instances and 128 for the larger instances including the case study. This is the only hyperparameter that we vary across instances to match the network expressiveness with the instance complexity. Parameter optimiza-tion uses Adam (Kingma and Ba 2015) with a base learning rate of 𝜂 = 10 −3, momentum 𝜷 = [0.9, 0.999 ]
+
+and a batch size of 1,024 . The prioritization weights 𝑤 𝑖 in the QP are set inversely proportional to each item’s long-run average gross requirements (external demand for end items and consumption through the BOM for component items) and normalized to sum to one. This gives priority to items with lower demand to balance the structural disadvantage of low-volume items in distance-based allocation. As shown in Section 4.2, this does not structurally restrict the policy class. Further implementation details of our policy are listed in Appendix D.1. 18 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+6.1. Baseline Policies 
+
+We provide an overview of the baseline policies with details deferred to Appendix C. For the ASML case study, we use the baseline configurations of van Dijck et al. (2026) without modification, while the hyperparameters for the other instances are given in Appendix D.2. 
+
+Base-Stock Policies We consider different variants of the structured echelon base-stock policies of van Dijck et al. (2026). The policy raises the echelon inventory position EIP 𝑡 of each item 𝑖 up to a potentially time-varying base-stock level 𝐵 𝑖,𝑡 and allocates production resources to minimize the maximum relative shortfall. Details on the allocation policy are provided in Appendix C. Static base-stock levels ( SBS ) use the long-run mean 𝑚 ′ 
+
+> 𝑖
+
+and standard deviation 𝑠 ′ 
+
+> 𝑖
+
+of echelon lead-time demand, 𝐵 𝑖,𝑡 = ⌈𝑚 ′ 
+
+> 𝑖
+
++ 𝜃 𝑖 𝑠 ′ 
+
+> 𝑖
+
+⌉, and apply under i.i.d. demand. Dynamic forecast-based levels ( DBS ) use the forecasted conditional mean 𝑚 ′ 
+
+> 𝑖,𝑡
+
+and standard deviation 𝑠 ′ 
+
+> 𝑖,𝑡
+
+given sfeat  
+
+> 𝑡
+
+, 𝐵 𝑖,𝑡 = ⌈𝑚 ′ 
+
+> 𝑖,𝑡
+
++ 𝜃 𝑖 𝑠 ′ 
+
+> 𝑖,𝑡
+
+⌉, and apply under non-stationary demand. Appendix C lays out how the echelon lead-time demand moments are computed. The item-specific safety-stock factors 
+
+𝜽 := (𝜃 𝑖 )𝑖 ∈ I are optimized using the black-box simulation-optimization algorithm CMA-ES (Hansen 2023). The single-factor variants SBS and DBS replace 𝜃 𝑖 by a global 𝜃 optimized by 1-D simulation-based grid search. In the small instances of Section 6.2, we additionally report SBS ∗, the globally optimal SBS policy. We obtain 𝜃 ∗ using a simulation-based exhaustive enumeration of safety stock factors that yield unique base stock levels, where bounds are chosen such that all best-found values lie strictly inside. 
+
+MILP Policies We additionally include a multi-stage stochastic program ( MSP ) and its deterministic counterpart ( DET ), both deployed in a rolling horizon. At each period, MSP builds a scenario tree by sampling demand forward from the current state, and implements only the first-stage production decision before re-solving from the updated state. The tree lets production at later nodes adapt to the realized demand history (recourse), while non-anticipativity constraints prevent it from reacting to demand that has not yet been observed. It structurally matches the approach of Thevenin et al. (2021) and Fleuren et al. (2025). DET 
+
+is the special case with a single successor per node and demand fixed to its inflated conditional-mean forecast 
+
+(1 + 𝛾 ) · E 𝚵 𝑡 :𝑡 +𝐻 | sfeat 
+
+> 𝑡
+
+ with safety-stock parameter 𝛾 ≥ 0. With a single successor per node, DET has no recourse. We include it since it is close to what many companies still use for production planning, although we expect it to be outperformed by policies that account for uncertainty explicitly. The full formulation is given in Appendix C.2. To improve the computational efficiency of MSP , we solve the LP relaxation and use a feasible rounding procedure to obtain integer values for the current decision. The rounding is structurally identical to our integer mapping but sorts the coordinates according to the fractional part of the LP solution because evaluating the effect on the objective would require re-solving the LP. Prior work found this to provide statistically indistinguishable results from the MIP policy, while requiring 10 times less computation time (van Dijck et al. 2026). Helm et al.: Learning Feasible Policies via Differentiable Projection 19 
+
+6.2. Small Instances 
+
+We investigate the smallest supply network with interdependent action constraints to compare against the optimal policy. The network has |I| = 3 items, with I𝐶 = {1} being the shared component and I𝐸 = {2, 3}
+
+the end items fed by a unit BOM A = [ 0 1 1 ]. Following the terminology of Tempelmeier and Derstroff (1996), we distinguish between a noncyclic resource structure in which every resource is confined to a single BOM level, and a cyclic one in which some resource is shared by an item and one of its (indirect) components. Specifically, we consider two resource structures: noncyclic dedicated resources with C = I and capacities (𝑘 1, 𝑘 2, 𝑘 3) = (3, 1, 2), and cyclic resources with C =  1 1 0 0 0 1 
+
+ and capacities (𝑘 1, 𝑘 2) = (4, 2). In the noncyclic setting, the projection decomposes I𝐶 and I𝐸 , whereas the cyclic setting is not decomposable. All lead times are fixed to 𝜏 𝑖 = 1.We generate a set of instances by varying three parameters: the average resource utilization 𝑢 ∈ { 0.5, 0.8},the variance-to-mean ratio 𝑣 ∈ { 1, 2}, and the shortage-cost ratio 𝑟 ∈ { 0.8, 0.9, 0.95 }. Demand is i.i.d. across periods and independent across end items, with empty feature vector sfeat  
+
+> 𝑡
+
+= [] . The average requirement of each item (demand for end items, consumption for components) is set such that Í𝑖 𝐶 𝑔,𝑖 E [Ξ𝑖 ] = 𝑢 𝑘 𝑔 for every resource 𝑔 ∈ G , i.e., the expected per-period consumption of resource 𝑔 equals a fraction 𝑢 of its capacity. We use 𝑢 to vary the mean demand instead of the capacities such that 𝑘 𝑔 remain integer. The demand distribution is Poisson when 𝑣 = 1 and negative binomial with Var (Ξ𝑖 ) = 𝑣 E [Ξ𝑖 ] when 𝑣 > 1. Instead of the coefficient of variation, we use the variance-to-mean ratio 𝑣 because it directly controls overdispersion for discrete demand: when the mean changes, fixing 𝑣 keeps the same distribution family and only requires changing its parameters. We fix holding costs to (ℎ1, ℎ 2, ℎ 3) = (1, 6, 4) across instances and determine shortage costs such that 𝑟 = 𝑝 𝑖 /( 𝑝 𝑖 + ℎ𝑖 ) holds. This yields a compact testbed of 24 instances across different levels of congestion, demand variability, and shortage severity. We compare our method and SBS ∗ against the optimal average cost obtained by relative value iteration on a truncated state space. The state-space truncation bounds are increased until further enlargement leaves the optimal policy and average cost unchanged. The policies are evaluated on a fixed set of 1,000 demand trajectories of length 10 ,000 , where the first 1,000 periods are discarded as burn-in to ensure that the system reaches its steady state under the current policy. Table 1 shows the gap of the simulated average cost of our method and SBS ∗ relative to the optimal average cost across the 24 instances. Our method achieves optimality gaps below 2% with only two exceptions and an average gap of 0.91% across all instances. We outperform SBS ∗ on 22/24 instances, where the savings are especially pronounced for congested systems with high resource utilization and demand variability. Since 
+
+SBS ∗ is the globally optimal policy within its class, this gap reflects the structural limitation of base-stock policies under interdependent action constraints. This demonstrates the ability of our method to learn near-optimal policies in small instances with interdependent action constraints, and its robustness across different levels of congestion, demand variability, and shortage severity. 20 Helm et al.: Learning Feasible Policies via Differentiable Projection                                                                                      
+
+> 𝑢 =0.5𝑢 =0.8
+> 𝑣 =1𝑣 =2𝑣 =1𝑣 =2Structure Policy 𝑟 =0.80 0.90 0.95 0.80 0.90 0.95 0.80 0.90 0.95 0.80 0.90 0.95 Cyclic Ours 2.18 0.24 0.91 0.59 0.64 0.52 0.98 0.90 1.63 0.61 1.03 0.82
+> SBS ∗1.09 1.15 0.41 1.34 1.28 0.85 4.88 3.66 3.58 5.63 4.10 3.54 Non-cyclic Ours 0.51 0.10 0.70 0.43 0.44 0.60 1.66 1.36 2.36 1.32 0.90 0.55
+> SBS ∗0.99 1.53 0.98 1.90 1.87 1.11 4.19 3.73 2.86 4.92 3.47 3.01
+> Table 1 Optimality gaps (%) for our method and SBS ∗on the small instances. The smallest gap in each column is bold, as is any entry that is not significantly higher than it (one-sided Wilcoxon signed-rank test with 𝑝 < 0.001 ).
+> 8
+> 9
+> 10
+> 5
+> 6
+> 7
+> 1
+> 2
+> 3
+> 4
+
+(a) Supply network.         
+
+> Resource Noncyclic Cyclic A1–4 1, 2, 6 B5–7 3, 4, 7 C8–10 5, 8–10
+
+(b) Resource groups.                   
+
+> Profile 0.9 0.7 0.5 1A–C ––2–A–C –3––A–C 4ABC5CBA
+
+(c) Utilization profiles.  
+
+> Figure 6 10-item resource-constrained supply network structures from Tempelmeier and Derstroff (1996).
+
+6.3. Larger Instances 
+
+We proceed to test our method on a set of larger instances based on the general capacitated network structure from Tempelmeier and Derstroff (1996, Problem Class A), which consists of |I| = 10 items, with |I 𝐸 | = 4
+
+end items, and |G| = 3 resource groups. The network is depicted in Figure 6 (a). Following Tempelmeier and Derstroff (1996), we consider 2 constraint structures with cyclic and noncyclic resource groups listed in Figure 6 (b), and 5 utilization profiles listed in Figure 6 (c), with 𝑘 𝑔 rounded to integers. The BOM and resource consumption matrices are binary. In the noncyclic setting, the projection decomposes into the resource groups, whereas the cyclic setting does not decompose. In addition, we assume a value-added structure for the holding costs, where the holding cost of item 𝑖 is given by ℎ𝑖 = 1 + Í 𝑗 ∈ I 𝐶 𝐴 𝑗,𝑖 ℎ 𝑗 , so that the most upstream items have ℎ𝑖 = 1. Lead times are 𝜏 𝑖 = 1 for all items. The shortage-cost ratio is set to 
+
+𝑟 = 0.9 for all end items. Demand is i.i.d. across periods and independent across end items, with empty feature vector sfeat  
+
+> 𝑡
+
+= [] . Raw demand is gamma distributed and stochastically rounded to integers using a Bernoulli distribution to preserve the expected demand, which is given by E [𝚵 ] = [7, 3, 5, 10 ]⊤. We consider 2 coefficients of variation cov ∈ { 0.5, 0.9} for the raw gamma demand, leading to a testbed of 20 instances. The planning horizon is 𝑇 = 60 periods. We compare our method against SBS , SBS , DET and MSP. All policies are evaluated on a fixed set of 
+
+5,000 demand trajectories with identical initial states and demand realizations. The initial state distribution Helm et al.: Learning Feasible Policies via Differentiable Projection 21                                                                                                                         
+
+> Profile 1 Profile 2 Profile 3 Profile 4 Profile 5 Structure Policy cov =0.5 0.9 0.5 0.9 0.5 0.9 0.5 0.9 0.5 0.9 Cyclic SBS 274.80 615.93 212.89 424.61 211.31 402.75 242.94 537.55 224.07 469.69 SBS 246.25 564.00 192.66 392.61 190.89 370.56 213.63 481.69 203.61 432.15 DET 267.43 570.70 225.54 430.05 225.10 432.31 243.55 491.83 270.99 528.26 MSP 259.38 618.82 208.35 414.86 207.40 399.95 223.85 498.36 218.15 473.22 Ours 231.27 508.98 191.78 382.62 190.43 368.15 204.32 440.52 200.05 422.70
+> Non-cyclic SBS 228.77 489.64 211.80 408.02 211.30 401.44 228.62 492.03 222.31 458.29 SBS 210.68 461.25 191.48 376.46 190.60 370.65 210.39 465.53 202.12 417.41 DET 243.53 518.00 224.49 427.63 225.04 431.00 230.36 491.96 268.34 535.60 MSP 225.63 509.85 207.79 404.68 207.40 399.19 220.43 478.79 216.96 458.51 Ours 206.23 441.19 190.61 373.35 190.78 367.26 201.46 425.53 199.61 412.70
+> Table 2 Average costs per period for all methods on the larger instances. The lowest cost in each column is bold, as is any entry that is not significantly higher than it (one-sided Wilcoxon signed-rank test with 𝑝 < 0.001 ).
+
+for evaluation is generated by a 30 -period warmup simulation under the optimized SBS policy. The results are given in Table 2. Our method outperforms all benchmarks in all but one instance, where the average costs of SBS are not statistically distinct ( +0.09% , 𝑝 = 0.09 ). Cost reductions of our method reach up to 9.75% 
+
+relative to the best baseline, which is SBS consistently. In line with van Dijck et al. (2026), SBS uniformly improves on SBS and MSP outperforms DET in all but two instances, but is strictly worse than SBS. In line with the findings from Section 6.2, the savings are particularly large when (downstream) capacity is tight, as is the case in Profiles 1 (90/90/90) and 4 (90/70/50), and demand is variable. Also, higher cov increases the cost gap in all but one case. The savings are further amplified under the cyclic resource structure, in which the cost reduction of our method compared to SBS tends to be higher than in the noncyclic setting. This confirms that the advantage of our method is largest where the action constraints are most interdependent and do not decompose into simple clusters. 
+
+6.4. Case Study 
+
+We consider the benchmark instances from the 2025 ASML Research Challenge, jointly organized by ASML and the International Society of Inventory Research (van Dijck et al. 2025). The instance is designed to capture the operational characteristics of real-world supply chains in the high-tech industry. It consists of 
+
+|I| = 14 items, including |I 𝐸 | = 3 end items, connected through a general bill-of-materials network with 
+
+|G| = 9 resource groups, as depicted in Figure 7. The resource structure is noncyclic, and the projection decomposes into the nine resource groups, the largest of which contains three items. Each component is required exactly once for every end item and each unit consumes one resource unit. The planning horizon is 
+
+𝑇 = 60 months and the average utilization of all resource groups is either 0.79 or 0.83 . The exogenous demand process is non-stationary and mimics real-world patterns in the high-tech industry. The aggregate market demand follows a cyclical AR(8) process with long-run mean 𝜇 = 15 and innovation variance 𝜎 2 = 4, using 22 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+𝑖 ∈ I 1 2 3 4 5 6 7 8 9 10 11 12 13 14 
+
+𝜏 𝑖 5 8 6 7 8 3 3 3 3 4 3 2 2 3
+
+ℎ𝑖 0.3 0.5 0.2 0.3 0.4 0.6 0.7 0.8 0.9 1.0 1.7 6.0 7.0 8.0 
+
+𝑔 ∈ G A B C D E F G H I
+
+𝑘 𝑔 18 19 18 19 19 18 19 19 19  
+
+> Table 3 Overview of instance parameters for the ASML Research Challenge from van Dijck et al. (2025).
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14  
+
+> Figure 7 14-item supply network structure of the ASML Research Challenge from van Dijck et al. (2025).
+
+autoregressive parameters 𝝓 = [0.6, 0.5, −0.2, −0.2, 0.2, −0.2, 0.1, −0.1]⊤. The market demand is then split stochastically across the end products based on a Dirichlet distribution with parameters 𝜶 combined with an unbiased rounding procedure. Thus, demand is also correlated across end items. The expected demand shares for the end items are 715 , 13 , and 15 , respectively. We use the original challenge with 𝜶 1 =  35 3 , 25 3 , 5
+
+as Setting 1 and the lower-variance demand split with 𝜶 2 = [35 , 25 , 15 ] proposed by van Dijck et al. (2026) as Setting 2. In both settings, the feature vector sfeat  
+
+> 𝑡
+
+contains the last eight aggregate demand observations before rounding. The shortage-cost ratio is 𝑟 = 0.9 for all end items. The remaining instance parameters and resource groups are given in Table 3. We compare our method to SBS, DBS, SBS , DBS , DET and MSP. Note that SBS is the original baseline of the ASML Research Challenge and DBS is the best-known policy for the instances. We evaluate all policies on a fixed set of 5,000 demand trajectories per setting with identical initial states and demand realizations. The initial state distribution for evaluation is generated by a 30 -period warmup simulation under the optimized DBS policy. Table 4 shows that our method significantly reduces total costs in both settings, by 3.22% in Setting 1 and 2.54% in Setting 2 relative to the best-performing benchmark, which is DBS. As reported by van Dijck et al. (2026), DBS finds a very different holding-backorder cost trade-off than MSP, stocking significantly more to avoid backorders. Our method finds a middle ground, incurring lower holding costs than DBS and lower backorder costs than MSP, while outperforming both in terms of total costs. Since ASML’s newest lithography systems exceed US$300 million in value per unit (van Dijck et al. 2026), the capital tied up in inventory is considerable. The 4.1–6.6% holding cost reduction compared to DBS consequently represents economically significant savings. Further, both DBS and MSP require an Helm et al.: Learning Feasible Policies via Differentiable Projection 23 
+
+Setting Costs SBS DBS SBS DBS MSP DET Ours 1 Backorder 73.81 82.20 66.33 68.27 93.65 122.50 73.53 Holding 239.24 227.57 232.49 218.72 195.60 211.08 204.21 Total 313.05 309.77 303.71 286.99 289.25 333.58 277.74 
+
+2 Backorder 59.36 77.52 61.69 60.86 80.65 98.85 62.32 Holding 220.19 204.23 213.02 197.26 180.89 199.34 189.25 Total 279.55 281.75 274.72 258.12 261.54 298.19 251.56          
+
+> Table 4 Average costs per period for all methods on the ASML instances. The lowest cost in each row is bold, as is any entry that is not significantly higher than it (one-sided Wilcoxon signed-rank test with 𝑝 < 0.001 ). 100 200 300 400 500 600
+> Cost per Period
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CDF
+> Method
+> DBS
+> Ours
+> Setting
+> 1
+> 2
+> Figure 8
+
+Empirical CDFs of realized average costs per period for the ASML instances. 
+
+explicit model of future demand to take decisions, whereas our policy maps the observed demand history to production decisions directly. Following B¨ ottcher et al. (2023), we extend the analysis beyond mean costs to the full distribution of realized costs across trajectories. In particular, Figure 8 reports the empirical cumulative distribution functions (CDF) of the realized average costs per period for our method and DBS. The empirical CDF of our method lies above that of DBS in both settings, so the realized cost of our policy is first-order stochastically smaller. Thus, our method not only reduces average costs but also yields a more favorable distribution of outcomes, with a higher probability of achieving lower costs compared to the benchmark. 
+
+6.5. Ablation Study 
+
+We perform an ablation study on the ASML instances to isolate the contributions of the key components of our method. Starting from the full method, we consider four variants, each of which reflects design choices made in prior work. Variant −BS removes the echelon base-stock inductive bias and lets the neural network output production targets directly (Madeka et al. 2022). Variant −STE follows Alvo et al. (2025) by training in the continuous surrogate system and applying integer mapping only at evaluation time, thereby removing the STE during training. Variant −IM replaces the dual-informed integer mapping by a simple rule that always floors production decisions to the nearest smaller integer as done by B¨ ottcher et al. (2023). Variant −KKT keeps the same forward pass but applies an STE to the entire projection. By Corollary 1, this 24 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+Setting −BS −STE −IM 1 +5.81 +1.16 +11.83 2 +7.06 +1.06 +15.79  
+
+> Table 5 Change in total cost (%) relative to our full method for the ablation variants on the ASML instances.
+
+reproduces the Jacobians of Lemma 1 at an empty active set: every coordinate is treated as Free rather than 
+
+Pinned or Competing , and the right-hand-side channel vanishes, as if no constraint were binding. In this case, the QP could be replaced by a MILP or any other non-differentiable projection method used in earlier work (Kaynov et al. 2024). The results are given in Table 5. −KKT consistently leads to divergence during training, and is, hence, not reported in the table. This is because the surrogate sensitivities mistakenly suggest that larger targets uniformly lead to larger actions. Since −KKT reproduces the learning signal that any non-differentiable projection within HDPO would provide, such methods do not merely perform worse than ours, but cannot be trained end to end at all. This demonstrates that the analytical projection gradients are essential for stable training, highlighting the importance of our proposed differentiable projection module. All other variants increase costs relative to our method, with −STE being the least detrimental causing about 1.1% higher cost. Training in a continuous surrogate system would still outperform all baselines, but applying STEs during training is even better, which is in line with B¨ ottcher et al. (2023). Without the echelon base-stock inductive bias, −BS increases costs by 5.8–7.1% , which shows the effectiveness of incorporating structural policy insights in line with Xie et al. (2026). Note that −BS would still outperform all baselines except DBS and MSP. Finally, −IM increases costs by 11 .8–15 .8% . This is consistent with the incompleteness of floor rounding on active actions shown in Proposition 2. Especially the crucial integer actions on the active boundary of the feasible set are oftentimes not reachable by floor rounding, as shown in Figure 5, which leads to significant performance degradation. It is equally consistent with Proposition 3: our integer mapping drives ambitious targets onto the integer frontier, whereas floor rounding systematically leaves spare capacity unused. Overall, the ablation results indicate that all components of our method contribute to its performance, with the differentiable projection and integer mapping playing particularly crucial roles in achieving cost savings and stable training. 
+
+## 7. Conclusion 
+
+We studied end-to-end policy learning for constrained sequential decision problems with combinatorial, state-dependent action spaces, focusing on capacitated multi-echelon production–inventory planning. The key obstacle is that hard, interdependent feasibility constraints break the differentiable scaling and Lagrangian relaxation schemes on which existing policies rely. To close this gap, we proposed a three-module differ-entiable policy: a differentiable decision rule proposes continuous action targets from the system state, a Helm et al.: Learning Feasible Policies via Differentiable Projection 25 
+
+strongly convex QP projects them onto the feasible set of the continuous relaxation while supplying analytical sensitivities through implicit differentiation of its optimality conditions, and a dual-informed integer mapping restores integrality while preserving feasibility and providing surrogate gradients through a straight-through estimator. We showed that our method outperforms both classical policies and a rolling-horizon multi-stage stochastic program on a set of instances of increasing scale and complexity, including a realistic industry benchmark from the 2025 ASML Research Challenge. For managers, the results demonstrate when an end-to-end learned policy is worth its added complexity. When capacity is ample, well-tuned echelon base-stock policies with balanced allocation remain close to the state-of-the-art, and the machinery of policy learning is difficult to justify. The picture changes as utilization rises, demand becomes more variable, and resources are shared across echelons. In those regimes, how much to stock and how to ration scarce capacity across competing items become tightly coupled decisions. Our policy learns to optimize both jointly, whereas conventional policies separate them, which leads to cost savings in exactly those instances. A structural advantage of embedding constraint handling inside the policy is that the operational setting enters only through the QP specification: additional shared resources, alternative capacity structures, or changing material balances change the QP coefficients but leave the neural policy, integer map, and training procedure untouched. In this sense, the policy mirrors the formulation-driven workflow of classical mixed-integer programming, where operational constraints are added to the model rather than to the algorithm. Transfer learning across constraint structures with the same architecture is an interesting avenue to future work. Other research directions follow directly from the key assumptions we made. We assume differentiable system dynamics and exogenous uncertainty to apply the HDPO framework. Where these do not hold, the differentiable simulator can be replaced by a learned critic that provides policy gradients, as in deterministic actor–critic reinforcement learning. While this extends the applicability of our method, it also introduces additional challenges in terms of sample efficiency and training stability. When the relaxed action space is not downward closed, the componentwise floor need no longer be feasible, so our integer mapping requires an additional repair step to recover a feasible starting point. Further, we assume resource limits are given, although capacity can be expanded through long-term investment. Using the projection sensitivities, the resource limits can be optimized alongside the policy. More broadly, our method can be transferred to other constrained sequential decision problems, such as financial hedging and manufacturing process control. 
+
+## Acknowledgments 
+
+> We thank Tjum van Dijck and Tijn Fleuren for providing their implementation of the rolling-horizon multi-stage stochastic program, and of its deterministic counterpart.
+
+26 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+## References 
+
+Agrawal A, Amos B, Barratt S, Boyd S, Diamond S, Kolter JZ (2019) Differentiable convex optimization layers. 
+
+Proceedings of the 33rd International Conference on Neural Information Processing Systems .Alvo M, Russo D, Kanoria Y, Lee M (2025) Deep reinforcement learning for inventory networks: Toward reliable policy optimization. arXiv preprint arXiv:2306.11246 .Amos B, Kolter JZ (2017) OptNet: Differentiable optimization as a layer in neural networks. Proceedings of the 34th International Conference on Machine Learning , volume 70 of PMLR , 136–145. Bauschke HH, Combettes PL (2017) Convex Analysis and Monotone Operator Theory in Hilbert Spaces (Cham: Springer), 2nd edition. Bengio Y, L´ eonard N, Courville AC (2013) Estimating or propagating gradients through stochastic neurons for conditional computation. arXiv preprint arXiv:1308.3432 .Blondel M, Martins AFT, Niculae V (2020) Learning with fenchel–young losses. Journal of Machine Learning Research 21(35):1–69. B¨ ottcher L, Asikis T, Fragkos I (2023) Control of dual-sourcing inventory systems using recurrent neural networks. 
+
+INFORMS Journal on Computing 35(6):1308–1328. Boyd S, Vandenberghe L (2004) Convex Optimization (Cambridge University Press). Buehler H, Gonon L, Teichmann J, Wood B (2019) Deep hedging. Quantitative Finance 19(8):1271–1291. Che E, Dong J, Namkoong H (2024) Differentiable discrete event simulation for queuing network control. arXiv preprint arXiv:2409.03740 .Clark AJ, Scarf H (1960) Optimal policies for a multi-echelon inventory problem. Management Science 6(4):475–490. Dalal G, Dvijotham K, Vecer´ ık M, Hester T, Paduraru C, Tassa Y (2018) Safe exploration in continuous action spaces. 
+
+CoRR abs/1801.08757. de Kok A, Fransoo J (2003) Planning supply chain operations: definition and comparison of planning concepts. de Kok A, Graves S, eds., Design and Analysis of Supply Chains , 597–675, Handbooks in Operations Research and Management Science (North-Holland Publishing Company). de Kok T, Grob C, Laumanns M, Minner S, Rambau J, Schade K (2018) A typology and literature review on stochastic multi-echelon inventory models. European Journal of Operational Research 269(3):955–983. Donti PL, Rolnick D, Kolter JZ (2021) DC3: A learning method for optimization with hard constraints. International Conference on Learning Representations (ICLR) .Drgoˇ na J, Kiˇ s K, Tuor A, Vrabie D, Klauˇ co M (2022) Differentiable predictive control: Deep learning alternative to explicit model predictive control for unknown nonlinear systems. Journal of Process Control 116:80–92. Eisenach C, Ghai U, Madeka D, Torkkola K, Foster D, Kakade S (2024) Neural coordination and capacity control for inventory management. arXiv preprint arXiv:2410.02817 .Helm et al.: Learning Feasible Policies via Differentiable Projection 27 Elmachtoub AN, Grigas P (2022) Smart “predict, then optimize”. Management Science 68(1):9–26. Fleuren T, Merzifonluoglu Y, Sotirov R, Hendriks M (2025) Production–inventory planning in high-tech low-volume manufacturing supply chains. International Journal of Production Economics 288:109687. Gijsbrechts J, Boute RN, van Mieghem JA, Zhang DJ (2022) Can deep reinforcement learning improve inventory management? performance on lost sales, dual-sourcing, and multi-echelon problems. Manufacturing & Service Operations Management 24(3):1349–1368. Gijsbrechts J, Boute RN, van Mieghem JA, Zhang DJ (2026) AI in inventory management: The disruptive era of DRL and beyond. Cohen MC, Dai T, eds., AI in Supply Chains: Perspectives from Global Thought Leaders , 137–148 (Cham: Springer Nature Switzerland). Glasserman P, Tayur S (1995) Sensitivity analysis for base-stock levels in multiechelon production-inventory systems. 
+
+Management Science 41(2):263–281. Hansen N (2023) The CMA evolution strategy: A tutorial. Harsha P, Jagmohan A, Kalagnanam J, Quanz B, Singhvi D (2025) Deep policy iteration with integer programming for inventory management. Manufacturing & Service Operations Management 27(2):369–388. Hoppe H, Baty L, Bouvier L, Parmentier A, Schiffer M (2025) Structured reinforcement learning for combinatorial decision-making. The 39th Annual Conference on Neural Information Processing Systems .Huh WT, Janakiraman G, Nagarajan M (2016) Capacitated multiechelon inventory systems: Policies and bounds. 
+
+Manufacturing & Service Operations Management 18(4):570–584. Karmarkar US (1987) Lot sizes, lead times and in-process inventories. Management Science 33(3):409–418. Kaynov I, van Knippenberg M, Menkovski V, van Breemen A, van Jaarsveld W (2024) Deep reinforcement learn-ing for one-warehouse multi-retailer inventory management. International Journal of Production Economics 
+
+267:109088. Kingma DP, Ba J (2015) Adam: A method for stochastic optimization. International Conference on Learning Repre-sentations (ICLR) .Liu D, Liu Y, Eisenach C (2025) Deep RL dual sourcing inventory management with supply and capacity risk awareness. 
+
+arXiv preprint arXiv:2507.14446 .Liu J, Lin S, Xin L, Zhang Y (2023) AI vs. human buyers: A study of alibaba’s inventory replenishment system. 
+
+INFORMS Journal on Applied Analytics 53(5):372–387. Madeka D, Torkkola K, Eisenach C, Luo A, Foster DP, Kakade SM (2022) Deep inventory management. arXiv preprint arXiv:2210.03137 .Malicki S, Minner S (2026) The impact of initial inventory assumptions on cost performance in lot-sizing models. 
+
+European Journal of Operational Research 329(2):447–459. 28 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+Mandi J, Kotary J, Berden S, Mulamba M, Bucarey V, Guns T, Fioretto F (2024) Decision-focused learning: Founda-tions, state of the art, benchmark and future opportunities. Journal of Artificial Intelligence Research 80:1623– 1701. Markgraf H, Sawant S, Krasowski H, Sch¨ afer L, Gros S, Althoff M (2026) Safe reinforcement learning using action projection: Safeguard the policy or the environment? Transactions on Machine Learning Research Expert Certification. Oroojlooyjadid A, Nazari M, Snyder LV, Tak´ aˇ c M (2022) A deep Q-network for the beer game: Deep reinforcement learning for inventory optimization. Manufacturing & Service Operations Management 24(1):285–304. Paszke A, Gross S, Massa F, Lerer A, Bradbury J, Chanan G, Killeen T, Lin Z, Gimelshein N, Antiga L, Desmaison A, K¨ opf A, Yang E, DeVito Z, Raison M, Tejani A, Chilamkurthy S, Steiner B, Fang L, Bai J, Chintala S (2019) Pytorch: an imperative style, high-performance deep learning library. Proceedings of the 33rd International Conference on Neural Information Processing Systems .Paulus A, Rol´ ınek M, Musil V, Amos B, Martius G (2021) CombOptNet: Fit the right NP-hard problem by learning integer programming constraints. Proceedings of the 38th International Conference on Machine Learning , volume 139 of PMLR , 8443–8453. Qi M, Shi Y, Qi Y, Ma C, Yuan R, Wu D, Shen ZJM (2023) A practical end-to-end inventory management model with deep learning. Management Science 69(2):759–773. Song JS, van Houtum GJ, van Mieghem JA (2020) Capacity and inventory management: Review, trends, and projections. 
+
+Manufacturing & Service Operations Management 22(1):36–46. Suh HJ, Simchowitz M, Zhang K, Tedrake R (2022) Do differentiable simulators give better policy gradients? Pro-ceedings of the 39th International Conference on Machine Learning , volume 162 of PMLR , 20668–20696. Tempelmeier H, Derstroff M (1996) A Lagrangean-based heuristic for dynamic multilevel multiitem constrained lotsizing with setup times. Management Science 42(5):738–757. Thevenin S, Adulyasak Y, Cordeau JF (2021) Material requirements planning under demand uncertainty using stochastic optimization. Production and Operations Management 30(2):475–493. van der Heijden M, Diks E, de Kok A (1997) Stock allocation in general multi-echelon distribution systems with (r, s) order-up-to-policies. International Journal of Production Economics 49(2):157–174. van Dijck T, Fleuren T, Hendriks M, Temizoz T, van Jaarsveld W (2025) ASML supply chain planning challenge. 
+
+https://www.isir2025.com/research-challenge/information .van Dijck T, Fleuren T, Temizoz T, Merzifonluoglu Y, Hendriks M, van Jaarsveld W (2024) Inventory planning in capacitated high-tech assembly systems under non-stationary demand. SSRN 4843271 .van Dijck T, Helm PP, Fleuren T, Temizoz T, van Jaarsveld W (2026) Production-inventory planning in high-tech supply chains: One policy to rule them all? SSRN 6735067 .Helm et al.: Learning Feasible Policies via Differentiable Projection 29 Wilder B, Dilkina B, Tambe M (2019) Melding the data-decisions pipeline: Decision-focused learning for combinatorial optimization. Proceedings of the AAAI Conference on Artificial Intelligence 33(01):1658–1665. Williams RJ (1992) Simple statistical gradient-following algorithms for connectionist reinforcement learning. Machine Learning 8(3-4):229–256. Xie Y, Hao X, Liu J, Ma W, Xin L, Cao L, Zhang Y (2026) Deepstock: Reinforcement learning with policy regulariza-tions for inventory management. arXiv preprint arXiv:2603.19621 .30 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+-
+
+. . . . . . 
+
+Start period 𝑡 
+
+End period 𝑡 
+
+6
+
+Pipeline arrivals. 
+
+Receipt of 𝑥 𝑖,𝑡 − 𝜏 𝑖 .
+
+?
+
+Production decision. x𝑡 ∈ A ( s𝑡 ) released; ˜𝑜 𝑖,𝑡 = 𝑜 𝐶 𝑖,𝑡 − Í 𝑗 𝐴 𝑖 𝑗 𝑥 𝑗,𝑡 , 𝑖 ∈ I 𝐶 .
+
+6
+
+Demand realization. 
+
+𝜉 𝑖,𝑡 observed; ˜𝑜 𝑖,𝑡 = 𝑜 𝐸 𝑖,𝑡 − 𝜉 𝑖,𝑡 , 𝑖 ∈ I 𝐸 .
+
+?
+
+Cost accrual. 
+
+Costs 𝑐 𝑡 incurred. 
+
+Figure 9 Sequence of events within period 𝑡 .
+
+## Appendix 
+
+A. Production–Inventory Planning in General Networks 
+
+State and sequence of events. The state s𝑡 is taken at the start of period 𝑡 , after pipeline arrivals from period 
+
+𝑡 − 𝜏 𝑖 have been received but before any production decision or demand realization. It comprises the on-hand component inventory 𝑜 𝐶 𝑖,𝑡 ∈ N0 for 𝑖 ∈ I 𝐶 , the net inventory of end items 𝑜 𝐸 𝑖,𝑡 ∈ Z for 𝑖 ∈ I 𝐸 (negative values represent backlog), the in-transit pipeline (𝑥 𝑖,𝑡 −𝑙 )𝑙 =1,..., 𝜏 𝑖 −1 of orders released but not yet completed, and the demand-feature vector sfeat  
+
+> 𝑡
+
+.Formally, 
+
+s𝑡 :=  (𝑜 𝐶 𝑖,𝑡 )𝑖 ∈ I 𝐶 , (𝑜 𝐸 𝑖,𝑡 )𝑖 ∈ I 𝐸 , (𝑥 𝑖,𝑡 −𝑙 )𝑖 ∈ I , 𝑙 =1,..., 𝜏 𝑖 −1, sfeat 
+
+> 𝑡
+
+.
+
+The events within period 𝑡 unfold in the following order, illustrated in Figure 9: 1. Pipeline arrivals. Production released 𝜏 𝑖 periods earlier completes, so that 𝑜 𝐶 𝑖,𝑡 and 𝑜 𝐸 𝑖,𝑡 already reflect receipt of 
+
+𝑥 𝑖,𝑡 − 𝜏 𝑖 .2. Production decision. The action x𝑡 ∈ N| I |  
+
+> 0
+
+is chosen, with 𝑥 𝑖,𝑡 the quantity of item 𝑖 released into the pipeline. This consumes on-hand inventory of all input components in a convergent BOM structure. The post-consumption component inventory is the intermediate variable ˜𝑜 𝑖,𝑡 := 𝑜 𝐶 𝑖,𝑡 −∑︁  
+
+> 𝑗 ∈ I
+
+𝐴 𝑖, 𝑗 𝑥 𝑗,𝑡 , 𝑖 ∈ I 𝐶 .
+
+3. Demand realization. Demand realization 𝜉 𝑖,𝑡 for end item 𝑖 ∈ I 𝐸 is observed and met from on-hand stock, yielding the post-demand end-item inventory ˜𝑜 𝑖,𝑡 := 𝑜 𝐸 𝑖,𝑡 − 𝜉 𝑖,𝑡 , 𝑖 ∈ I 𝐸 .
+
+4. Cost accrual. Holding costs are charged on positive intermediate inventory and shortage costs on unmet end-item demand, giving the per-period cost function 
+
+𝑐 (s𝑡 , x𝑡 , 𝝃 𝑡 ) =∑︁ 
+
+> 𝑖 ∈ I
+
+ℎ𝑖 ( ˜𝑜 𝑖,𝑡 )+ +∑︁ 
+
+> 𝑖 ∈ I 𝐸
+
+𝑝 𝑖 (− ˜𝑜 𝑖,𝑡 )+.
+
+Given the action x𝑡 and demand realization 𝝃 𝑡 , the state transitions deterministically as s𝑡 +1 = Γ (s𝑡 , x𝑡 , 𝝃 𝑡 ), where the transition function Γ shifts the pipeline forward by one period and updates on-hand inventories with the arrivals from period 𝑡 − 𝜏 𝑖 + 1: 
+
+𝑜 𝐶 𝑖,𝑡 +1 = ˜𝑜 𝑖,𝑡 + 𝑥 𝑖,𝑡 − 𝜏 𝑖 +1, 𝑖 ∈ I 𝐶 ,𝑜 𝐸 𝑖,𝑡 +1 = ˜𝑜 𝑖,𝑡 + 𝑥 𝑖,𝑡 − 𝜏 𝑖 +1, 𝑖 ∈ I 𝐸 .Helm et al.: Learning Feasible Policies via Differentiable Projection 31 
+
+B. Echelon Base-Stock Target Generation 
+
+We instantiate the differentiable decision rule of Section 4 with a structured parameterization tailored to inventory control. Rather than predicting production requests independently per item, the neural network first outputs a vector 
+
+B𝑡 ∈ R| I | ≥0 of state-dependent echelon base-stock levels, specifying desired echelon inventory positions that are then converted into production targets. This structure acts as an inductive bias (Xie et al. 2026), embedding problem-specific structure while preserving flexibility. As shown in the ablation study in Section 6.5, it improves performance in complex real-world supply networks. The echelon inventory position of item 𝑖 at time 𝑡 is EIP 𝑖,𝑡 := 𝑜 𝐸 𝑖,𝑡 + 
+
+> 𝜏 𝑖 −1
+
+∑︁ 
+
+> 𝑙 =1
+
+𝑥 𝑖,𝑡 −𝑙 , 𝑖 ∈ I 𝐸 ,
+
+EIP 𝑖,𝑡 := 𝑜 𝐶 𝑖,𝑡 + 
+
+> 𝜏 𝑖 −1
+
+∑︁ 
+
+> 𝑙 =1
+
+𝑥 𝑖,𝑡 −𝑙 +∑︁  
+
+> 𝑗 ∈ I
+
+𝐴 𝑖, 𝑗 EIP 𝑗,𝑡 , 𝑖 ∈ I 𝐶 .
+
+End items provide the non-recursive base case, where EIP 𝑖,𝑡 reduces to the local inventory position because end items have no downstream successors. Component items are then computed by propagating upward through the acyclic BOM, making the recursion well-defined. Including this BOM term generalizes the classical echelon-stock notion of Clark and Scarf (1960) to general bill-of-material structures: 𝐴 𝑖, 𝑗 EIP 𝑗,𝑡 counts the units of component 𝑖 embedded in the echelon position of downstream item 𝑗 , so EIP 𝑖,𝑡 aggregates all material committed to item 𝑖 , whether on hand, in the pipeline, or absorbed into a downstream stage, automatically coordinating upstream actions with downstream inventory. The corresponding continuous production target z𝑡 is then defined componentwise as 
+
+z𝑡 := (B𝑡 − EIP 𝑡 )+.
+
+The projection and integer-mapping modules of Section 4 then map z𝑡 to a feasible integer production decision. 
+
+C. Baseline Policy Details 
+
+C.1. Base Stock Policy 
+
+Shortfall-priority allocation Given B𝑡 with 𝐵 𝑖,𝑡 > 0 for all 𝑖 ∈ I , echelon inventory positions EIP 𝑡 , and on-hand component inventories o𝐶 𝑡 , the allocator implements the nested min–max relative shortfall ( waterfilling ) rule of van Dijck et al. (2026). The relative shortfall of item 𝑖 at time 𝑡 given the current cumulative assignment 𝑥 𝑖,𝑡 is 
+
+𝑦 𝑖,𝑡 =
+
+ 𝐵 𝑖,𝑡 − EIP 𝑖,𝑡 − 𝑥 𝑖,𝑡 
+
++
+
+𝐵 𝑖,𝑡 
+
+.
+
+At each step, the next unit is assigned to the item with the largest 𝑦 𝑖,𝑡 , given that this is feasible. When allocating to the leading item becomes infeasible, allocation moves to the next-most-short feasible item. The procedure terminates when no further production is feasible or all shortfalls are eliminated. 
+
+Echelon lead-time demand Let 𝐿 𝑗,𝑖 denote the echelon lead time of item 𝑖 ∈ I along the BOM path to end item 𝑗 ∈ I 𝐸 , computed as the longest path from 𝑖 to 𝑗 over per-item lead times 𝜏 𝑙 plus a unit increment for the periodic review. With binary BOM matrices, the static mean and variance of the echelon lead-time demand for item 𝑖 aggregate over all served end items 
+
+𝑚 ′ 
+
+> 𝑖
+
+=∑︁  
+
+> 𝑗 ∈ I 𝐸
+
+𝐿 𝑗,𝑖 E Ξ 𝑗 
+
+ , (𝑠 ′ 
+
+> 𝑖
+
+)2 =∑︁  
+
+> 𝑗 ∈ I 𝐸
+
+𝐿 𝑗,𝑖 Var (Ξ 𝑗 ).
+
+For DBS, the conditional mean and variance (𝑚 ′ 
+
+> 𝑖,𝑡
+
+, 𝑠 ′ 
+
+> 𝑖,𝑡
+
+) are obtained from the closed-form recursions of the AR ( 𝑝 )
+
+aggregate-demand model. We refer to van Dijck et al. (2026, Appendix B) for the full derivation. 32 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+C.2. Multi-Stage Stochastic Programming 
+
+The multi-stage stochastic program is formalized below. Following the action-then-demand timing of Appendix A, the production decision indexed by a node is made before observing the demand realization associated with that node. In addition to the notation of Section 5, which consists of the BOM A, resource consumption C, capacities k, lead times 
+
+𝜏 𝑖 , and unit holding and backlog costs ℎ𝑖 and 𝑝 𝑖 , it uses the following notation. 
+
+Sets 
+
+T Look-ahead periods relative to the current period, T = {0, 1, . . . , 𝐻 } for a look-ahead of 𝐻 
+
+periods, indexed by 𝑡 , with 𝑡 = 0 the current period (root) 
+
+N Nodes of the scenario tree, indexed by 𝑛 or 𝑛 ′
+
+N 𝐴 𝑛 Ancestors of node 𝑛 ∈ N , i.e., the nodes on the path from the root to 𝑛 including itself 
+
+Parameters 
+
+𝜉 𝑖,𝑛 ∈ N0 Demand of end item 𝑖 ∈ I 𝐸 sampled at node 𝑛 ∈ N 
+
+𝑡 (𝑛 ) ∈ T Time slot associated with node 𝑛 ∈ N 
+
+𝑎 (𝑛 ) ∈ N Parent node of node 𝑛 ∈ N , which is undefined for the root node in time slot 0 
+
+𝜌 𝑛 ∈ ( 0, 1] Probability of reaching node 𝑛 ∈ N , with Í   
+
+> 𝑛 ∈ N :𝑡 (𝑛 )=𝑡
+
+𝜌 𝑛 = 1 for all 𝑡 ∈ T 
+
+¯𝑜 𝑖 ∈ Z Initial inventory of item 𝑖 ∈ I , which can be negative for end items 𝑖 ∈ I 𝐸 
+
+¯𝑥 𝑖,𝑡 ∈ N0 Initial in-transit pipeline of item 𝑖 ∈ I arriving 𝑡 periods from now, with ¯ 𝑥 𝑖,𝑡 = 0 for 𝑡 ≥ 𝜏 𝑖 
+
+Decision variables 
+
+𝑥 𝑖,𝑛 ∈ N0 Pre-demand production quantity of item 𝑖 ∈ I at node 𝑛 ∈ N 
+
+𝑜 𝑖,𝑛 ∈ N0 Inventory of item 𝑖 ∈ I at node 𝑛 ∈ N 
+
+𝑏 𝑖,𝑛 ∈ N0 Backlog of end item 𝑖 ∈ I 𝐸 at node 𝑛 ∈ N 
+
+min ∑︁ 
+
+> 𝑛 ∈ N
+
+𝜌 𝑛  ∑︁ 
+
+> 𝑖 ∈ I
+
+ℎ𝑖 𝑜 𝑖,𝑛 +∑︁ 
+
+> 𝑖 ∈ I 𝐸
+
+𝑝 𝑖 𝑏 𝑖,𝑛 
+
+!
+
+(3a) s.t. ¯𝑜 𝑖 + 
+
+> 𝑡 (𝑛 )
+
+∑︁ 
+
+> 𝑡 ′=1
+
+¯𝑥 𝑖,𝑡 ′ +∑︁       
+
+> 𝑛 ′∈ N 𝐴 𝑛
+> 𝑡 (𝑛 ′) ≤ 𝑡 (𝑛 ) − 𝜏 𝑖
+
+𝑥 𝑖,𝑛 ′ −∑︁   
+
+> 𝑛 ′∈ N 𝐴 𝑛
+
+𝜉 𝑖,𝑛 ′ + 𝑏 𝑖,𝑛 = 𝑜 𝑖,𝑛 𝑖 ∈ I 𝐸 , 𝑛 ∈ N (3b) ¯𝑜 𝑖 + 
+
+> 𝑡 (𝑛 )
+
+∑︁ 
+
+> 𝑡 ′=1
+
+¯𝑥 𝑖,𝑡 ′ +∑︁       
+
+> 𝑛 ′∈ N 𝐴 𝑛
+> 𝑡 (𝑛 ′) ≤ 𝑡 (𝑛 ) − 𝜏 𝑖
+
+𝑥 𝑖,𝑛 ′ −∑︁  
+
+> 𝑗 ∈ I
+
+𝐴 𝑖, 𝑗 ©«∑︁ 𝑛 ′ ∈ N 𝐴 𝑛 
+
+𝑥 𝑗,𝑛 ′ ª®¬
+
+= 𝑜 𝑖,𝑛 𝑖 ∈ I 𝐶 , 𝑛 ∈ N (3c) ∑︁ 
+
+> 𝑖 ∈ I
+
+𝐶 𝑔,𝑖 𝑥 𝑖,𝑛 ≤ 𝑘 𝑔 𝑔 ∈ G , 𝑛 ∈ N (3d) 
+
+𝑥 𝑖,𝑛 = 𝑥 𝑖,𝑛 ′ 𝑖 ∈ I ; 𝑛, 𝑛 ′ ∈ N : 𝑎 (𝑛 ) = 𝑎 (𝑛 ′) (3e) 
+
+𝑥 𝑖,𝑛 , 𝑜 𝑖,𝑛 ∈ N0 𝑖 ∈ I , 𝑛 ∈ N (3f) 
+
+𝑏 𝑖,𝑛 ∈ N0 𝑖 ∈ I 𝐸 , 𝑛 ∈ N (3g) The objective (3a) is to minimize the expected total holding and backlog costs. Constraints (3b) set the inventory and backlog values for the end-items, while constraints (3c) specify the inventory levels for components, both at each node of the scenario tree. Constraints (3d) enforce the shared resource capacities. Constraints (3e) impose non-anticipativity: Helm et al.: Learning Feasible Policies via Differentiable Projection 33 nodes with the same parent differ only in the demand drawn in the current period, which is not yet observed when production is released (Appendix A). Lastly, constraints (3f) and (3g) impose non-negativity and integrality on all decision variables. 
+
+D. Experimental Configuration 
+
+We implement our policy and simulation in PyTorch (Paszke et al. 2019) and integrate the open-source qpth solver (Amos and Kolter 2017) for the differentiable projection layer. The MILP policies are implemented using Gurobi 12 with a non-binding time limit of 3600 seconds. We run experiments distributed across CPU cores, with one Intel Xeon Platinum 8280L CPU at 2.70 GHz per process. 
+
+D.1. Implementation Details of Our Policy 
+
+We train for at most 1 ,000 epochs with early stopping if the validation loss plateaus. To approach long-run performance on the small instances, we use trajectories of length 200 during training, where the initial state distribution is generated by a 100-period warmup simulation under the current policy. For the larger instances, we use the planning horizon 𝑇 
+
+for each trajectory with an additional warmup period of 𝑇 /2 periods. We augment the state by the echelon inventory position as a handcrafted feature. We scale the state, action and costs during training to improve numerical stability. The inventory levels and pipelines are scaled by the mean demand per period, whereas the echelon inventory position is scaled by the mean demand during the echelon lead time. For the ASML instances, the aggregate demand lags are scaled by the long-run mean. The costs are scaled by the costs of the SBS policy. While this is not strictly necessary, it avoids the need to tune the learning rate separately for each instance. Before each update, we clip the gradient norm to 10. To keep the neural network output normalized, the echelon base-stock network uses softplus as the output activation and then scales by the base-stock levels of SBS. The raw action network in the ablation study uses a sigmoid as the output activation and then scales by the lowest limit of any resource that the respective item consumes. 
+
+D.2. Baseline Configurations 
+
+For the ASML case study, we use the complete baseline configurations of van Dijck et al. (2026) without modification. This includes the fitted item-specific and global safety-stock factors 𝜽 and 𝜃 for the base stock policies as well as the lookahead horizon of 𝐻 = 30 for the MILP policies with demand inflation factor 𝛾 for DET, and the scenario tree branches [6, 4, 3, 2, 2] + [ 1] × ( 25 ) for MSP. We therefore do not retune the baseline policies for the ASML instances. For the remaining instances, we fit the parameters separately using the following hyperparameters. The look-ahead horizon 𝐻 for the MILP policies is fixed to two times the maximum echelon lead time to account for the downstream effect of upstream production. Based on this, 𝛾 for DET is tuned via a simulation-based grid search over [0.1, 0.9] in increments of 0 .05. For MSP, we fix the branching structure to [6, 4, 3, 2, 2] + [ 1] × ( 𝐻 − 5) across instances, yielding 288 scenarios. We tune 𝜃 for SBS via a simulation-based grid search over [1, 7] in increments of 0 .1. All simulation-based grid searches are performed using the same set of 1 ,000 demand trajectories of length 𝑇 preceded by 𝑇 /2 warmup periods for each candidate value. The intervals are chosen such that the best-found value is strictly within the search space. We optimize 𝜽 for SBS and DBS using CMA-ES. Following the recommendations from Hansen (2023), we set the population size to 4 + ⌊ 3.0 · log (dim (𝜽 ))⌋ , and the number of parents to half of that. We initialize the population mean to the best global 𝜃 with an initial step size of 1. The optimization runs for 200 iterations and candidates within each iteration are evaluated on the same set of 1 ,000 demand trajectories of length 𝑇 preceded by 𝑇 /2 warmup periods. 34 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+E. Proofs 
+
+Proof of Lemma 1 Let 𝝀 ∈ R𝑚  
+
+> +
+
+denote the Lagrange multipliers associated with the constraints Mx 𝑡 ≤ r𝑡 . The Lagrangian of (2) is 
+
+L( x𝑡 , 𝝀 ) = 12 (x𝑡 − z𝑡 )⊤W(x𝑡 − z𝑡 ) + 𝝀 ⊤ (Mx 𝑡 − r𝑡 ).
+
+Under a locally fixed linearly independent active set, the reduced KKT system for (2) is 
+
+ W ˜M⊤
+
+> 𝑡
+
+˜M𝑡 0
+
+  x∗
+
+> 𝑡
+
+˜𝝀 ∗
+
+> 𝑡
+
+
+
+=
+
+Wz 𝑡 
+
+˜r𝑡 
+
+
+
+, (4) where ˜𝝀 ∗ 
+
+> 𝑡
+
+collects the optimal Lagrange multipliers (dual prices) of the active constraints. On a neighborhood where the active set is fixed, (4) is a linear system whose coefficient matrix is invertible because W ≻ 0 and the active rows are linearly independent. Its solution (x∗ 
+
+> 𝑡
+
+, ˜𝝀 ∗ 
+
+> 𝑡
+
+) therefore depends affinely, hence differentiably, on the inputs (z𝑡 , b𝑡 ).Differentiating (4) with respect to z𝑡 gives 
+
+W 𝜕 x∗
+
+> 𝑡
+
+𝜕 z𝑡 
+
++ ˜M⊤
+
+> 𝑡
+
+𝜕 ˜𝝀 ∗
+
+> 𝑡
+
+𝜕 z𝑡 
+
+= W, ˜M𝑡 
+
+𝜕 x∗
+
+> 𝑡
+
+𝜕 z𝑡 
+
+= 0.
+
+Solving the first equation for 𝜕 x∗ 
+
+> 𝑡
+> 𝜕 z𝑡
+
+and substituting into the second yields 𝜕 ˜𝝀 ∗ 
+
+> 𝑡
+> 𝜕 z𝑡
+
+=   ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+ −1 ˜M𝑡 ; substituting this back gives the first claim. Differentiating (4) with respect to b𝑡 instead gives 
+
+W 𝜕 x∗
+
+> 𝑡
+
+𝜕 b𝑡 
+
++ ˜M⊤
+
+> 𝑡
+
+𝜕 ˜𝝀 ∗
+
+> 𝑡
+
+𝜕 b𝑡 
+
+= 0, ˜M𝑡 
+
+𝜕 x∗
+
+> 𝑡
+
+𝜕 b𝑡 
+
+= U𝑡 ,
+
+and the same elimination yields the second claim. For the general sensitivity formulas for QPs, see Amos and Kolter (2017). 
+
+Proof of Corollary 1, part (a) (resource competition) Define 𝚷 𝑡 := I − W−1/2 ˜M⊤
+
+> 𝑡
+
+  ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+ −1 ˜M𝑡 W−1/2.
+
+Then 𝚷 𝑡 is the Euclidean orthogonal projector onto ker ( ˜M𝑡 W−1/2), and the formula in Lemma 1 reads 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 z𝑡 =
+
+W−1/2𝚷 𝑡 W1/2. Since W is diagonal, its 𝑖 th column and the corresponding diagonal entry are 
+
+𝜕 x∗
+
+> 𝑡
+
+𝜕𝑧 𝑖,𝑡 
+
+= 𝑤 1/2 
+
+> 𝑖
+
+W−1/2𝚷 𝑡 e𝑖 , 𝜕𝑥 ∗
+
+> 𝑖,𝑡
+
+𝜕𝑧 𝑖,𝑡 
+
+= [𝚷 𝑡 ]𝑖𝑖 = e⊤ 
+
+> 𝑖
+
+𝚷 𝑡 e𝑖 = ∥𝚷 𝑡 e𝑖 ∥22 ∈ [ 0, 1], (5) where the last equality uses that 𝚷 𝑡 is symmetric and idempotent, and the upper bound uses that orthogonal projections do not increase Euclidean norm. Both expressions vanish exactly when 𝚷 𝑡 e𝑖 = 0, so the column is zero if and only if its diagonal entry is. Lemma 1 also gives ˜ M𝑡 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 z𝑡 = 0.
+
+Free regime. If coordinate 𝑖 appears in no active row, the 𝑖 th column of ˜ M𝑡 is zero, so the formula in Lemma 1 gives 
+
+𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 = e𝑖 and thus 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 1. 
+
+Pinned and Competing regimes. Suppose coordinate 𝑖 appears in some active row. Since 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+> 0, the lower-bound row −e⊤ 
+
+> 𝑖
+
+is not active, and the lower-bound row −e⊤ 
+
+> 𝑙
+
+of any other coordinate 𝑙 ≠ 𝑖 has a zero entry in column 𝑖 ; coordinate 
+
+𝑖 therefore appears in an active A/C row. It suffices to show that if 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 contains no strictly negative entry, it is identically zero. Assume 𝜕𝑥 ∗ 
+
+> 𝑙,𝑡
+
+/𝜕𝑧 𝑖,𝑡 ≥ 0 for every 𝑙 ∈ [ 𝑛 ]. For each active row 𝑘 ,∑︁ 
+
+> 𝑙 ∈ [ 𝑛 ]
+
+˜𝑀 𝑘𝑙 
+
+𝜕𝑥 ∗
+
+> 𝑙,𝑡
+
+𝜕𝑧 𝑖,𝑡 
+
+= 0.
+
+For active lower-bound rows −e⊤ 
+
+> 𝑙
+
+, this equation gives 𝜕𝑥 ∗ 
+
+> 𝑙,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0 directly. For active A/C rows, every summand is the product of two nonnegative factors, because A, C ≥ 0. Since the sum is zero, each summand must vanish. Thus any Helm et al.: Learning Feasible Policies via Differentiable Projection 35 coordinate appearing with a positive coefficient in an active A/C row has 𝜕𝑥 ∗ 
+
+> 𝑙,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0. Any remaining coordinate 
+
+𝑙 ≠ 𝑖 appears in no active row, so the 𝑙 th column of ˜M𝑡 is zero, and the formula in Lemma 1 gives 𝜕𝑥 ∗ 
+
+> 𝑙,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0. Coordinate 𝑖 appears with a positive coefficient in an active A/C row, so the same argument also gives 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0. Hence 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0 (Pinned regime). Otherwise 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 contains at least one strictly negative entry, and since 
+
+𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 ≥ 0 that entry is off-diagonal (Competing regime). In this case 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 ≠ 0, so 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 > 0 by (5). Since coordinate 𝑖 appears in an active row, e𝑖 ∉ ker ( ˜M𝑡 W−1/2), so 𝚷 𝑡 e𝑖 ≠ e𝑖 and therefore 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 < 1. Finally, suppose every active row 𝑘 with ˜𝑀 𝑘𝑖 > 0 has ˜𝑀 𝑘𝑙 = 0 for all 𝑙 ≠ 𝑖 , so that these rows are scalar bounds on 
+
+𝑥 𝑖,𝑡 . Row 𝑘 of ˜M𝑡 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0 then collapses to ˜𝑀 𝑘𝑖 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0, so 𝜕𝑥 ∗ 
+
+> 𝑖,𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0 and hence 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕𝑧 𝑖,𝑡 = 0 by (5). The Competing regime therefore requires some active row 𝑘 with ˜𝑀 𝑘𝑖 > 0 and ˜𝑀 𝑘 𝑗 > 0 for some 𝑗 ≠ 𝑖 .
+
+Proof of Corollary 1, part (b) (nonexpansiveness) As shown in the proof of part (a), 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 z𝑡 = W−1/2𝚷 𝑡 W1/2,where 𝚷 𝑡 is the Euclidean orthogonal projector onto ker ( ˜M𝑡 W−1/2). Equivalently, 𝜕 x∗ 
+
+> 𝑡
+
+/𝜕 z𝑡 is the W-orthogonal projector onto ker ˜ M𝑡 . Hence, for every perturbation h,
+
+𝜕 x∗
+
+> 𝑡
+
+𝜕 z𝑡 
+
+h W = ∥𝚷 𝑡 W1/2h∥2 ≤ ∥ W1/2h∥2 = ∥h∥W,
+
+where the inequality uses that orthogonal projections do not increase the Euclidean norm. 
+
+Proof of Corollary 1, part (c) (constraint filling) By Lemma 1, ˜M𝑡 
+
+𝜕 x∗
+
+> 𝑡
+
+𝜕 b𝑡 
+
+= ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+  ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+ −1U𝑡 = U𝑡 .
+
+For a perturbation Δb𝑡 , consider the equality-constrained quadratic problem min 
+
+> y
+
+12 ∥y∥2 
+
+> W
+
+s.t. ˜M𝑡 y = U𝑡 Δb𝑡 .
+
+With Lagrangian multipliers 𝝂 , its KKT conditions are 
+
+Wy − ˜M⊤ 
+
+> 𝑡
+
+𝝂 = 0, ˜M𝑡 y = U𝑡 Δb𝑡 ,
+
+so, using the linear independence of the active rows, 
+
+y = W−1 ˜M⊤
+
+> 𝑡
+
+ ˜M𝑡 W−1 ˜M⊤
+
+> 𝑡
+
+ −1
+
+U𝑡 Δb𝑡 = 𝜕 x∗
+
+> 𝑡
+
+𝜕 b𝑡 
+
+Δb𝑡 .
+
+Strict convexity gives uniqueness, proving the minimum-norm characterization. 
+
+Proof of Proposition 1, part (i) (objective gap) Since x∗ 
+
+> 𝑡
+
+∈ A rel (s𝑡 ) ⊆ R𝑛 
+
+> ≥0
+
+, the componentwise floor x𝐹 𝑡 = ⌊x∗ 
+
+> 𝑡
+
+⌋
+
+satisfies 0 ≤ x𝐹 𝑡 ≤ x∗ 
+
+> 𝑡
+
+, so downward closedness of Arel (s𝑡 ) by Assumption (i) gives x𝐹 𝑡 ∈ A rel (s𝑡 ) ∩ N𝑛  
+
+> 0
+
+= A ( s𝑡 ). Write 
+
+𝜹 𝑡 := x∗ 
+
+> 𝑡
+
+− x𝐹 𝑡 for the rounding remainder and Δ𝑡 := ∥𝜹 𝑡 ∥W for its weighted norm. By definition of the integer mapping, 
+
+x𝑡 ∈ A ( s𝑡 ) and 𝑓 𝑡 (x𝑡 ) ≤ 𝑓 𝑡 (x𝐹 𝑡 ). Since A ( s𝑡 ) ⊆ A rel (s𝑡 ) and x𝐼 𝑡 is integer optimal, 0 ≤ 𝑓 𝑡 (x𝑡 ) − 𝑓 𝑡 (x𝐼 𝑡 ) ≤ 𝑓 𝑡 (x𝑡 ) − 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+) ≤ 𝑓 𝑡 (x𝐹 𝑡 ) − 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+).
+
+Using x𝐹 𝑡 = x∗ 
+
+> 𝑡
+
+− 𝜹 𝑡 ,
+
+𝑓 𝑡 (x𝐹 𝑡 ) − 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+) = 12 ∥𝜹 𝑡 ∥2 
+
+> W
+
++ 𝜹 ⊤ 
+
+> 𝑡
+
+W(z𝑡 − x∗ 
+
+> 𝑡
+
+) ≤ 12 Δ2 
+
+> 𝑡
+
++ Δ𝑡 𝑅 𝑡 ,
+
+where the inequality follows from Cauchy–Schwarz. Since 0 ≤ 𝛿 𝑖,𝑡 < 1, we have Δ2 
+
+> 𝑡
+
+= Í𝑖 ∈ [ 𝑛 ] 𝑤 𝑖 𝛿 2 
+
+> 𝑖,𝑡
+
+≤ Í𝑖 ∈ [ 𝑛 ] 𝑤 𝑖 = 1 by the weight normalization. Thus 𝑓 𝑡 (x𝑡 ) − 𝑓 𝑡 (x𝐼 𝑡 ) ≤ 12 + 𝑅 𝑡 . If 𝑅 𝑡 ≤ 𝜌 , inserting gives the first claim. 36 Helm et al.: Learning Feasible Policies via Differentiable Projection 
+
+Now suppose 𝑅 𝑡 > 𝜌 . Since 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+) = 12 𝑅 2 
+
+> 𝑡
+
+and 𝑓 𝑡 (x𝐼 𝑡 ) ≥ 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+) > 0, 
+
+𝑓 𝑡 (x𝑡 ) − 𝑓 𝑡 (x𝐼 𝑡 )
+
+𝑓 𝑡 (x𝐼 𝑡 ) ≤ 
+
+> 12
+
+Δ2 
+
+> 𝑡
+
++ Δ𝑡 𝑅 𝑡  
+
+> 12
+
+𝑅 2
+
+> 𝑡
+
+= Δ2
+
+> 𝑡
+
+𝑅 2
+
+> 𝑡
+
++ 2 Δ𝑡 
+
+𝑅 𝑡 
+
+≤ 1
+
+𝜌 2 + 2
+
+𝜌 ,
+
+using Δ𝑡 ≤ 1 and 𝑅 𝑡 > 𝜌 . This proves the claim. 
+
+Proof of Proposition 1, part (ii) (decision distance) We adopt x𝐹 𝑡 , 𝜹 𝑡 , and Δ𝑡 from the proof of part (i). The first bound follows from the projection inequality: 12 ∥x𝐼 𝑡 − x∗ 
+
+> 𝑡
+
+∥2 
+
+> W
+
+≤ 𝑓 𝑡 (x𝐼 𝑡 ) − 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+) ≤ 𝑓 𝑡 (x𝐹 𝑡 ) − 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+).
+
+By the same expansion and Cauchy–Schwarz step as in the proof of part (i), 
+
+𝑓 𝑡 (x𝐹 𝑡 ) − 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+) ≤ 12 Δ2 
+
+> 𝑡
+
++ Δ𝑡 𝑅 𝑡 .
+
+Hence ∥x𝐼 𝑡 − x∗ 
+
+> 𝑡
+
+∥W ≤√︃ Δ2 
+
+> 𝑡
+
++ 2Δ𝑡 𝑅 𝑡 . Since 0 ≤ 𝛿 𝑖,𝑡 < 1, we also have Δ𝑡 ≤ 1, giving ∥x𝐼 𝑡 − x∗ 
+
+> 𝑡
+
+∥W ≤ √1 + 2𝑅 𝑡 .It remains to bound the distance from x𝑡 to x∗ 
+
+> 𝑡
+
+. Since x𝑡 = x𝐹 𝑡 + 𝜼 𝑡 = x∗ 
+
+> 𝑡
+
+− 𝜹 𝑡 + 𝜼 𝑡 , where 𝜼 𝑡 ∈ { 0, 1}𝑛 collects the unit increments accepted by IM 𝑡 , each coordinate satisfies |𝑥 𝑖,𝑡 − 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+| = |𝜂 𝑖,𝑡 − 𝛿 𝑖,𝑡 | ≤ 1. Therefore ∥x𝑡 − x∗ 
+
+> 𝑡
+
+∥2 
+
+> W
+
+=
+
+Í𝑖 ∈ [ 𝑛 ] 𝑤 𝑖 (𝜂 𝑖,𝑡 − 𝛿 𝑖,𝑡 )2 ≤ 1. By the triangle inequality, 
+
+∥x𝑡 − x𝐼 𝑡 ∥W ≤ ∥ x𝑡 − x∗ 
+
+> 𝑡
+
+∥W + ∥ x𝐼 𝑡 − x∗ 
+
+> 𝑡
+
+∥W ≤ 1 +√︃ Δ2 
+
+> 𝑡
+
++ 2Δ𝑡 𝑅 𝑡 ≤ 1 +√︁ 1 + 2𝑅 𝑡 .
+
+If 𝑅 𝑡 ≤ 𝜌 , monotonicity in 𝑅 𝑡 gives the first claim. If 𝑅 𝑡 > 𝜌 , dividing by 𝑅 𝑡 along with monotonicity yields the second claim. 
+
+Proof of Proposition 2, part (a) (completeness of the integer mapping) Fix q ∈ A ( s𝑡 ). Since q is relaxed feasible, 
+
+𝑃 𝑡 (q) = q. By continuity of the projection map, choose 0 < 𝜂 < 1/2 such that, for every z𝑡 = q + 𝜺 ∈ R𝑛  
+
+> ≥0
+
+with |𝜀 𝑖 | < 𝜂 
+
+when 𝑞 𝑖 ≥ 1 and 0 ≤ 𝜀 𝑖 < 𝜂 when 𝑞 𝑖 = 0, 
+
+∥𝑃 𝑡 (z𝑡 ) − q∥∞ < 1.
+
+Thus, for x∗ 
+
+> 𝑡
+
+= 𝑃 𝑡 (z𝑡 ), the floor point satisfies 𝑥 𝐹 𝑖,𝑡 = 0 if 𝑞 𝑖 = 0, and 𝑥 𝐹 𝑖,𝑡 ∈ { 𝑞 𝑖 − 1, 𝑞 𝑖 } if 𝑞 𝑖 ≥ 1. Hence x𝐹 𝑡 is componentwise below q and differs from it by at most one unit in each coordinate. During the IM traversal, every intermediate point below q is feasible, because q ∈ A ( s𝑡 ) and A ( s𝑡 ) is downward closed by Assumption (i). Moreover, the one-step objective change 𝑓 𝑡 (x + e𝑖 ; z𝑡 ) − 𝑓 𝑡 (x; z𝑡 ) = 𝑤 𝑖 (𝑥 𝑖 + 12 − 𝑧 𝑖,𝑡 ) depends only on coordinate 𝑖 , so the acceptance decisions below do not depend on the traversal order induced by the priority scores. If the current coordinate satisfies 𝑥 𝑖 = 𝑞 𝑖 − 1, then 
+
+𝑓 𝑡 (x + e𝑖 ; z𝑡 ) − 𝑓 𝑡 (x; z𝑡 ) = 𝑤 𝑖 (𝑞 𝑖 − 12 − 𝑧 𝑖,𝑡 ) = −𝑤 𝑖 ( 12 + 𝜀 𝑖 ) < 0,
+
+so IM accepts the missing increment. If 𝑥 𝑖 = 𝑞 𝑖 , then 
+
+𝑓 𝑡 (x + e𝑖 ; z𝑡 ) − 𝑓 𝑡 (x; z𝑡 ) = 𝑤 𝑖 (𝑞 𝑖 + 12 − 𝑧 𝑖,𝑡 ) = 𝑤 𝑖 ( 12 − 𝜀 𝑖 ) > 0,
+
+so IM rejects any increment beyond q. Therefore every target in this relative neighbourhood of q maps to q. The preimage of q thus has positive Lebesgue measure, and ΦIM  
+
+> 𝑡
+
+is complete. Helm et al.: Learning Feasible Policies via Differentiable Projection 37 
+
+Proof of Proposition 2, part (a) (completeness of flooring on slack actions) Fix q ∈ A slack (s𝑡 ). By definition no A
+
+or C constraint is active, so Aq < b𝑡 and Cq < k componentwise. Hence there is 𝜀 ∈ ( 0, 1) with A(q + 𝜀 1) ≤ b𝑡 and 
+
+C(q + 𝜀 1) ≤ k, i.e., q + 𝜀 1 ∈ A rel (s𝑡 ). By downward-closedness the box [0, q + 𝜀 1] ⊆ A rel (s𝑡 ), and it is full-dimensional because q + 𝜀 1 > 0. Hence p := q + 𝜀  
+
+> 2
+
+1 lies in its interior, and therefore in the interior of Arel (s𝑡 ), denoted int Arel (s𝑡 ),as well as in the open cell (q, q + 1). Choose a ball 𝐵 (p, 𝛿 ) ⊆ int Arel (s𝑡 ) ∩ ( q, q + 1). For every z𝑡 ∈ 𝐵 (p, 𝛿 ) we have 
+
+z𝑡 ∈ A rel (s𝑡 ), so the projection fixes it, 𝑃 𝑡 (z𝑡 ) = z𝑡 , and therefore ⌊𝑃 𝑡 (z𝑡 )⌋ = ⌊z𝑡 ⌋ = q. Thus 𝐵 (p, 𝛿 ) ⊆ ( ΦF 
+
+> 𝑡
+
+)−1 (q) has positive Lebesgue measure. Since q ∈ A slack (s𝑡 ) was arbitrary, ΦF 
+
+> 𝑡
+
+is complete on Aslack (s𝑡 ).
+
+Proof of Proposition 2, part (b), incompleteness of flooring on active actions Fix any positive weights W and take the single resource constraint 𝑥 1 + 𝑥 2 ≤ 2 and q = (1, 1), which is active since 𝑥 1 + 𝑥 2 = 2 at q, so q ∈ A act (s𝑡 ).The only point of Arel (s𝑡 ) in [1, 2)2 is q itself, since 𝑥 1, 𝑥 2 ≥ 1 forces 𝑥 1 + 𝑥 2 ≥ 2 with equality only at q. Hence 
+
+ΦF 
+
+> 𝑡
+
+(z𝑡 ) = q if and only if 𝑃 𝑡 (z𝑡 ) = q. By the optimality condition of the weighted projection, x∗ 
+
+> 𝑡
+
+= 𝑃 𝑡 (z𝑡 ) if and only if x∗ 
+
+> 𝑡
+
+∈ A rel (s𝑡 ) and W(z𝑡 − x∗ 
+
+> 𝑡
+
+) ∈ 𝑁 (x∗ 
+
+> 𝑡
+
+), where 𝑁 (x) denotes the normal cone of Arel (s𝑡 ) at x. The floor preimage of q therefore equals 𝑃 −1 
+
+> 𝑡
+
+(q) = q + W−1 𝑁 (q). Only the resource constraint is active at q, so 𝑁 (q) = {( 𝑎, 𝑎 )⊤ : 𝑎 ≥ 0}
+
+and W−1 𝑁 (q) = {( 𝑎 /𝑤 1, 𝑎 /𝑤 2)⊤ : 𝑎 ≥ 0}, whence the preimage is a one-dimensional ray of Lebesgue measure zero in 
+
+R2
+
+> ≥0
+
+. Since W was arbitrary, ΦF 
+
+> 𝑡
+
+is not complete on Aact (s𝑡 ) for any positive weights. 
+
+Proof of Proposition 3 Let y := Φ IM  
+
+> 𝑡
+
+(z𝑡 ) and let 𝑆 ⊆ [ 𝑛 ] denote the set of coordinates the IM incremented, so 
+
+𝑦 𝑖 = 𝑥 𝐹 𝑖,𝑡 + 1 for 𝑖 ∈ 𝑆 and 𝑦 𝑖 = 𝑥 𝐹 𝑖,𝑡 for 𝑖 ∉ 𝑆 . It suffices to exhibit some 𝑖 ∈ [ 𝑛 ] with y + e𝑖 ∉ A ( s𝑡 ).
+
+Step 1: 𝑆 ≠ [𝑛 ]. Suppose, for contradiction, that 𝑆 = [𝑛 ], so y = x𝐹 𝑡 + 1. Because the IM accepts only feasible increments, y ∈ A ( s𝑡 ) ⊆ A rel (s𝑡 ). Fix 𝑖 ∈ [ 𝑛 ] and write 𝑟 𝑖 := 𝑧 𝑖,𝑡 − 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+for the projection residual and 𝑐 𝑖 := 𝑦 𝑖 − 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+=
+
+1 −  𝑥 ∗ 
+
+> 𝑖,𝑡
+
+− 𝑥 𝐹 𝑖,𝑡 
+
+ for the step taken in coordinate 𝑖 . Since 0 ≤ 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+− 𝑥 𝐹 𝑖,𝑡 < 1 and 𝑟 𝑖 > 12 by assumption, we have 0 < 𝑐 𝑖 ≤ 1 < 2𝑟 𝑖 and therefore |𝑧 𝑖,𝑡 − 𝑦 𝑖 | = |𝑟 𝑖 − 𝑐 𝑖 | < 𝑟 𝑖 = |𝑧 𝑖,𝑡 − 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+|, that is, the increment moves coordinate 𝑖 towards the target without overshooting it far enough to increase the distance. Weighting by 𝑤 𝑖 > 0 and summing over 𝑖 ∈ [ 𝑛 ]
+
+gives 𝑓 𝑡 (y; z𝑡 ) < 𝑓 𝑡 (x∗ 
+
+> 𝑡
+
+; z𝑡 ) for the relaxed-feasible point y, contradicting the optimality of x∗ 
+
+> 𝑡
+
+in (2). Hence 𝑆 ≠ [𝑛 ].
+
+Step 2: pick 𝑖 ∈ [ 𝑛 ] \ 𝑆 and show y + e𝑖 ∉ A ( s𝑡 ). The IM considered coordinate 𝑖 with 𝑥 𝑖 = 𝑥 𝐹 𝑖,𝑡 at some intermediate state x ≤ y and rejected the unit increment. That increment strictly decreases the projection objective, 𝑓 𝑡 (x + e𝑖 ; z𝑡 ) − 
+
+𝑓 𝑡 (x; z𝑡 ) = 𝑤 𝑖 
+
+ 𝑥 𝐹 𝑖,𝑡 + 12 − 𝑧 𝑖,𝑡 
+
+ < 0, because 𝑧 𝑖,𝑡 − 𝑥 𝐹 𝑖,𝑡 ≥ 𝑧 𝑖,𝑡 − 𝑥 ∗ 
+
+> 𝑖,𝑡
+
+> 12 . Since the IM accepts every feasible increment that does not increase the objective, the rejection must be due to infeasibility, x + e𝑖 ∉ A ( s𝑡 ), and downward closedness lifts this to y + e𝑖 ∉ A ( s𝑡 ) because x + e𝑖 ≤ y + e𝑖 . Hence y ∈ F ( s𝑡 ).

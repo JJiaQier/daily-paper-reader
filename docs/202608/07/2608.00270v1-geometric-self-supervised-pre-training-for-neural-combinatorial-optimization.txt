@@ -1,0 +1,445 @@
+Title: Geometric Self-Supervised Pre-training for Neural Combinatorial Optimization
+
+URL Source: https://arxiv.org/pdf/2608.00270v1
+
+Published Time: Tue, 04 Aug 2026 00:14:00 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+This work has been submitted to IEEE Transactions on Knowledge and Data Engineering for possible publication. 
+
+# GEOMETRIC SELF -S UPERVISED PRE -TRAINING FOR NEURAL 
+
+# COMBINATORIAL OPTIMIZATION 
+
+David Aguado, Daniel Fuertes, Carlos R. del-Blanco, Fernando Jaureguizar 
+
+Grupo de Tratamiento de Imágenes, Information Processing and Telecomunications Center, ETSI Telecomunicación, Universidad Politécnica de Madrid, 28040, Madrid, Spain 
+
+david.aguado@alumnos.upm.es, {d.fcoiras, carlosrob.delblanco, fernando.jaureguizar}@upm.es 
+
+August 4, 2026 
+
+## ABSTRACT 
+
+Neural Combinatorial Optimization (NCO) techniques have emerged as a highly efficient alternative to traditional exact algorithms for solving routing problems such as the Traveling Salesman Problem (TSP). However, the generalization capabilities of these Reinforcement Learning-based models are severely hindered when scaling to high-dimensional instances. This issue has been mitigated in other domains, like computer vision and natural language processing, by adopting a self-supervised pre-training strategy. Nevertheless, its application to routing graphs, which lack complex topological attributes beyond 2D spatial coordinates, remains a challenge. In this paper, we propose a geometric self-supervised pre-training framework specifically designed to capture spatial invariance and global relative distance distributions. By applying isometric transformations, such as rotations and axial reflections, the model learns robust structural representations prior to the policy optimization phase. Empirical results demonstrate that this strategy consistently outperforms models trained from scratch (baselines), achieving a 7.23% improvement in tour length for massive zero-shot extrapolation scenarios (TSP1,000). Furthermore, the proposed model exhibits remarkable computational efficiency, delivering speedups of up to two orders of magnitude over the exact solver Concorde at massive scales. The source code and pre-trained models are publicly available at https://github.com/ davidaguadocosano/TSP-GeoPretrain.git .
+
+Keywords Contrastive learning, neural combinatorial optimization, self-supervised pretraining, traveling salesman problem. 
+
+## 1 Introduction 
+
+Recently, Neural Combinatorial Optimization (NCO) has emerged as a disruptive paradigm to tackle classic NP-hard routing tasks, such as the Traveling Salesman Problem (TSP). By leveraging Deep Reinforcement Learning (DRL), NCO models learn resolution strategies directly from data without requiring labels [ 1 ]. Once trained, these neural solvers provide near-instantaneous inference, offering a highly efficient alternative for real-time routing applications. Despite their success on small to medium-scale instances, current NCO models face a severe generalization challenge [2, 3]. When trained from scratch, neural agents struggle to learn invariant structural representations, often overfitting to the specific graph scale seen during training. Consequently, their routing performance degrades drastically when exposed to zero-shot extrapolation scenarios, for example, training on 50 nodes and testing on massive graphs of up to 1,000 nodes. In other domains, such as Natural Language Processing (NLP) [ 4 ] and Computer Vision [ 5], self-supervised pre-training has become the standard mechanism to build robust, generalizable models before fine-tuning on specific tasks. While incorporating these techniques into NCO could theoretically mitigate the generalization bottleneck, specific pre-training frameworks for routing problems are virtually non-existent in the current literature. The reason is that existing graph arXiv:2608.00270v1 [cs.AI] 31 Jul 2026 A PREPRINT - A UGUST 4, 2026 pre-training methods [ 6, 7, 8] are primarily designed for attribute-rich networks and rely on predicting missing semantic features. This renders them fundamentally incompatible with TSP instances, which are fully connected, attribute-poor graphs where the only meaningful features are 2D spatial coordinates. To bridge this critical gap, this paper introduces a novel geometric self-supervised pre-training framework specifically tailored for Neural Combinatorial Optimization in routing problems. Based on the premise that the optimal sequence of a TSP remains invariant under isometric transformations that preserve relative distances, we force the network to learn robust spatial symmetries prior to the Reinforcement Learning (RL) policy optimization. To rigorously evaluate this framework, we conduct an extensive ablation study isolating the effects of spatial translations, rotations, and axial reflections. The empirical results demonstrate that our proposed geometric pre-training significantly enhances zero-shot extrapolation capabilities on large-scale instances, maintaining near-instantaneous inference times and establishing a highly scalable neural solver for massive routing networks. 
+
+## 2 Related Work 
+
+This section reviews the fundamental literature that contextualizes our proposed approach. First, we outline the evolution of routing problem resolution, transitioning from traditional exact solvers and heuristics to modern Neural Combinatorial Optimization (NCO) architectures. Subsequently, we examine the current landscape of self-supervised pre-training on graphs, highlighting the structural limitations that prevent existing frameworks from being directly applied to attribute-poor topologies such as the TSP. 
+
+2.1 Neural Combinatorial Optimization for Routing 
+
+Traditionally, Vehicle Routing Problems (VRPs) have been addressed using exact mathematical solvers, such as Concorde [ 9 ], which rely on branch-and-cut algorithms [ 10 ]. While providing optimal guarantees, their exponential time complexity makes them unsuitable for large-scale or real-time applications. To mitigate this, expert-designed heuristics like the Lin-Kernighan algorithm (LKH-3) [ 11 ] or 2-opt [ 12 ] were developed, trading optimality for computational speed. In recent years, Neural Combinatorial Optimization (NCO) has emerged as an alternative, leveraging deep learning to parameterize routing policies [ 13 ]. Early attempts utilized Sequence-to-Sequence (Seq2Seq) models and Pointer Networks [ 14 ] to output valid permutations of input cities. However, treating the TSP as a sequential permutation task introduces unnatural inductive biases, as graphs do not have an inherent sequential order. To properly address topological relationships, the field transitioned towards permutation-invariant architectures, pri-marily Graph Neural Networks (GNNs) and Transformer-based models. Approaches using Graph Convolutional Networks (GCN) [ 15 ], Graph Attention Networks (GAT) [ 16 ], and Gated Graph Neural Networks [ 17 ] allowed the encoders to explicitly process the structural connectivity of the cities. These representations are typically coupled with attention-based decoders and optimized via DRL algorithms. For instance, the Attention Model proposed by Kool et al. [ 2] demonstrated how these architectures can process global structural contexts to construct routing solutions autoregressively. Despite these architectural advances, the efficiency of these DRL models remains heavily dependent on the quality of the latent representations extracted from scratch, often leading to performance degradation when scaling to larger graph sizes [18]. 
+
+2.2 Self-Supervised Pre-training on Graphs 
+
+Self-supervised pre-training has been extended to Graph Learning to overcome the scarcity of labeled data and improve model generalization. More specifically, state-of-the-art graph pre-training strategies typically fall into generative or contrastive approaches. Generative methods, such as GraphMAE [ 19 ] and its subsequent iteration GraphMAE2 [ 6 ], apply masked auto-encoding to predict hidden node attributes or edge connectivity. In contrast, approaches such as Deep Graph Infomax (DGI) [7 ] and GraphCL [ 8] maximize agreement between augmented views to extract transferable representations. Beyond these canonical formulations, transformation-based pretext tasks learn equivariant representations by reconstructing controlled changes in graph topology [ 20 ]. More recent graph contrastive learning methods emphasize that view generation must be adapted to the input graph and preserve task-relevant information. In particular, GPA learns graph-specific augmentation policies [ 21 ], AEGCL combines contrastive learning with graph autoencoding in both the topology and attribute domains [ 22 ], and multi-scale injective augmentation enriches node representations by integrating subgraph-, graph-, and node-level contextual information [ 23 ]. Invariant graph learning has also been 2A PREPRINT - A UGUST 4, 2026 investigated for out-of-distribution generalization; for example, GI-Graph uses a diffusion model to generate diverse environment subgraphs for invariant representation learning [ 24 ]. Collectively, these works show that the design of the pretext task and augmentation mechanism is central to the quality, robustness, and transferability of the learned graph representations. However, a fundamental limitation exists when applying these standard frameworks to pure routing problems like the TSP. Existing methods are primarily designed for attribute-rich networks (e.g., molecular graphs with atom types, or social networks with user features) and sparse topologies [ 25 ]. Conversely, a TSP instance is an attribute-poor, fully connected graph where the only meaningful information is the 2D geometric coordinates of the nodes. Masking attributes or dropping random edges destroys the underlying metric space required to solve the problem. Consequently, these standard techniques are intrinsically incompatible with NCO, presenting a need for geometric-specific pre-training strategies that exploit spatial symmetries and relative distances. 
+
+## 3 Proposed Framework 
+
+This section presents the formal definition of the routing task and details the proposed neural architecture. Furthermore, we comprehensively formulate our geometric self-supervised pre-training strategy and the subsequent RL optimization process. 
+
+3.1 Problem Formulation 
+
+The Traveling Salesman Problem (TSP) is mathematically modeled on a complete graph G = ( V, E), where V =
+
+{1, . . . , n } denotes the set of n nodes (or cities) and E = {eij | i, j ∈ V , i ̸ = j} represents the edges connecting them. In the standard two-dimensional Euclidean TSP, each node i is characterized exclusively by its spatial coordinates 
+
+xi ∈ [0 , 1] 2. Each edge eij has an associated cost dij corresponding to the Euclidean distance between nodes i and j,such that dij = ∥xi − xj ∥2.To formalize the optimization objective, let xij ∈ { 0, 1} be a binary decision variable that equals 1 if the agent travels directly from node i to node j, and 0 otherwise. The goal is to minimize the total length of the tour, expressed by the objective function: 
+
+min 
+
+> n
+
+X
+
+> i=1
+
+X 
+
+> j̸=i
+
+dij xij (1) To ensure that the sequence forms a single continuous, Hamiltonian cycle that visits every node exactly once, the problem is subject to the following constraints: 
+
+> n
+
+X
+
+> i=1 ,i ̸=j
+
+xij = 1 ∀j ∈ V (2) 
+
+> n
+
+X 
+
+> j=1 ,j ̸=i
+
+xij = 1 ∀i ∈ V (3) Additionally, to prevent the formation of disjoint sub-tours, we incorporate the Miller-Tucker-Zemlin (MTZ) formulation [26 ]. This approach introduces auxiliary continuous variables ui ∈ R for i = 2 , . . . , n , which represent the visitation order of the nodes: 
+
+ui − uj + nx ij ≤ n − 1 ∀i, j ∈ { 2, . . . , n }, i ̸ = j (4) From a machine learning perspective, the neural solver aims to construct a valid permutation a = ( a1, a 2, . . . , a n) of the input nodes that satisfies all the aforementioned mathematical constraints while minimizing the sequence length: 
+
+L(a) = 
+
+> n−1
+
+X
+
+> t=1
+
+∥xat − xat+1 ∥2 + ∥xan − xa1 ∥2 (5) This formal representation serves as the foundational geometric environment upon which our neural architecture and self-supervised pre-training framework are built. 3A PREPRINT - A UGUST 4, 2026 Next Node πt+1 
+
+> t= θ
+> t=1
+> ...
+> Graph Encoder
+> Original
+> Graph
+> Transformed
+> Graph
+> InfoNCE Contrastive Loss
+> Original Graph
+> Embedding
+> Transformed Graph
+> Embedding
+> Weight
+> Update
+> Graph Encoder
+> TSP Instance
+> MHA Decoder
+> Graph
+> Embedding
+> Policy Optimization
+> Weight
+> Update
+> Δθ
+> Current Policy
+
+Pre-train  Train 
+
+Figure 1: Overview of the proposed neural architecture. The system comprises a GatedGCN encoder for structural feature extraction and a Multi-Head Attention decoder for autoregressive route construction, linked by the geometric self-supervised pre-training module. 
+
+3.2 Neural Architecture for Routing 
+
+To map the continuous geometric space into a discrete routing policy, we employ an encoder-decoder architecture driven by DRL. As depicted in Figure 1, the system processes the raw 2D coordinates through an anisotropic graph encoder to extract robust topological features, which are subsequently utilized by an autoregressive attention decoder to construct the Hamiltonian cycle step by step. Next, both encoder and decoder are explained in detail. 
+
+3.2.1 Graph Encoder 
+
+The encoding process transforms the TSP structure into a high-dimensional latent space. A critical requirement for routing problems is the ability to process not only the node features but also the explicit edge weights (distances). To achieve this, we utilize a Gated Graph Convolutional Network (GatedGCN) [ 17 ], which captures the graph structure through anisotropic message-passing mechanisms, weighting the relevance of connections via edge gating. Since the TSP is natively defined on a fully connected graph, processing the entire dense edge matrix is computationally prohibitive at scale. To mitigate this computational and memory bottleneck, the graph is sparsified by restricting the connections strictly to the k-nearest neighbors ( k-NN) for each node. The encoding process then begins by linearly projecting the node coordinates xi ∈ [0 , 1] 2 and the Euclidean distances dij of this sparsified k-NN graph into a 
+
+d-dimensional space. Formally, the hidden state of a node hli and the latent edge representation ˆelij at layer l + 1 are updated following an anisotropic network scheme with residual connections. First, we compute the aggregated message 
+
+mli from the neighborhood: 
+
+mli = MAX j∈N i
+
+ σ(ˆ elij ) ⊙ V lhlj
+
+ , (6) where Ni is the set of neighbors of node i defined by the k-NN graph, σ represents the sigmoid function acting as a gating mechanism, V l ∈ Rd×d is a learnable weight matrix of layer l, and ⊙ denotes the Hadamard product. Then, the node and edge embeddings are updated as follows: 
+
+hl+1  
+
+> i
+
+= hli + ReLU  Norm  U lhli + mli
+
+ (7) 
+
+ˆel+1  
+
+> ij
+
+= ˆ elij + ReLU  Norm  Al ˆelij + Blhli + Clhlj
+
+ (8) where U l, A l, B l, C l ∈ Rd×d are also learnable weight matrices of layer l, and Norm represents Layer Normalization [27]. 4A PREPRINT - A UGUST 4, 2026 To guarantee scale extrapolation, critical design decisions were made. First, the aggregation is performed via the MAX operation, which is intrinsically agnostic to the number of nodes, preventing the embedding magnitudes from exploding in dense graphs. Second, Layer Normalization guarantees that the feature vectors remain in a predictable numerical range outside the training domain. After Lenc convolution layers, the encoder outputs the final structural embeddings for all N nodes in the graph, denoted as H(Lenc ) = {h(Lenc ) 
+
+> i
+
+}Ni=1 , serving as the fundamental input for the autoregressive decoding mechanism. 
+
+3.2.2 Autoregressive Attention Decoder 
+
+For route generation, we utilize an autoregressive decoder based on attention mechanisms [ 2 ]. This models the solution construction as a sequential process, capturing the permutation structure of the TSP. At each time step t, the decoder generates a context vector ˆhCt that integrates three sources of information: the global representation of the graph, the currently visited node, and the first selected node. This integration is defined by a linear projection of their concatenated embeddings: 
+
+ˆhCt = WC [hG, h at−1 , h a1 ], (9) where hG ∈ Rd is the global graph embedding, derived by averaging the final node embeddings output by the encoder 
+
+H(Lenc ) (i.e., hG = 1
+
+> N
+
+PNi=1 h(Lenc ) 
+
+> i
+
+); hat−1 ∈ Rd represents the embedding of the currently visited node; and ha1 ∈ Rd
+
+is the starting node of the route. The learnable projection matrix WC ∈ Rd×3d maps the concatenated input to a embedding space, yielding the context vector ˆhCt ∈ Rd. In the initial step ( t = 1 ), there is not route history, then, two trainable parameter vectors vlast , v first ∈ Rd are used as placeholders. This context vector ˆhCt is processed by a Multi-Head Cross Attention (MHA) mechanism to evaluate the relevance of unvisited nodes. Following the standard attention formulation, we first obtain the query vector qtm , the keys matrix 
+
+Km, and the values matrix Vm for each attention head m ∈ { 1, . . . , M } by applying learnable linear projections to the context vector and the global node embeddings H(Lenc ):
+
+qtm = ( ˆhCt )⊤W Qm (10) 
+
+Km = H(Lenc )W Km (11) 
+
+Vm = H(Lenc )W Vm , (12) where W Qm , W Km , W Vm ∈ Rd×dk are the projection weight matrices, and dk = d/M is the dimensionality of each attention head. With these components explicitly defined, the output of the attention head is computed using the standard scaled dot-product formulation: head m = softmax 
+
+ qtm K⊤
+
+> m
+
+√dk
+
+
+
+Vm. (13) The outputs from all heads are concatenated and linearly projected to obtain the final refined context ˜hCt :
+
+˜hCt = Concat (head 1, . . . , head M )W O , (14) where W O ∈ Rd×d. Finally, the selection probabilities (or logits), ujt , for the next node j are obtained through a final single-head attention mechanism (acting as a pointer) that uses a hyperbolic tangent function as a non-linear function: 
+
+ujt =
+
+(
+
+C · tanh 
+
+ Q⊤ 
+
+> tKj
+> √d
+
+
+
+if j / ∈ { a1, . . . , a t−1}−∞ otherwise (15) where the queries ( Qt) and keys ( Kj ) for this single-head attention are defined respectively as: 
+
+Qt = W Q
+
+> ptr
+
+˜hCt and Kj = W K 
+
+> ptr
+
+h(Lenc ) 
+
+> j
+
+.
+
+5A PREPRINT - A UGUST 4, 2026 Here, the dot product measures the similarity between the refined context ˜hCt and the structural node embedding h(Lenc )
+
+> j
+
+provided by the encoder. The parameters W Q
+
+> ptr
+
+, W K 
+
+> ptr
+
+∈ Rd×d are independent learnable projection matrices specific to this final pointer mechanism. The parameter C (set to 10) clips the values to encourage exploration during training, and the value −∞ (acting as a safety mask) strictly blocks previously visited nodes to guarantee a valid Hamiltonian permutation. The stochastic policy πθ is obtained from these unnormalized compatibilities ujt through a softmax function, yielding a valid probability distribution over the available nodes: 
+
+πθ (at = j | G , a <t ) = exp( ujt )
+
+PNk=1 exp( ukt ) (16) Finally, the action at (i.e., the next node to visit) is extracted from this policy, and the specific procedure depends on the execution phase. During training, the next node is sampled from the distribution ( at ∼ πθ ) to promote exploration of the state space. Conversely, during inference, a greedy decoding strategy is employed, deterministically selecting the node with the highest probability: 
+
+at = arg max  
+
+> j
+
+πθ (at = j | G , a <t ) (17) 
+
+3.3 Geometric Self-Supervised Pre-training 
+
+The fundamental limitation of training DRL routing agents from scratch is their susceptibility to geometric over-squashing and poor zero-shot extrapolation. Without a preliminary understanding of the topological space, the encoder tends to memorize the absolute coordinate distribution of the specific training scale rather than the underlying relative distance metrics. To mitigate this, we propose a self-supervised pre-training framework that forces the GatedGCN encoder to capture scale-invariant spatial symmetries prior to the policy optimization phase. Our approach is founded on a core geometric property of the Euclidean TSP: the optimal routing sequence remains strictly invariant under rigid isometric transformations that preserve the relative distances between all pairs of nodes. By leveraging contrastive learning [ 28 ], we train the encoder to maximize the agreement between different augmented views of the same underlying graph topology, a process conceptually depicted in the pre-training module of Figure 1, using the spatial transformations detailed in Figure 2. The choice of geometric augmentation transformations is critical for enabling the encoder to capture relative distance metrics dij while ignoring absolute spatial coordinates. We implement three isometric transformations, represented in Figure 2, that operate on the node coordinates xi ∈ [0 , 1] 2 for a set of nodes N = {1, . . . , n }: Central Rotation, Axial Reflection and Spatial Translation. In the Central Rotation, the graph is rotated around the geometric center 
+
+c = [0 .5, 0.5] ⊤ of the unit square by an angle θ sampled from U[0 , 2π). The transformed coordinates are: 
+
+fθ (xi) = Rθ (xi − c) + c, Rθ =
+
+cos θ − sin θ
+
+sin θ cos θ
+
+
+
+. (18) In the Axial Reflection, the transformation mirrors the graph across an axis passing through c with an orientation 
+
+ϕ ∼ U [0 , π ), utilizing the Householder reflection matrix Sϕ [29]: 
+
+fϕ(xi) = Sϕ(xi − c) + c, Sϕ = 2 vv ⊤ − I (19) where v = [cos ϕ, sin ϕ]⊤ is the unit vector defining the reflection axis, and I is the identity matrix. Finally, in the Spatial Translation, a translation vector δ = [ δx, δ y ]⊤ is applied uniformly to all nodes: 
+
+fδ (xi) = xi + δ. (20) To maintain numerical stability, the displacement δ is constrained to a maximum of 15% of the total coordinate range, reinforcing the policy’s independence from absolute coordinate origins. Additionally, to maximize diversity in the graph contrastive views, we implement a stochastic Hybrid Transformation Strategy, consisting in the composition of previous transformations as 
+
+g(xi) = f bδ 
+
+> δ
+
+(f bθ 
+
+> θ
+
+(f bϕ 
+
+> ϕ
+
+(xi))) , (21) 6A PREPRINT - A UGUST 4, 2026   
+
+> (a) Original graph (b) Rotated graph
+> (c) Reflected graph (d) Translated graph
+
+Figure 2: Geometric transformations for graph pre-training: (a) original instance, (b) rotation fθ , (c) axial reflection fϕ,and (d) translation fδ .where bϕ, b θ , b δ ∼ Bernoulli (p) with p = 0 .5 are independent binary random variables. The conditional operator f bk
+
+> k
+
+applies the transformation if bk = 1 and returns the identity otherwise: 
+
+f bk 
+
+> k
+
+(x) = 
+
+fk(x) if bk = 1 
+
+x if bk = 0 (22) By applying these isometric transformations, we generate augmented views of the graph with significantly different coordinate representations but identical pairwise distances. This guarantees that the optimal TSP solution remains completely unchanged across views, forcing the encoder to extract deep, robust features that are invariant to spatial perturbations while preserving the underlying metric structure. Once the transformations to be applied are defined, a cost or loss function is established to perform graph-level contrastive learning: global representations of the original graph and its augmented view should be compared. However, following standard contrastive learning frameworks, these global embeddings are not contrasted directly in the encoder’s output space. Instead, an auxiliary projection head, consisting of a two-layer Multi-Layer Perceptron (MLP), temporarily maps the global graph embeddings into a lower-dimensional latent space. For the i-th instance in a batch, let hG,i and 
+
+h′ 
+
+> G,i
+
+be the global embeddings of the original and augmented views, respectively. Their latent projections are defined as 
+
+zi = MLP (hG,i ) and z′ 
+
+> i
+
+= MLP (h′
+
+> G,i
+
+).To maximize the agreement between views of the same instance and minimize it against other instances, we apply the InfoNCE (Information Noise Contrastive Estimation) loss [30], which is formulated for a given batch of size Nb as: 
+
+LInfoNCE = − 1
+
+NbNbX
+
+> i=1
+
+log exp( z⊤ 
+
+> i
+
+z′
+
+> i
+
+)
+
+PNb 
+
+> j=1
+
+exp( z⊤ 
+
+> i
+
+z′ 
+
+> j
+
+) , (23) where the numerator represents the similarity of the positive pair (zi, z ′
+
+> i
+
+), and the denominator sums the similarities between the anchor zi and all augmented views in the batch, acting as negative samples when j̸ = i.This objective function forces the encoder to capture connectivity patterns and distance distributions that are strictly essential for routing. After the pre-training is complete, the MLP projection head is discarded, allowing the RL phase to utilize the rich structural features retained in the unprojected embeddings ( hG). 7A PREPRINT - A UGUST 4, 2026 
+
+3.4 Reinforcement Learning Training 
+
+Following the contrastive pre-training phase, the model undergoes its primary training stage, as depicted in the overall architecture in Fig.1. Given that the TSP is an NP-hard combinatorial task, generating ground-truth optimal labels for large-scale instances is computationally prohibitive. Therefore, the system is trained end-to-end using DRL, allowing the model to learn routing policies directly from the reward signal defined by the final tour length. We model the tour construction as a Markov Decision Process (MDP) [ 31 ], where the agent, represented by our neural architecture, sequentially selects nodes. The objective is to minimize the expected tour length L(a) under the policy 
+
+πθ (a|G ) using the loss function 
+
+L(θ|G ) = Eπθ (a|G )[L(a)] . (24) To update the network parameters θ, we employ the REINFORCE gradient estimator [ 32 ]. To mitigate the high variance inherent in the tour cost L(a), we subtract a baseline b(G) that approximates the expected cost of the current policy. The gradient of the loss is formulated as: 
+
+∇θ L(θ|G ) = Eπθ (a|G ) [( L(a) − b(G)) ∇θ log πθ (a|G )] . (25) The baseline b(G) is implemented following the Greedy Rollout Baseline [ 2] as the cost of a tour generated by a deterministic version of the model, where actions are selected according to equation 17. The sampled policy receives a positive update only when it outperforms the greedy baseline. The baseline is periodically replaced with the training model whenever a paired t-test ( α = 0 .05 ) confirms a statistically significant reduction in average tour length. Finally, the estimated gradients are processed by the Adam optimizer, which updates the network parameters to guide the model toward increasingly efficient routing policies. 
+
+## 4 Results and Discussion 
+
+This section presents the empirical evaluation of the proposed system, aiming to quantify the impact of different geometric pre-training strategies on the model’s ability to solve the TSP. First, we conduct an ablation study to isolate the effects of individual and combined isometric transformations. Subsequently, we analyze the impact of scale variability during training on the model’s zero-shot extrapolation capabilities, and finally, we benchmark our best-performing neural architecture against the state-of-the-art exact solver Concorde and some classical heuristic methods. 
+
+4.1 Experimental Setup 
+
+To ensure the rigor and reproducibility of the results presented in this paper, this section details the hardware environment, hyperparameters, evaluation datasets, and the performance metrics used during the learning and validation phases. All experiments were conducted on a system equipped with an NVIDIA GeForce RTX 4090 GPU following a learning lifecycle divided into two consecutive methodological phases. In the first one, Pre-training Phase (Contrastive Learning), the encoder is configured with a latent embedding dimension of 128 . The self-supervised learning process spans 100 
+
+epochs, processing 128 , 000 unique graph instances per epoch, which are processed in mini-batches of 512 instances. The network parameters are optimized using the Adam optimizer with a constant learning rate of 1 × 10 −4. To endow the encoder with a versatile inductive bias against structural variability, the number of nodes in the training graphs is dynamically sampled from a uniform distribution between 20 and 50 nodes. And in the second one, Training Phase (RL), the policy optimization via the REINFORCE algorithm is extended for 50 additional epochs, maintaining the latent embedding dimension at 128 . The epoch size remains constant at 128 , 000 instances, organized into batches of 
+
+256 instances. The gradients are processed using the Adam optimizer, configured with a base learning rate of 10 −4.For the validation, the model’s performance is evaluated on independent datasets, each comprising 1, 000 unique TSP instances randomly generated in the 2D Euclidean plane. The quantitative evaluation framework relies on two primary metrics. The first one, Average Cost, calculates the mean tour length ( μ) and its sample standard deviation ( s) over the test sets. And the second one, Optimality Gap, uses the exact solver Concorde as the performance baseline to compute the deviation of the neural model’s solution quality as GAP TSP (%) = μNCO − μConcorde 
+
+μConcorde 
+
+× 100 , (26) where μNCO and μConcorde denote the average costs obtained by our neural solver and Concorde, respectively. 8A PREPRINT - A UGUST 4, 2026 
+
+4.2 Ablation Study and State-of-the-Art Comparison 
+
+To empirically determine the contribution of the proposed isometric transformations and contextualize our results within the current literature, we conduct a joint analysis of solution quality and computational efficiency. All neural models evaluated in this section were pre-trained on instances of variable size (20 to 50 nodes) and subsequently fine-tuned via RL exclusively on 50-node graphs. Their zero-shot extrapolation capabilities were then tested on scales ranging from TSP20 up to massive TSP1,000 instances. Table 1: Evolution of the Optimality Gap (%) for different pre-training strategies compared to Concorde. 
+
+# Pre-training Strategy TSP20 TSP50 TSP100 TSP200 TSP500 TSP1000 
+
+# None (Baseline) 4.6 6.9 13.8 25.1 46.0 67.2 Rotation (Rot) 3.7 6.0 12.2 22.8 40.7 58.2 Reflection (Refl) 3.7 5.9 12.0 21.4 40.3 57.5 Translation (Trans) 5.1 6.2 13.0 26.3 51.0 76.2 Rot + Refl (Proposed) 3.7 5.9 11.6 21.5 38.4 55.1 
+
+# Rot + Trans 4.2 5.4 11.7 25.3 61.9 106.9 Trans + Refl 4.2 6.6 13.1 23.8 46.4 66.8 Rot + Refl + Trans 3.6 5.8 11.6 21.7 41.2 60.6 First, we isolate the effects of the geometric augmentations. Table 1 details the evolution of the optimality gap against the exact solver Concorde for different pre-training strategies. The numerical metrics strongly corroborate the premise of geometric self-supervised learning: pre-training consistently establishes a generalized superiority over random initialization. While the baseline model trained from scratch suffers a severe performance degradation when extrapolating to massive instances, isolated pre-training strategies such as rotation or reflection successfully mitigate this steep increase. However, spatial translation has a highly detrimental impact when scaling the problem’s dimensionality, yielding the worst overall results at TSP1,000. Our hypothesis is that translation introduces a detrimental geometric bias: it conditions the model to assume that a coordinate (x, y ) is functionally equivalent to a slightly displaced one, such as 
+
+(x+δ, y +δ). While this assumption has a negligible impact in low-density configurations, it becomes critical in massive, highly dense graphs, where even a minimal spatial variation separates two completely distinct nodes. By erroneously interpreting these extremely close locations as analogous, the network loses its ability to discriminate strict routing precedence, which severely hinders its capacity to resolve local neighborhoods. Ultimately, the hybrid composition of rotation and reflection emerges as the dominant strategy, confirming that combining strictly distance-preserving transformations without spatial shifts is highly effective. Second, we benchmark our best-performing hybrid model (Rotation + Reflection) against the baseline NCO without pre-training, the exact solver Concorde, and classical expert-designed heuristics. Table 2 presents a comprehensive comparison of both the optimality gap and the computational inference time. This joint analysis highlights a fundamental operational trade-off. Concorde guarantees the optimal Hamiltonian cycle; however, due to the NP-hard nature of the TSP, its execution time grows exponentially, creating a severe computational bottleneck. Classical heuristics, such as LKH-3, offer high-quality solutions but still exhibit a noticeable increase in computational overhead at massive scales. In contrast, our pre-trained NCO framework achieves the best balance between solution quality and computational cost. While trading absolute optimality for speed in massive extrapolation scenarios, it maintains a near-instantaneous execution profile, delivering speedups of up to two orders of magnitude over Concorde at 1,000 nodes. Table 2: State-of-the-Art Comparison: Optimality Gap (%) and Inference Time (s) across increasing TSP scales.                                                                                                      
+
+> Algorithm TSP20 TSP50 TSP100 TSP200 TSP500 TSP1000
+> Gap (%) Time (s) Gap (%) Time (s) Gap (%) Time (s) Gap (%) Time (s) Gap (%) Time (s) Gap (%) Time (s) Concorde (Exact) 0.0 0.06341 0.0 0.11 0.0 0.35 0.0 1.42 0.0 14.39 0.0 175.19 LKH-3 0.0 0.05412 0.0 0.06360 0.0 0.09787 0.0 0.27 0.0 1.61 0.0 7.18 Google OR-Tools 0.3 0.05169 2.7 0.05160 4.5 0.10 5.3 0.50 4.4 7.01 5.1 80.06 Ant Colony Optimization 1.5 2.69 2.4 26.65 3.9 181.56 ------Genetic Algorithm 1.7 1.08 0.8 14.41 3.4 144.56 ------NCO Baseline (No Pre-train) 4.6 0.00026 6.9 0.00077 13.8 0.00353 25.1 0.01260 46.0 0.09417 67.2 0.499
+> NCO Proposed (Rot+Refl) 3.7 0.00029 5.9 0.00082 11.6 0.00361 21.5 0.01269 38.4 0.09428 55.1 0.50
+
+To visually illustrate the qualitative impact of our geometric approach, Appendix A provides a side-by-side comparison of the routing sequences generated by the baseline model, various pre-training configurations, and the optimal solver 9A PREPRINT - A UGUST 4, 2026 Table 3: Impact of training and pre-training with scale variability on zero-shot generalization and average tour costs.                                                                                                       
+
+> Pre-training Training Evaluation TSP 20 TSP 50 TSP 100 TSP 200 TSP 500 TSP 1,000
+> 20-50 20-50 3.922 ±0.020 6.071 ±0.019 8.846 ±0.033 13 .561 ±0.071 25 .852 ±0.088 43 .420 ±0.137
+> 20-50 50 3.949 ±0.020 6.028 ±0.019 8.626 ±0.033 12 .959 ±0.065 23 .350 ±0.089 37 .405 ±0.137
+> 20-100 20-100 3.909 ±0.020 5.963 ±0.019 8.425 ±0.033 12 .334 ±0.075 21 .686 ±0.087 34 .192 ±0.147
+> 50 50 3.957 ±0.021 5.990 ±0.019 8.545 ±0.033 12 .927 ±0.067 23 .927 ±0.091 38 .635 ±0.133
+> 100 100 4.578 ±0.038 6.312 ±0.019 8.558 ±0.033 12 .225 ±0.082 20 .931 ±0.087 32 .553 ±0.139
+
+Concorde. This visual analysis demonstrates the structural coherence gained through the different pre-training strategies across varying instance sizes. 
+
+4.3 Scalability and Zero-Shot Extrapolation 
+
+A fundamental challenge in NCO is the tendency of DRL agents to overfit to the specific graph size encountered during training. When these models are evaluated on significantly larger instances without prior fine-tuning, their performance typically degrades drastically. This collapse occurs because the network internalizes the specific node density and distance distributions of the training set, failing to generalize its routing policy when exposed to the denser topologies of massive graphs. To counteract this scale-dependent bias, our methodology introduces scale variability during the learning phases. Rather than exposing the network to a static graph size (e.g., exactly 50 nodes), the model is trained on instances dynamically sampled from a uniform distribution of sizes (e.g., N ∼ U (20 , 50) ). This stochastic variation in the number of nodes forces the GatedGCN encoder and the attention mechanisms to learn scale-agnostic representations. Consequently, the model must rely on the underlying geometric relationships and relative distances rather than memorizing the absolute topological characteristics of a fixed-size environment. The quantitative impact of introducing this dynamic sizing is detailed in Table 3. The results demonstrate a clear correlation between scale variability during the pre-training/training phases and the model’s resilience in zero-shot extrapolation scenarios. When models are restricted to a strictly fixed training scale, they suffer a steep increase in the average tour costs when confronted with massive instances such as TSP500 or TSP1,000. The encoder, accustomed to a specific spatial density, becomes disoriented by the sheer number of neighboring nodes in high-dimensional spaces. Conversely, incorporating scale variability acts as a powerful structural regularizer. When this variable-scale approach is combined with our optimal hybrid geometric pre-training (Rotation + Reflection), the degradation of the routing policy is significantly contained up to moderate extrapolation scales. However, an important nuance emerges from the empirical data regarding extreme extrapolation. While scale flexibility proves highly beneficial for transitioning between moderate sizes, the results indicate that for scenarios of ultra-high node density, the benefit of scale flexibility dilutes in favor of structural specialization. In massive, highly dense instances (such as TSP1,000), the topological complexity and the sheer number of local neighborhoods demand a highly specialized feature extraction. In these extreme environments, a model trained on a fixed, specific scale may capitalize on its “over-specialization” to resolve localized clusters better than a generalized, scale-agnostic model. This reveals a critical trade-off in NCO design between maintaining universal scale flexibility and achieving peak performance through structural specialization in ultra-dense domains. 
+
+## 5 Conclusions 
+
+In this paper, we address the generalization bottleneck of NCO in routing problems by introducing a novel geometric self-supervised pre-training framework. Our findings demonstrate that applying a carefully selected composition of isometric transformations forces the encoder to learn robust, scale-invariant spatial representations, effectively mitigating the structural collapse typically observed in baseline models during zero-shot extrapolation. Furthermore, while incorporating scale variability during training acts as a powerful regularizer for generalizing across moderate sizes, we identify a critical trade-off where ultra-dense instances ultimately require fixed-scale structural specialization to achieve peak performance. The proposed neural solver maintains near-instantaneous inference times, delivering speedups of up to two orders of magnitude over the exact solver Concorde and establishing a highly scalable alternative for real-time, industrial routing applications. 10 A PREPRINT - A UGUST 4, 2026 
+
+## References 
+
+[1] Fu Luo, Xi Lin, Fei Liu, Qingfu Zhang, and Zhenkun Wang. Neural combinatorial optimization with heavy decoder: Toward large scale generalization. ArXiv , abs/2310.07985, 2023. [2] Wouter Kool, Herke van Hoof, and Max Welling. Attention, learn to solve routing problems! In International Conference on Learning Representations , 2019. [3] Jiwoo Son, Zhikai Zhao, Federico Berto, Chuanbo Hua, Zhiguang Cao, Changhyun Kwon, and Jinkyoo Park. RRNCO: Towards real-world routing with neural combinatorial optimization. In Workshop on Differentiable Learning of Combinatorial Algorithms , 2025. [4] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina N. Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. 2018. [5] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, and Ross Girshick. Masked autoencoders are scalable vision learners. In 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,pages 15979–15988, 2022. [6] Zhenyu Hou, Yufei He, Yukuo Cen, Xiao Liu, Yuxiao Dong, Evgeny Kharlamov, and Jie Tang. Graphmae2: A decoding-enhanced masked self-supervised graph learner. In Proceedings of the ACM Web Conference 2023 ,WWW ’23, page 737–746, New York, NY, USA, 2023. Association for Computing Machinery. [7] Petar Veliˇ ckovi´ c, William Fedus, William L. Hamilton, Pietro Liò, Yoshua Bengio, and R Devon Hjelm. Deep graph infomax. In International Conference on Learning Representations , 2019. [8] Yuning You, Tianlong Chen, Yang Shen, and Zhangyang Wang. Graph contrastive learning automated. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 12121–12132. PMLR, 18–24 Jul 2021. [9] David L. Applegate, Robert E. Bixby, Vašek Chvatál, and William J. Cook. The Traveling Salesman Problem: A Computational Study . Princeton University Press, 2006. [10] David R. Morrison, Sheldon H. Jacobson, Jason J. Sauppe, and Edward C. Sewell. Branch-and-bound algorithms: A survey of recent advances in searching, branching, and pruning. Discrete Optimization , 19:79–102, 2016. [11] Keld Helsgaun. An extension of the lin-kernighan-helsgaun tsp solver for constrained traveling salesman and vehicle routing problems: Technical report. 2017. [12] David Astoquillca-Yaranga and Esther Berger-Vidal. Heurística de intercambio 2opt best improvement y nivel de eficacia de las soluciones del problema del agente viajero simétrico. Revista peruana de computación y sistemas ,5:65–81, 06 2023. [13] K. T. Chung, C. K. M. Lee, and Y. P. Tsang. Neural combinatorial optimization with reinforcement learning in industrial engineering: a survey. Artificial Intelligence Review , 58(5):130, 2025. [14] Oriol Vinyals, Meire Fortunato, and Navdeep Jaitly. Pointer networks. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama, and R. Garnett, editors, Advances in Neural Information Processing Systems , volume 28. Curran Associates, Inc., 2015. [15] Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks, 2017. [16] Petar Veliˇ ckovi´ c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. Graph attention networks, 2018. [17] Yujia Li, Daniel Tarlow, Marc Brockschmidt, and Richard Zemel. Gated graph sequence neural networks, 2017. [18] Chaitanya K. Joshi, Quentin Cappart, Louis-Martin Rousseau, and Thomas Laurent. Learning the travelling salesperson problem requires rethinking generalization. Constraints , 27(1–2):70–98, April 2022. [19] Zhenyu Hou, Xiao Liu, Yukuo Cen, Yuxiao Dong, Hongxia Yang, Chunjie Wang, and Jie Tang. Graphmae: Self-supervised masked graph autoencoders. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , KDD ’22, page 594–604, New York, NY, USA, 2022. Association for Computing Machinery. [20] Xiang Gao, Wei Hu, and Guo-Jun Qi. Self-supervised graph representation learning via topology transformations. 
+
+IEEE Transactions on Knowledge and Data Engineering , 35(4):4202–4215, April 2023. [21] Xin Zhang, Qiaoyu Tan, Xiao Huang, and Bo Li. Graph contrastive learning with personalized augmentation. 
+
+IEEE Transactions on Knowledge and Data Engineering , 36(11):6305–6316, November 2024. 11 A PREPRINT - A UGUST 4, 2026 [22] Wen-Zhi Li, Chang-Dong Wang, Jian-Huang Lai, and Philip S. Yu. Towards effective and robust graph contrastive learning with graph autoencoding. IEEE Transactions on Knowledge and Data Engineering , 36(2):868–881, February 2024. [23] Haonan Zhang, Yuyang Ren, Luoyi Fu, Xinbing Wang, Guihai Chen, and Chenghu Zhou. Multi-scale self-supervised graph contrastive learning with injective node augmentation. IEEE Transactions on Knowledge and Data Engineering , 36(1):261–274, January 2024. [24] Sanfeng Zhang, Xinyi Liu, Zihao Qi, Xingchen Yan, and Wang Yang. GI-Graph: A generative invariant graph learning scheme towards out-of-distribution generalization. IEEE Transactions on Knowledge and Data Engineering , 37(10):5934–5947, October 2025. [25] Jiajun Zhou, Chenxuan Xie, Shengbo Gong, Zhenyu Wen, Xiangyu Zhao, Qi Xuan, and Xiaoniu Yang. Data augmentation on graphs: A technical survey. ACM Comput. Surv. , 57(11), June 2025. [26] C. E. Miller, A. W. Tucker, and R. A. Zemlin. Integer programming formulation of traveling salesman problems. 
+
+J. ACM , 7(4):326–329, 1960. [27] Ruibin Xiong, Yunchang Yang, Di He, Kai Zheng, Shuxin Zheng, Chen Xing, Huishuai Zhang, Yanyan Lan, Liwei Wang, and Tie-Yan Liu. On layer normalization in the transformer architecture. In Proceedings of the 37th International Conference on Machine Learning , ICML’20. JMLR.org, 2020. [28] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for contrastive learning of visual representations. In Proceedings of the 37th International Conference on Machine Learning ,ICML’20. JMLR.org, 2020. [29] Alston S. Householder. Unitary triangularization of a nonsymmetric matrix. J. ACM , 5(4):339–342, October 1958. [30] Chongyi Zheng, Ruslan Salakhutdinov, and Benjamin Eysenbach. Contrastive difference predictive coding. In 
+
+The Twelfth International Conference on Learning Representations , 2024. [31] Chelsea C. White and Douglas J. White. Markov decision processes. European Journal of Operational Research ,39(1):1–16, 1989. [32] Ronald J. Williams. Simple statistical gradient-following algorithms for connectionist reinforcement learning. 
+
+Machine Learning , 8(3):229–256, May 1992. 12 A PREPRINT - A UGUST 4, 2026 
+
+## A Visual comparison Baseline  Rotation  Reflection  Rot + Ref TSP20 TSP50 TSP100 
+
+> Translation  Concorde
+
+TSP500 
+
+Figure 3: Visual comparison of the routes generated by different architectures in response to progressive increases in the TSP scale. 13
