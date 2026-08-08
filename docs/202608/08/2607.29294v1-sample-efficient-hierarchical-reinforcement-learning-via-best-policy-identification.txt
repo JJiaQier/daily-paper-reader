@@ -1,0 +1,6713 @@
+Title: Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification
+
+URL Source: https://arxiv.org/pdf/2607.29294v1
+
+Published Time: Mon, 03 Aug 2026 00:55:41 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+# Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification 
+
+Anders Jonsson 
+
+Department of Engineering Universitat Pompeu Fabra 
+
+anders.jonsson@upf.edu 
+
+Emilie Kaufmann 
+
+Univ. Lille, CNRS, Inria Centrale Lille, UMR 9189-CRIStAL 
+
+emilie.kaufmann@univ-lille.fr 
+
+Gianmarco Tedeschi 
+
+Dept. Electronics, Information, and Bioengineering Politecnico di Milano 
+
+gianmarco.tedeschi@polimi.it 
+
+Lorenzo Steccanella 
+
+Department of Engineering Universitat Pompeu Fabra 
+
+lorenzo.steccanella.w@gmail.com 
+
+Abstract 
+
+We present HBPI-UCRL, a model-based algorithm for hierarchical reinforcement learning (HRL) that learns high-level and low-level policies in parallel. HBPI-UCRL exploits the fact that a high-level transition corresponds to a multi-step transition at the low level. We introduce two conditions on the low-level dynamics that are sufficient to make parallel HRL learnable. When these conditions hold, we prove that HBPI-UCRL has a polynomial sample complexity in the problem parameters. In the sparse-reward, goal-directed setting, our sample complexity upper bound for HBPI-UCRL is strictly lower than that of its non-hierarchical counterpart, providing theoretical justification for the empirical success of HRL. 
+
+1 Introduction 
+
+In hierarchical reinforcement learning (HRL), a branch of reinforcement learning (RL), the learning problem is decomposed into a hierarchy of subproblems, each a Markov decision process (MDP). At the top of the hierarchy is a semi-Markov decision process (SMDP) that selects between subproblems. When selected, a subproblem executes a local policy for multiple time steps before returning control to the SMDP. The aim is to approximate the optimal hierarchical policy, which involves maximizing a local value function of each subproblem as well as the value function of the SMDP. Many authors have demonstrated empirically that HRL carries several practical benefits, such as efficient exploration [Bellemare et al., 2020, Konidaris and Barto, 2009, Machado et al., 2022], improved sample efficiency [Levy et al., 2019, Nachum et al., 2018, Rafati and Noelle, 2019], better credit assignment [Vezhnevets et al., 2017], faster long-term planning [Gopalan et al., 2017] and generalization and transfer [Ahn et al., 2022, Matthews et al., 2022]. However, in spite of the long history and large body of work on HRL, there are surprisingly few works that prove theoretical guarantees for HRL algorithms. This is especially true when the SMDP and subproblem policies are learned in parallel. Hence an important research question is to establish theoretical foundations for HRL that explain its benefits. We present a novel model-based algorithm for episodic HRL called HBPI-UCRL, for hierarchical best policy identification. The algorithm learns the SMDP policy and subproblem policies in parallel by collecting data in the form of episodes. We assume that the subproblem MDPs share the transition dynamics but differ in the local reward functions. HBPI-UCRL performs best policy identification by computing empirical composite distributions and maintaining high-probability confidence bounds on the SMDP dynamics. Since the SMDP dynamics depend on the subproblem policies, the SMDP 
+
+> Preprint. arXiv:2607.29294v1 [cs.LG] 31 Jul 2026
+
+learning problem is non-stationary when the subproblem policies are learned in parallel. A key contribution of our work is to identify two conditions that relate the quality of the subproblem solutions to the accuracy of the SMDP dynamics. These conditions are sufficient for HRL to be PAC-learnable, and can also be of practical importance. When our two conditions hold, we prove that HBPI-UCRL is (ε, δ )-PAC with respect to the optimal hierarchical value function. Its sample complexity is of order eO(SA H4H6/ε 2)1, where SA is the size of the subproblem state-action space, H is the subproblem horizon and H is the SMDP horizon. Notably, the sample complexity is independent of the number of high-level states S and the number of subproblems. In sparse-reward, goal-directed HRL, a version of HBPI-UCRL achieves a sample complexity bound of order eO(SA H2H2/ε 2), which is a factor S smaller than that of the non-hierarchical algorithm BPI-UCRL [Kaufmann et al., 2021], and only a factor H2 larger than that of BPI-UCRL when applied to a single sparse-reward subproblem. To the best of our knowledge, ours is the first explicit sample complexity result for the parallel HRL setting. The only comparable work for parallel HRL is that of Drappo et al. [2025], who analyze the regret specifically for the goal-oriented setting. It is possible to use a regret-to-PAC conversion to obtain a sample complexity guarantee for their algorithm, but unlike HBPI-UCRL, their algorithm does not have a data-dependent stopping rule and cannot solve a more general class of HRL problems. We further elaborate on the differences in Section 5. The paper is organized as follows. Section 2 introduces two families of composite distributions and describes best policy identification (BPI) for episodic RL. Section 3 describes our formalism for episodic HRL and introduces our two key conditions for learnability. HBPI-UCRL is described in Section 4, in which we analyze its sample complexity, including the special case of sparse-reward, goal-directed HRL. Our sample complexity bounds are put in context of existing work in Section 5. In Section 6 we present some numerical experiments, and we conclude with a discussion. 
+
+Notation Given a finite set X , ∆( X ) denotes the probability simplex on X . Given an integer n > 0,
+
+JnK denotes the set {1, . . . , n }. We use I(E) to denote the indicator function for an event E, a ∧ b to denote the minimum of a and b, and a ∨ b to denote the maximum. Given integers i and j such that 
+
+1 ≤ i ≤ j, let γi:j denote a partial sequence γi, . . . , γ j of elements from a given alphabet Γ.
+
+2 Reinforcement Learning 
+
+An episodic Markov decision process (MDP) is a tuple M = ⟨S , A, P, R, H ⟩, where S is the finite state space with cardinality S = |S| , A is the finite action space with cardinality A = |A| ,
+
+P : S × A → ∆( S)2 is a transition kernel, R : S × A → [0 , 1] is a reward function, and H > 1 is an integer horizon. An episode s1, a 1, · · · , s H , a H , s H+1 is valid if P(sh+1 |sh, a h) > 0 for each 
+
+h ∈ JHK. We say that M is sparse-reward if PHh=1 R(sh, a h) ≤ 1 for each valid episode. A deterministic policy π = {πh}h∈JHK defines a mapping πh : S → A for each h ∈ JHK. The value function V π : JH + 1 K × S → R of π measures the expected reward sum under π when starting from state s at step h. The value function is recursively defined for each s ∈ S as V πH+1 (s; R) = 0 and 
+
+V πh (s; R) = R(s, π h(s)) + X
+
+> s′
+
+P(s′|s, π h(s)) V πh+1 (s′; R) ∀h ∈ JHK,
+
+where the notation emphasizes the dependence on R. We assume known R but unknown P, and below we assume a unique initial state s1, though all results generalize to fixed initial state distributions. We denote by π∗ an optimal policy, whose value function satisfies V ∗ 
+
+> 1
+
+(s1; R) = max π V π 
+
+> 1
+
+(s1; R).In online RL, in each episode t an agent chooses a policy πt and collects a state sequence st 
+
+> 1: H+1
+
+by taking in each step h the action ath = πth(sth) and transitioning to the next state sth+1 ∼ P (·| sth, a th).The policy πt can be selected based on data from previous episodes. Our paper focuses on a particular PAC RL problem, called best policy identification (BPI). In this setting, after each episode the agent can decide to stop data collection and output a guess bπ for the optimal policy. The resulting algorithm is called (ε, δ )-PAC if |V ∗ 
+
+> 1
+
+(s1; R) − V bπ 
+
+> 1
+
+(s1; R)| ≤ ε with            
+
+> 1The notation eOhides logarithmic factors in S,A,H,H,1/ε and 1/δ , and states the result for the regime of small δ.
+> 2Several authors consider time-inhomogeneous transition kernels Ph, but this is uncommon in the HRL literature.
+
+2probability larger than 1 − δ. The sample complexity of the algorithm is the number of episodes τ it requires before stopping and making an (ε, δ )-PAC guess. 
+
+(ε, δ )-PAC algorithms with a minimax optimal sample complexity are based on sophisticated Bernstein bonuses [e.g. Dann et al., 2019]. In this work we instead focus our attention on a simpler algorithm called BPI-UCRL [Kaufmann et al., 2021], that couples an optimistic algorithm based on Hoeffding bonuses with an appropriate stopping rule. In this section, we present an alternative stopping rule for BPI-UCRL rooted in new bounds on the estimation error of composite probability distributions. As we shall see, this variant of BPI-UCRL can be naturally extended to an algorithm for HRL. 
+
+Estimating transitions. We now introduce notation for model-based episodic RL algorithms. After t
+
+episodes, we compute counts N t and an empirical estimate bPt of the transition kernel as follows: 
+
+N t(s, a, s ′) = 
+
+> t
+
+X
+
+> ℓ=1
+> H
+
+X
+
+> h=1
+
+I(( s, a, s ′) = ( sℓh, π ℓh(sℓh), s ℓh+1 )) , bPt(s′|s, a ) = N t(s, a, s ′)
+
+P 
+
+> s′
+
+N t(s, a, s ′) ,
+
+with bPt(s′|s, a ) ≡ 1/S if N t(s, a ) ≡ P 
+
+> s′
+
+N t(s, a, s ′) = 0. We remark that the episode 
+
+st
+
+> 1
+
+, a t
+
+> 1
+
+, · · · , s tH , a tH , s tH+1 is fully determined by st 
+
+> 1: H+1
+
+and πt. We use Pπh (s′|s) = P(s′|s, π h(s)) 
+
+and bPt,π h (s′|s) = bPt(s′|s, π h(s)) to denote the true and estimated transition kernels under the policy 
+
+π. Using time-uniform concentration, we establish in Appendix G that the event 
+
+E = ∀t ∈ N, ∀(s, a ) ∈ S × A , bPt(·| s, a ) − P (·| s, a ) 1 ≤ Bt(s, a ) . (1) satisfies P(E) ≥ 1 − δ/ 2, where Bt(s, a ) = p2β(N t(s, a ), δ )/N t(s, a ) ∧ 2 and β is defined as 
+
+β(n, δ ) = log(2 SA/δ ) + ( S − 1) log( e(1 + n/ (S − 1))) .
+
+Composite distributions. We consider two families of composite probability distributions induced by the transition kernels {P πh }h∈JHK of π. Given integers i and j such that 1 ≤ i < j ≤ H + 1 , let 
+
+Pπi:j (·| si) be the probability of sequences si+1: j conditional on a state si, recursively defined as 
+
+Pπi:j (si+1: j |si) = 
+
+Pπh (si+1 |si), if i + 1 = j, 
+
+Pπh (si+1 |si) Pπi+1: j (si+2: j |si+1 ), else .
+
+Given i and j such that 1 ≤ i ≤ j ≤ H + 1 , let Pπi:j (·| si) be the occupancy of states sj at step j
+
+conditional on a state si, recursively defined as 
+
+Pπi:j (sj |si) = 
+
+ I(si = sj ), if i = j, P 
+
+> si+1
+
+Pπh (si+1 |si) Pπi+1: j (sj |si+1 ), else .
+
+Replacing Pπh in the above definitions with another transition kernel for π induces different composite distributions, e.g. the empirical estimates bPt,π h have associated composite distributions bPt,π i:j and bPt,π i:j .
+
+BPI-UCRL Revisited. We present and analyze a variant of BPI-UCRL [Kaufmann et al., 2021] for best policy identification. In each episode t, BPI-UCRL computes an upper confidence bound on the optimal value function V ∗. For each state-action (s, a ), the algorithm first defines a confidence set 
+
+Ct(s, a ) = p ∈ ∆( S) p − bPt(·| s, a ) 1 ≤ Bt(s, a ) . (2) An upper confidence bound V t on V ∗ can now be recursively defined for s as V tH+1 (s; R) = 0 and 
+
+V th (s; R) = max 
+
+> a
+
+h
+
+R(s, a ) + max 
+
+> p∈C t(s,a )
+
+X
+
+> s′
+
+p(s′)V th+1 (s′; R)
+
+i
+
+∀h ∈ JHK. (3) The policy πt+1 in episode t + 1 is defined as the greedy policy for V t.Our analysis relies on an error function bLt recursively defined for each s ∈ S as bLtH+1 (s) = 0 and 
+
+bLth(s) = min 
+
+h
+
+2, B t(s, π t+1  
+
+> h
+
+(s)) + X
+
+> s′
+
+bPt,π t+1  
+
+> h
+
+(s′|s)bLth+1 (s′)
+
+i
+
+∀h ∈ JHK. (4) Intuitively, bLt compounds the approximation error of kernels in the confidence set Ct across an entire episode. In Appendix C we show that this is enough to upper bound the difference between both types of composite probability distributions. We modify BPI-UCRL by redefining the stopping criterion as 
+
+τ = inf {t ∈ N : bLt
+
+> 1
+
+(s1) ≤ ε/ (2 H)}. Upon stopping, BPI-UCRL outputs the policy bπ = πτ +1 .3In Appendix C we prove the following theorem that upper bounds the sample complexity of our variant of BPI-UCRL. The upper bound is a factor H larger than that reported by Kaufmann et al. [2021] for stationary transition kernels in their Appendix E. However, we believe that their proof is incorrect, and that the sample complexity in the stationary setting is of the same order as ours. 
+
+Theorem 2.1. With probability larger than 1 − δ, BPI-UCRL with the modified stopping rule returns a policy bπ that satisfies V ∗ 
+
+> 1
+
+(s1; R) − V bπ 
+
+> 1
+
+(s1; R) ≤ ε using a number of episodes 
+
+τ = O
+
+ SAH 4
+
+ε2
+
+
+
+log SAH δ + S log 
+
+ SAH 5
+
+ε2 log SAH δ
+
+ 
+
+.
+
+Our claims throughout focus on the regime of small δ [Kaufmann et al., 2021] in which the first term dominates, but any improvement in the sample complexity also carries over to the second term. In Appendix C we show that if M is sparse-reward, we can set the stopping criterion of BPI-UCRL to 
+
+bLt
+
+> 1
+
+(s1) ≤ ε/ 2 and achieve a sample complexity of order eO(SAH 2/ε 2) in the regime of small δ.
+
+3 Hierarchical Reinforcement Learning 
+
+In episodic HRL, the aim is to identify a good hierarchical policy (defined below) in an episodic MDP 
+
+M = ⟨Σ, A, X , Y, N ⟩, usually called the flat (i.e. non-hierarchical) MDP in the HRL literature. We assume that M admits a hierarchical structure. Concretely, the state space Σ is characterized by a high-level state space S with cardinality S = |S| and a subproblem state space S, and three known functions f : S × S → Σ, g : Σ → S and g : Σ → S map pairs (s, s ) ∈ S × S to states σ ∈ Σ and vice versa. In addition, there are K subproblems in the form of episodic MDPs 
+
+Mk = ⟨S , A, P, Rk, H ⟩, k ∈ JKK, that share the transition kernel P but differ in the local reward function Rk. The transition kernel X of M can be expressed as follows for each transition (σ, a, σ ′):
+
+X (σ′|σ, a ) = X
+
+> s′
+
+P(s′|g(σ), a ) · I(σ′ = f (g(σ), s ′)) .
+
+Hence the transitions of M are fully characterized by the kernel P and the functions f , g and g.Given a set of subproblem policies π = {πk}k∈JKK, an episodic semi-Markov decision process (SMDP) is a tuple Mπ = ⟨Σ, JKK, Pπ , Rπ , H⟩, where boldface indicates SMDP components. At each step h ∈ JHK, the learner observes a state σh ∈ Σ, selects a subproblem k ∈ JKK and executes the subproblem policy πk for H steps to generate a state sequence s1: H+1 starting from s1 = g(σh).The state becomes σh+1 = f (g(σh), s H+1 ), and the process repeats H times, implying HH = N .The SMDP transitions Pπ and reward Rπ depend on the subproblem policies π = {πk}k∈JKK.Given subproblem policies π, state pair (σ, σ ′) and subproblem k, the SMDP dynamics are defined as 
+
+Pπ (σ′|σ, k )= X
+
+> sH+1
+
+Pπk
+
+> 1: H+1
+
+(sH+1 |s1 = g(σ)) I(σ′ =f (g(σ), s H+1 )) , Rπ (σ, k )= V πk 
+
+> 1
+
+(g(σ); Yg(σ)),
+
+where Ys(s, a ) = Y(f (s, s ), a ), s ∈ S. Hence SMDP transitions associated with subproblem k are defined by the H-step transition kernel Pπk 
+
+> 1: H+1
+
+of πk, and SMDP rewards are defined by the value of 
+
+πk under Y. We use bPt,π and bRt,π to denote the empirical estimates induced by bPt,π k 
+
+> 1: H+1
+
+and bV t,π k 
+
+> 1
+
+.A (deterministic) SMDP policy π = {πh}h∈JHK is a collection of mappings πh : Σ → JKK selecting the subproblem to be solved in step h. A hierarchical policy (π, π ) consists of an SMDP policy π
+
+and a set of subproblem policies π = {πk}k∈JKK. The value function V π,π : [ H + 1] × Σ → R of the hierarchical policy (π, π ) is defined for each σ ∈ Σ as V π,π 
+
+> H+1
+
+(σ) = 0 and 
+
+V π,π  
+
+> h
+
+(σ) = Rπ (σ, πh(σ)) + X
+
+> σ′
+
+Pπ (σ′|σ, πh(σ)) V π,π 
+
+> h+1
+
+(σ′) ∀h ∈ JHK.
+
+V π,π  
+
+> h
+
+(σ) is the value of the hierarchical policy (π, π ) in the flat MDP M, i.e. the expected cumulative sum of rewards under the original reward function Y when using a sequence of subproblem policies 
+
+(πk1 , . . . , π kH ), with each subproblem kh = πh(σh) chosen by the SMDP policy π.Let V ∗ 
+
+> h
+
+(σ) ≡ max π V π,π ∗ 
+
+> h
+
+(σ) be the optimal value function of the SMDP Mπ∗
+
+induced by the optimal subproblem policies π∗ = {π∗,k }k∈JKK, where π∗,k is the optimal subproblem policy under 4Gσ1
+
+> σℓ
+> σ
+> ffffffffff
+
+# 1 23 4 
+
+> GLRBTs
+> ffff
+
+a) b) Figure 1: a) An MDP representing a gridworld with 4 rooms and treasures; b) five subproblems corresponding to the terminal states G, L, R, T, B .
+
+Rk. The aim of the learner is to return a hierarchical policy (bπ, bπ) such that |V ∗ 
+
+> 1
+
+(σ1) − V bπ,bπ 
+
+> 1
+
+(σ1)| ≤ 
+
+ε. Note that V ∗ is optimal with respect to the hierarchical structure, but usually different from the optimal value function of M. This is a commonly accepted tradeoff in the HRL community, since HRL algorithms can typically solve the SMDP problem more efficiently in practice. 
+
+An SMDP example. To illustrate our definition of episodic SMDPs, Figure 1a) shows an episodic MDP M = ⟨Σ, A, X , Y, N ⟩ with initial state σ1. The aim is to reach the goal state G while collecting treasures. The reward Y is 1 for collecting a treasure ( f) and for reaching G, and 0 otherwise. A treasure disappears when the agent steps on it, making it impossible to collect the reward twice. We decompose M by defining high-level states S = {1, 2, 3, 4} for each room, and subproblems for reaching a terminal state among G, L, R, T, B inside a room. The subproblems include the location of treasures and have the same dynamics as the interior of each room. Figure 1b) shows the subproblem state corresponding to room 3. The local reward Rk is 1 for collecting a treasure and for reaching the correct terminal state, and 0 otherwise. The function f is not injective: both (1 , B ) and 
+
+(3 , s ) map to state σ. Since σ is in room 3, g(σ) = 3 and g(σ) = s. We can use f to model that some terminal states are not available in a room, e.g. in room 3, reaching terminal state L causes the agent to move to the state σℓ = f (3 , L ). The goal state G is absorbing, but the agent can only achieve a reward of 1 the first time it observes G. The same is true of the terminal states of the subproblems. 
+
+Sufficient conditions for PAC-Learnability. Since Mπ depends on the subproblem policies π,the SMDP learning problem is non-stationary [Nachum et al., 2018]. Two ingredients are necessary for the SMDP problem to be PAC-learnable. First, the optimal SMDP value function V ∗ has to be unique, else the difference |V ∗ 
+
+> 1
+
+(σ1) − V bπ,bπ 
+
+> 1
+
+(σ1)| is ambiguous. Hence the SMDP dynamics Pπ∗
+
+and Rπ∗
+
+of the optimal subproblem policies π∗ have to be unique. Second, making progress towards 
+
+π∗ should also make progress towards estimating Pπ∗
+
+and Rπ∗
+
+, else a subproblem policy π may be arbitrarily close to solving the subproblems, but V π,π can still be very different from V ∗ for any π.We introduce two conditions that are sufficient to ensure that the SMDP problem is PAC-learnable. 
+
+Assumption 3.1. For each subproblem k, each optimal policy π∗,k for k, each other policy πk and each state pair (s, s 1) ∈ S × S it holds that 
+
+Pπk
+
+> 1: H+1
+
+(·| s1) − Pπ∗,k 
+
+> 1: H+1
+
+(·| s1) 1 ≤ 2 V πk 
+
+> 1
+
+(s1; Rk) − V π∗,k  
+
+> 1
+
+(s1; Rk) ,
+
+V πk 
+
+> 1
+
+(s1; Ys) − V π∗,k  
+
+> 1
+
+(s1; Ys) ≤ V πk 
+
+> 1
+
+(s1; Rk) − V π∗,k  
+
+> 1
+
+(s1; Rk) .
+
+These conditions achieve both criteria. If there are two optimal subproblem policies π∗ 
+
+> 1
+
+and π∗ 
+
+> 2
+
+, the conditions ensure that Pπ∗ 
+
+> 1
+
+= Pπ∗ 
+
+> 2
+
+and Rπ∗ 
+
+> 1
+
+= Rπ∗ 
+
+> 2
+
+. If a subproblem policy π is close to solving the subproblems, the right-hand side is small, implying that Pπ and Rπ tend towards Pπ∗
+
+and Rπ∗
+
+.In Appendix B we prove the following proposition about the SMDP example in Figure 1. 
+
+Proposition 3.2. Assume that the subproblem horizon H is large enough for each optimal subproblem policy to collect all treasures in a room and reach the correct terminal state with probability 1. Then the SMDP example in Figure 1 satisfies Assumption 3.1. 
+
+5Input: Parameters ε, δ, MDPs M, {M k}k∈JKK, states S, functions f , g, g, horizons H, H 
+
+Initialize t ← − 1 and N 0(s, a, s ′) ← 0 for each s, a, s ′ ∈ S × A × S 
+
+repeat 
+
+t ← t + 1 
+
+πt+1 ,k , bLt,k ← apply BPI (N t, H, Rk, δ ) for each k ∈ JKK
+
+bPt,π t+1 
+
+, bRt,π t+1 
+
+← compute the empirical SMDP dynamics of the subproblem policies πt+1 
+
+πt+1 , V t, Lt ← compute the value function upper bound in (5) and the error function in (6) use πt+1 , π t+1 to collect an episode and update N t+1 
+
+until Lt
+
+> 1
+
+(σ1) ≤ ε/ (6 HH)
+
+return πt+1 , π t+1 
+
+Algorithm 1: HBPI-UCRL. To illustrate our conditions, we provide several examples of SMDPs that do not satisfy them. Assume that a subproblem Mk has two terminal states s∗ 
+
+> 1
+
+and s∗ 
+
+> 2
+
+with associated rewards 1 and 0.99 . A subproblem policy πk that reaches s∗ 
+
+> 2
+
+achieves almost the same value as an optimal policy π∗,k that reaches s∗
+
+> 1
+
+, but Pπk 
+
+> 1: H+1
+
+is completely different from Pπ∗,k 
+
+> 1: H+1
+
+. Next assume that a subproblem Mk has a single terminal state s∗ which is reached with probability p from s1 by an optimal policy π∗,k . The difference ∥Pπk
+
+> 1: H+1
+
+(·| s1) − Pπ∗,k 
+
+> 1: H+1
+
+(·| s1)∥1 of a policy πk that reaches s∗ with probability q from s1
+
+can be as large as 2(1 −q), which can be arbitrarily larger than V πk 
+
+> 1
+
+(s1; Rk)−V π∗,k  
+
+> 1
+
+(s1; Rk) = p−q.A concrete example of such a policy is one that “gives up” once it cannot reach the terminal state and instead wanders in a different direction. A third example is one where the MDP rewards Y
+
+and subproblem rewards Rk are non-zero for different non-terminal states of a subproblem Mk.In this case, two policies can both be optimal for subproblem Mk but collect different amounts of reward under Y. To the best of our knowledge, these issues have been ignored in previous work on parallel HRL, and we believe that our conditions consistute a major contribution in this regard, since without such conditions the parallel HRL learning problem does not have a well-defined solution .We remark that our conditions are strictly weaker than those of Drappo et al. [2025] who assume a single terminal state reached with probability one and zero reward for non-terminal states. 
+
+4 The HBPI-UCRL Algorithm 
+
+We now present HBPI-UCRL, a novel model-based algorithm for HRL in episodic SMDPs. Intuitively, the algorithm performs best policy identification on both levels of the hierarchy, using carefully tailored confidence bounds on the empirical estimates of SMDP transitions. In each episode t,the learner uses a hierarchical policy (πt, π t) to generate a state sequence σt
+
+> 1: HH+1
+
+. Let πt, h ≡
+
+πt, πt 
+
+> h(σH(h−1)+1 )
+
+be the subproblem policy selected by πt at each h ∈ JHK, and let st, h 
+
+> 1: H+1
+
+be the resulting subproblem state sequence. The counts and empirical transition probabilities are given by 
+
+N t(s, a, s ′) = 
+
+> t
+
+X
+
+> ℓ=1
+> H
+
+X
+
+> h=1
+> H
+
+X
+
+> h=1
+
+I(( s, a, s ′) = ( sℓ, h 
+
+> h
+
+, a ℓ, h 
+
+> h
+
+, s ℓ, h
+
+> h+1
+
+)) , bPt(s′|s, a ) = N t(s, a, s ′)
+
+P 
+
+> s′
+
+N t(s, a, s ′) ,
+
+where aℓ, h 
+
+> h
+
+= πt, h 
+
+> h
+
+(sℓ, h 
+
+> h
+
+). The event E in (1) still holds with probability P(E) ≥ 1−δ/ 2. HBPI-UCRL exploits that all uncertainty can be expressed in terms of the counts N t and the estimate bPt of P.Algorithm 1 provides pseudo-code for HBPI-UCRL. The input is the parameters ε, δ , the MDP M,the subproblems Mk, k ∈ JKK, and the hierarchy in the form of SMDP states S, functions f , g
+
+and g and horizons H, H . In each episode t, HBPI-UCRL performs best policy identification for each subproblem k. Concretely, the algorithm computes the confidence bounds Ct in (2) and the upper confidence bound V t,k in (3) for each k, replacing R with the local reward function Rk. The policy πt+1 ,k is selected as the greedy policy for V t,k . Given πt+1 , the algorithm also computes the function bLt,k h in (4) for each k and the empirical SMDP dynamics bPt,π t+1 
+
+and bRt,π t+1 
+
+for πt+1 .To select the SMDP policy πt+1 , HBPI-UCRL computes an SMDP value function V t. In Appendix D we show that V t upper bounds V ∗ under event E and Assumption 3.1. We define confidence sets as 
+
+Ct(σ, k ) = 
+
+n
+
+p ∈ ∆(Σ) p − bPt,π t+1 
+
+(·| σ, k ) 1 ≤ 5H bLt,k  
+
+> 1
+
+(g(σ)) 
+
+o
+
+∀(σ, k ).
+
+6An upper confidence bound V t can now be recursively defined for each σ ∈ Σ as V t
+
+> H+1
+
+(σ) = 0 and 
+
+V t
+
+> h
+
+(σ) = max 
+
+> k
+
+h
+
+min 
+
+h
+
+HH, bRt,π t+1 
+
+(σ, k ) + 3 H bLt,k  
+
+> 1
+
+(g(σ)) + max 
+
+> p∈Ct(σ,k )
+
+X
+
+> σ′
+
+p(σ′)V t
+
+> h+1
+
+(σ′)
+
+ii 
+
+. (5) The policy πt+1 is selected as the greedy policy for V t. For each h and σ we define the transition kernel for πt+1 that achieves the maximum over Ct in (5) as 
+
+Pt
+
+> h
+
+(· | σ) = arg max  
+
+> p∈Ct(σ, πt+1
+> h(σ))
+
+X
+
+> σ′
+
+p(σ′)V t
+
+> h+1
+
+(σ′).
+
+We next define an SMDP error function Lt recursively for each σ as Lt
+
+> H+1
+
+(σ) = 0 and 
+
+Lt
+
+> h
+
+(σ) = min 
+
+h
+
+2, Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+i
+
+∀h ∈ JHK, (6) where Bt
+
+> h
+
+(σ) ≡ 10 H bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) . The stopping criterion of HBPI-UCRL is defined as τ =inf t ∈ N : Lt
+
+> 1
+
+(σ1) ≤ ε/ (6 HH) . Upon stopping, HBPI-UCRL returns (πτ +1 , π τ +1 ).
+
+General analysis of HBPI-UCRL. The following theorem provides a sample complexity upper bound for the novel algorithm HBPI-UCRL. 
+
+Theorem 4.1. Under Assumption 3.1, with probability larger than 1 − δ HBPI-UCRL returns a hierarchical policy (bπ, bπ) such that ∥V ∗ 
+
+> 1
+
+(σ1) − V bπ,bπ 
+
+> 1
+
+(σ1)∥1 ≤ ε using a number of episodes 
+
+τ = O
+
+ SA H4H6
+
+ε2
+
+
+
+log SA HHδ + S log 
+
+ SA H5H7
+
+ε2 log SA HHδ
+
+ 
+
+.
+
+The proof appears in Appendix E. If we apply BPI-UCRL to solve the flat MDP M, we obtain a sample complexity bound of order eO(|Σ|AN 4/ε 2) = eO(SSA H4H4/ε 2) in the regime of small δ.Hence HBPI-UCRL is more sample efficient if H2 < S, though we recall that the optimal policy for 
+
+M is in general different from the optimal hierarchical policy (π∗, π ∗).
+
+HBPI-UCRL for Sparse-Reward SMDPs. We next show that in sparse-reward SMDPs, a modified version of HBPI-UCRL achieves a lower sample complexity. An SMDP Mπ is sparse-reward if both the flat MDP M and the subproblems Mk, k ∈ JKK, are sparse-reward. In Appendix B we prove that the SMDP example in Figure 1 is sparse-reward if we remove all treasures. To adapt HBPI-UCRL to sparse-reward SMDPs, we modify the algorithm in several ways. We first redefine the upper confidence bound of the value function as V t
+
+> H+1
+
+(σ) = 0 and 
+
+V t
+
+> h
+
+(σ) = max 
+
+> k
+
+h
+
+min 
+
+h
+
+1, bRt,π t+1 
+
+(σ, k ) + 3 bLt,k  
+
+> 1
+
+(g(σ)) + max 
+
+> p∈Ct(σ,k )
+
+X
+
+> σ′
+
+p(σ′)V t
+
+> h+1
+
+(σ′)
+
+ii 
+
+,
+
+Ct(σ, k ) = 
+
+n
+
+p ∈ ∆(Σ) p − bPt,π t+1 
+
+(·| σ, k ) 1 ≤ 5bLt,k  
+
+> 1
+
+(g(σ)) 
+
+o
+
+∀(σ, k ).
+
+Compared to (5), the confidence bound Ct is tighter, and the value function upper bound takes the minimum with 1 instead of the minimum with HH. In Appendix F we prove that the new definition of V t is an upper bound on V ∗ for sparse-reward SMDPs under event E and Assumption 3.1. We redefine Bt
+
+> h
+
+(σ) ≡ 10 bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) and we modify the stopping criterion to be Lt
+
+> 1
+
+(σ1) ≤ ε/ 6.In Appendix F we prove the following theorem. 
+
+Theorem 4.2. For sparse-reward SMDPs, under Assumption 3.1, w.p. at least 1 − δ the modified HBPI-UCRL returns (bπ, bπ) such that ∥V ∗ 
+
+> 1
+
+(σ1) − V bπ,bπ 
+
+> 1
+
+(σ1)∥1 ≤ ε using a number of episodes 
+
+τ = O
+
+ SA H2H2
+
+ε2
+
+
+
+log SA HHδ + S log 
+
+ SA H3H3
+
+ε2 log SA HHδ
+
+ 
+
+.
+
+In comparison, the sample complexity of BPI-UCRL is eO(SSA H2H2/ε 2) for sparse-reward M in the small δ regime. Hence the sample complexity of HBPI-UCRL is a factor S smaller, and only a factor H2 larger than that of BPI-UCRL when applied to a single sparse-reward subproblem Mk.75 Related Work 
+
+Several authors have studied the sample complexity [Brunskill and Li, 2014] or regret [Drappo et al., 2023, Fruit et al., 2017] of HRL when the optimal subproblem policies are given as prior knowledge. Nachum et al. [2019] study representations that bound the suboptimality gap between the optimal flat policy and the optimal SMDP policy. Kuric et al. [2024] present an algorithm that provably converges to a hierarchical policy equivalent to the optimal flat policy. Recent works analyze the setting in which the SMDP and subproblem policies are learned in parallel. The focus of prior work is often on regret, and we believe that ours is the first sample complexity upper bound for parallel HRL policy learning. While we propose general conditions for efficient HRL, most existing works define SMDPs specifically for goal-oriented episodic tasks [Wen et al., 2020, Robert et al., 2023, Drappo et al., 2025]. Drappo et al. [2024] analyze the regret in a more general HRL framework, but the regret depends on the concentrability coefficients at the SMDP and subproblem levels, and the authors do not make any attempt to bound these coefficients. Manenti and Ianelli [2025] prove that Q-learning converges in the parallel HRL setting, but do not show that the optimal SMDP value function is unique. Wen et al. [2020] use posterior sampling to exploit a hierarchical structure and prove a bound on the Bayesian regret of the resulting algorithm in which the size of the state space is replaced by the size of the subproblem state space. Due to the Bayesian nature of this result, it is not possible to derive an (ε, δ )-PAC algorithm from their regret in our frequentist setting. Moreover, the algorithm that achieves their regret result does not learn a hierarchical policy. The work of Drappo et al. [2025] is more similar to ours in spirit, despite their focus on regret. Indeed, they also use an optimistic approach to learn the subproblem policies, but they build a quite different upper bound on the value of their high-level policy tailored to the goal-oriented setting. They assume that the next high-level state after solving a subproblem is known, which allows to obtain an efficient algorithm by storing high-level states only. Note that this approach cannot solve the example in Figure 1. Using the regret-to-PAC conversion [Jin et al., 2018], which runs their algorithm for a large enough T and outputs the hierarchical policy used in a random episode in {1, . . . , T }, one can prove that choosing T = eO(SAK HH/ (ε2δ2)) yields an (ε, δ )-PAC policy. Compared to this bound, our bound shaves off a factor K, which comes from the fact that their setting considers different possible state spaces for each subproblem (e.g. different room shapes but with the transitions all inherited from the underlying flat MDP). Our worse scaling in the horizons can be explained by two things. The improvement in H comes from the fact that their regret minizer is UCBVI with Bernstein bonuses [Azar et al., 2017], analyzed in the special case of sparse reward. Regarding our extra H
+
+factor, it is mitigated by the fact that their setting is slightly different, as their algorithm terminates an episode early when a subgoal is not reached by the current subproblem policy. Hence some of their episodes could contain only one low-level episode, which implies that the number of episodes has to be multiplied by H. In contrast, HBPI-UCRL never terminates an episode early. Besides the fact that our algorithm is not specific to the goal-oriented setting, the main improvement in our bound is the dependency in δ, which comes from our data-dependent stopping rule (a non-trivial component of HBPI-UCRL) instead of a deterministic sample size T fixed in advance. The work of Robert et al. [2023] considers a slightly different sample complexity: following Kakade [2003], their sample complexity is defined as the number of episodes collected using a policy that is not ε-optimal. Still, their lower bound also applies to our notion of sample com-plexity. Their main result states that any HRL algorithm needs a number of samples of order 
+
+Ω(max( SAKH 2/ε 2, SKH2/ε 2)) , which is inconsistent with our sample complexity upper bounds in Theorems 4.1 and 4.2. In the first term, the additional factor K is due to the fact that unlike us, they do not assume that subproblems share the transition kernel. However, we believe that the second term only applies to a slightly different setting, in which the HRL algorithm has to sample high-level transitions and rewards. In contrast, we exploit the fact that high-level transitions and rewards are fully determined by the subproblem policies and the subproblem dynamics. 
+
+6 Numerical Experiments 
+
+In this section we present results from numerical experiments with episodic (S)MDPs. The aim is to show that HBPI-UCRL is more sample efficient in practice than BPI-UCRL [Kaufmann et al., 2021]. 8(a) Stopping time τ as a function of S. (b) Unverifiable stopping time as a function of S.
+
+Figure 2: Stopping time of BPI-UCRL and HBPI-UCRL as functions of the number of high-level states S: (a) using the stopping criterion; (b) unverifiable by the algorithms but observed in practice. We carry out experiments on a deterministic version of the SMDP in Figure 1 with treasures removed, varying the size of each room and the number of rooms. Hence the SMDPs are sparse-reward and aim to reach the goal G. Implementation details and additional experimental results in domains with treasures and stochastic transitions can be found in Appendix I. In particular, some randomness is introduced by the use of a random initial state in each episode, and we perform experiments (that are very costly) with three different seeds, with the shaded area indicating the standard deviation. Figure 2a shows the stopping time τ of BPI-UCRL and HBPI-UCRL as functions of the number of high-level states S for rooms of size 3 × 3, varying the number of rooms from 2 × 2 to 18 × 18 
+
+and setting the SMDP horizon to H = 2 √S. BPI becomes too slow for 11 × 11 rooms, and the broken line from 10 × 10 to 18 × 18 is an interpolation. The stopping time of HBPI-UCRL is clearly proportional to √S, which validates our theory and indicates that a sample complexity of order 
+
+eO(SA HH/ε 2) is possible for sparse SMDPs with a tighter analysis (i.e. independent of S but linear in H ∝ √S). The stopping time of BPI-UCRL is clearly not sublinear in S. We carry out several ablations in Appendix I to separately test the impact of H and S on the sample complexity. Figure 2b reports the last episode t for which |V ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π t+1  
+
+> 1
+
+(σ1)| > ε , for both BPI-UCRL and HBPI-UCRL. From that point on the algorithms keep using an ε optimal policy and have therefore identified one, but without being able to certify it. This quantity is related to the notion of unverifiable sample complexity introduced by Katz-Samuels and Jamieson [2020] for pure exploration in bandits. We remark an interesting phenomenon: Although the theoretical stopping time of HBPI-UCRL is larger than that of BPI-UCRL for small values of S, in practice it needs fewer episodes to converge. This experiment also reveals that the stopping time based on Hoeffding bounds is not tight. 
+
+7 Discussion 
+
+There are several possible extensions of our work, and here we mention a few. One such extension is to define the SMDP policy and value function on high-level states rather than full states, as is common in the HRL literature. The challenge in this setting is that the initial state of each subproblem is not fully determined, which makes it harder to formalize and analyze the SMDP dynamics. A related question is how to adapt Assumption 3.1 to make it more general. We have not fully characterized the class of HRL problems that satisfy the assumptions, but all known examples involve optimal subproblem policies that terminate in a single state with probability 1. Either HRL is sample efficient only in the case of goal-directed subproblems (which would be a contribution in its own right), or researchers have to propose other conditions that cause HRL to be PAC-learnable. 9In our work, all subproblems share the transition dynamics, but this is not always the case. An open research question is how to extend HBPI-UCRL to SMDPs whose subproblems have different transition dynamics, or subproblems that belong to one of several equivalence classes. Finally, an interesting direction for future work is to extend HBPI-UCRL to the infinite-horizon setting. 10 References 
+
+M. Ahn, A. Brohan, N. Brown, Y. Chebotar, O. Cortes, B. David, C. Finn, C. Fu, K. Gopalakrishnan, K. Hausman, A. Herzog, D. Ho, J. Hsu, J. Ibarz, B. Ichter, A. Irpan, E. Jang, R. J. Ruano, K. Jeffrey, S. Jesmonth, N. Joshi, R. Julian, D. Kalashnikov, Y. Kuang, K.-H. Lee, S. Levine, Y. Lu, L. Luu, C. Parada, P. Pastor, J. Quiambao, K. Rao, J. Rettinghouse, D. Reyes, P. Sermanet, N. Sievers, C. Tan, A. Toshev, V. Vanhoucke, F. Xia, T. Xiao, P. Xu, S. Xu, M. Yan, and A. Zeng. Do As I Can and Not As I Say: Grounding Language in Robotic Affordances. In Conference on Robot Learning , 2022. M. Gheshlaghi Azar, I. Osband, and R. Munos. Minimax regret bounds for reinforcement learning. In Proceedings of the 34th International Conference on Machine Learning, (ICML) 2017 , 2017. M. G. Bellemare, S. Candido, P. S. Castro, J. Gong, M. C. Machado, S. Moitra, S. S. Ponda, and Z. Wang. Autonomous navigation of stratospheric balloons using reinforcement learning. Nature ,588:77–82, 2020. E. Brunskill and L. Li. PAC-Inspired Option Discovery in Lifelong Reinforcement Learning. In 
+
+International Conference on Machine Learning , pages 316–324, 2014. C. Dann, T. Lattimore, and E. Brunskill. Unifying PAC and regret: Uniform PAC bounds for episodic reinforcement learning. In Neural Information Processing Systems , pages 5713–5723, 2017. C. Dann, L. Li, W. Wei, and E. Brunskill. Policy certificates: Towards accountable reinforcement learning. In International Conference on Machine Learning , 2019. G. Drappo, A. M. Metelli, and M. Restelli. An option-dependent analysis of regret minimization algorithms in finite-horizon semi-MDP. Transactions on Machine Learning Research , pages 1–24, 2023. G. Drappo, A. M. Metelli, and R. Marcello. A Provably Efficient Option-Based Algorithm for both High-Level and Low-Level Learning. Reinforcement Learning Journal , 2:819–839, 2024. G. Drappo, A. Robert, M. Restelli, A. A. Faisal, A. M. Metelli, and C. Pike-Burke. Efficient Exploitation of Hierarchical Structure in Sparse Reward Reinforcement Learning. In International Conference on Artificial Intelligence and Statistics , pages 2269–2277, 2025. R. Fruit, M. Pirotta, A. Lazaric, and E. Brunskill. Regret Minimization in MDPs with Options without Prior Knowledge. In Neural Information Processing Systems , 2017. N. Gopalan, M. desJardins, M. Littman, J. MacGlashan, S. Squire, S. Tellex, J. Winder, and L. Wong. Planning with Abstract Markov Decision Processes. In International Conference on Automated Planning and Scheduling , 2017. T. Jaksch, R. Ortner, and P. Auer. Near-optimal Regret Bounds for Reinforcement Learning. Journal of Machine Learning Research , 11:1563–1600, 2010. C. Jin, Z. Allen-Zhu, S. Bubeck, and M. I. Jordan. Is Q-Learning Provably Efficient? In Advances in Neural Information Processing Systems , 2018. A. Jonsson, E. Kaufmann, P. Ménard, O. Darwiche Domingues, E. Leurent, and M. Valko. Planning in Markov Decision Processes with Gap-Dependent Sample Complexity. In Neural Information Processing Systems , 2020. S. Kakade. On the Sample Complexity of Reinforcement Learning . PhD thesis, University College London, 2003. Julian Katz-Samuels and Kevin Jamieson. The true sample complexity of identifying good arms. In 
+
+AISTATS , 2020. E. Kaufmann, P. Ménard, O. Darwiche Domingues, A. Jonsson, E. Leurent, and M. Valko. Adaptive Reward-Free Exploration. In Algorithmic Learning Theory , pages 865–891, 2021. G. Konidaris and A. Barto. Skill Discovery in Continuous Reinforcement Learning Domains using Skill Chaining. In Neural Information Processing Systems , 2009. 11 D. Kuric, G. Infante, V. Gómez, A. Jonsson, and H. van Hoof. Planning with a Learned Policy Basis to Optimally Solve Complex Tasks. In International Conference on Automated Planning and Scheduling , 2024. A. Levy, G. Konidaris, R. Platt, and K. Saenko. Learning Multi-Level Hierarchies with Hindsight. In 
+
+International Conference on Learning Representations , 2019. M. C. Machado, A. Barreto, D. Precup, and M. Bowling. Temporal Abstraction in Reinforcement Learning with the Successor Representation. Journal of Machine Learning Research , 24(80):1–69, 2022. M. Manenti and A. Ianelli. An ODE method approach for proving convergence and stability of Q-learning in Hierarchical Reinforcement Learning. In Workshop on Dynamics at the Frontiers of Optimization, Sampling, and Games at NeurIPS@26 , 2025. M. Matthews, M. Samvelyan, J. Parker-Holder, E. Grefenstette, and T. Rocktäsche1. Hierarchical Kickstarting for Skill Transfer in Reinforcement Learning. In Conference on Lifelong Learning Agents , 2022. O. Nachum, S. Gu, H. Lee, and S. Levine. Data-efficient hierarchical reinforcement learning. In 
+
+Neural Information Processing Systems , 2018. O. Nachum, S. Gu, H. Lee, and S. Levine. Near-Optimal Representation Learning for Hierarchical Reinforcement Learning. In International Conference on Learning Representations , 2019. J. Rafati and D. C. Noelle. Learning Representations in Model-Free Hierarchical Reinforcement Learning. In AAAI Conference on Artificial Intelligence , 2019. A. Robert, C. Pike-Burke, and A. A. Faisal. Sample Complexity of Goal-Conditioned Hierarchical Reinforcement Learning. In Neural Information Processing Systems , 2023. A. S. Vezhnevets, S. Osindero, T. Schaul, N. Heess, M. Jaderberg, D. Silver, and K. Kavukcuoglu. FeUdal Networks for Hierarchical Reinforcement Learning. In International Conference on Machine Learning , 2017. Z. Wen, D. Precup, M. Ibrahimi, A. Barreto, B. Van Roy, and S. Singh. On Efficiency in Hierarchical Reinforcement Learning. In Neural Information Processing Systems , 2020. 12 Supplementary Materials 
+
+1 Introduction 12 Reinforcement Learning 23 Hierarchical Reinforcement Learning 44 The HBPI-UCRL Algorithm 65 Related Work 86 Numerical Experiments 87 Discussion 9A Equivalent Definitions of Recursive Functions 14 B Properties of the SMDP Example 15 C Proof of Theorem 2.1 15 D The Value Function Upper Bound 19 E Proof of Theorem 4.1 20 F Proof of Theorem 4.2 26 G On High-Probability Events 28 H A Technical Lemma 30 I Experimental Settings and Additional Results 31 
+
+13 A Equivalent Definitions of Recursive Functions 
+
+In this appendix we prove the following lemma, which states that our composite probability distribu-tions allow us to express equivalent definitions of recursive functions. 
+
+Lemma A.1. Given a policy π, let {fh}h∈JHK and {gπh }h∈JH+1 K be sets of functions fh : S ×A → R
+
+and gπh : S → R. The following three definitions of gπh are equivalent for each sh if we assume 
+
+gπH+1 (sh) = 0 :
+
+gπh (sh) = fh(sh, π h(sh)) + X
+
+> s′
+
+Pπh (s′|sh)gπh+1 (s′),gπh (sh) = X
+
+> sh+1: H+1
+
+Pπh:H+1 (sh+1: H+1 |sh)
+
+> H
+
+X
+
+> i=h
+
+fi(si, π i(si)) ,gπh (sh) = 
+
+> H
+
+X
+
+> i=h
+
+X
+
+> si
+
+Pπh:i(si|sh)fi(si, π i(si)) .
+
+The proof is by induction, with the base case given by h = H. In this case, each of the three definitions can be written as 
+
+gπH (sH ) = fH (sH , π H (sH )) + 0 = fH (sH , π H (sH )) ,gπH (sH ) = X
+
+> sH+1: H+1
+
+PπH:H+1 (sH+1: H+1 |sH )
+
+> H
+
+X
+
+> i=H
+
+fi(si, π i(si)) = fH (sH , π H (sH )) X
+
+> sH+1
+
+PπH (sH+1 |sH ) = fH (sH , π H (sH )) ,gπH (sH ) = 
+
+> H
+
+X
+
+> i=H
+
+X
+
+> si
+
+PπH:i(si|sH )fi(si, π i(si)) = X
+
+> si
+
+I(si = sH )fi(si, π i(si)) = fH (sH , π H (sH )) ,
+
+where we have used the definitions of PπH:H+1 and PπH:H .The inductive case is given by h ∈ JH − 1K. We show that the second and third definitions are equivalent to the first. The second definition can be written 
+
+gπh (sh) = X
+
+> sh+1: H+1
+
+Pπh:H+1 (sh+1: H+1 |sh)
+
+> H
+
+X
+
+> i=h
+
+fi(si, π i(si)) = fh(sh, π h(sh)) X
+
+> sh+1: H+1
+
+Pπh:H+1 (sh+1: H+1 |sh)+ X
+
+> sh+1: H+1
+
+Pπh (sh+1 |sh) Pπh+1: H+1 (sh+2: H+1 |sh+1 )
+
+> H
+
+X
+
+> i=h+1
+
+fi(si, π i(si)) = fh(sh, π h(sh)) + X
+
+> sh+1
+
+Pπh (sh+1 |sh) X
+
+> sh+2: H+1
+
+Pπh+1: H+1 (sh+2: H+1 |sh+1 )
+
+> H
+
+X
+
+> i=h+1
+
+fi(si, π i(si)) = fh(sh, π h(sh)) + X
+
+> sh+1
+
+Pπh (sh+1 |sh)gπh+1 (sh+1 ),
+
+where we have used the equality P 
+
+> sh+1: H+1
+
+Pπh:H+1 (sh+1: H+1 |sh) = 1 , the recursive definition of 
+
+Pπh:H+1 and the inductive hypothesis. The third definition can be written 
+
+gπh (sh) = 
+
+> H
+
+X
+
+> i=h
+
+X
+
+> si
+
+Pπh:i(si|sh)fi(si, π i(si)) = X
+
+> si
+
+I(si = sh)fi(si, π i(si)) + 
+
+> H
+
+X
+
+> i=h+1
+
+X
+
+> si
+
+X
+
+> sh+1
+
+Pπh (sh+1 |sh)Pπh+1: i(si|sh+1 )fi(si, π i(si)) 
+
+14 = fh(sh, π h(sh)) + X
+
+> sh+1
+
+Pπh (sh+1 |sh)
+
+> H
+
+X
+
+> i=h+1
+
+X
+
+> si
+
+Pπh+1: i(si|sh+1 )fi(si, π i(si)) = fh(sh, π h(sh)) + X
+
+> sh+1
+
+Pπh (sh+1 |sh)gπh+1 (sh+1 ),
+
+where we have used the definition of Pπh:h, the recursive definition of Pπh:i and the inductive hypothesis. This proves that the three definitions are equivalent. 
+
+B Properties of the SMDP Example 
+
+In this section we prove Propositions 3.2 and B.1 given below, which state that the SMDP example in Figure 1 satisfies various assumptions. 
+
+Proposition B.1. Assume that the subproblem horizon H is large enough for each optimal subproblem policy to reach the correct terminal state with probability 1. Then the SMDP example in Figure 1 with all treasures removed is sparse-reward and satisfies Assumption 3.1. 
+
+We first show that if the subproblem horizon H is large enough for each optimal subproblem policy to collect all treasures and reach the correct terminal state s∗ with probability 1, then the first condition of the assumption holds. If a subproblem has m treasures, then the value of the optimal subproblem policy π∗,k in any non-terminal state s is V π∗,k  
+
+> 1
+
+(s; Rk) = m + 1 . Any subproblem policy πk
+
+whose value is at most m satisfies the first condition since 2|V πk 
+
+> 1
+
+(s; Rk) − V π∗,k  
+
+> 1
+
+(s; Rk)| ≥ 2 ≥∥Pπk
+
+> 1: H+1
+
+(·| s) − Pπ∗,k 
+
+> 1: H+1
+
+(·| s)∥1. If πk has value V πk 
+
+> 1
+
+(s; Rk) > m , it reaches s∗ with probability at least V πk 
+
+> 1
+
+(s; Rk) − m, implying ∥Pπk
+
+> 1: H+1
+
+(·| s) − Pπ∗,k 
+
+> 1: H+1
+
+(·| s)∥1 ≤ 2|V πk 
+
+> 1
+
+(s; Rk) − V π∗,k  
+
+> 1
+
+(s; Rk)|.We next show that under the same condition, the SMDP example in Figure 1 satisfies the second condition of the assumption. Recall that the reward functions Ys and Rk are the same for all non-terminal states of a subproblem k and all high-level states s. If a subproblem has m treasures, then the optimal subproblem policy π∗,k satisfies V π∗,k  
+
+> 1
+
+(s; Ys) = m and V π∗,k  
+
+> 1
+
+(s; Rk) = m + 1 . If the value of a subproblem policy πk under Ys is V πk 
+
+> 1
+
+(s; Ys) = ℓ, then the value under Rk can be at most V πk 
+
+> 1
+
+(s; Rk) = ℓ + 1 , implying |V π∗,k  
+
+> 1
+
+(s; Rk) − V πk 
+
+> 1
+
+(s; Rk)| ≥ m − ℓ. Hence we have 
+
+|V πk 
+
+> 1
+
+(s1; Ys) − V π∗,k  
+
+> 1
+
+(s1; Ys)| = m − ℓ ≤ | V π∗,k  
+
+> 1
+
+(s; Rk) − V πk 
+
+> 1
+
+(s; Rk)|, which satisfies the second condition. Taken together, these two results are enough to prove Proposition 3.2. To prove Proposition B.1, note that even if we remove all treasures, the reasoning above still holds. Specifically, this implies that Assumption 3.1 is satisfied. If we remove all treasures, the only available reward is 1 for reaching G the first time in the case of M, and 1 for reaching the correct terminal state the first time in the case of Mk. Hence the flat MDP M and the subproblems Mk, k ∈ JKK,are all sparse-reward, which is precisely the definition of a sparse-reward SMDP. 
+
+C Proof of Theorem 2.1 
+
+In this appendix we prove Theorem 2.1, which states an upper bound on the sample complexity of BPI-UCRL. We first introduce an error function Lt analogous to bLt but associated with the true transition kernel Pπt+1 
+
+of πt+1 . The function Lt is recursively defined as LtH+1 (s) = 0 and 
+
+Lth(s) = Bt(s, π t+1  
+
+> h
+
+(s)) + X
+
+> s′
+
+Pπt+1  
+
+> h
+
+(s′|s)Lth+1 (s′) ∀h ∈ JHK.
+
+We also define Bt,π h (s) ≡ Bt(s, π h(s)) for each policy π and step h.The following lemma bounds the L1-norm of the difference between the composite distributions induced by bPt,π t+1 
+
+and those induced by any transition kernel for πt+1 in the confidence sets Ct.
+
+Lemma C.1. Let {Q πt+1  
+
+> h
+
+}h∈JHK be a transition kernel for πt+1 s.t. Qπt+1  
+
+> h
+
+(·| sh) ∈ C t(sh, π t+1  
+
+> h
+
+(sh)) 
+
+for each h and sh, and let Qπt+1  
+
+> i:j
+
+and Qπt+1  
+
+> i:j
+
+be its composite distributions. Under event E we have 
+
+Qπt+1 
+
+> h:H+1
+
+(·| sh) − bPt,π t+1 
+
+> h:H+1
+
+(·| sh) 1 ≤ bLth(sh) ≤ 3Lth(sh),
+
+15 Qπt+1 
+
+h:H+1 (·| sh) − bPt,π t+1 
+
+h:H+1 (·| sh) 1 ≤ bLth(sh) ≤ 3Lth(sh).
+
+Proof. We first show by induction on h that bLth(sh) upper bounds ∥Qπt+1 
+
+h:H+1 (·| sh) − bPt,π t+1 
+
+h:H+1 (·| sh)∥1
+
+and ∥Qπt+1 
+
+h:H+1 (·| sh) − bPt,π t+1 
+
+h:H+1 (·| sh)∥1. The base case is given by h = H. In this case by definition we have 
+
+bPt,π t+1 
+
+H:H+1 (·| sH ) = bPt,π t+1 
+
+H:H+1 (·| sH ) = bPt,π t+1 
+
+H (·| sH ),
+
+Qπt+1 
+
+H:H+1 (·| sH ) = Qπt+1 
+
+H:H+1 (·| sH ) = Qπt+1 
+
+H (·| sH ),
+
+bLtH (sH ) = min 
+
+h
+
+2, B t,π t+1 
+
+H (sH ) + 0 
+
+i
+
+= Bt,π t+1 
+
+H (sH ),
+
+since Bt,π t+1 
+
+H (sH ) already involves a minimum with 2. Consequently we can write 
+
+Qπt+1 
+
+H:H+1 (·| sH ) − bPt,π t+1 
+
+H:H+1 (·| sH ) 1
+
+= Qπt+1 
+
+H (·| sH ) − bPt,π t+1 
+
+H (·| sH ) 1
+
+≤ Bt,π t+1 
+
+H (sH ) = bLtH (sH ),
+
+where the inequality follows from the fact that Qπt+1 
+
+H (·| sH ) belongs to Ct(sH , π t+1 
+
+H (sH )) . The proof for ∥Qπt+1 
+
+H:H+1 (·| sH ) − bPt,π t+1 
+
+H:H+1 (·| sH )∥1 is identical. In the inductive case h ∈ JH − 1K we have 
+
+Qπt+1 
+
+> h:H+1
+
+(·| sh) − bPt,π t+1 
+
+> h:H+1
+
+(·| sh) 1
+
+= X
+
+> sh+1: H+1
+
+Qπt+1 
+
+> h:H+1
+
+(sh+1: H+1 |sh) − bPt,π t+1 
+
+> h:H+1
+
+(sh+1: H+1 |sh)
+
+≤(a)
+
+X
+
+> sh+1: H+1
+
+Qπt+1  
+
+> h
+
+(sh+1 |sh)Qπt+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 ) − bPt,π t+1  
+
+> h
+
+(sh+1 |sh)Qπt+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 )
+
++ X
+
+> sh+1: H+1
+
+bPt,π t+1  
+
+> h
+
+(sh+1 |sh)Qπt+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 ) − bPt,π t+1  
+
+> h
+
+(sh+1 |sh)bPt,π t+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 )
+
+=(b)
+
+X
+
+> sh+1
+
+Qπt+1  
+
+> h
+
+(sh+1 |sh) − bPt,π t+1  
+
+> h
+
+(sh+1 |sh) X
+
+> sh+2: H+1
+
+Qπt+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 )+ X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(sh+1 |sh) X
+
+> sh+2: H+1
+
+Qπt+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 ) − bPt,π t+1 
+
+> h+1: H+1
+
+(sh+2: H+1 |sh+1 )
+
+=(c) Qπt+1  
+
+> h
+
+(·| sh) − bPt,π t+1  
+
+> h
+
+(·| sh) 1
+
++ X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(sh+1 |sh) Qπt+1 
+
+> h+1: H+1
+
+(·| sh+1 ) − Pπt+1 
+
+> h+1: H+1
+
+(·| sh+1 ) 1
+
+≤(d) Bt,π t+1  
+
+> h
+
+(sh) + X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(sh+1 |sh)bLth+1 (sh+1 ) ≡ bZth(sh).
+
+In (a) we use the definition of Qπt+1 
+
+h:H+1 and bPt,π t+1 
+
+h:H+1 and the triangle inequality, in (b) we use the equality |ab − ac | = a|b − c| for a ≥ 0, in (c) we use the definition of the L1-norm and the equality 
+
+P
+
+sh+2: H+1 Qπt+1 
+
+h+1: H+1 (sh+2: H+1 |sh+1 ) = 1 , and in (d) we use the fact that Qπt+1 
+
+h (·| sh) belongs to 
+
+Ct(sh, π t+1 
+
+h (sh)) and the inductive hypothesis for h + 1 . Since the trivial bound 2 also applies, we obtain 
+
+Qπt+1 
+
+h:H+1 (·| sh) − bPt,π t+1 
+
+h:H+1 (·| sh) 1
+
+≤ min 
+
+h
+
+2, bZth(sh)
+
+i
+
+= bLth(sh).
+
+The proof for ∥Qπt+1 
+
+h:H+1 (·| sh) − bPt,π t+1 
+
+h:H+1 (·| sh)∥1 is very similar: 
+
+Qπt+1 
+
+> h:H+1
+
+(·| sh) − bPt,π t+1 
+
+> h:H+1
+
+(·| sh) 1
+
+= X
+
+> sH+1
+
+Qπt+1 
+
+> h:H+1
+
+(sH+1 |sh) − bPt,π t+1 
+
+> h:H+1
+
+(sH+1 |sh)
+
+≤(a)
+
+X
+
+> sH+1
+
+X
+
+> sh+1
+
+Qπt+1  
+
+> h
+
+(sh+1 |sh)Qπt+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 ) − bPt,π t+1  
+
+> h
+
+(sh+1 |sh)Qπt+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 )
+
++ X
+
+> sH+1
+
+X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(sh+1 |sh)Qπt+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 ) − bPt,π t+1  
+
+> h
+
+(sh+1 |sh)bPt,π t+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 )
+
+=(b)
+
+X
+
+> sh+1
+
+Qπt+1  
+
+> h
+
+(sh+1 |sh) − bPt,π t+1  
+
+> h
+
+(sh+1 |sh) X
+
+> sH+1
+
+Qπt+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 )
+
+16 + X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(sh+1 |sh) X
+
+> sH+1
+
+Qπt+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 ) − bPt,π t+1 
+
+> h+1: H+1
+
+(sH+1 |sh+1 )
+
+=(c) Qπt+1  
+
+> h
+
+(·| sh) − bPt,π t+1  
+
+> h
+
+(·| sh) 1
+
++ X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(·| sh) Qπt+1 
+
+> h+1: H+1
+
+(·| sh+1 ) − Pπt+1 
+
+> h+1: H+1
+
+(·| sh+1 ) 1
+
+≤(d) Bt,π t+1  
+
+> h
+
+(sh) + X
+
+> sh+1
+
+bPt,π t+1  
+
+> h
+
+(·| sh)bLth+1 (sh+1 ) = bZth(sh).
+
+We next prove by induction on h that bLth(s)−Lth(s) ≤ 2Lth(s). The base case is h = H, in which case 
+
+bLtH (s) = min[2 , B t,π t+1  
+
+> H
+
+(sH )] = Bt,π t+1  
+
+> H
+
+(sH ) = LtH (s), implying bLtH (s) − LtH (s) = 0 ≤ 2LtH (s).The inductive case is h ∈ JH − 1K. Due to Lemma A.1, an alternative definition of Lth is given by 
+
+Lth(s) = 
+
+> H
+
+X
+
+> i=h
+
+X
+
+> si
+
+Pπt+1  
+
+> h:i
+
+(si|s)Bt,π t+1  
+
+> i
+
+(si).
+
+We can now write 
+
+bLth(s) − Lth(s) ≤ Bt,π t+1  
+
+> h
+
+(sh) + X
+
+> s′
+
+bPt,π t+1  
+
+> h
+
+(s′|s)bLth+1 (s′) − Bt,π t+1  
+
+> h
+
+(sh) − X
+
+> s′
+
+Pπt+1  
+
+> h
+
+(s′|s)Lth+1 (s′)= X
+
+> s′
+
+ bPt,π t+1  
+
+> h
+
+(s′|s) − P πt+1  
+
+> h
+
+(s′|s)
+
+ bLth+1 (s′) + X
+
+> s′
+
+Pπt+1  
+
+> h
+
+(s′|s)
+
+bLth+1 (s′) − Lth+1 (s′)
+
+
+
+≤(a) 2 bPt,π t+1  
+
+> h
+
+(·| s) − P πt+1  
+
+> h
+
+(·| s) 1
+
++ 2 X
+
+> s′
+
+Pπt+1  
+
+> h
+
+(s′|s)
+
+> H
+
+X
+
+> i=h+1
+
+X
+
+> si
+
+Pπt+1 
+
+> h+1: i
+
+(si|s′)Bt,π t+1  
+
+> i
+
+(si)
+
+≤(b) 2 X
+
+> si
+
+Pπt+1  
+
+> h:h
+
+(si|s)Bt,π t+1  
+
+> i
+
+(si) + 2 
+
+> H
+
+X
+
+> i=h+1
+
+X
+
+> si
+
+Pπt+1  
+
+> h:i
+
+(si|s)Bt,π t+1  
+
+> i
+
+(si)= 2 
+
+> H
+
+X
+
+> i=h
+
+X
+
+> si
+
+Pπt+1  
+
+> h:i
+
+(si|s)Bt,π t+1  
+
+> i
+
+(si) = 2 Lth(s).
+
+In (a) we use the upper bound bLth+1 (s′) ≤ 2, the inductive hypothesis and the alternative definition of Lth+1 (s′). In (b) we use event E, the definition Pπt+1  
+
+> h:h
+
+(si|s) = I(s = si) and change the order of summation to obtain P 
+
+> s′
+
+Pπt+1  
+
+> h
+
+(s′|s)Pπt+1 
+
+> h+1: i
+
+(si|s′) = Pπt+1  
+
+> h:i
+
+(si|s). Finally we identify the alternative definition of Lth(s). Since bLth(s) − Lth(s) ≤ 2Lth(s), it follows that bLth(s) = bLth(s) − Lth(s) + 
+
+Lth(s) ≤ 3Lth(s). This concludes the proof of the lemma. We next prove that BPI-UCRL outputs an ε-optimal policy. To do so, let Pth(·| s, a ) =arg max p∈C t(s,a )
+
+P 
+
+> s′
+
+p(s′)V th+1 (s′; R) be the transition kernel that achieves the maximum over 
+
+Ct(s, a ) in (3) for each h and (s, a ), and let Pt,π h (s′|s) = Pth(s′|s, π h(s)) be its transition kernel. 
+
+Lemma C.2. Under event E, BPI-UCRL returns a policy bπ such that V ∗ 
+
+> 1
+
+(s1; R) − V bπ 
+
+> 1
+
+(s1; R) ≤ ε.Proof. Since V ∗ 
+
+> 1
+
+is optimal and V τ 
+
+> 1
+
+is an upper bound on V ∗ 
+
+> 1
+
+under E, we have V πτ +1  
+
+> 1
+
+(s1; R) ≤
+
+V ∗ 
+
+> 1
+
+(s1; R) ≤ V τ 
+
+> 1
+
+(s1; R). Since BPI-UCRL outputs the policy bπ = πτ +1 , we can use the alternative definitions of V τh and V πτ +1  
+
+> h
+
+due to Lemma A.1 to bound the difference between V ∗ 
+
+> 1
+
+and V bπ 
+
+> 1
+
+as 
+
+V ∗ 
+
+> 1
+
+(s1; R) − V bπ 
+
+> 1
+
+(s1; R) = V ∗ 
+
+> 1
+
+(s1; R) − V πτ +1  
+
+> 1
+
+(s1; R) ≤ V τ 
+
+> 1
+
+(s1; R) − V πτ +1  
+
+> 1
+
+(s1; R)
+
+≤ X
+
+> s2: H+1
+
+Pτ,π τ +1  
+
+> 1: H+1
+
+(s2: H+1 |s1) − Pπτ +1 
+
+> 1: H+1
+
+(s2: H+1 |s1)
+
+> H
+
+X
+
+> i=1
+
+R(si, π τ +1  
+
+> i
+
+(si)) 
+
+≤
+
+h
+
+Pτ,π τ +1  
+
+> 1: H+1
+
+(·| s1) − bPt,π τ +1  
+
+> 1: H+1
+
+(·| s1) 1
+
++ bPτ,π τ +1  
+
+> 1: H+1
+
+(·| s1) − Pπτ +1 
+
+> 1: H+1
+
+(·| s1) 1
+
+i
+
+H ≤ 2bLτ 
+
+> 1
+
+(s1)H ≤ ε, 
+
+where we use the alternative definitions of V τh and V πτ +1  
+
+> h
+
+, the triangle inequality, the fact that 
+
+Pτ,π τ +1  
+
+> h
+
+(·| sh) and Pπτ +1  
+
+> h
+
+(·| sh) belong to Cτ (sh, π τ +1  
+
+> h
+
+(sh)) under event E, Lemma C.1 and the stopping criterion. 17 For each h and (s, a ), let nt(s, a ) = PHh=1 Pπt
+
+> 1: h
+
+(s|s1) · I(a = πth(s)) be the expected number of visits of (s, a ) in episode t, and define pseudo-counts N t(s, a ) = Ptℓ=1 nℓ(s, a ). From Lemma G.2 in Appendix G (applied to H = 1 ) under the event 
+
+Ecnt =
+
+
+
+∀t ≥ 1, N t(s, a ) ≥ 12 N t(s, a ) − H log 
+
+ 2SAH δ
+
+ 
+
+,
+
+for all t the confidence bonuses satisfy the inequality 
+
+Bt,π t+1  
+
+> h
+
+(s) ≤ 4√H
+
+s
+
+β  N t(s, π t+1  
+
+> h
+
+(s)) , δH
+
+
+
+N t(s, π t+1  
+
+> h
+
+(s)) ∨ H .
+
+Assume that the algorithm stops after episode τ . Before stopping, we have ε/ (2 H) ≤ bLt
+
+> 1
+
+(s1) for each t ∈ Jτ K. Under events E and Ecnt we can sum the contributions from each episode to obtain 
+
+τ ε 
+
+2H ≤(a)
+
+> τ
+
+X
+
+> t=1
+
+bLt
+
+> 1
+
+(s1) ≤ 3
+
+> τ
+
+X
+
+> t=1
+
+Lt
+
+> 1
+
+(s1) = 3 
+
+> τ
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+X
+
+> sh
+
+Pπt+1  
+
+> 1: h
+
+(sh|s1)Bt,π t+1  
+
+> h
+
+(sh)
+
+≤(b) 12 √H
+
+> τ
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+X
+
+> sh
+
+Pπt+1  
+
+> 1: h
+
+(sh|s1)
+
+s
+
+β(N t(sh, π t+1  
+
+> h
+
+(sh)) , δ/H )
+
+N t(sh, π t+1  
+
+> h
+
+(sh)) ∨ H
+
+≤(c) 12 pHβ (Hτ, δ/H )
+
+> τ
+
+X
+
+> t=1
+
+X
+
+> s,a
+
+P
+
+> sh
+
+PHh=1 Pπt+1  
+
+> 1: h
+
+(sh|s1) · I(( s, a ) = ( sh, π t+1  
+
+> h
+
+(sh))) 
+
+q
+
+N t(s, a ) ∨ H
+
+=(d) 12 pHβ (Hτ, δ/H )
+
+> τ
+
+X
+
+> t=1
+
+X
+
+> s,a
+
+P 
+
+> sh
+
+nt+1 (sh, a ) · I(s = sh)
+
+q
+
+N t(s, a ) ∨ H
+
+≤(e) 12 pHβ (Hτ, δ/H ) X
+
+> s,a τ
+
+X
+
+> t=1
+
+N t+1 (s, a ) − N t(s, a )
+
+q
+
+N t(s, a ) ∨ H
+
+≤(f ) 12 pHβ (Hτ, δ/H )√H X
+
+> s,a τ
+
+X
+
+> t=1
+
+(N t+1 (s, a ) − N t(s, a )) /H 
+
+q
+
+N t(s, a )/H ∨ 1
+
+≤(g) 12 Hpβ(Hτ, δ/H )SAτ . 
+
+In (a) we use Lemma C.1 and the alternative definition of Lt
+
+> 1
+
+(s1) due to Lemma A.1. In (b) we convert the counts to pseudo-counts. In (c) we use the monotonicity of β to obtain an upper bound 
+
+β(Hτ, δ/H ), and we move the term 1/
+
+q
+
+N t(s, a ) ∨ 1 outside the sum over sh by summing over 
+
+s, a and introducing an indicator function I(( s, a ) = ( sh, π t+1  
+
+> h
+
+(sh))) . In (d) we identify nt+1 (sh, a ).In (e) we simplify the sum over sh and use the definitions of N t+1 (s, a ) and N t(s, a ). In (f ) we normalize the pseudo-counts by dividing them with H, and in (g) we apply Lemma 19 of Jaksch et al. [2010]. Rearranging the terms of the inequality to isolate τ on one side gives us 
+
+√τ ≤ 24 H2pβ(Hτ, δ/H )SA ε ⇔ Hτ ≤ 576 H · SAH 4β(Hτ, δ/H )
+
+ε2 .
+
+Recalling the expression β(n, δ ) = log(2 SA/δ ) + ( S − 1) log( e(1 + n/ (S − 1))) , the last inequality is equivalent to 
+
+Hτ ≤ 576 H · SAH 4 (log(2 SAH/δ ) + ( S − 1) log( e(1 + Hτ / (S − 1)))) 
+
+ε2 .
+
+Using some inversion lemma such as Lemma 15 from Kaufmann et al. [2021] (which we restate for completeness as Lemma H.1) yields the bound 
+
+τ = O
+
+ SAH 4
+
+ε2
+
+
+
+log SAH δ + S log 
+
+ SAH 5
+
+ε2 log SAH δ
+
+ 
+
+18 that is valid under the event E ∩ E cnt . Moreover, from Lemma G.1, this event holds with probability larger than 1 − δ, which concludes the proof. The proof follows a very similar strcuture compared to that of the original BPI-UCRL algorithm. A subtle difference is that BPI-UCRL is originally analyzed for time-inhomogeneous MDPs. For time-homogeneous transitions, the threshold function β in the event E can be chosen slightly smaller (removing an H inside the log) but the event Ecnt needs to be defined in a slightly different way compared to the original analysis, with an extra H factor in the correction term involved therein (see Appendix G). This was actually overlooked in the initial work of Kaufmann et al. [2021] who claim that an improvement of a factor H can be obtained in the resulting sample complexity bound. For sparse-reward MDPs, Lemma C.2 trivially holds for the stopping rule bLτ 
+
+> 1
+
+(s1) = ε/ 2:
+
+V ∗ 
+
+> 1
+
+(s1; R) − V bπ 
+
+> 1
+
+(s1; R) ≤ X
+
+> s2: H+1
+
+Pτ,π τ +1  
+
+> 1: H+1
+
+(s2: H+1 |s1) − Pπτ +1 
+
+> 1: H+1
+
+(s2: H+1 |s1)
+
+> H
+
+X
+
+> i=1
+
+R(si, π τ +1  
+
+> i
+
+(si)) 
+
+≤ Pτ,π τ +1  
+
+> 1: H+1
+
+(·| s1) − bPt,π τ +1  
+
+> 1: H+1
+
+(·| s1) 1
+
++ bPτ,π τ +1  
+
+> 1: H+1
+
+(·| s1) − Pπτ +1 
+
+> 1: H+1
+
+(·| s1) 1
+
+≤ 2bLτ 
+
+> 1
+
+(s1) ≤ ε. 
+
+Because of the modified stopping rule, the analysis from the proof of Theorem 2.1 directly yields 
+
+τ ε 
+
+2 ≤ 12 Hpβ(Hτ, δ/H )SAτ ⇔ Hτ ≤ 576 H · SAH 2β(Hτ, δ/H )
+
+ε2 .
+
+Lemma H.1 now yields a sample complexity of order eO(SAH 2/ε 2).
+
+D The Value Function Upper Bound 
+
+In this appendix we show that the value function V t is an upper bound on V ∗. We prove the statement using two lemmas that bound the transition kernels and rewards, respectively. 
+
+Lemma D.1. Under Assumption 3.1 and event E, for each (σ, k ) the transition kernels Pπ∗
+
+(·| σ, k )
+
+and Pπt+1 
+
+(·| σ, k ) belong to the high-level confidence set Ct(σ, k ).Proof. To show that Pπ∗
+
+(·| σ, k ) belongs to Ct(σ, k ), we bound ∥ bPt,π t+1 
+
+(·| σ, k ) − Pπ∗
+
+(·| σ, k )∥1 as 
+
+bPt,π t+1 
+
+(·| σ, k ) − Pπ∗
+
+(·| σ, k ) 1
+
+≤(a) bPt,π t+1 
+
+(·| σ, k ) − Pπt+1 
+
+(·| σ, k ) 1
+
++ Pπt+1 
+
+(·| σ, k ) − Pπ∗
+
+(·| σ, k ) 1
+
+≤(b) bPt,π t+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) − Pπt+1 ,k 
+
+> 1: H+1
+
+(·| g(σ)) 1
+
++ Pπt+1 ,k 
+
+> 1: H+1
+
+(·| g(σ)) − Pπ∗,k 
+
+> 1: H+1
+
+(·| g(σ)) 1
+
+≤(c) bLt,k  
+
+> 1
+
+(g(σ)) + 2 V πt+1 ,k  
+
+> 1
+
+(g(σ); Rk) − V π∗,k  
+
+> 1
+
+(g(σ); Rk)
+
+≤(d) bLt,k  
+
+> 1
+
+(g(σ)) + 4 H bLt,k  
+
+> 1
+
+(g(σ)) ≤ 5H bLt,k  
+
+> 1
+
+(g(σ)) .
+
+In (a) we use the triangle inequality, and in (b) we use the definitions of bPt,π and Pπ . In (c) we apply Lemma C.1 and use Assumption 3.1, and in (d) we bound the value difference as in the proof of Lemma C.2. Since ∥ bPt,π t+1 
+
+(·| σ, k ) − Pπt+1 
+
+(·| σ, k )∥1 is the first term in step (a), the second claim follows. 
+
+Lemma D.2. Under Assumption 3.1 and event E, for each (σ, k ) it holds that bRt,π t+1 
+
+(σ, k ) −
+
+Rπ∗
+
+(σ, k ) ≤ 3H bLt,k  
+
+> 1
+
+(g(σ)) and bRt,π t+1 
+
+(σ, k ) − Rπt+1 
+
+(σ, k ) ≤ 3H bLt,k  
+
+> 1
+
+(g(σ)) .Proof. We can bound the first term as follows: 
+
+bRt,π t+1 
+
+(σ, k ) − Rπ∗
+
+(σ, k ) ≤(a) bRt,π t+1 
+
+(σ, k ) − Rπt+1 
+
+(σ, k ) + Rπt+1 
+
+(σ, k ) − Rπ∗
+
+(σ, k )
+
+=(b) bV t,π t+1 ,k  
+
+> 1
+
+(g(σ); Yg(σ)) − V πt+1 ,k  
+
+> 1
+
+(g(σ); Yg(σ)) + V πt+1 ,k  
+
+> 1
+
+(g(σ); Yg(σ)) − V π∗,k  
+
+> 1
+
+(g(σ); Yg(σ))
+
+≤(c) bPt,π t+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) − Pπt+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) 1
+
+H + V πt+1 ,k  
+
+> 1
+
+(g(σ); Rk ) − V π∗,k  
+
+> 1
+
+(g(σ); Rk )
+
+19 ≤(d) H bLt,k  
+
+> 1
+
+(g(σ)) + 2 H bLt,k  
+
+> 1
+
+(g(σ)) ≤ 3H bLt,k  
+
+> 1
+
+(g(σ)) .
+
+In (a) we use the triangle inequality, and in (b) we use the definitions of bRt,π and Rπ . In (c) we bound the value difference using the composite distributions and use Assumption 3.1. In (d) we use Lemma C.1 and bound the value difference as in the proof of Lemma C.2. The second statement of the lemma holds since bRt,π t+1 
+
+(σ, k ) − Rπt+1 
+
+(σ, k ) is the first term of step (a).As a consequence of Lemmas D.1 and D.2, bRt,π t+1 
+
+(σ, k ) + 3 H bLt,k  
+
+> 1
+
+(g(σ)) is an upper bound on 
+
+Rπ∗
+
+(σ, k ) for each (σ, k ), and Pπ∗
+
+(· | σ, πh(σ)) belongs to the confidence set Ct(σ, πh(σ)) for each π and σ. Since V t maximizes over Ct(σ, k ), this implies that V t is an upper bound on V ∗.Since V ∗ 
+
+> h
+
+(σ) is trivially upper bounded by HH for each h and σ, taking the minimum with HH
+
+does not invalidate the bound. 
+
+E Proof of Theorem 4.1 
+
+In this section we prove Theorem 4.1, which states an upper bound on the sample complexity of HBPI-UCRL. We first define an error function Lt analogous to Lt but for the true SMDP transition kernel of (πt+1 , π t+1 ). The function Lt is recursively defined for each σ as Lt
+
+> H+1
+
+(σ) = 0 and 
+
+Lt
+
+> h
+
+(σ) = Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pπt+1 
+
+(σ′|σ, πt+1  
+
+> h
+
+(σ)) Lt
+
+> h+1
+
+(σ′) ∀h ∈ JHK.
+
+We also introduce convenient notation for several transition kernels of the policy πt+1 .• Pt
+
+> h
+
+(σ′|σ) = Pπ∗
+
+(σ′|σ, πt+1  
+
+> h
+
+(σ)) is the true transition kernel of πt+1 under π∗ with associated composite distributions PPPt 
+
+> i:j
+
+and PPPt 
+
+> i:j
+
+.• ePt
+
+> h
+
+(σ′|σ) = Pπt+1 
+
+(σ′|σ, πt+1  
+
+> h
+
+(σ)) is the true transition kernel of πt+1 under πt+1 with associated composite distributions ePPPt 
+
+> i:j
+
+and ePPPt 
+
+> i:j
+
+.• bPt
+
+> h
+
+(σ′|σ) = bPt,π t+1 
+
+(σ′|σ, πt+1  
+
+> h
+
+(σ)) is the empirical transition kernel of πt+1 under πt+1 
+
+with associated composite distributions bPPPt 
+
+> i:j
+
+and bPPPt 
+
+> i:j
+
+.We are now ready to prove a lemma for SMDPs analogous to Lemma C.1 for MDPs. 
+
+Lemma E.1. Let {Qπt+1  
+
+> h
+
+}h∈JHK be any transition kernel for πt+1 such that Qπt+1  
+
+> h
+
+(·| σ) ∈
+
+Ct(σ, πt+1 (σ)) for h, σ , and let QQQπt+1  
+
+> i:j
+
+and QQQπt+1  
+
+> i:j
+
+be the induced composite distributions. Un-der Assumption 3.1 and event E we have 
+
+QQQπt+1 
+
+> h:H+1
+
+(·| σ) − PPPt
+
+> h:H+1
+
+(·| σ) 1 ≤ Lt
+
+> h
+
+(σ) ≤ 3Lt
+
+> h
+
+(σ),
+
+QQQπt+1 
+
+> h:H+1
+
+(·| σ) − PPPt
+
+> h:H+1
+
+(·| σ) 1 ≤ Lt
+
+> h
+
+(σ) ≤ 3Lt
+
+> h
+
+(σ),
+
+where PPPt 
+
+> h:H+1
+
+and PPPt 
+
+> h:H+1
+
+are the composite distributions induced by Pt
+
+> h
+
+.Proof. We first prove the left inequalities by induction on h. The base case is h = H. In this case by definition we have 
+
+QQQπt+1 
+
+> H:H+1
+
+(·| σH ) = QQQπt+1 
+
+> H:H+1
+
+(·| σH ) = Qπt+1  
+
+> H
+
+(·| σH ),
+
+PPPt
+
+> H:H+1
+
+(·| σH ) = PPPt
+
+> H:H+1
+
+(·| σH ) = Pt 
+
+> H
+
+(·| σH ),
+
+Lt 
+
+> H
+
+(σH ) = min 2, Bt 
+
+> H
+
+(σH ) + 0  .
+
+Consequently we can write 
+
+QQQπt+1 
+
+> H:H+1
+
+(·| σH ) − PPPt
+
+> H:H+1
+
+(·| σH ) 1
+
+= Qπt+1  
+
+> H
+
+(·| σH ) − Pt 
+
+> H
+
+(·| σH ) 1
+
+≤ Qπt+1  
+
+> H
+
+(·| σH ) − bPt 
+
+> H
+
+(·| σH ) 1
+
++ bPt 
+
+> H
+
+(·| σH ) − Pt 
+
+> H
+
+(·| σH ) 1
+
+≤ 5H bLt, πt+1    
+
+> H(σH)1
+
+(g(σH )) + 5 H bLt, πt+1    
+
+> H(σH)1
+
+(g(σH )) = 10 H bLt, πt+1    
+
+> H(σH)1
+
+(g(σH ) = Bt 
+
+> H
+
+(σH ),
+
+20 where we use the triangle inequality and the facts that Qπt+1 
+
+H (·| σH ) and Pt
+
+H (·| σH ) belong to 
+
+Ct(σH , πt+1 
+
+H (σH )) . Since the trivial bound 2 also applies, this shows that ∥QQQπt+1 
+
+H:H+1 (·| σH ) −
+
+PPPt
+
+H:H+1 (·| σH )∥1 ≤ min[2 , Bt
+
+H (σH )] = Lt
+
+H (σH ). The proof for ∥QQQπt+1 
+
+H:H+1 (·| σH ) −
+
+PPPt
+
+H:H+1 (·| σH )∥1 is identical. The inductive case is given by h ∈ JH − 1K. In this case we have 
+
+QQQπt+1 
+
+> h:H+1
+
+(·| σh) − PPPt
+
+> h:H+1
+
+(·| σh) 1
+
+= X
+
+> σh+1: H+1
+
+QQQπt+1 
+
+> h:H+1
+
+(σh+1: H+1 |σh) − PPPt
+
+> h:H+1
+
+(σh+1: H+1 |σh)
+
+≤(a)
+
+X
+
+> σh+1: H+1
+
+Qπt+1  
+
+> h
+
+(σh+1 |σh)QQQπt+1 
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 ) − Pt
+
+> h
+
+(σh+1 |σh)QQQπt+1 
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 )
+
++ X
+
+> σh+1: H+1
+
+Pt
+
+> h
+
+(σh+1 |σh)QQQπt+1 
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 ) − Pt
+
+> h
+
+(σh+1 |σh)PPPt
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 )
+
+=(b)
+
+X
+
+> σh+1
+
+Qπt+1  
+
+> h
+
+(σh+1 |σh) − Pt
+
+> h
+
+(σh+1 |σh) X
+
+> σh+2: H+1
+
+QQQπt+1 
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 )+ X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh) X
+
+> σh+2: H+1
+
+QQQπt+1 
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 ) − PPPt
+
+> h+1: H+1
+
+(σh+2: H+1 |σh+1 )
+
+=(c) Qπt+1  
+
+> h
+
+(·| σh) − Pt
+
+> h
+
+(·| σh) 1
+
++ X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh) QQQπt+1 
+
+> h+1: H+1
+
+(·| σh+1 ) − PPPt
+
+> h+1: H+1
+
+(·| σh+1 ) 1
+
+≤(d) Bt
+
+> h
+
+(σh) + X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh)Lt
+
+> h+1
+
+(σh+1 ) ≡ Zt
+
+> h
+
+(σh).
+
+In (a) we use the definition of QQQπt+1 
+
+h:H+1 and PPPt
+
+h:H+1 and the triangle inequality, in (b) we use the equality |ab − ac | = a|b − c| for a ≥ 0, in (c) we use the definition of the L1-norm and the equality P
+
+σh+2: H+1 QQQπt+1 
+
+h+1: H+1 (σh+2: H+1 |σh+1 ) = 1 , and in (d) we use the fact that Qπt+1 
+
+h (·| σh)
+
+and Pt
+
+h(·| σh) belong to Ct(σh, πt+1 
+
+h (σh)) and the inductive hypothesis for h + 1 . Since the trivial bound 2 also applies, we obtain 
+
+QQQπt+1 
+
+h:H+1 (·| σh) − PPPt
+
+h:H+1 (·| σh) 1
+
+≤ min 2, Zt
+
+h(σh) = Lt
+
+h(σh).
+
+The proof for ∥QQQπt+1 
+
+h:H+1 (·| σh) − PPPt
+
+h:H+1 (·| σh)∥1 is very similar: 
+
+QQQπt+1 
+
+> h:H+1
+
+(·| σh) − PPPt
+
+> h:H+1
+
+(·| σh) 1
+
+= X
+
+> σH+1
+
+QQQπt+1 
+
+> h:H+1
+
+(σH+1 |σh) − PPPt
+
+> h:H+1
+
+(σH+1 |σh)
+
+≤(a)
+
+X
+
+> σH+1
+
+X
+
+> σh+1
+
+Qπt+1  
+
+> h
+
+(σh+1 |σh)QQQπt+1 
+
+> h+1: H+1
+
+(σH+1 |σh+1 ) − Pt
+
+> h
+
+(σh+1 |σh)QQQπt+1 
+
+> h+1: H+1
+
+(σH+1 |σh+1 )
+
++ X
+
+> σH+1
+
+X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh)QQQπt+1 
+
+> h+1: H+1
+
+(σH+1 |σh+1 ) − Pt
+
+> h
+
+(σh+1 |σh)PPPt
+
+> h+1: H+1
+
+(σH+1 |σh+1 )
+
+=(b)
+
+X
+
+> σh+1
+
+Qπt+1  
+
+> h
+
+(σh+1 |σh) − Pt
+
+> h
+
+(σh+1 |σh) X
+
+> σH+1
+
+QQQπt+1 
+
+> h+1: H+1
+
+(σH+1 |σh+1 )+ X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh) X
+
+> σH+1
+
+QQQπt+1 
+
+> h+1: H+1
+
+(σH+1 |σh+1 ) − PPPt
+
+> h+1: H+1
+
+(σH+1 |σh+1 )
+
+=(c) Qπt+1  
+
+> h
+
+(·| σh) − Pt
+
+> h
+
+(·| σh) 1
+
++ X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh) QQQπt+1 
+
+> h+1: H+1
+
+(·| σh+1 ) − PPPt
+
+> h+1: H+1
+
+(·| σh+1 ) 1
+
+≤(d) Bt
+
+> h
+
+(σh) + X
+
+> σh+1
+
+Pt
+
+> h
+
+(σh+1 |σh)Lt
+
+> h+1
+
+(σh+1 ) ≡ Zt
+
+> h
+
+(σh).
+
+We next show by induction on h that Lt
+
+h(σ) − Lt
+
+h(σ) ≤ 2Lt
+
+h(σ). The base case is given by 
+
+h = H, in which case Lt
+
+H (σ) = min[2 , Bt
+
+H (σ)] ≤ Bt
+
+H (σ) = Lt
+
+H (σ) by definition, implying 
+
+Lt
+
+H (σ) − Lt
+
+H (σ) ≤ 0 ≤ 2Lt
+
+H (σ). In the inductive case h ∈ JH − 1K we can write 
+
+Lt
+
+> h
+
+(σ) − Lt
+
+> h
+
+(σ) ≤ Bt 
+
+> H
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′) − Bt 
+
+> H
+
+(σ) − X
+
+> σ′
+
+ePt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+21 = X
+
+> σ′
+
+
+
+Pt
+
+> h
+
+(σ′|σ) − ePt
+
+> h
+
+(σ′|σ)
+
+
+
+Lt
+
+> h+1
+
+(σ′) + X
+
+> σ′
+
+ePt
+
+> h
+
+(σ′|σ)  Lt
+
+> h+1
+
+(σ′) − Lt
+
+> h+1
+
+(σ′)
+
+≤(a) 2 Pt
+
+> h
+
+(·| σ) − bPt
+
+> h
+
+(·| σ) 1
+
++ 2 bPt
+
+> h
+
+(·| σ) − ePt
+
+> h
+
+(·| σ) 1
+
++ 2 X
+
+> σ′
+
+ePt
+
+> h
+
+(σ′|σ)
+
+> H
+
+X
+
+> i=h+1
+
+X
+
+> σi
+
+ePPPt
+
+> h+1: i
+
+(σi|σ′)Bt 
+
+> i
+
+(σi)
+
+≤(b) 2 X
+
+> σi
+
+ePPPt
+
+> h:h
+
+(σi|σ)Bt 
+
+> i
+
+(σi) + 2 
+
+> H
+
+X
+
+> i=h+1
+
+X
+
+> σi
+
+ePPPt
+
+> h:i
+
+(σi|σ)Bt 
+
+> i
+
+(σi) = 2 
+
+> H
+
+X
+
+> i=h
+
+X
+
+> σi
+
+ePPPt
+
+> h:i
+
+(σi|σ)Bt 
+
+> i
+
+(σi) = 2 Lt
+
+> h
+
+(σ).
+
+In (a) we use the trivial bound Lt
+
+> h+1
+
+(σ′) ≤ 2, the triangle inequality, the inductive hypothe-sis and the alternative definition of Lt
+
+> h+1
+
+(σ′) due to Lemma A.1. In (b) we use Lemma D.1 twice, the definition ePPPt
+
+> h:h
+
+(σi|σ) = I(σ = σi) and change the order of summation to obtain 
+
+P 
+
+> σ′
+
+ePt
+
+> h
+
+(σ′|σ)ePPPt
+
+> h+1: i
+
+(σi|σ′) = ePPPt
+
+> h:i
+
+(σi|σ). Since Lt
+
+> h
+
+(σ) − Lt
+
+> h
+
+(σ) ≤ 2Lt
+
+> h
+
+(σ), it follows that 
+
+Lt
+
+> h
+
+(σ) = Lt
+
+> h
+
+(σ) − Lt
+
+> h
+
+(σ) + Lt
+
+> h
+
+(σ) ≤ 3Lt
+
+> h
+
+(σ). This concludes the proof of the lemma. We next prove a lemma that bounds two particular choices of value functions. 
+
+Lemma E.2. Let U t and W t be two value functions of πt+1 recursively defined for each σ as 
+
+U t
+
+> H+1
+
+(σ) = W t
+
+> H+1
+
+(σ) = 0 and 
+
+U t
+
+> h
+
+(σ) = bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) − Rπ∗
+
+(σ, πt+1  
+
+> h
+
+(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)U t
+
+> h+1
+
+(σ′),
+
+W t
+
+> h
+
+(σ) = min 
+
+h
+
+1, 3H bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)W t
+
+> h+1
+
+(σ′)
+
+i
+
+.
+
+Under Assumption 3.1 and event E, for each h and σ it holds that U t
+
+> h
+
+(σ) ≤ HHLt
+
+> h
+
+(σ) and 
+
+W t
+
+> h
+
+(σ) ≤ Lt
+
+> h
+
+(σ).Proof. We prove the claim by induction on h. In the base case h = H we have 
+
+U t 
+
+> H
+
+(σ) = bRt,π t+1 
+
+(σ, πt+1  
+
+> H
+
+(σ)) − Rπ∗
+
+(σ, πt+1  
+
+> H
+
+(σ)) + 0 ≤ 3H bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) ≤ Bt 
+
+> H
+
+(σ),
+
+W t 
+
+> H
+
+(σ) = min 
+
+h
+
+1, 3H bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) + 0 
+
+i
+
+≤ min 2, B t 
+
+> H
+
+(σ) = Lt 
+
+> H
+
+(σ),
+
+where we have used Lemma D.2. Since U t 
+
+> H
+
+(σ) is trivially upper bounded by HH, we have 
+
+U t 
+
+> H
+
+(σ) ≤ min HH, Bt 
+
+> H
+
+(σ) ≤ HH min[2 , Bt 
+
+> H
+
+(σ)] = HHLt 
+
+> H
+
+(σ).
+
+The inductive case is given by h ∈ JH − 1K. In this case we have 
+
+U t
+
+> h
+
+(σ) = bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) − Rπ∗
+
+(σ, πt+1  
+
+> h
+
+(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)U t
+
+> h+1
+
+(σ′)
+
+≤ Bt
+
+> h
+
+(σ) + HH X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′),
+
+W t
+
+> h
+
+(σ) = min 
+
+"
+
+1, 3H bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)W t
+
+> h+1
+
+(σ′)
+
+#
+
+≤ min 
+
+"
+
+2, Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+#
+
+= Lt
+
+> h
+
+(σ),
+
+where we have used Lemma D.2 and the inductive hypothesis. Since U t
+
+> h
+
+(σ) is upper bounded by 
+
+HH, we have 
+
+U t
+
+> h
+
+(σ) ≤ min 
+
+"
+
+HH, Bt
+
+> h
+
+(σ) + HH X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+#
+
+≤ HH min 
+
+"
+
+2, Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+#
+
+= HHLt
+
+> h
+
+(σ).
+
+This concludes the proof of the lemma. 22 Since Rπt+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi) ≤ 3H bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) ≤ Bt
+
+> h
+
+(σ) due to the proof of Lemma D.2, replacing bRt,π t+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi) with 
+
+Rπt+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi) in the definition of U t
+
+> h
+
+(σ) yields the same bound. We next prove an upper bound on the value function V t.
+
+Lemma E.3. Let bV t, πt+1 ,π t+1 
+
+be a value function recursively defined for σ as bV t, πt+1 ,π t+1  
+
+> H+1
+
+(σ) = 0 
+
+and 
+
+bV t, πt+1 ,π t+1  
+
+> h
+
+(σ) = bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ) bV t, πt+1 ,π t+1  
+
+> h+1
+
+(σ′).
+
+For each h and σ it holds that V t
+
+> h
+
+(σ) ≤ HHW t
+
+> h
+
+(σ) + bV t, πt+1 ,π t+1  
+
+> h
+
+(σ).Proof. By induction on h, with the base case given by h = H. In this case we have 
+
+V t 
+
+> H
+
+(σ) = min 
+
+h
+
+HH, bRt,π t+1 
+
+(σ, πt+1  
+
+> H
+
+(σ)) + 3 H bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) 
+
+i
+
+≤ min 
+
+h
+
+HH, HH3H bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) 
+
+i
+
++ bRt,π t+1 
+
+(σ, πt+1  
+
+> H
+
+(σ)) = HHW t 
+
+> H
+
+(σ) + bV t, πt+1 ,π t+1  
+
+> H
+
+(σ).
+
+The recursive case is given by h ∈ JH − 1K. In this case we have 
+
+V t
+
+> h
+
+(σ) = min 
+
+h
+
+HH, bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + 3 H bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)V t
+
+> h+1
+
+(σ′)
+
+i
+
+≤ min 
+
+h
+
+HH, bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + 3 H bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)
+
+
+
+HHW t
+
+> h+1
+
+(σ′) + bV t, πt+1 ,π t+1  
+
+> h+1
+
+(σ′)
+
+ i 
+
+≤ min 
+
+h
+
+HH, HH3H bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + HH X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)W t
+
+> h+1
+
+(σ′)
+
+i
+
++ bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ) bV t, πt+1 ,π t+1  
+
+> h+1
+
+(σ′) = HHW t
+
+> h
+
+(σ) + bV t, πt+1 ,π t+1  
+
+> h
+
+(σ),
+
+where we have used the inductive hypothesis. This concludes the proof. We note that Lemma A.1 applies to each transition kernel of πt+1 and associated composite distribu-tions, which implies that we can write the value functions of πt+1 as 
+
+V πt+1 ,π ∗ 
+
+> h
+
+(σh) = X
+
+> σh+1: H+1
+
+PPPt
+
+> h:H+1
+
+(σh+1: H+1 |σh)
+
+> H
+
+X
+
+> i=h
+
+Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi)) ,
+
+V πt+1 ,π t+1  
+
+> h
+
+(σh) = X
+
+> σh+1: H+1
+
+ePPPt
+
+> h:H+1
+
+(σh+1: H+1 |σh)
+
+> H
+
+X
+
+> i=h
+
+Rπt+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) ,
+
+bV t, πt+1 ,π t+1  
+
+> h
+
+(σh) = X
+
+> σh+1: H+1
+
+PPPt
+
+> h:H+1
+
+(σh+1: H+1 |σh)
+
+> H
+
+X
+
+> i=h
+
+bRt,π t+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) ,
+
+U t
+
+> h
+
+(σh) = X
+
+> σh+1: H+1
+
+PPPt
+
+> h:H+1
+
+(σh+1: H+1 |σh)
+
+> H
+
+X
+
+> i=h
+
+bRt,π t+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) −Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi)) .
+
+We are now ready to prove the first part of Theorem 4.1. 
+
+Lemma E.4. Under Assumption 3.1 and event E, the policies πτ +1 and {πτ +1 ,k }k∈JKK returned by HBPI-UCRL satisfy |V ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π τ +1  
+
+> 1
+
+(σ1)| ≤ ε.
+
+23 Proof. We first use the triangle inequality to obtain 
+
+V ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π τ +1  
+
+> 1
+
+(σ1) ≤ V ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1) + V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π τ +1  
+
+> 1
+
+(σ1) .
+
+Since V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1) ≤ V ∗ 
+
+> 1
+
+(σ1) ≤ V τ 
+
+> 1
+
+(σ1), the first term can be bounded as 
+
+V ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1) ≤ V τ 
+
+> 1
+
+(σ1) − V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1)
+
+≤(a) HHW τ 
+
+> 1
+
+(σ1) + bV τ, πτ +1 ,π τ +1  
+
+> 1
+
+(σ1) − V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1)
+
+≤(b) HHW τ 
+
+> 1
+
+(σ1) + X
+
+> σ2: H+1
+
+PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+bRτ,π τ +1 
+
+(σi, πτ +1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πτ +1  
+
+> i
+
+(σi)) 
+
++ X
+
+> σ2: H+1
+
+PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1) − PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπ∗
+
+(σi, πτ +1  
+
+> i
+
+(σi)) 
+
+≤(c) HHW τ 
+
+> 1
+
+(σ1) + U τ 
+
+> 1
+
+(σ1) + PPPτ
+
+> 1: H+1
+
+(·| σ1) − PPPτ
+
+> 1: H+1
+
+(·| σ1) 1
+
+HH ≤ 3HHLτ 
+
+> 1
+
+(σ1).
+
+In (a) we use the upper bound on V τ from Lemma E.3, and in (b) we use the alternative definitions of 
+
+bV τ, πτ +1 ,π τ +1  
+
+> 1
+
+and V πτ +1 ,π ∗ 
+
+> 1
+
+and the triangle inequality. In (c) we identify the alternative definition of U τ , upper bound the reward sum by HH and apply Lemmas E.2 and E.1. The second term can be bounded as 
+
+V πτ +1 ,π ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π τ +1  
+
+> 1
+
+(σ1)
+
+≤(a)
+
+X
+
+> σ2: H+1
+
+ePPPτ
+
+> 1: H+1
+
+(σ2:H+1 |σ1) − PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπτ +1 
+
+(σi, πτ +1  
+
+> i
+
+(σi)) + X
+
+> σ2: H+1
+
+PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπτ +1 
+
+(σi, πτ +1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πτ +1  
+
+> i
+
+(σi)) 
+
++ X
+
+> σ2: H+1
+
+PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1) − PPPτ
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπ∗
+
+(σi, πτ +1  
+
+> i
+
+(σi)) 
+
+≤(b) ePPPτ
+
+> 1: H+1
+
+(·| σ1) − PPPτ
+
+> 1: H+1
+
+(·| σ1) 1
+
+HH + PPPτ
+
+> 1: H+1
+
+(·| σ1) − PPPτ
+
+> 1: H+1
+
+(·| σ1) 1
+
+HH + U τ 
+
+> 1
+
+(σ1)
+
+≤ 3HHLτ 
+
+> 1
+
+(σ1).
+
+In (a) we use the alternative definitions of V πτ +1 ,π ∗ 
+
+> 1
+
+and V πτ +1 ,π τ +1  
+
+> 1
+
+and the triangle inequality, and in (b) we use the bound HH on the reward sums, identify the alternative definition of U τ 
+
+> 1
+
+(σ1) and apply Lemmas E.2 and E.1. Gathering the terms we obtain 
+
+V ∗ 
+
+> 1
+
+(σ1) − V πτ +1 ,π τ +1  
+
+> 1
+
+(σ1) ≤ (3 + 3) HHLτ 
+
+> 1
+
+(σ1) ≤ 6HHLτ 
+
+> 1
+
+(σ1) ≤ ε, 
+
+where the last inequality follows from the stopping criterion Lτ 
+
+> 1
+
+(σ1) ≤ ε/ (6 HH).We next define an appropriate notion of pseudo-counts for the hierarchical setting. In episode t + 1 ,since the policies are πt+1 and πt+1 ,k , k ∈ JKK, high-level transitions are governed by the transition kernel Pπt+1 ,π t+1  
+
+> h
+
+. Letting kt 
+
+> h
+
+= πt+1  
+
+> h
+
+(σh), the expected number of visits of a state-action (s, a )
+
+during episode t + 1 is 
+
+nt+1 (s, a ) = 
+
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπt+1 ,π t+1  
+
+> 1:h
+
+(σh|σ1)
+
+> H
+
+X
+
+> h=1
+
+Pπt+1 ,k t 
+
+> h
+> 1: h
+
+(s|g(σh)) · I(a = πt+1 ,k t 
+
+> h
+
+(s)) .
+
+The pseudo-count is the sum over all episodes, i.e. N t(s, a ) = Ptℓ=1 nℓ(s, a ).While the algorithm does not stop, it holds that ε/ (6 HH) ≤ Lt
+
+> 1
+
+(σ1). Under events E and Ecnt ,summing the contributions of each episode yields 24 τ ε 
+
+6HH ≤(a)
+
+> τ
+
+X
+
+> t=1
+
+Lt
+
+> 1
+
+(σ1) ≤ 3
+
+> τ
+
+X
+
+> t=1
+
+Lt
+
+> 1
+
+(σ1) = 3 
+
+> τ
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπt+1 ,π t+1  
+
+> 1:h
+
+(σh|σ1)10 HL t,π t+1h (σh)1 (g(σh)) 
+
+≤(b) 9
+
+> τ
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπt+1 ,π t+1  
+
+> 1:h
+
+(σh|σ1)10 HL t,π t+1h (σh)1 (g(σh)) 
+
+≤(c) 90 H
+
+> τ
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπt+1 ,π t+1  
+
+> 1:h
+
+(σh|σ1)
+
+> H
+
+X
+
+> h=1
+
+X
+
+> sh
+
+Pπt+1 ,πt+1   
+
+> h(σh)
+> 1: h
+
+(sh|g(σh)) Bt(sh, π t+1 ,πt+1   
+
+> h(σh)
+> h
+
+(sh)) 
+
+≤(d) 360 H
+
+> τ
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπt+1 ,π t+1  
+
+> 1:h
+
+(σh|σ1)
+
+×
+
+> H
+
+X
+
+> h=1
+
+X
+
+> sh
+
+Pπt+1 ,πt+1   
+
+> h(σh)
+> 1: h
+
+(sh|g(σh)) 
+
+vuuut HHβ (N t(sh, π t+1 ,πt+1   
+
+> h(σh)
+> h
+
+(sh)) , δ/ HH)
+
+N t(sh, π t+1 ,πt+1   
+
+> h(σh)
+> h
+
+(sh)) ∨ HH
+
+≤(e) 360 HpHHβ (HHτ, δ/ HH)
+
+> τ
+
+X
+
+> t=1
+
+X
+
+> s,a
+
+1
+
+q
+
+N t(s, a ) ∨ HH
+
+× X
+
+> sh
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπt+1 ,π t+1  
+
+> 1:h
+
+(σh|σ1)
+
+> H
+
+X
+
+> h=1
+
+Pπt+1 ,k h 
+
+> 1: h
+
+(sh|g(σh)) · I
+
+
+
+(s, a ) = ( sh, π t+1 ,k h (sh)) 
+
+
+
+=(f ) 360 HpHHβ (HHτ, δ/ HH)
+
+> τ
+
+X
+
+> t=1
+
+X
+
+> s,a
+
+P 
+
+> sh
+
+nt+1 (sh, a ) · I(s = sh)
+
+q
+
+N t(s, a ) ∨ HH
+
+=(g) 360 HpHHβ (HHτ, δ/ HH) X
+
+> s,a τ
+
+X
+
+> t=1
+
+N t+1 (s, a ) − N t(s, a )
+
+q
+
+N t(s, a ) ∨ HH
+
+≤(h) 360 HpHHβ (HHτ, δ/ HH)√HH X
+
+> s,a τ
+
+X
+
+> t=1
+
+(N t+1 (s, a ) − N t(s, a )) /(HH)
+
+q
+
+N t(s, a )/(HH) ∨ 1
+
+≤(i) 360 HH2pβ(HHτ, δ/ HH)SAτ . 
+
+In (a) we use Lemma E.1, the alternative definition of Lt
+
+> 1
+
+(σ1) due to Lemma A.1 and the definition of Bt. In (b) we apply Lemma C.1, and in (c) we use the alternative definition of Lt,π t+1h (σh)1 (g(σh)) 
+
+due to Lemma A.1. In (d) we apply Lemma G.2 to convert the counts to pseudo-counts. In (e)
+
+we use the monotonicity of β to obtain an upper bound β(HHτ, δ/ HH), and we move the term 
+
+1/
+
+q
+
+N t(s, a ) ∨ 1 outside the sum over sh by summing over s, a and introducing an indicator function 
+
+I(( s, a ) = ( sh, π t+1 ,k h 
+
+> h
+
+(sh))) . In (f ) we identify ¯nt+1 (sh, a ), and in (g) we simplify the sum over 
+
+sh and use the definitions of N t+1 (s, a ) and N t(s, a ). In (h) we divide the pseudo-counts by HH,and in (i) we apply Lemma 19 of Jaksch et al. [2010]. Rearranging the terms of the inequality to isolate τ on one side gives us 
+
+√τ ≤ 2160 H2H3pβ(HHτ, δ/ HH)SA ε
+
+⇔ HHτ ≤ 4665600 HH · SA H4H6β(HHτ, δ/ HH)
+
+ε2 .
+
+From here, using the expression of β together with Lemma H.1 applied to n = HHτ yields 
+
+τ = O
+
+ SA H4H6
+
+ε2
+
+
+
+log SA HHδ + S log 
+
+ SA H5H7
+
+ε2 log SA HHδ
+
+ 
+
+.
+
+Finally, Lemma G.1 implies that the events E and Ecnt hold simultaneously with probability 1 − δ.25 F Proof of Theorem 4.2 
+
+We first remark that since the flat MDP M is sparse-reward, for any state sequence σ1: H+1 we have 
+
+> H
+
+X
+
+> h=1
+
+bRt,π t+1 
+
+(σh, πt+1  
+
+> h
+
+(σh)) =
+
+> H
+
+X
+
+> h=1
+
+bV t,π t+1 ,πt+1   
+
+> h(σh)
+> 1
+
+(g(σh); Yg(σh))=
+
+> H
+
+X
+
+> h=1
+
+X
+
+> s2: H+1
+
+bPt,π t+1 ,πt+1   
+
+> h(σh)
+> 1: H+1
+
+(s2: H+1 |s1 = g(σh)) 
+
+> H
+
+X
+
+> i=1
+
+Y(f (g(σh), s i), π t+1  
+
+> i
+
+(si)) = X
+
+> σ2: HH+1
+
+Γt
+
+> 1: HH+1
+
+(σ2: HH+1 |σ1) X
+
+> a1: HH
+> HH
+
+Y
+
+> i=1
+
+μti(ai|σi)
+
+> HH
+
+X
+
+> i=1
+
+Y(σi, a i) ≤ 1,
+
+where Γt 
+
+> 1: HH+1
+
+is an appropriately chosen composite distribution on state sequences, and μti : Σ →
+
+∆( A) is an appropriately chosen stochastic policy for each i ∈ JHHK. As a consequence, this implies that all value functions (both true as well as empirical) are upper bounded by 1.We next exploit that the subproblem MDPs are sparse-reward. We prove that Lemma D.1 still holds for the new definition of the confidence sets Ct.
+
+bPt,π t+1 
+
+(·| σ, k ) − Pπ∗
+
+(·| σ, k )
+
+> 1
+
+≤ bPt,π t+1 
+
+(·| σ, k ) − Pπt+1 
+
+(·| σ, k ) 1
+
++ Pπt+1 
+
+(·| σ, k ) − Pπ∗
+
+(·| σ, k ) 1
+
+≤ bLt,k  
+
+> 1
+
+(g(σ)) + 2 V πt+1 ,k  
+
+> 1
+
+(g(σ); Rk ) − V π∗,k  
+
+> 1
+
+(g(σ); Rk )
+
+≤ bLt,k  
+
+> 1
+
+(g(σ)) + 2 V t,k  
+
+> 1
+
+(g(σ); Rk ) − V πt+1 ,k  
+
+> 1
+
+(g(σ); Rk )
+
+≤ bLt,k  
+
+> 1
+
+(g(σ)) + 2 X
+
+> s2: H+1
+
+Pt,π t+1 ,k  
+
+> 1: H+1
+
+(s2: H+1 |g(σ)) − Pπt+1 ,k  
+
+> 1: H+1
+
+(s2: H+1 |g(σ)) 
+
+> H
+
+X
+
+> i=1
+
+Rk (si, π t+1 ,k i (si)) 
+
+≤ bLt,k  
+
+> 1
+
+(g(σ)) + 2 Pt,π t+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) − bPt,π t+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) 1
+
++ 2 bPt,π t+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) − Pπt+1 ,k  
+
+> 1: H+1
+
+(·| g(σ)) 1
+
+≤ 5bLt,k  
+
+> 1
+
+(g(σ)) .
+
+This implies that Lemma E.1 still holds since ∥Qπt+1  
+
+> h
+
+(·| σh) − Pt
+
+> h
+
+(·| σh)∥1 ≤ Bt
+
+> h
+
+(σh) for the new definition of Bt. Consequently, the modified V t is still an upper bound on V ∗ since bRt,π t+1 
+
+(σ, k ) + 3bLt,k  
+
+> 1
+
+(g(σ)) is an upper bound on Rπ∗
+
+(σ, k ) due to Lemma D.2. Since M is sparse-reward, taking the minimum with 1 does not invalidate the bound. 
+
+Lemma F.1. Under Assumption 3.1 and event E, for each h and σ it holds that U t
+
+> h
+
+(σ) ≤ Lt
+
+> h
+
+(σ) and 
+
+W t
+
+> h
+
+(σ) ≤ Lt
+
+> h
+
+(σ) for W t defined as W t
+
+> H+1
+
+(σ) = 0 and 
+
+W t
+
+> h
+
+(σ) = min 
+
+"
+
+1, 3bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)W t
+
+> h+1
+
+(σ′)
+
+#
+
+.
+
+Proof. We prove the claim by induction on h, with the base case given by h = H. In this case we have 
+
+U t 
+
+> H
+
+(σ) = bRt,π t+1 
+
+(σ, πt+1  
+
+> H
+
+(σ)) − Rπ∗
+
+(σ, πt+1  
+
+> H
+
+(σ)) + 0 ≤ 3bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) ≤ Bt 
+
+> H
+
+(σ),
+
+W t 
+
+> H
+
+(σ) = min 
+
+h
+
+1, 3bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) + 0 
+
+i
+
+≤ min 2, B t 
+
+> H
+
+(σ) = Lt 
+
+> H
+
+(σ).
+
+Since U t 
+
+> H
+
+(σ) is upper bounded by 2 due to M being sparse-reward, we obtain 
+
+U t 
+
+> H
+
+(σ) ≤ min 2, Bt 
+
+> H
+
+(σ) ≤ Lt 
+
+> H
+
+(σ).
+
+26 The recursive case is given by h ∈ JH − 1K. In this case we have 
+
+U t
+
+> h
+
+(σ) = bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) − Rπ∗
+
+(σ, πt+1  
+
+> h
+
+(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)U t
+
+> h+1
+
+(σ′)
+
+≤ Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′),
+
+W t
+
+> h
+
+(σ) = min 
+
+"
+
+1, 3bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)W t
+
+> h+1
+
+(σ′)
+
+#
+
+≤ min 
+
+"
+
+2, Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+#
+
+= Lt
+
+> h
+
+(σ),
+
+where we have used the inductive hypothesis. Since U t
+
+> h
+
+(σ) is upper bounded by 2 we obtain 
+
+U t
+
+> h
+
+(σ) ≤ min 
+
+"
+
+2, Bt
+
+> h
+
+(σ) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)Lt
+
+> h+1
+
+(σ′)
+
+#
+
+= Lt
+
+> h
+
+(σ).
+
+This concludes the proof of the lemma. 
+
+Lemma F.2. For each h and σ it holds that V t
+
+> h
+
+(σ) ≤ W t
+
+> h
+
+(σ) + bV t, πt+1 ,π t+1  
+
+> h
+
+(σ).Proof. By induction on h, with the base case given by h = H. In this case we have 
+
+V t 
+
+> H
+
+(σ) = min 
+
+h
+
+1, bRt,π t+1 
+
+(σ, πt+1  
+
+> H
+
+(σ)) + 3 bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) 
+
+i
+
+≤ min 
+
+h
+
+1, 3bLt, πt+1   
+
+> H(σ)1
+
+(g(σ)) 
+
+i
+
++ bRt,π t+1 
+
+(σ, πt+1  
+
+> H
+
+(σ)) = W t 
+
+> H
+
+(σ) + bV t, πt+1 ,π t+1  
+
+> H
+
+(σ).
+
+The recursive case is given by h ∈ JH − 1K. In this case we have 
+
+V t
+
+> h
+
+(σ) = min 
+
+h
+
+1, bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + 3 bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)V t
+
+> h+1
+
+(σ′)
+
+i
+
+≤ min 
+
+h
+
+1, bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + 3 bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)
+
+
+
+W t
+
+> h+1
+
+(σ′) + bV t, πt+1 ,π t+1  
+
+> h+1
+
+(σ′)
+
+ i 
+
+≤ min 
+
+h
+
+1, 3bLt, πt+1   
+
+> h(σ)1
+
+(g(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ)W t
+
+> h+1
+
+(σ′)
+
+i
+
++ bRt,π t+1 
+
+(σ, πt+1  
+
+> h
+
+(σ)) + X
+
+> σ′
+
+Pt
+
+> h
+
+(σ′|σ) bV t, πt+1 ,π t+1  
+
+> h+1
+
+(σ′)= W t
+
+> h
+
+(σ) + bV t, πt+1 ,π t+1  
+
+> h
+
+(σ).
+
+This concludes the proof. We are now ready to prove the first part of the theorem. 
+
+Lemma F.3. Under Assumption 3.1 and event E, the policies πt+1 and {πt+1 ,k }k∈JKK returned by the modified version of HBPI-UCRL satisfy V ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π t+1  
+
+> 1
+
+(σ1) ≤ ε.Proof. We first use the triangle inequality to obtain 
+
+V ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π t+1  
+
+> 1
+
+(σ1) ≤ V ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π ∗ 
+
+> 1
+
+(σ1) + V πt+1 ,π ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π t+1  
+
+> 1
+
+(σ1) .
+
+Since V πt+1 ,π ∗ 
+
+> 1
+
+(σ1) ≤ V ∗ 
+
+> 1
+
+(σ1) ≤ V t 
+
+> 1
+
+(σ1), the first term can be bounded as 
+
+V ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π ∗ 
+
+> 1
+
+(σ1) ≤ V t 
+
+> 1
+
+(σ1) − V πt+1 ,π ∗ 
+
+> 1
+
+(σ1)
+
+≤ W t
+
+> 1
+
+(σ1) + bV t, πt+1 ,π t+1  
+
+> 1
+
+(σ1) − V πt+1 ,π ∗ 
+
+> 1
+
+(σ1)
+
+27 ≤ W t
+
+> 1
+
+(σ1) + X
+
+> σ2: H+1
+
+PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+bRt,π t+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi)) 
+
++ X
+
+> σ2: H+1
+
+PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1) − PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi)) 
+
+≤ W t
+
+> 1
+
+(σ1) + U t
+
+> 1
+
+(σ1) + PPPt
+
+> 1: H+1
+
+(·| σ1) − PPPt
+
+> 1: H+1
+
+(·| σ1) 1
+
+≤ 3Lt
+
+> 1
+
+(σ1),
+
+where we have used the upper bound 1 on the reward due to M being sparse-reward. The second term can be bounded as 
+
+V πt+1 ,π ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π t+1  
+
+> 1
+
+(σ1)
+
+≤ X
+
+> σ2: H+1
+
+ePPPt
+
+> 1: H+1
+
+(σ2:H+1 |σ1) − PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπt+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) + X
+
+> σ2: H+1
+
+PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπt+1 
+
+(σi, πt+1  
+
+> i
+
+(σi)) − Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi)) 
+
++ X
+
+> σ2: H+1
+
+PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1) − PPPt
+
+> 1: H+1
+
+(σ2: H+1 |σ1)
+
+> H
+
+X
+
+> i=1
+
+Rπ∗
+
+(σi, πt+1  
+
+> i
+
+(σi)) 
+
+≤ ePPPt
+
+> 1: H+1
+
+(·| σ1) − PPPt
+
+> 1: H+1
+
+(·| σ1) 1
+
++ PPPt
+
+> 1: H+1
+
+(·| σ1) − PPPt
+
+> 1: H+1
+
+(·| σ1) 1
+
++ U t
+
+> 1
+
+(σ1) ≤ 3Lt
+
+> 1
+
+(σ1).
+
+Gathering the terms we obtain 
+
+V ∗ 
+
+> 1
+
+(σ1) − V πt+1 ,π t+1  
+
+> 1
+
+(σ1) ≤ (3 + 3) Lt
+
+> 1
+
+(σ1) ≤ 6Lt
+
+> 1
+
+(σ1) ≤ ε, 
+
+where we have used the new stopping criterion Lt
+
+> 1
+
+(σ1) ≤ ε/ 6. This concludes the proof. The remaining analysis is the same as in the proof of Theorem 4.1. However, since the stopping criterion is different and since Bt does not contain a factor H anymore, summing the contributions of each episode yields 
+
+τ ε 
+
+6 ≤ 360 HHpβ(HHτ, δ/ HH)SAτ . 
+
+Rearranging the terms of the inequality to isolate τ on one side gives us 
+
+√τ ≤ 2160 HHpβ(HHτ, δ/ HH)SA ε
+
+⇔ HHτ ≤ 4665600 HH · SA H2H2β(HHτ, δ/ HH)
+
+ε2 .
+
+From here, using Lemma H.1 gives 
+
+τ ≤ O 
+
+ SA H2H2
+
+ε2
+
+
+
+log SA HHδ + S log 
+
+ SA H3H3
+
+ε2 log SA HHδ
+
+ 
+
+.
+
+Finally, Lemma G.1 implies that the events E and Ecnt hold simultaneously with probability 1 − δ.
+
+G On High-Probability Events 
+
+We first recall the definition of the counts and introduce the notion of pseudo-counts, in the general hierarchical setting. We have 
+
+N t(s, a ) =
+
+> t
+
+X
+
+> ℓ=1
+> H
+
+X
+
+> h=1
+> H
+
+X
+
+> h=1
+
+I(sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a)
+
+N t(s, a ) =
+
+> t
+
+X
+
+> ℓ=1
+> H
+
+X
+
+> h=1
+> H
+
+X
+
+> h=1
+
+X
+
+> σh
+
+PPPπℓ,π ℓ 
+
+> 1:h
+
+(σh|σ1) · Pπℓ, πℓ 
+
+> h(σh)
+> 1: h
+
+(s|g(σh)) · I(a = πℓ, πℓ
+
+> h(σh)
+
+(s)) 
+
+28 =
+
+> t
+
+X
+
+> ℓ=1
+> H
+
+X
+
+> h=1
+> H
+
+X
+
+> h=1
+
+P
+
+
+
+sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a Fℓ−1
+
+
+
+where Fℓ is the filtration generated by the observation made in the ℓ first episodes. Indeed, by definition of the algorithm, the high level policy πℓ and low level policies πℓ,k used in episode ℓ are 
+
+Fℓ−1 measurable. Observe that we are marginalizing out the starting state of each low-level episode, 
+
+σh, in the computation of the conditional probability. With these definition, and the empirical transition probability ˆPt(s′|s, a ) = N t(s,a,s ′)  
+
+> Nt(s,a )
+
+, we introduce the events 
+
+E =
+
+n
+
+∀t ∈ N, ∀(s, a ), ˆPth(·| s, a ) − P h(·| s, a ) 1
+
+≤ Bth(s, a )
+
+o
+
+and Ecnt =
+
+
+
+∀t ∈ N, ∀(s, a ), N th(s, a ) ≥ 12 N th(s, a ) − βcnt (δ)
+
+
+
+where Bth(s, a ) = 
+
+q 2β(N th(s,a ),δ )  
+
+> Nth(s,a )
+
+∧ 2.
+
+Lemma G.1. Choosing 
+
+β(n, δ ) = log(2 SA/δ ) + ( S − 1) log( e(1 + n/ (S − 1))) 
+
+βcnt (δ) = HH log (2 SA HH/δ )
+
+yields P (Ec) ≤ δ 
+
+> 2
+
+and P (( Ecnt )c) ≤ δ 
+
+> 2
+
+.Proof. To prove the first statement, we write 
+
+P (Ec) ≤ X
+
+> s,a
+
+P
+
+
+
+∃t ∈ N : ∥ ˆPt(·| s, a ) − P (·| s, a )∥1 > B t(s, a )
+
+
+
+> (a)
+
+≤ X
+
+> s,a
+
+P ∃t ∈ N : ∥ ˆPt(·| s, a ) − P (·| s, a )∥1 >
+
+s
+
+2β(N t(s, a ), δ )
+
+N t(s, a )
+
+!
+
+> (b)
+
+≤ X
+
+> s,a
+
+P
+
+
+
+∃t ∈ N : N t(s, a ) > 1, N t(s, a )KL 
+
+ bPt(·| s, a ) P(·| s, a )
+
+
+
+> β (N t(s, a ), δ )
+
+
+
+> (c)
+
+≤ X
+
+> s,a
+
+P
+
+
+
+∃n ≥ 1 : nKL 
+
+ bP(n)(·| s, a ) P(·| s, a )
+
+
+
+> β (n, δ )
+
+
+
+> (d
+
+≤ δ
+
+2
+
+where in (a) we use that the L1 norm between any two probability distributions is upper bounded by 2, in (b) we use Pinsker’s inequality, in (c) we introduce bP(n)(·| s, a ) the empirical transition probability based on the first n visits of (s, a ) (in any step h of any (high level) episode and any step 
+
+h of a low-level episode) and in (d) we use the expression of β and Proposition 1 from Jonsson et al. [2020] which provides time-uniform concentration bound in KL on transition probabilities. To establish the second statement, for each h ∈ [H] and each h ∈ [H], we use Lemma F.4 in Dann et al. [2017] to prove that, for all δ ∈ (0 , 1] ,
+
+P ∃t ∈ N :
+
+> t
+
+X
+
+> ℓ=1
+
+I(sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a) < 12
+
+> t
+
+X
+
+> ℓ=1
+
+P
+
+
+
+sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a|F ℓ−1
+
+
+
+− log(1 /δ )
+
+!
+
+≤ δ. 
+
+As a consequence, we get that 
+
+P
+
+∃t ∈ N : X
+
+> h∈[H]
+> h∈[H]
+> t
+
+X
+
+> ℓ=1
+
+I(sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a) < 12
+
+X
+
+> h∈[H]
+> h∈[H]
+> t
+
+X
+
+> ℓ=1
+
+P
+
+
+
+sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a|F ℓ−1
+
+
+
+− HH log(1 /δ )
+
+
+
+≤ X
+
+> h∈[H]
+> h∈[H]
+
+P ∃t ∈ N :
+
+> t
+
+X
+
+> ℓ=1
+
+I(sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a) < 12
+
+> t
+
+X
+
+> ℓ=1
+
+P
+
+
+
+sℓ, h 
+
+> h
+
+= s, a ℓ, h 
+
+> h
+
+= a|F ℓ−1
+
+
+
+− log(1 /δ )
+
+!
+
+29 ≤ HHδ . 
+
+Using the definition of the counts and pseudo-counts and a union bound over s and a further yields 
+
+P
+
+
+
+∃t ∈ N, ∃s ∈ S , a ∈ A : N t(s, a ) < 12 N t(s, a ) − HH log(2 SA HH/δ )
+
+
+
+≤ δ
+
+2
+
+hence we have P(( Ecnt )c) ≤ δ/ 2.
+
+From counts to pseudo-counts Below we provide a simple extension of Lemma 7 from Kaufmann et al. [2021] to relate the counts and pseudo-counts. 
+
+Lemma G.2. On the event Ecnt (with βcnt as in Lemma G.1) it holds that, for all t and (s, a ),
+
+Bt(s, a ) ≤ 4√HH
+
+s
+
+β  N th(s, a ), δ
+
+> HH
+
+
+
+N th(s, a ) ∨ HH .
+
+Proof. We assume that Ecnt holds and fix a time step t and a triplet (h, s, a ). To ease the notation, we let n = N th(s, a ) and n = N th(s, a ).We consider a first case in which 14 n > HH log   2SA HHδ
+
+. On event Ecnt , this implies n ≥ 14 n.Using the monotonicity properties of β yields 
+
+β(n, δ )
+
+n ≤ β (n/ 4, δ )) 
+
+n/ 4 ≤ 4 β(n, δ )
+
+n = 4 β(n, δ )
+
+n ∨ HH ,
+
+where the last equality follows from the observation that n ≥ HH as 4 log   2SA HHδ
+
+ ≥ 4 log   2
+
+> δ
+
+ ≥
+
+1 for δ ∈ (0 , 1) . Hence r 2β(n, δ )
+
+n ≤ √8
+
+r β(n, δ )
+
+n ∨ HH
+
+which implies Bth(s, a ) ≤ √8
+
+r β(N th(s,a ),δ )  
+
+> Nth(s,a )∨HH
+
+≤ 4√H
+
+r β(N th(s,a ), δ 
+
+> HH
+
+)  
+
+> Nth(s,a )∨HH
+
+.In the second case, we assume 14 n ≤ HH log   2SA HHδ
+
+ hence n ≤ 4HH log   2SAH δ
+
+. As the right-hand side is also always larger than HH, we get 
+
+n ∨ HH ≤ 4HH log 
+
+ 2SA HHδ
+
+
+
+.
+
+Hence we have 
+
+1 ≤ 4HH log   2SA HHδ
+
+
+
+n ∨ HH = 4HHβ  0, δ
+
+> HH
+
+
+
+n ∨ HH ≤ 4HHβ  n, δ
+
+> HH
+
+
+
+n ∨ HH
+
+and 
+
+2 ≤ 4√HH
+
+s
+
+β  n, δ
+
+> HH
+
+
+
+n ∨ 1 .
+
+As Bth(s, a ) ≤ 2, we also have Bth(s, a ) ≤ 4√HH
+
+r β(N th(s,a ), δ 
+
+> HH
+
+)  
+
+> Nth(s,a )∨1
+
+, which concludes the proof. 
+
+H A Technical Lemma 
+
+For completeness, we provide below a technical lemma extracted from the literature that allows to get an upper bound on x from an inequality upper bounding x by some (quasi) linear function of log( x).
+
+Lemma H.1 (Lemma 15 of Kaufmann et al. [2021]) . Let n ≥ 1 and a, b, c, d > 0. If n∆2 ≤
+
+a + b log( c + dn ) then 
+
+n ≤ 1∆2
+
+
+
+a + b log 
+
+
+
+c + d
+
+∆4 (a + b(√c + √d)) 2
+
+ 
+
+.
+
+30 Figure 3: Stopping time and execution time as functions of the policy update interval Ψ.
+
+I Experimental Settings and Additional Results 
+
+In this appendix, we discuss the experimental setting for the experiments provided in the main paper and we present further results. 
+
+Algorithm Setting. We perform experiments on a synthetic grid maze as presented in Figure 1, with treasures removed. The environment consists of an m × m grid of rooms, where each room is a discrete grid of size n × n. Rooms are connected via specific doorways (corresponding to terminal states of subproblems). The total number of states is (m · n)2 + 1 , with the goal state G separate from the grid. The action space is a discrete set of 5 possible actions, where the first four actions move the agent in a cardinal direction, and the last action is exclusively used to reach the goal G. The transitions are deterministic. The reward function is sparse as the agent only receives a reward of 1
+
+upon reaching the goal state G in the final room, or when reaching the correct terminal state in the case of subproblems. In each episode, the agent starts in an initial state uniformly sampled within the first room. Without loss of generality this setting can be modelled using a unique dummy initial state s⊥ by defining the dynamics of each action a as R(s⊥, a ) = 0 and P(s′|s⊥, a ) = ν(s′), where ν(s′) is the initial probability of s′. All experiments are performed with three fixed random seeds, a confidence parameter δ = 0 .1 and an accuracy ε = 1 . Since the domain is deterministic, the value of a policy is 1 if it successfully reaches G, and 0 otherwise. Hence an accuracy ε = 1 is sufficient to distinguish optimal from non-optimal policies. For HBPI-UCRL, the theoretical confidence bounds derived from Hoeffding bonuses are not very tight. To make the algorithm more practical, we remove the constants in several expressions: 3 in the SMDP reward bonus of V t, 5 in the SMDP confidence set Ct and 10 in the expression for Bt. As is customary in the literature [e.g. Kaufmann et al., 2021], we use a simplified bound β(n, δ ) = 2 log(1 /δ ) + log n in both BPI-UCRL and HBPI-UCRL. Since running the algorithms until stopping is slow, we implement an approximation that updates the policy only every Ψ episodes. Figure 3 shows the stopping time (red) and execution time (blue) of BPI (solid) and HBPI (broken) as functions of Ψ, in the setting of 3 × 3 rooms of size 3 × 3.For the experiments we choose Ψ = 20 for BPI and Ψ = 100 for HBPI since these values offer good tradeoffs between stopping time accuracy and execution time. All experiments were run on a single core of a standard CPU. Even with fewer policy updates, some executions of BPI-UCRL and HBPI-UCRL are slow, and can sometimes take multiple days of computation time. 
+
+Additional Results on Specific Instances. To further understand the behavior of HBPI-UCRL, we present additional experiments over different domains, varying both the room size n and the grid dimension m. We first report the average reward of the algorithms, to get a sense on how fast the algorithms are playing near optimal policies. In Figure 4, we can notice how in small domains such as 2 × 2 = 4 rooms, BPI-UCRL manages, within a shorter horizon, to reach comparable performance to HBPI-UCRL. This result illustrates a 31 trade-off in the domain complexity as the benefit of a hierarchical structure can not be appreciated in such simple tasks. 0 100 200 300 400 500 
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=12 BPI, H=16 BPI, H=20 HBPI, H=4x3=12 HBPI, H=4x4=16 HBPI, H=4x5=20
+
+(a) 2 × 2 grid 3 × 3 room. 0 200 400 600 800 1000 1200 1400  
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=21 BPI, H=28 BPI, H=35 HBPI, H=7x3=21 HBPI, H=7x4=28 HBPI, H=7x5=35
+
+(b) 2 × 2 grid 5 × 5 room. 
+
+Figure 4: Comparison of observed reward between BPI-UCRL and HBPI-UCRL (dotted line for BPI and solid line for HBPI 3 runs, mean ± 95% C.I.). Differently, in Figure 5, as we approach larger domains with 3 × 3 = 9 and 4 × 4 = 16 rooms of dimension n = {3, 5}, the advantage of a hierarchical structure is more evident. HBPI-UCRL consistently manages to discover optimal policies in fewer time steps with respect to BPI-UCRL, which in more complex settings requires almost double the time to approximate an optimal policy (Figure 5c).This behavior is consistent with our analysis as HBPI-UCRL scales better in larger environments as it successfully mitigates the increase in the number of high-level states. 0 100 200 300 400 500 
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=20 BPI, H=24 BPI, H=28 HBPI, H=4x5=20 HBPI, H=4x6=24 HBPI, H=4x7=28
+
+(a) 3 × 3 grid 3 × 3 room. 0 200 400 600 800 1000 1200 1400  
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=35 BPI, H=42 BPI, H=49 HBPI, H=7x5=35 HBPI, H=7x6=42 HBPI, H=7x7=49
+
+(b) 3 × 3 grid 5 × 5 room. 0 200 400 600 800 1000 1200 1400  
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=49 BPI, H=56 BPI, H=63 HBPI, H=7x7=49 HBPI, H=7x8=56 HBPI, H=7x9=63
+
+(c) 4 × 4 grid 5 × 5 room. 
+
+Figure 5: Comparison of observed reward between BPI-UCRL and HBPI-UCRL (dotted line for BPI and solid line for HBPI 3 runs, mean ± 95% C.I.). Eventually, pushing the grid size to 5 × 5 = 25 rooms, in Figure 6 we can consistently see the advantage of adopting a hierarchical structure both in terms of performance, as BPI-UCRL requires more time steps to reach an optimal policy, approximating the policy at a much slower rate than HBPI-UCRL. Figure 7 shows the heatmap of visited states during the first 40 ,000 timesteps of BPI-UCRL and HBPI-UCRL in the domain with 5 × 5 rooms of size 3 × 3. It is interesting to see that the two algorithms explore the space in very different ways. BPI-UCRL explores all states uniformly until it eventually finds a policy that reaches the goal state in the middle of the top right room, highlighted by the star marker. In contrast, HBPI-UCRL extensively explores the first room, but after that it does not need to explore all rooms and all states within a room since the rooms share the dynamics. Instead it proceeds more directly to the goal. The asymmetry is likely due to the fact that the subproblem for moving up has a lower index than the subproblem for moving to the right, which causes tiebreaking to prefer moving up first. 32 0 200 400 600 800 1000 1200 1400 
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=36 BPI, H=40 BPI, H=44 HBPI, H=4x9=36 HBPI, H=4x10=40 HBPI, H=4x11=44
+
+(a) 5 × 5 grid 3 × 3 room. 0 200 400 600 800 1000 1200 1400  
+
+> 0.0 0.2 0.4 0.6 0.8 1.0 Reward
+> BPI, H=63 BPI, H=70 BPI, H=77 HBPI, H=7x9=63 HBPI, H=7x10=70 HBPI, H=7x11=77
+
+(b) 5 × 5 grid 5 × 5 room. 
+
+Figure 6: Comparison of observed reward between BPI-UCRL and HBPI-UCRL (dotted line for BPI and solid line for HBPI, 3 runs, mean ± 95% C.I.). a) b) 
+
+# ⋆ ⋆
+
+Figure 7: Heatmap of visited states in the domain with 5 × 5 rooms of size 3 × 3 for a) BPI-UCRL; b) HBPI-UCRL. 
+
+Ablations. To test the exact dependency of the stopping time on S and H, we perform several ablations. Figure 8a shows the stopping time of BPI-UCRL and HBPI-UCRL as functions of S
+
+when H is fixed. As expected, the stopping time of BPI-UCRL is linear in S even when H is fixed. However, the stopping time of HBPI-UCRL actually decreases as a function of S. We believe that the stopping time of HBPI-UCRL is adversely affected by setting the horizon much too large (as is the case for small values of S in the figure), and we have two possible explanations for this. The first is that our implementation of HBPI-UCRL interrupts an episode or a subproblem when a terminal state is reached, preventing the algorithm from collecting as much data as the horizon allows. The second is that the policy update interval Ψ may cause a larger approximation error when the horizon is larger. Conversely, Figure 8b shows the stopping time of BPI-UCRL and HBPI-UCRL as functions of H
+
+and H when S is fixed, in the setting of 5 × 5 rooms of size 3 × 3. The stopping time of BPI-UCRL increases monotonically in HH, but the stopping time of HBPI-UCRL depends on the values of both 
+
+H and H. Concretely, the stopping time of HBPI-UCRL increases as a function of H but is initially constant as a function of H. However, when increasing the subproblem horizon H, we observe the same effect as in Figure 8a, that the stopping time of HBPI-UCRL is adversely affected by setting 33 (a) Stopping time of S for fixed H.
+
+40 60 80 100 120 140 
+
+0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 
+
+·10 6
+
+HH          
+
+> Total Steps
+> BPI HBPI, H=9 HBPI, H=10 HBPI, H=11 HBPI, H=12 HBPI, H=13 HBPI, H=14 HBPI, H=15
+> (b) Stopping time of HHfor fixed S.
+
+Figure 8: Ablations varying S and HH while maintaining everything else constant. the horizon much too large. We conjecture that the stopping time of HBPI-UCRL depends on the 
+
+effective subproblem horizon H, i.e. the number of time steps necessary to solve each subproblem in practice. 
+
+Figure 9: Stopping time τ of BPI-UCRL and HBPI-UCRL as a function of S in stochastic domains. 
+
+Results for Stochastic Domains. Even though Assumption 3.1 is not guaranteed to hold for stochastic domains in which the probability of reaching a terminal state is less than 1, we carry out experiments in a version of the domain in Figure 1 with stochastic actions. Concretely, with probability 0.1 an action has a random effect among all neighboring states. We use the same setting as before with three seeds and varying the number of high-level states S. Figure 9 shows the stopping time of BPI-UCRL and HBPI-UCRL in this setting. We can observe that the stopping time of BPI-UCRL is no longer linear, while the stopping time of HBPI-UCRL still has a sublinear tendency. 
+
+Results with Treasures. We also carry out experiments with HBPI-UCRL when treasures are present. Concretely, we consider a version of the example in Figure 1 with 2 × 2 rooms of size 
+
+3 × 3 and at most one treasure in each room. This example has almost 8, 000 states and over 300 
+
+million state-action-state triplets. Since BPI-UCRL has to maintain a count N t(s, a, s ′) for each state-action-state triplet, the algorithm suffers extremely slow running time, which prevents it from solving the problem in practice. In contrast, Figure 10 shows the reward collected by HBPI-UCRL for a fixed subproblem horizon H = 10 and varying SMDP horizons H = 4 , 6, 8.34 0 0.5 1 1.5 2
+
+·10 4
+
+0123
+
+t
+
+> Reward
+
+HH = 40 
+
+HH = 60 
+
+HH = 80 
+
+Figure 10: Results for HBPI-UCRL with treasures. 35

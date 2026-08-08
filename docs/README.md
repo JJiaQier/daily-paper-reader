@@ -6,47 +6,36 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-07
-- 运行时间：2026-08-07 21:18:45 UTC
+- 最新运行日期：2026-08-08
+- 运行时间：2026-08-08 20:45:25 UTC
 - 运行状态：成功
-- 本次总论文数：9
+- 本次总论文数：4
 - 精读区：3
-- 速读区：6
+- 速读区：1
 
 ### 今日简报（AI）
-今日共读9篇论文，精读3篇，重点聚焦神经组合优化与多智能体路径规划两大方向。最值得关注的是《Geometric Self-Supervised Pre-training》与《PRIMAL3》，前者用几何自监督提升组合优化泛化性，后者结合强化学习与模仿学习突破多智能体路径规划效率。建议普通读者优先关注图神经网络在动态匹配与运动规划中的落地应用，这两篇速读文章能帮你快速理解技术趋势。
-- 详情：[/202608/07/README](/202608/07/README)
+今日精读3篇、速读1篇，聚焦动态环境运动规划与多智能体路径规划的前沿方法。
+
+最值得关注的是综述《Learning-Based Motion Planning》（9.0分），系统梳理从基础算法到新兴范式；《PRIMAL3》（8.0分）则展示强化+模仿学习在多智能体路径规划上的最新突破。
+
+建议普通读者先读综述掌握领域脉络，再结合PRIMAL3理解具体实现，效率更高。
+- 详情：[/202608/08/README](/202608/08/README)
 
 ### 精读区论文标签
-1. [Geometric Self-Supervised Pre-training for Neural Combinatorial Optimization](/202608/07/2608.00270v1-geometric-self-supervised-pre-training-for-neural-combinatorial-optimization)  
-   标签：评分：9.0/10、query:rl-last-mile
-   evidence：面向基于强化学习的神经组合优化，针对TSP/VRP等路由问题提升泛化能力
-2. [PRIMAL3: Pathfinding via Reinforcement and Imitation Multi-Agent Learning - Leveraging LaCAM3](/202608/07/2608.04905v1-primal3-pathfinding-via-reinforcement-and-imitation-multi-agent-learning---leveraging-lacam3)  
+1. [Learning-Based Motion Planning for Dynamic Environments: From Foundational Algorithms to Emerging Paradigms](/202608/08/2608.00625v1-learning-based-motion-planning-for-dynamic-environments-from-foundational-algorithms-to-emerging-paradigms)  
    标签：评分：9.0/10、query:rl-path-opt
-   evidence：面向多智能体路径搜索的强化学习框架，契合强化学习路径规划主题
-3. [X-NavDP: Generalizing Navigation Diffusion Policy to Novel Behavior and Embodiments with Group Q-score Reweighted Matching](/202608/07/2607.28560v1-x-navdp-generalizing-navigation-diffusion-policy-to-novel-behavior-and-embodiments-with-group-q-score-reweighted-matching)  
+   evidence：综述基于学习的运动规划，涵盖深度强化学习在机器人路径规划中的应用
+2. [PRIMAL3: Pathfinding via Reinforcement and Imitation Multi-Agent Learning - Leveraging LaCAM3](/202608/08/2608.04905v1-primal3-pathfinding-via-reinforcement-and-imitation-multi-agent-learning---leveraging-lacam3)  
    标签：评分：8.0/10、query:rl-path-opt
-   evidence：面向机器人路径规划的RL后训练导航扩散策略
+   evidence：深度强化学习与模仿学习用于多智能体路径规划
+3. [Search-Aided Joint Agent-Environment Reinforcement Learning for Robust Lifelong Multi-Agent Path Finding with Rotations](/202608/08/2608.05588v1-search-aided-joint-agent-environment-reinforcement-learning-for-robust-lifelong-multi-agent-path-finding-with-rotations)  
+   标签：评分：8.0/10、query:rl-last-mile
+   evidence：解决仓库多智能体路径规划的强化学习方法，属于物流中的路径规划，与'物流中强化学习路径规划'要求吻合
 
 ### 速读区论文标签
-1. [RedFlow: Redirect Failure into Action-Level Corrections for Flow-matching VLA Policy](/202608/07/2607.27782v1-redflow-redirect-failure-into-action-level-corrections-for-flow-matching-vla-policy)  
+1. [Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification](/202608/08/2607.29294v1-sample-efficient-hierarchical-reinforcement-learning-via-best-policy-identification)  
    标签：评分：7.0/10、query:rl-path-opt
-   evidence：将离线强化学习用于机器人操作的动作级修正，与基于强化学习的末端路径优化相关。
-2. [Learning Optimal Dynamic Matching via Graph Neural Networks](/202608/07/2607.28925v1-learning-optimal-dynamic-matching-via-graph-neural-networks)  
-   标签：评分：7.0/10、query:rl-last-mile
-   evidence：使用图神经网络增强学习进行动态匹配，与调度和末端物流直接相关
-3. [Learning-Based Motion Planning for Dynamic Environments: From Foundational Algorithms to Emerging Paradigms](/202608/07/2608.00625v1-learning-based-motion-planning-for-dynamic-environments-from-foundational-algorithms-to-emerging-paradigms)  
-   标签：评分：7.0/10、query:rl-path-opt
-   evidence：综述动态环境中基于学习的运动规划，涵盖深度强化学习在机器人路径规划中的应用
-4. [Hard Constraints, Smooth Gradients: Learning Feasible Inventory Policies via Differentiable Projection](/202608/07/2608.02343v1-hard-constraints-smooth-gradients-learning-feasible-inventory-policies-via-differentiable-projection)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：面向约束组合决策的可微投影DRL方法，可应用于VRP约束处理
-5. [Hybrid LLM-Augmented Reinforcement Learning Agents for Complex Sequential Decision Tasks](/202608/07/2608.03502v1-hybrid-llm-augmented-reinforcement-learning-agents-for-complex-sequential-decision-tasks)  
-   标签：评分：6.0/10、query:rl-last-mile
-   evidence：LLM与RL混合的通用序贯决策方法，可迁移至路径规划
-6. [ATLAS: Adaptive Topological Learning with Abstract Successors for Continual Learning](/202608/07/2608.04334v1-atlas-adaptive-topological-learning-with-abstract-successors-for-continual-learning)  
-   标签：评分：6.0/10、query:rl-path-opt
-   evidence：用于空间导航的强化学习与持续学习，适用于机器人路径规划
+   evidence：层次强化学习并行学习高层与低层策略，直接支持基于RL的路径优化与区域划分
 
 
 <div class="dpr-home-promo-card">
