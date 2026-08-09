@@ -1,0 +1,1156 @@
+Title: Revisiting TD Target Aggregation under Uncertainty in Q-Learning
+
+URL Source: https://arxiv.org/pdf/2608.03069v1
+
+Published Time: Wed, 05 Aug 2026 00:27:10 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Revisiting TD Target Aggregation under Uncertainty in Q-Learning 
+
+Lipeng Zu 1 Xiaonan Zhang 11Computer Science Department, Florida State University, Tallahassee, Florida, USA 
+
+## Abstract 
+
+Deep Q-Networks (DQNs) learn value functions through bootstrapped temporal-difference updates, where future returns are approximated using a greedy maximization over next-state action values. While effective, this aggregation rule is inherently sensitive to estimation noise: when Q-values are uncertain, the maximization operator deterministi-cally favors the largest estimate, regardless of its reliability, leading to amplified errors through boot-strapping. In this work, we propose the Successor Rollout Aggregation Deep Q-Network (SADQ), a simple modification to Q-learning that regular-izes how the TD target is formed. SADQ uses one-step rollout predictions from a learned dynam-ics model to guide the comparison among can-didate next-state actions, introducing additional structure into the aggregation step without alter-ing the underlying learning framework. The re-sulting mixed Bellman update attenuates unreli-able maxima while preserving the standard fixed point under diminishing model error. We provide theoretical analysis showing that SADQ reduces bootstrap-induced overestimation in a pointwise manner. Empirically, SADQ consistently improves training stability across classical control tasks, real-world vector-based environments, and Atari bench-marks when compared to strong DQN variants. 
+
+## 1 INTRODUCTION 
+
+Q-learning and its deep variants, such as Deep Q-Networks (DQN), learn action-value functions through bootstrapped temporal-difference (TD) updates [Mnih et al., 2015, Liang et al., 2022]. In these methods, future returns are approxi-mated using a greedy backup, max a′ Q(s′, a ′), rather than being directly observed [Moore and Atkeson, 1993, Ghias-sian et al., 2020]. This mechanism has proven effective in practice, but it also introduces a well-known source of insta-bility when combined with function approximation [Maei et al., 2009, Lee and He, 2019, Rowland et al., 2023]. A large body of work has focused on improving the quality of Q-value estimation. Strategies such as prioritized sam-pling [Schaul et al., 2016], multi-step returns [Mnih et al., 2016], architectural refinements including Double and Duel-ing DQN [Van Hasselt et al., 2016, Wang et al., 2016], and distributional methods [Bellemare et al., 2017, Dabney et al., 2018b] have significantly improved empirical performance and stability. These methods primarily aim to reduce estima-tion uncertainty or better characterize predictive dispersion at the level of individual value predictions. However, even when value estimates are improved, the TD target is still formed by a hard maximization over next-state actions. This maximization implicitly assumes that the relative ordering of Q-values is reliable. In practice, especially during learn-ing, Q-values are often noisy and uncertain. Under such conditions, selecting actions solely based on their maximum estimated value can be brittle: the greedy operator may favor actions that appear optimal due to transient overestimation rather than genuine long-term advantage. This uncertainty is recursively amplified through bootstrapped updates, leading to biased targets and unstable learning dynamics. This observation suggests that the challenge is not only about estimating Q-values accurately, but also about how candidate actions are ranked under uncertainty when form-ing the TD target. In particular, the standard greedy backup lacks any mechanism to assess the reliability of competing action values. A natural question then arises: can we intro-duce additional structure into the aggregation step of the TD update, without abandoning the simplicity and efficiency of Q-learning? One source of such structure comes from predicting the immediate consequences of actions under the environment dynamics. Recent advances in learned dy-namics models [Ha and Schmidhuber, 2018, Hafner et al., 2025] have shown that short-horizon rollouts can provide meaningful information about action outcomes. Yet, in most arXiv:2608.03069v1 [cs.LG] 4 Aug 2026 existing work, these models are used for planning or data generation, rather than for shaping the TD target itself. In this paper, we propose Successor Rollout Aggregation Deep Q-Networks (SADQ), a simple modification to the TD target construction that incorporates one-step rollout information into action comparison. Instead of relying solely on greedy value maximization, SADQ uses rollout-based evaluations to guide the selection of the next-state action used in the target. Importantly, the rollout is not used to replace Q-values, but to regularize the aggregation process, reducing sensitivity to unreliable maxima while preserving the standard bootstrap framework. Our contributions can be summarized as follows: • We identify brittle action aggregation under noisy value estimates as a structural source of instability in Q-learning. • We propose SADQ, a rollout-guided aggregation mech-anism that regularizes greedy TD target construction without altering the underlying learning paradigm. • We provide theoretical analysis showing that the result-ing update reduces maximization-induced bias while preserving the optimal fixed point under diminishing model error. • We demonstrate consistent empirical improvements across a range of benchmark and real-world decision-making tasks. 
+
+## 2 RELATED WORK 
+
+Stabilization Strategies for Q Estimation. The core in-stability in Q-learning arises from the bootstrapped target, where the hard maximization operator introduces systematic overestimation bias and amplifies estimation variance [Mnih et al., 2015, Sutton and Barto, 2018]. Early work such as Double DQN mitigates overestimation bias in Q-value pre-dictions [Van Hasselt et al., 2016], while Dueling DQN sep-arates the state-value and advantage functions [Wang et al., 2016]. Advancing further, distributional RL techniques, such as C51 [Bellemare et al., 2017] and QR-DQN [Dabney et al., 2018b], model the full return distribution before apply-ing maximization, thereby altering how uncertainty propa-gates through the max operator [Tang et al., 2022, Schwarzer et al., 2023, Kastner et al., 2025]. Bayesian approaches also emerge, integrating prior knowledge and adaptive explo-ration strategies into the DQN framework [Cao and Ray, 2012]. Complementary to these innovations, sampling tech-niques are used to enhance data efficiency and exploration at the sample level [Osband et al., 2016, Schaul et al., 2016, Elvira and Martino, 2021]. Despite these advances, most existing methods eventually revert to the max operation for Q updates. In contrast, our work focuses explicitly on restructuring the max-based TD target itself. 
+
+Model-Based and Generative Approaches in RL. 
+
+Model-based RL exploits learned dynamics models for plan-ning and decision-making [Ha and Schmidhuber, 2018, Schwarzer et al., 2021, Mondal et al., 2024]. For exam-ple, Recurrent State-Space Model (RSSM) [Hafner et al., 2019, 2025] combines variational inference with recurrent dynamics to infer compact latent states. Subsequent ap-proaches such as RePo [Zhu et al., 2023] and Denoised MDP [Wang et al., 2022] remove pixel reconstruction and emphasize reward-relevant features to improve tractability and task alignment. To enhance generalization and robust-ness, several methods introduce information bottlenecks through mutual information regularization across latent rep-resentations [Bai et al., 2021, Saanum et al., 2023a, Tang et al., 2023]. Diffusion-based generative models have re-cently been incorporated into RL as powerful tools for tra-jectory modeling and synthetic data generation [Janner et al., 2022, Lu et al., 2023b, Wang et al., 2025]. Some approaches integrate policy or value guidance into diffusion processes to bias generation toward task-relevant behaviors [Rigter et al., 2024, Chen et al., 2023]. Others adopt energy-based objectives to guide generative modeling for RL learning [Lu et al., 2023a, Liu et al., 2024]. In contrast to approaches that leverages predictive models for long-horizon planning, our method employs one-step successor rollouts and integrates them directly into TD target aggregation, thereby modifying the update rule rather than the planning process. 
+
+Relation to Path-Consistency Methods. The proposed aggregation bears conceptual similarity to path-consistency approaches such as PCZero [Zhao et al., 2023], which re-duce variance by enforcing consistency along selected tra-jectories. PCZero constructs a window over historical and search-expanded states and minimizes value variation within that window, reflecting the principle that values along an optimal path should agree [Zhao et al., 2022]. The mixed TD target in Eq. (17) can be viewed as a single-step ana-logue of this idea. Given the set of rollout-informed esti-mates {fQ′ϕ(s′, a ′)}a′∈A , we identify the action whose pre-dicted successor outcome is most aligned with the greedy backup, and interpolate between this action and the stan-dard maximizer. In contrast to multi-step or window-based consistency, our approach operates at the finest temporal granularity of a single transition, directly regularizing the aggregation step in the TD update. 
+
+Relation to Model-based Value Expansion. SADQ is related to model-based value expansion methods in that both use predictive model information to improve value learning. Methods such as MVE [Palenicek et al., 2022] and STEVE [Buckman et al., 2018] use learned dynam-ics and reward models to construct expanded value targets by accumulating predicted rewards over rollout horizons and then bootstrapping from the terminal predicted state. In contrast, SADQ does not use the model to expand the Bellman backup over multiple rollout steps. The auxiliary model provides a one-step lookahead score for each candi-date next action, which is used to refine the action-selection step inside the max-based TD target. Thus, SADQ shares the motivation of leveraging predictive structure for value learn-ing, but differs in where the model enters the update. Value expansion modifies the target value through rollout-based reward accumulation, whereas SADQ modifies the action aggregation process while keeping the final bootstrapped value evaluation within the Q-learning framework. 
+
+## 3 PRELIMINARIES 
+
+3.1 REINFORCEMENT LEARNING 
+
+RL is a machine learning paradigm where an agent learns to make decisions through the interaction with the environ-ment [Matsuo et al., 2022, Saanum et al., 2023b, Zhang et al., 2024]. Typically, the RL problem is modeled as a Markov Decision Process (MDP), characterized by a tu-ple (S, A, P, R, γ ). Here, S represents the set of states, A
+
+indicates the set of actions, P denotes the state transition probabilities, R specifies the reward function, and γ serves as the discount factor. The objective of the agent is to learn an optimal policy π∗(s) that maximizes the expected cumu-lative reward over time. RL methods can be broadly categorized into policy-based [Schulman et al., 2015], value-based [Mnih et al., 2015], and actor-critic approaches [Haarnoja et al., 2018]. Policy-based methods directly learn a policy π(a|s) that maps states to actions, whereas value-based methods fo-cus on estimating a value function, such as the Q-function 
+
+Q(s, a ), to estimate the quality of actions. Given that this work centers on DQN, our discussion primarily emphasizes value-based methods and their relevance to optimal policy learning. 
+
+3.2 DEEP Q-BASED RL 
+
+As a foundational deep Q-based RL algorithm, Deep Q-Network (DQN) [Mnih et al., 2015] integrates Q-learning with deep neural networks to facilitate decision-making in high-dimensional state spaces. Particularly, DQN is com-prised of two distinct neural networks: the primary Q-network and the target Q-network. The primary Q-network, simply referred to as the Q-network, approximates the Q-value Q(s, a ). To stabilize training, a separate target Q net-work, denoted as Q′(s, a ), computes the target Q-value y
+
+independently. The optimization objective for training the Q-network is defined as minimizing the TD error, given by: 
+
+LQ = E(s,a,r,s ′)∈D [y − Q(s, a )] , (1) where (s, a, r, s ′) is the sampled transition from replay buffer D. The target Q-value y in Eq. (1) is computed by the -500 -400 -300 -200 -100     
+
+> Eval Return
+> Acrobot
+> DQN
+> 01234
+> Iteration (× 10 )
+> 0.0 0.3 0.6 0.9 1.2
+> Q Discrepancy
+
+(a) 050 100 150 200      
+
+> Eval Return
+> Cartpole
+> DQN
+> 0510 15 20
+> Iteration (× 10²)
+> 0.0 0.06 0.12 0.18 0.24
+> Q Discrepancy
+
+(b) 
+
+Figure 1: Upper: Training performance of DQN on Acrobot and Cartpole environments. Lower: The evaluation of Q discrepancy ( max Q(s, a ) − min Q(s, a )). target Q-network Q′ and is formulated as: 
+
+y = r + γ max  
+
+> a′
+
+Qtarget (s′, a ′), (2) The maximization operator in Eq. (2) determines how future value estimates are aggregated into the TD target, making it a critical component of the learning dynamics. 
+
+## 4 MOTIVATION 
+
+Observation: Fig. 1 shows that DQN training typically exhibits a rapid improvement phase followed by a sta-ble phase. To examine how value estimation evolves dur-ing this transition, we track the Q discrepancy ∆Q(s) = max a Q(s, a ) − min a Q(s, a ), which directly depends on the max-Q term used in the TD target. As shown in the lower panels, ∆Q increases during the performance rising phase, reaches a peak near the transition point (dashed line), and then decreases to a stable level together with the eval-uation return. Since max a Q(s, a ) is the quantity selected in the bootstrap target, the alignment between performance dynamics and ∆Q indicates that training behavior is closely tied to the magnitude of the maxQ statistic. In particular, the overshoot and subsequent contraction of ∆Q suggest that excessive amplification of the maximized Q-value is not sus-tained in the stable regime, motivating a closer examination of how max-Q enters the TD update. 
+
+Insight: The key point is the large separation among ac-tion values is temporary. Once learning stabilizes, the dis-crepancy contracts rather than remaining large. This indi-cates that aggressively amplifying the largest Q-value is not a prerequisite for good performance, but instead emerges during learning when value estimates are still uncertain. During this phase, action values are noisy and continually reshaped, yet the maximization operator treats their ordering as fully reliable. By selecting a single largest estimate, the TD target can be dominated by transient peaks that are not well supported by the underlying dynamics. These peaks are then reinforced through bootstrapping, even though they eventually fade as learning progresses. The difficulty there-fore lies not only in estimating Q-values accurately, but in how actions are compared when those estimates are still unreliable. Such observation raises a simple question: can the next-state evaluation used in the TD target be made more robust than a single maximized value, without abandoning the basic structure of Q-learning? Addressing this question motivates reconsidering how predicted future consequences are incor-porated into the TD update, and leads to the rollout-guided aggregation approach developed in this work. 
+
+## 5 METHOD 
+
+In this section, we present the Successor Rollout Aggrega-tion Mechanism (SADQ). We first introduce the learned dynamics model to generate one-step successor states and rewards (Section 5.1 for vector-based tasks; Section 5.2 for image-based tasks). Based on these rollout predictions, we construct a structurally aggregated TD target for DQN and its distributional variants (Section 5.3 and Section 5.4, respectively). In the end, the theoretical analysis of the pro-posed mechanism is provided (Section 5.5). 
+
+5.1 VECTOR-STATE DYNAMICS MODEL 
+
+Our goal is not to perform multi-step rollout or long-horizon planning, but to obtain a lightweight, action-conditional sig-nal that reflects how different actions are expected to unfold in the next step. In environments where the state is repre-sented as a low-dimensional vector, this can be achieved by modeling the dynamics directly in the original state space. We therefore learn a stochastic dynamics model M that predicts both the successor state distribution P (s′ | s, a )
+
+and the immediate reward. For state transitions, we model the dominant stochasticity using a Gaussian distribution, 
+
+P (s′ | s, a ) ∼ N (μ(s, a ), σ 2(s, a )) , (3) where the mean μ(s, a ) and variance σ2(s, a ) are parame-terized by neural networks fμ and fσ :
+
+μ(s, a ) = fμ(s, a ), (4) 
+
+σ2(s, a ) = exp( fσ (s, a )) . (5) Given a state–action pair (s, a ), a successor state s′M is sampled using the reparameterization trick, 
+
+s′M = μ(s, a ) + σ(s, a ) · ϵ, ϵ ∼ N (0 , I ), (6) and the immediate reward is predicted by a separate head, 
+
+rM = fr (s, a ). (7) The dynamics model is trained using supervised losses on both the successor state and the reward, 
+
+LM = MSE (s′M, s ′) + MSE (rM, r ), (8) where (s, a, r, s ′) are sampled from the replay buffer. Once trained, M provides one-step rollout predictions (s′M, r M)
+
+that serve as auxiliary signals when forming the TD target, complementing the maximized Q-value. 
+
+5.2 IMAGE-STATE DYNAMICS MODEL 
+
+In image-based environments, the system state is not directly observable and must be inferred from high-dimensional ob-servations. To obtain one-step successor predictions, we op-erate in a learned latent space. While recurrent state-space models (RSSMs) [Hafner et al., 2019] are commonly used for long-horizon dynamics modeling, our objective here is more limited. We require a compact latent representa-tion that supports reliable one-step prediction for TD target aggregation, rather than multi-step imagination or planning. Accordingly, we adopt a simplified RSSM-style latent dy-namics model focusing exclusively on immediate transition consequences. The model takes the current latent state xs
+
+and action a as input, and produces predictions of the succes-sor latent state and reward. By restricting the temporal scope to a single step, we avoid introducing recurrent structure that would add parameterization without providing correspond-ing benefit for our setting. Specifically, given the one-hot action embedding ea, the latent dynamics are defined as 
+
+Feature model: h = fϕ(xs, e a),
+
+Encoder: z ∼ qϕ(z | h, x s′ ),
+
+Dynamics predictor: ˆz ∼ pϕ(ˆ z | h),
+
+Reward predictor: ˆr ∼ pϕ(ˆ r | h, z ),
+
+Decoder: ˆxs′ ∼ pϕ(ˆ xs′ | h, z ).
+
+(9) The encoder qϕ(z | h, x s′ ) and the dynamics predictor 
+
+pϕ(ˆ z | h) together capture the stochastic transition structure in the latent space, while the decoder maps latent predic-tions back to the observation space. A separate reward head predicts the immediate reward associated with the transition. Importantly, this model is trained and used strictly for one-step prediction, and is not employed for trajectory rollout or policy optimization. The dynamic model parameters ϕ are learned end-to-end using a weighted combination of prediction, dynamics, and representation losses, following the general structure of Dreamer-style training [Hafner et al., 2025]: 
+
+L(ϕ) = βpred Lpred + βdyn Ldyn + βrep Lrep , (10) where we set βpred = 1 , βdyn = 1 , and βrep = 0 .1. The individual loss terms are given by 
+
+Lpred (ϕ) = Lrecon (ϕ) + Lrew (ϕ)= − ln pϕ(xs′ | h, z ) − ln pϕ(r | h, z ),
+
+Ldyn (ϕ) = max 
+
+
+
+1, KL sg( qϕ(z | h, x s′ )) pϕ(z | h)
+
+,
+
+Lrep (ϕ) = max 
+
+
+
+1, KL qϕ(z | h, x s′ ) sg( pϕ(z | h)) 
+
+.
+
+(11) To reduce the computational overhead of dynamics model training, we adapt the update frequency of the dynamics model based on the reconstruction component of Lpred , con-trolled by a threshold τM. Specifically, if 
+
+Lrecon (ϕ) = − ln pϕ(xs′ | h, z ) < τ M, (12) the update frequency is reduced to a fraction tf ∈ (0 , 1) 
+
+of the default schedule; otherwise, the dynamics model follows the default update schedule. This adaptive sched-ule preserves frequent updates when the model has not yet learned reliable observation reconstruction, while reducing redundant updates after the reconstruction quality becomes sufficiently accurate. Once the dynamics model is trained, the latent dynamics model provides one-step successor state and reward predic-tions that are used solely to inform TD target aggregation. The model does not alter the underlying Q-learning update, but supplies auxiliary predictive structure that helps regular-ize action comparison under uncertain value estimates. 
+
+5.3 STRUCTURAL AGGREGATION TARGET 
+
+In standard Q-learning, the TD target is formed by aggre-gating future action values through a hard maximization over next-state actions. Rather than modifying the off-policy learning framework itself, we focus on how this aggregation is carried out in the bootstrapped update. Our goal is to introduce additional structure into the comparison among candidate next actions, while leaving the underlying value function approximation unchanged. To this end, we use the learned dynamics model M to obtain one-step, action-conditional predictions from the observed next state s′. For each candidate action a′ ∈ A , the model produces a pre-dicted successor state s′′ M(a′) together with an immediate reward estimate. These predictions are not used for plan-ning or policy improvement, but serve as auxiliary evidence when comparing candidate actions in the TD target. We begin by recalling the Bellman optimality equation for the action-value function, 
+
+Q∗(s, a ) = E
+
+h
+
+r + γ max  
+
+> a′
+
+Q∗(s′, a ′) | s, a 
+
+i
+
+. (13) In practice, Q-learning approximates this relation using the greedy TD target max a′ Q′
+
+> ϕ
+
+(s′, a ′). As discussed earlier, the reliability of this update depends entirely on the quality of the maximized estimate at the observed next state s′.To regularize this aggregation step, we additionally evaluate the immediate consequences of each candidate next action using the dynamics model Mθ . For every a′ ∈ A , the model generates a one-step rollout, 
+
+(r′M, s ′′ M) ∼ M θ (· | s′, a ′), (14) from which we compute a model-based Bellman estimate, 
+
+fQ′ϕ(s′, a ′) = r′M + γ max  
+
+> a′′
+
+Q′
+
+> ϕ
+
+(s′′ M, a ′′ ). (15) This quantity provides a rollout-informed evaluation of ac-tion a′, grounded in its predicted transition outcome rather than solely in the value estimate at s′.We use these rollout-based estimates only to guide action comparison. Specifically, we select 
+
+ˆa′ = arg max 
+
+> a′∈A
+
+fQ′ϕ(s′, a ′), (16) and form a mixed TD target, 
+
+ˆy = α max  
+
+> a′
+
+Q′
+
+> ϕ
+
+(s′, a ′) + (1 − α)Q′
+
+> ϕ
+
+(s′, ˆa′), (17) where α ∈ [0 , 1] controls the interpolation between the standard greedy evaluation and the model-guided action selection. Importantly, the rollout does not replace the value function in the target; it only influences which action is used when forming the update. In this way, SADQ separates action ranking from value evaluation, reducing sensitivity to unreliable maxima while preserving the standard bootstrap structure. 
+
+5.4 EXTENSION TO DISTRIBUTIONAL DQN 
+
+We next extend the proposed aggregation mechanism to the distributional setting, where the target network predicts a return distribution Z′
+
+> ϕ
+
+(s, a ) rather than a scalar value. In dis-tributional DQN, greedy evaluation is typically performed with respect to the expected return, 
+
+max  
+
+> a′
+
+EZ′
+
+> ϕ
+
+(s′, a ′) , (18) and the TD target is formed by selecting the action with the largest expectation. As in the scalar case, our objective is not to alter the underly-ing distributional learning framework, but to regularize how candidate actions are compared when forming the target. To this end, we use the learned dynamics model Mθ to obtain one-step, action-conditional successor predictions from the observed next state s′. For each a′ ∈ A , the model produces 
+
+(r′M, s ′′ M) ∼ M θ (· | s′, a ′). (19) Based on these predictions, we construct a rollout-informed distributional Bellman estimate, 
+
+fZ′ϕ(s′, a ′) = r′M + γ Z ′
+
+> ϕ
+
+(s′′ M, a ∗∗ ), (20) where a∗∗ = arg max a′′ E
+
+h
+
+Z′
+
+> ϕ
+
+(s′′ M, a ′′ )
+
+i
+
+. This estimate reflects the predicted immediate transition outcome of action 
+
+a′, while retaining the distributional representation of future returns. We use the expectation of these rollout-informed distribu-tions to guide action comparison, 
+
+ˆa′ = arg max  
+
+> a′∈A
+
+E
+
+hfZ′ϕ(s′, a ′)
+
+i
+
+, (21) and construct a mixed distributional target, 
+
+ˆZ = α Z ′
+
+> ϕ
+
+(s′, a ∗) + (1 − α) Z′
+
+> ϕ
+
+(s′, ˆa′), (22) where a∗ = arg max a′ E
+
+h
+
+Z′
+
+> ϕ
+
+(s′, a ′)
+
+i
+
+.
+
+This formulation preserves the same structural aggregation principle as in the scalar case. The dynamics model is used only to influence which action is selected for the target, while the value distribution itself is always provided by the distributional critic. In this way, the proposed mechanism ex-tends naturally from scalar Q-values to return distributions, regularizing greedy action comparison without modifying the distributional update rule. 
+
+5.5 THEORETICAL ANALYSIS 
+
+We provide a theoretical analysis to clarify how the proposed aggregation affects bootstrap bias, and to verify that it does not alter the optimal solution asymptotically. All formal proofs are deferred to Appendix A .Let Mθ (· | s, a ) denote a dynamics model trained on the support of the replay buffer D. For notational convenience, define the standard and model-based TD targets 
+
+yM = rM + γ max  
+
+> a′
+
+Q′
+
+> ϕ
+
+(s′M, a ′), (23) 
+
+y = r + γ max  
+
+> a′
+
+Q′
+
+> ϕ
+
+(s′, a ′), (24) where (r, s ′) ∼ T (· | s, a ) follows the true environment dynamics and (rM, s ′M) ∼ M θ (· | s, a ) is generated by the learned dynamics model. 
+
+Lemma 1 (Local state extrapolation). Under the neural tangent kernel (NTK) regime [Jacot et al., 2018], for any in-sample state-action pair (s, a ) ∈ D and in-neighborhood state-action pair (sM, a ) such that ∥s − sM∥ ≤ ϵ, the value difference of the deep Q function can be bounded as: 
+
+∥Qϕ(s′M, a ′) − Qϕ(s′, a ′)∥ ≤ 
+
+C
+
+q 
+
+min ( ∥s′ ⊕ a′∥, ∥s′M ⊕ a′∥)√ϵ + 2 ϵ
+
+
+
+, (25) where ⊕ denotes the vector concatenation operation, and C is a finite constant. The Lemma 1 is a direct corollary of Theorem 1 in Li et al. [2023], specialized to the case of local state extrapolation. 
+
+Algorithm 1 SADQ 
+
+Input : Online Q-network Q(s, a ; θ), target Q-network 
+
+Q(s, a ; θ′), replay buffer D, dynamics model M.
+
+Output : Optimized Q-network Q(s, a ; θ∗). 
+
+> 1:
+
+Training loop:  
+
+> 2:
+
+while not done do  
+
+> 3:
+
+Sample transitions {(s, a, r, s ′)} from D for M. 
+
+> 4:
+
+Train model M by Eq. (8) or Eq. (10).  
+
+> 5:
+
+Resample transitions {(s, a, r, s ′)} from D for Q.  
+
+> 6:
+
+Compute successor rollout in Eq. (14).  
+
+> 7:
+
+Get candidate action ˆa′ in Eq. (16) or Eq. (21).  
+
+> 8:
+
+Compute target Q-value y in Eq. (17) or Eq. (22).  
+
+> 9:
+
+Update Q-networks.  
+
+> 10:
+
+Periodically update target network Q′. 
+
+> 11:
+
+end while  
+
+> 12:
+
+return Optimized Q-network parameters θ.
+
+Assumption 1 (Controlled model-induced perturbation). 
+
+We assume that for all (s, a ) ∈ D ,
+
+E[∥yM − y∥ | (s, a )] ≤ ϵr + γϵ s, (26) where ϵr bounds the reward prediction error of the learned model, and ϵs bounds the state-induced value perturbation characterized by Lemma 1 , respectively. 
+
+Theorem 1 (Bootstrap bias reduction and ideal-limit target consistency). Let Tstd and Tmix denote the stan-dard Bellman operator and the mixed operator induced by Eq. (17), respectively. Then, the following properties hold: 1. For any bounded action-value function Q, the mixed operator satisfies 
+
+Tmix Q ≤ T std Q pointwise .
+
+2. In the ideal limiting case where the model-induced perturbation approach zero in Assumption 1 , then 
+
+lim  
+
+> k→∞
+
+T (k)mix Q∗ − T ∗Q∗ 
+
+> ∞
+
+= 0 .
+
+The first property shows that, for any given Q, the mixed operator produces a TD target no larger than the standard greedy backup. This indicates that SADQ attenuates the up-ward bias caused by unreliable maximized value estimates. The second property is an ideal-limit target consistency result. When the model-induced perturbation approaches zero, the mixed target approaches the optimal Bellman tar-get. This does not imply a finite-error fixed-point guarantee; with nonzero residual model error, the induced operator may differ from the optimal Bellman operator. 
+
+5.6 SADQ ALGORITHM 
+
+The Algorithm 1 summarizes how SADQ modifies TD tar-get construction in standard Q-learning. Instead of relying 0 2 4 6 8 10 
+
+> Iteration (× 10 )
+> -500 -410 -320 -230 -140 -50
+> Eval Return Acrobot
+
+(a) 0 2 4 6 8 
+
+> Iteration (× 10 )
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Eval Return BitFlip
+
+(b) 0 5 10 15 20  
+
+> Iteration (× 10³)
+> -600 -400 -200 0200
+> Eval Return LunarLander
+
+(c) 0 10 -4 0 Acrobot      
+
+> 08-5 0BitFlip
+> 02-3 0LunarLander
+> Iteration (× 10 )
+> log (Loss) Stochastic Model Convergence
+
+(d) SADQ BDQN DQN DuelDQN C51 Rainbow QRDQN FQF TEG 
+
+Figure 2: Performance comparison of SADQ with other baselines across conventional RL tasks. The legend above describes the corresponding methods in (a) Acrobot, (b) BitFlip, (c) LunarLander, and (d) Convergency of the stochastic model. 0.0 0.5 1.0 1.5 2.0 
+
+> Iteration (× 10³)
+> 070 140 210 280
+> Eval Return Cartpole
+> SADQ SADQ-5 SADQ-10 SADQ-20 C51 DQN
+
+(a) 0.0 0.5 1.0 1.5 2.0  
+
+> Iteration (× 10³)
+> 0.0 0.3 0.6 0.9 1.2
+> Loss of
+> Cartpole
+> SADQ SADQ-5 SADQ-10 SADQ-20
+
+(b) 
+
+Figure 3: Effects of stochastic model convergence to per-formance. (a) Effects of updating frequency to SADQ and compare with C51 and DQN; (b) The Loss of stochastic model among different updating configurations. solely on the max operator over next-state Q-values, SADQ uses one-step successor rollout information from the aux-iliary dynamics model to guide action aggregation. The Q-network is then updated with the resulting mixed TD target, while the remaining replay-based training pipeline follows the standard DQN-style procedure. 
+
+## 6 EXPERIMENTS 
+
+We first evaluate SADQ on discrete-action vector-based benchmarks implemented in DI-Engine 1. In this setting, SADQ is built upon the Dueling DQN backbone [Wang et al., 2016]. The environments include Acrobot [Sut-ton, 1995], BitFlip, Cartpole [Barto et al., 1983], and Lu-narLander, along with two real-world-inspired scenarios, CityFlow [Tang et al., 2019] and O-Cloud. Detailed envi-ronment descriptions are provided in Appendix B .We compare SADQ against representative value-based base-lines from two major categories. (1) Classical DQN vari-ants: DQN [Mnih et al., 2015], Double DQN [Van Hasselt et al., 2016], Dueling DQN [Wang et al., 2016], BDQN [Az-izzadenesheli et al., 2018], and SUNRISE [Lee et al., 2021]. 
+
+(2) Distributional DQN methods: C51 [Bellemare et al., 
+
+> 1
+
+https://github.com/opendilab/DI-engine 
+
+2017], Rainbow [Hessel et al., 2018], QRDQN [Dabney et al., 2018b], FQF [Yang et al., 2019], and TEG [Dabney et al., 2021]. This setup allows us to evaluate SADQ against both classical value estimators and distributional formula-tions. To further assess generality in high-dimensional visual domains, we conduct experiments on the Atari100K benchmark [Bellemare et al., 2013], implemented in Jax-baseline 2. In the image-based setting, SADQ is applied as a plug-in modification to multiple value-based agents. Specifi-cally, we replace the standard TD target in QRDQN [Dabney et al., 2018b], IQN [Dabney et al., 2018a], and CoAct Kork-maz [2025b] with the proposed mixed target, while preserv-ing their original architectures, distributional parameteriza-tions, and optimization procedures. This design isolates the effect of SADQ at the target-construction level and enables evaluation across different quantile-based estimators. All experiments are conducted with five independent ran-dom seeds. We report mean performance across seeds, and full hyperparameter configurations are provided in Ap-pendix C for reproducibility. 
+
+6.1 CONVENTIONAL RL TASKS 
+
+We evaluate SADQ across multiple control environments. On Acrobot, BitFlip, and LunarLander (Figs. 2a–2c), SADQ attains the highest or competitive final returns while exhibit-ing more stable training dynamics than representative DQN variants, which often show rapid early gains followed by per-formance degradation. To isolate the contribution of SADQ, we compare multiple baselines with and without SADQ under identical experimental settings, where the only dif-ference is the max-operator-related component introduced by SADQ. As shown in Appendix D , SADQ consistently improves all baselines. To examine the role of the vector-based stochastic model 
+
+> 2
+
+https://github.com/tinker495/ jax-baseline 0 1 2 3 4
+
+> Iteration (× 10³)
+> -120 -100 -80 -60 -40
+> Eval Return CityFlow
+> SADQ Dueling DQN BDQN Rainbow
+
+(a) 0 1 2 3 4 5 
+
+> Iteration (× 10³)
+> -420 -350 -280 -210 -140
+> Eval Return O-Cloud
+> SADQ Dueling DQN BDQN Rainbow
+
+(b) 
+
+Figure 4: Performance comparison of SADQ with baselines across CityFlow and O-Cloud scenarios. (a) Performance in CityFlow scenario; (b) Performance in O-Cloud scenario. 
+
+M, we vary its update frequency k in Cartpole. As shown in Fig. 3a, larger k consistently accelerates convergence and improves final performance, with k = 20 achieving the fastest learning. The corresponding loss curves (Fig. 3b) confirm faster and more stable model convergence as k in-creases. Together, these results indicate that more accurate successor prediction leads to improved stability and effec-tiveness of the SADQ update. See Appendix E for further discussion of Cartpole. 
+
+6.2 REAL WORLD SCENARIOS 
+
+We further evaluate SADQ in two real-world scenarios: CityFlow for traffic signal control and O-Cloud for dynamic resource allocation. These experiments are designed to as-sess the practical applicability of SADQ in complex, struc-tured decision-making environments and to compare its performance against representative baseline methods under realistic operational conditions. In both scenarios (Figs. 4a-4b), SADQ demonstrates superior performance compared to other baselines, including Dueling DQN, BDQN, and Rain-bow. During the whole training process, SADQ achieves the highest evaluation return, consistently outperforming the baselines throughout training. 
+
+6.3 ATARI100K GAMES 
+
+Tab. 1 reports results on Atari100K games for QRDQN, IQN, and CoAct with and without SADQ. Across all three estimators, SADQ improves both mean and median perfor-mance, with gains on 20/24 games for QRDQN, 18/24 for IQN, and 22/24 for CoAct. These results demonstrate that successor-guided target formation consistently enhances robustness in quantile-based value learning. We further an-alyze the effect of the mixing coefficient α on three repre-sentative games (Alien, Breakout, and Qbert). As shown in Figs 5a–5c, SADQ yields smoother learning dynamics and reduced variance for all tested α, indicating robustness to the choice of mixing weight. Fig 5d shows that the simpli-fied RSSM-style model converges rapidly ( ∼2k iterations), 0 50 100 
+
+> Iteration (× 10³)
+> 04812 16
+> Eval Return Alien
+> = 0.1
+> = 0.2
+> = 0.3
+> = 0.4
+
+(a) 0 50 100  
+
+> Iteration (× 10³)
+> 0123
+> Eval Return Breakout
+> = 0.1
+> = 0.2
+> = 0.3
+> = 0.4
+
+(b) 0 50 100 
+
+> Iteration (× 10³)
+> 01234
+> Eval Return Qbert
+> = 0.1
+> = 0.2
+> = 0.3
+> = 0.4
+
+(c) 0 1-4 0 Alien      
+
+> 01-5 0Breakout
+> 01-3 0Qbert
+> Iteration (× 10 )
+> log (Recon.) Stochastic Model Convergence
+
+(d) 
+
+Figure 5: Case study on Atari environments. (a) α-ablation on Alien; (b) α-ablation on Breakout; (c) α-ablation on Qbert; (d) Convergence of the stochastic dynamics model measured by log reconstruction loss across three games. suggesting that the rollout signal becomes reliable early and effectively regularizes TD target construction. In our implementation, M is instantiated as the simplified one-step RSSM-style model described in Sec. 5.2. The full RSSM contains approximately 62M parameters, whereas our one-step dynamics model contains approximately 34M parameters. To further examine the computational overhead of training the dynamics model M, we report the wall-clock training time of SADQ under different dynamics-model update frequencies. Tab. 2 compares the runtime with 
+
+tf = 40% and tf = 20% on Atari-100K and Atari-10M. The results show that the adaptive scheduling mechanism maintains sufficient state-prediction accuracy while substan-tially reducing the computational overhead of dynamics-model training. Table 2: Runtime comparison of QR-DQN and SADQ with different reduced update fractions tf .
+
+QR-DQN +SADQ +SADQ (tf = 40% ) (tf = 20% )
+
+Atari-100K 4 mins 6 mins 5 mins Atari-10M 434 mins 598 mins 522 mins 
+
+## 7 DISCUSSION 
+
+SADQ relies on an auxiliary dynamics model M for one-step successor prediction, which introduces a trade-off be-tween prediction reliability and computational overhead. If Table 1: Performance on Atari100K. Normalized scores are averaged over 20 evaluations per seed. QRDQN IQN CoAct Game Base +SADQ Base +SADQ Base +SADQ Alien 12.49 14.22 10.08 10.98 10.74 11.54 
+
+Amidar 2.48 3.15 2.61 3.04 2.06 2.85 
+
+Assault 4.82 4.86 4.80 4.63 3.79 4.03 
+
+Asterix 2.27 2.45 1.62 1.74 1.75 2.07 
+
+BankHeist 0.30 0.23 0.08 0.08 0.15 0.21 
+
+BattleZone 0.41 0.61 0.42 0.46 0.70 0.99 
+
+Boxing 2.62 3.92 -31.27 -26.91 2.84 3.43 
+
+Breakout 2.00 2.38 2.30 2.31 1.38 1.43 
+
+ChopperCommand 1.83 2.02 1.63 1.37 1.80 1.88 
+
+CrazyClimber 15.23 23.11 16.12 29.93 24.17 28.81 
+
+DemonAttack 3.82 4.09 4.12 4.01 3.46 3.23 Gopher 3.91 4.99 2.83 3.41 7.18 7.56 
+
+Hero 1.63 3.30 1.06 2.08 3.09 6.40 
+
+Jamesbond 0.16 0.24 0.18 0.22 0.17 0.18 
+
+Kangaroo 0.26 0.22 0.04 0.02 0.35 0.24 Krull 76.34 77.04 67.17 69.77 74.60 77.81 
+
+KungFuMaster 7.70 8.93 1.60 4.65 1.74 2.05 
+
+MsPacman 16.23 17.30 15.46 17.09 12.93 13.21 
+
+Pong -14.96 -14.27 -20.70 -20.70 -16.88 -16.66 
+
+PrivateEye -1.35 -1.85 -21.00 -8.46 -4.91 -2.95 
+
+Qbert 3.42 3.54 2.25 3.04 2.11 2.30 
+
+RoadRunner 1.66 1.65 2.08 2.69 0.91 0.93 
+
+Seaquest 2.80 3.22 1.84 2.59 2.48 2.63 
+
+UpNDown 5.28 5.55 4.35 4.57 4.29 4.56 
+
+Mean 6.31 7.05 2.90 4.69 5.89 6.63 
+
+M has not sufficiently converged, its predictions may per-turb action comparison, especially in simple tasks such as Cartpole where standard DQN-style updates already provide a strong learning signal. This trade-off comes from intro-ducing auxiliary predictive information, rather than from any particular model architecture. SADQ only requires a one-step predictive signal, and the relative overhead can be further mitigated in ensemble-DQN settings or pre-collected data scenarios, where the auxiliary model can be trained of-fline or reused more efficiently. The scope of SADQ is motivated by the continuing role of bootstrapped TD targets in value-based reinforcement learning. Our experiments focus on DQN-based agents be-cause they expose the max-based action selection step most directly, and distributional variants preserve the same target-selection issue when return distributions are used for action evaluation. This focus does not make the problem narrow. Recent work still revisits the stability, efficiency, and statis-tical behavior of deep TD learning and Q-based methods, suggesting that target construction remains a relevant de-sign point in modern RL [Korkmaz, 2025a, Gallici et al., 2025, Kastner et al., 2025]. SADQ contributes to this line by addressing how bootstrapped targets can be made less sensitive to noisy value estimates during action aggregation. 
+
+## 8 CONCLUSION 
+
+In this work, we revisited TD target construction through the perspective of action aggregation under uncertainty and identified hard maximization over noisy Q-values as a structural source of instability in deep Q-learning. Rather than redesigning value estimators, we introduced SADQ, a lightweight successor-rollout aggregation mechanism that regularizes greedy target formation while preserving the standard bootstrap framework. Theoretically, we show that the resulting mixed Bellman operator is pointwise no more optimistic than the standard backup and recovers the optimal Bellman target in the ideal limit as model error approaches zero. Empirically, across classical control tasks, real-world scenarios, and Atari100K benchmarks, SADQ consistently improves training stability and final performance, and inte-grates seamlessly as a plug-in modification to both DQN and distributional variants. These results suggest that restruc-turing the aggregation step of the TD update itself offers a simple and principled path toward more robust Q-learning. Acknowledgements 
+
+The work of Xiaonan Zhang is partially supported by NSF under grants CCF-2312617, CNS-2431553, and IIS-2544108. We thank the anonymous reviewers for their help-ful feedback. 
+
+References 
+
+Kamyar Azizzadenesheli, Emma Brunskill, and Animashree Anandkumar. Efficient exploration through bayesian deep q-networks. In Information Theory and Applications Workshop , pages 1–9. IEEE, 2018. Chenjia Bai, Lingxiao Wang, Lei Han, Animesh Garg, Jianye Hao, Peng Liu, and Zhaoran Wang. Dynamic bottleneck for robust self-supervised exploration. Ad-vances in Neural Information Processing Systems , 34: 17007–17020, 2021. Andrew G Barto, Richard S Sutton, and Charles W Ander-son. Neuronlike adaptive elements that can solve difficult learning control problems. IEEE Transactions on Systems, Man, and Cybernetics , pages 834–846, 1983. Marc G Bellemare, Yavar Naddaf, Joel Veness, and Michael Bowling. The arcade learning environment: An evalu-ation platform for general agents. Journal of Artificial Intelligence Research , 47:253–279, 2013. Marc G Bellemare, Will Dabney, and Rémi Munos. Adistributional perspective on reinforcement learning. In 
+
+International Conference on Machine Learning , pages 449–458. PMLR, 2017. Jacob Buckman, Danijar Hafner, George Tucker, Eugene Brevdo, and Honglak Lee. Sample-efficient reinforce-ment learning with stochastic ensemble value expansion. 
+
+Advances in Neural Information Processing Systems , 31, 2018. Feng Cao and Soumya Ray. Bayesian hierarchical rein-forcement learning. Advances in Neural Information Processing Systems , 25, 2012. Huayu Chen, Cheng Lu, Chengyang Ying, Hang Su, and Jun Zhu. Offline reinforcement learning via high-fidelity gen-erative behavior modeling. In International Conference on Learning Representations , 2023. Will Dabney, Georg Ostrovski, David Silver, and Rémi Munos. Implicit quantile networks for distributional re-inforcement learning. In International Conference on Machine Learning , pages 1096–1105. PMLR, 2018a. Will Dabney, Mark Rowland, Marc Bellemare, and Rémi Munos. Distributional reinforcement learning with quan-tile regression. In AAAI Conference on Artificial Intelli-gence , volume 32, 2018b. Will Dabney, Georg Ostrovski, and Andre Barreto. Temporally-extended ε-greedy exploration. In Interna-tional Conference on Learning Representations , 2021. Víctor Elvira and Luca Martino. Advances in Importance Sampling , pages 1–14. John Wiley & Sons, Ltd, 2021. Matteo Gallici, Mattie Fellows, Benjamin Ellis, Bartomeu Pou, Ivan Masmitja, Jakob Foerster, and Mario Martin. Simplifying deep temporal difference learning. In Inter-national Conference on Learning Representations , 2025. Sina Ghiassian, Andrew Patterson, Shivam Garg, Dhawal Gupta, Adam White, and Martha White. Gradient temporal-difference learning with regularized corrections. In International Conference on Machine Learning , pages 3524–3534. PMLR, 2020. David Ha and Jürgen Schmidhuber. Recurrent world models facilitate policy evolution. Advances in Neural Informa-tion Processing Systems , 31, 2018. Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In 
+
+International Conference on Machine Learning , pages 1861–1870. PMLR, 2018. Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Ville-gas, David Ha, Honglak Lee, and James Davidson. Learn-ing latent dynamics for planning from pixels. In Inter-national Conference on Machine Learning , pages 2555– 2565. PMLR, 2019. Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse control tasks through world models. Nature , 640(8059):647–653, 2025. Matteo Hessel, Joseph Modayil, Hado Van Hasselt, Tom Schaul, Georg Ostrovski, Will Dabney, Dan Horgan, Bi-lal Piot, Mohammad Azar, and David Silver. Rainbow: Combining improvements in deep reinforcement learning. In AAAI Conference on Artificial Intelligence , volume 32, 2018. Arthur Jacot, Franck Gabriel, and Clément Hongler. Neural tangent kernel: Convergence and generalization in neural networks. Advances in Neural Information Processing Systems , 31, 2018. Michael Janner, Yilun Du, Joshua Tenenbaum, and Sergey Levine. Planning with diffusion for flexible behavior syn-thesis. In International Conference on Machine Learning ,pages 9902–9915. PMLR, 2022. Tyler Kastner, Mark Rowland, Yunhao Tang, Murat A Er-dogdu, and Amir-massoud Farahmand. Categorical distri-butional reinforcement learning with kullback-leibler di-vergence: Convergence and asymptotics. In International Conference on Machine Learning , pages 29294–29320. PMLR, 2025. Ezgi Korkmaz. Counteractive rl: Rethinking core principles for efficient and scalable deep reinforcement learning. 
+
+Advances in Neural Information Processing Systems , 38: 24330–24348, 2025a. Ezgi Korkmaz. Counteractive RL: Rethinking core princi-ples for efficient and scalable deep reinforcement learning. 
+
+Advances in Neural Information Processing Systems , 38: 24330–24348, 2025b. Donghwan Lee and Niao He. Target-based temporal-difference learning. In International Conference on Ma-chine Learning , pages 3713–3722. PMLR, 2019. Kimin Lee, Michael Laskin, Aravind Srinivas, and Pieter Abbeel. Sunrise: A simple unified framework for ensem-ble learning in deep reinforcement learning. In Inter-national Conference on Machine Learning , pages 6131– 6141. PMLR, 2021. Jianxiong Li, Xianyuan Zhan, Haoran Xu, Xiangyu Zhu, Jingjing Liu, and Ya-Qin Zhang. When data geometry meets deep function: Generalizing offline reinforcement learning. In International Conference on Learning Rep-resentations , 2023. Litian Liang, Yaosheng Xu, Stephen McAleer, Dailin Hu, Alexander Ihler, Pieter Abbeel, and Roy Fox. Reducing variance in temporal-difference value estimation via en-semble of deep networks. In International Conference on Machine Learning , pages 13285–13301. PMLR, 2022. Ning Liu, Zhe Li, Jielong Xu, Zhiyuan Xu, Sheng Lin, Qinru Qiu, Jian Tang, and Yanzhi Wang. A hierarchi-cal framework of cloud resource allocation and power management using deep reinforcement learning. In Inter-national Conference on Distributed Computing Systems ,pages 372–382. IEEE, 2017. Xu-Hui Liu, Tian-Shuo Liu, Shengyi Jiang, Ruifeng Chen, Zhilong Zhang, Xinwei Chen, and Yang Yu. Energy-guided diffusion sampling for offline-to-online reinforce-ment learning. In International Conference on Machine Learning , pages 31541–31565. PMLR, 2024. Cheng Lu, Huayu Chen, Jianfei Chen, Hang Su, Chongxuan Li, and Jun Zhu. Contrastive energy prediction for exact energy-guided diffusion sampling in offline reinforce-ment learning. In International Conference on Machine Learning , pages 22825–22855. PMLR, 2023a. Cong Lu, Philip Ball, Yee Whye Teh, and Jack Parker-Holder. Synthetic experience replay. Advances in Neu-ral Information Processing Systems , 36:46323–46344, 2023b. Hamid Maei, Csaba Szepesvari, Shalabh Bhatnagar, Doina Precup, David Silver, and Richard S Sutton. Conver-gent temporal-difference learning with arbitrary smooth function approximation. Advances in Neural Information Processing Systems , 22, 2009. Yixiu Mao, Yun Qu, Qi Wang, and Xiangyang Ji. Adap-tive neighborhood-constrained q learning for offline re-inforcement learning. Advances in Neural Information Processing Systems , 38:26008–26041, 2025. Yutaka Matsuo, Yann LeCun, Maneesh Sahani, Doina Pre-cup, David Silver, Masashi Sugiyama, Eiji Uchibe, and Jun Morimoto. Deep learning, reinforcement learning, and world models. Neural Networks , 152:267–275, 2022. Volodymyr Mnih, Koray Kavukcuoglu, David Silver, An-drei A Rusu, Joel Veness, Marc G Bellemare, Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level control through deep rein-forcement learning. Nature , 518(7540):529–533, 2015. Volodymyr Mnih, Adria Puigdomenech Badia, Mehdi Mirza, Alex Graves, Timothy Lillicrap, Tim Harley, David Silver, and Koray Kavukcuoglu. Asynchronous methods for deep reinforcement learning. In Interna-tional Conference on Machine Learning , pages 1928– 1937. PMLR, 2016. Arnab Kumar Mondal, Siba Smarak Panigrahi, Sai Rajeswar, Kaleem Siddiqi, and Siamak Ravanbakhsh. Efficient dy-namics modeling in interactive environments with koop-man theory. In International Conference on Learning Representations , 2024. Andrew W Moore and Christopher G Atkeson. Prioritized sweeping: Reinforcement learning with less data and less time. Machine Learning , 13(1):103–130, 1993. Ian Osband, Charles Blundell, Alexander Pritzel, and Ben-jamin Van Roy. Deep exploration via bootstrapped dqn. 
+
+Advances in Neural Information Processing Systems , 29, 2016. Daniel Palenicek, Michael Lutter, and Jan Peters. Revisiting model-based value expansion. In ICLR Workshop on Generalizable Policy Learning in Physical World , 2022. Marc Rigter, Jun Yamada, and Ingmar Posner. World models via policy-guided trajectory diffusion. Transactions on Machine Learning Research , 2024. Mark Rowland, Yunhao Tang, Clare Lyle, Rémi Munos, Marc G Bellemare, and Will Dabney. The statistical ben-efits of quantile temporal-difference learning for value es-timation. In International Conference on Machine Learn-ing , pages 29210–29231. PMLR, 2023. Tankred Saanum, Noémi Éltet˝ o, Peter Dayan, Marcel Binz, and Eric Schulz. Reinforcement learning with simple sequence priors. Advances in Neural Information Pro-cessing Systems , 36:61985–62005, 2023a. Tankred Saanum, Noémi Éltet˝ o, Peter Dayan, Marcel Binz, and Eric Schulz. Reinforcement learning with simple sequence priors. Advances in Neural Information Pro-cessing Systems , 36, 2023b. Tom Schaul, John Quan, Ioannis Antonoglou, and David Silver. Prioritized experience replay. In International Conference on Learning Representations , 2016. John Schulman, Sergey Levine, Pieter Abbeel, Michael Jor-dan, and Philipp Moritz. Trust region policy optimization. In International Conference on Machine Learning , pages 1889–1897. PMLR, 2015. Max Schwarzer, Ankesh Anand, Rishab Goel, R Devon Hjelm, Aaron Courville, and Philip Bachman. Data-efficient reinforcement learning with self-predictive rep-resentations. In International Conference on Learning Representations , 2021. Max Schwarzer, Johan Samir Obando Ceron, Aaron Courville, Marc G Bellemare, Rishabh Agarwal, and Pablo Samuel Castro. Bigger, better, faster: Human-level atari with human-level efficiency. In International Confer-ence on Machine Learning , pages 30365–30380. PMLR, 2023. Richard S Sutton. Generalization in reinforcement learn-ing: Successful examples using sparse coarse coding. 
+
+Advances in Neural Information Processing Systems , 8, 1995. Richard S. Sutton and Andrew G. Barto. Reinforcement Learning: An Introduction . The MIT Press, Cambridge, MA, 2018. Yunhao Tang, Remi Munos, Mark Rowland, Bernardo Avila Pires, Will Dabney, and Marc Bellemare. The nature of temporal difference errors in multi-step distributional reinforcement learning. Advances in Neural Information Processing Systems , 35:30265–30276, 2022. Yunhao Tang, Zhaohan Daniel Guo, Pierre Harvey Richemond, Bernardo Avila Pires, Yash Chandak, Rémi Munos, Mark Rowland, Mohammad Gheshlaghi Azar, Charline Le Lan, Clare Lyle, et al. Understanding self-predictive learning for reinforcement learning. In Inter-national Conference on Machine Learning , pages 33632– 33656. PMLR, 2023. Zheng Tang, Milind Naphade, Ming-Yu Liu, Xiaodong Yang, Stan Birchfield, Shuo Wang, Ratnesh Kumar, David Anastasiu, and Jenq-Neng Hwang. Cityflow: A city-scale benchmark for multi-target multi-camera vehicle tracking and re-identification. In IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pages 8797–8806, 2019. Hado Van Hasselt, Arthur Guez, and David Silver. Deep reinforcement learning with double q-learning. In AAAI Conference on Artificial Intelligence , volume 30, 2016. Likun Wang, Xiangteng Zhang, Yinuo Wang, Guojian Zhan, Wenxuan Wang, Haoyu Gao, Jingliang Duan, and Shengbo Eben Li. Off-policy reinforcement learning with model-based exploration augmentation. Advances in Neu-ral Information Processing Systems , 38:92121–92151, 2025. Tongzhou Wang, Simon Du, Antonio Torralba, Phillip Isola, Amy Zhang, and Yuandong Tian. Denoised mdps: Learn-ing world models better than the world itself. In Interna-tional Conference on Machine Learning , pages 22591– 22612. PMLR, 2022. Ziyu Wang, Tom Schaul, Matteo Hessel, Hado Hasselt, Marc Lanctot, and Nando Freitas. Dueling network ar-chitectures for deep reinforcement learning. In Inter-national Conference on Machine Learning , pages 1995– 2003. PMLR, 2016. Derek Yang, Li Zhao, Zichuan Lin, Tao Qin, Jiang Bian, and Tie-Yan Liu. Fully parameterized quantile function for distributional reinforcement learning. Advances in Neural Information Processing Systems , 32, 2019. Shuai Zhang, Heshan Devaka Fernando, Miao Liu, Keerthi-ram Murugesan, Songtao Lu, Pin-Yu Chen, Tianyi Chen, and Meng Wang. Sf-dqn: provable knowledge transfer using successor feature for deep reinforcement learning. In International Conference on Machine Learning , pages 58897–58934. PMLR, 2024. Dengwei Zhao, Shikui Tu, and Lei Xu. Efficient learning for alphazero via path consistency. In International Confer-ence on Machine Learning , pages 26971–26981. PMLR, 2022. Dengwei Zhao, Shikui Tu, and Lei Xu. Generalized weighted path consistency for mastering atari games. Ad-vances in Neural Information Processing Systems , 36: 50346–50357, 2023. Chuning Zhu, Max Simchowitz, Siri Gadipudi, and Ab-hishek Gupta. Repo: Resilient model-based reinforce-ment learning by regularizing posterior predictability. Ad-vances in Neural Information Processing Systems , 36: 32445–32467, 2023. Revisiting TD Target Aggregation under Uncertainty in Q-Learning (Supplementary Material) 
+
+Lipeng Zu 1 Xiaonan Zhang 11Computer Science Department, Florida State University, Tallahassee, Florida, USA 
+
+## A THEORETICAL ANALYSIS 
+
+Lemma 1 (Local state extrapolation). Under the neural tangent kernel (NTK) regime [Jacot et al., 2018], for any in-sample state-action pair (s, a ) ∈ D and in-neighborhood state-action pair (sM, a ) such that ∥s − sM∥ ≤ ϵ, the value difference of the deep Q function can be bounded as: 
+
+∥Qϕ(s′M, a ′) − Qϕ(s′, a ′)∥ ≤ C
+
+q 
+
+min ( ∥s′ ⊕ a′∥, ∥s′M ⊕ a′∥)√ϵ + 2 ϵ
+
+
+
+, (27) where ⊕ denotes the vector concatenation operation, and C is a finite constant. 
+
+Proof. The lemma follows directly from Theorem 1 or Lemma 4 in Li et al. [2023]. Please refer to Li et al. [2023] for detailed proofs. In addition, NTK remains one of the most influential theoretical frameworks for analyzing the generalization of deep neural networks [Mao et al., 2025]. 
+
+Assumption 1 (Controlled model-induced perturbation). Let Mθ (· | s, a ) be a stochastic dynamics model trained on the replay buffer support D. Assume that for all (s, a ) ∈ D ,
+
+E
+
+h
+
+∥rM + γ max  
+
+> a′
+
+Q′
+
+> ϕ
+
+(s′M, a ′) −  r + γ max  
+
+> a′
+
+Q′
+
+> ϕ
+
+(s′, a ′)∥ (s, a )
+
+i
+
+≤ ϵr + γϵ s, (28) where (r, s ′) ∼ T (· | s, a ) denotes the true transition dynamic and (rM, s ′M) ∼ M θ (· | s, a ) denotes the learned stochastic model. Moreover, ϵr bounds the reward prediction error of the learned model, and ϵs bounds the state-induced value perturbation characterized by Lemma 1 , respectively. 
+
+Definition 1: (Successor-state aggregation). The standard TD update relies on the greedy evaluation max a′ Q′
+
+> ϕ
+
+(s′, a ′) at the observed next state s′. Here, we additionally employ a stochastic dynamics model Mθ to predict the one-step outcomes of all next state-action pairs. For each a′ ∈ A , let (r′M, s ′′ M) ∼ M θ (· | s′, a ′). We define the model-based Bellman estimate 
+
+fQ′ϕ(s′, a ′) = r′M + γ max  
+
+> a′′
+
+Q′
+
+> ϕ
+
+(s′′ M, a ′′ ). (29) Let ˆa′ = arg max a′∈A fQ′ϕ(s′, a ′), then the resulting mixed TD target is defined as 
+
+ˆy = α max  
+
+> a′
+
+Q′
+
+> ϕ
+
+(s′, a ′) + (1 − α)Q′
+
+> ϕ
+
+(s′, ˆa′), (30) where α ∈ [0 , 1] controls the trade-off between the standard greedy target and the model-guided action selection. Remark 1: Path-consistency methods such as PCZero construct a sliding window that contains historical states and MCTS-scouted nodes [Zhao et al., 2023]. They then minimize the value variance within that window. The goal is to enforce the principle that “values on one optimal path should be identical” [Zhao et al., 2022]. Definition 1 realizes a one-step aggregation analogue: given the model-generated successor evaluations { eQϕ(s′, a ′)}a′∈A , we select ˆa′ = arg max a′∈A eQϕ(s′, a ′), that is, the action whose model-based Bellman estimate is most aligned with the greedy backup. The mixed target in Eq. (30) then interpolates between the standard TD greedy evaluation and this model-guided successor aggregation. In this sense, the aggregation step plays a role analogous to the low-variance window averaging in PCZero, but at the finest temporal granularity of a single transition. 
+
+Theorem 1 (Bootstrap bias reduction and ideal-limit target consistency). Let Tstd and Tmix denote the standard Bellman operator and the mixed operator induced by Eq. (17), respectively. Then, the following properties hold: 1. For any bounded action-value function Q, the mixed operator satisfies 
+
+Tmix Q ≤ T std Q pointwise .
+
+2. In the ideal limiting case where the model-induced perturbation approach zero in Assumption 1 , then 
+
+lim  
+
+> k→∞
+
+T (k)mix Q∗ − T ∗Q∗ 
+
+> ∞
+
+= 0 .
+
+Proof. Define the following Bellman operators acting on bounded functions Q : S × A → R:
+
+(Tstd Q)( s, a ) := r(s, a ) + γ Es′
+
+ max  
+
+> a′
+
+Q(s′, a ′), (31) 
+
+(Tmix Q)( s, a ) := r(s, a ) + γ Es′
+
+α max  
+
+> a′
+
+Q(s′, a ′) + (1 − α)Q(s′, ˆa′(s′)) , (32) where ˆa′(s′) is defined via successor-state aggregation (Definition 1), and T ∗ denotes the optimal Bellman operator. 
+
+(I) Bias monotonicity. 
+
+For any fixed Q and any s′,
+
+Q(s′, ˆa′(s′)) ≤ max  
+
+> a′
+
+Q(s′, a ′).
+
+Hence, 
+
+(Tmix Q)( s, a ) − (Tstd Q)( s, a ) = γ(1 − α) Es′
+
+Q(s′, ˆa′(s′)) − max  
+
+> a′
+
+Q(s′, a ′) ≤ 0.
+
+Therefore, 
+
+Tmix Q ≤ T std Q pointwise .
+
+This establishes that the mixed operator cannot increase the bootstrap bias relative to the greedy operator. 
+
+(II) Ideal case consistency. 
+
+By Definition 1, the model-based one-step score is 
+
+eQ(s′, a ′) = r′M + γ max  
+
+> a′′
+
+Q(s′′ M, a ′′ ).
+
+Assumption 1 implies that for all (s′, a ′) in the replay support, 
+
+eQ(s′, a ′) −  r′ + γ max  
+
+> a′′
+
+Q(s′′ , a ′′ ) ≤ ϵr + γϵ s.
+
+If 
+
+lim 
+
+> k→∞
+
+(ϵ(k) 
+
+> r
+
++ γϵ (k) 
+
+> s
+
+) = 0 ,
+
+then 
+
+sup 
+
+> s,a
+
+(T (k)mix Q)( s, a ) − (Tstd Q)( s, a ) −→ 0.
+
+In particular, 
+
+lim  
+
+> k→∞
+
+∥T (k)mix Q∗ − T ∗Q∗∥∞ = 0 .
+
+Since Q∗ is the unique fixed point of the optimal Bellman operator T ∗, the limiting result indicates that the mixed target recovers the optimal Bellman target in the ideal zero-error case. B SCENARIOS OF CITYFLOW AND O-CLOUD 
+
+In Appendix B, we illustrate the scenarios of CityFlow and O-Cloud that are used in our evaluations in detail, including the system model, state representation, action space, reward function, and setup. 
+
+B.1. CITYFLOW SCENARIO 
+
+We consider a traffic management scenario within the CityFlow simulation environment 1, where a set of intersections, denoted as C = {1, · · · , c, · · · , C }, are managed by a centralized traffic control system. Each intersection is equipped with traffic lights that regulate the flow of vehicles across various road networks. The goal is to manage traffic flow efficiently by adjusting the traffic light phases at each intersection based on real-time traffic conditions. 
+
+State Representation: The state space, denoted as S, encapsulates crucial operational metrics: • Traffic Light Phases: Each intersection c ∈ C has multiple phases representing different traffic light states (e.g., green, yellow, red) that control the flow of vehicles. The state captures the current phase at each intersection. • Vehicle Count on Lanes: The number of vehicles present on each lane leading into an intersection, represented by a vector Vlane . This includes both the total number of vehicles and those waiting to pass through the intersection. • Waiting Vehicle Count on Lanes: The number of vehicles waiting at each lane, represented by a vector Wlane . This reflects the congestion level at the intersection. 
+
+Action Space: The action space, A, involves selecting an appropriate traffic light phase for each intersection c ∈ C . The action taken at each step is to choose the phase that will be applied to control the traffic flow. 
+
+Reward Function: The reward function is designed to minimize traffic congestion and vehicle wait times at intersections. The reward is computed based on the difference in the number of waiting vehicles before and after a traffic light phase change: 
+
+rc 
+
+> congestion
+
+= − X
+
+> l∈L
+
+ W after  
+
+> lane
+
+− W before 
+
+> lane
+
+ , (33) where L represents the set of lanes at intersection c. This reward structure encourages actions that reduce the number of waiting vehicles, thus alleviating congestion. The overall reward for the environment at any given time is the sum of the rewards across all intersections: 
+
+rtotal =
+
+> C
+
+X
+
+> c=1
+
+rc
+
+> congestion
+
+. (34) 
+
+B.2. O-CLOUD SCENARIO 
+
+We consider the computational task management on O-Cloud clusters, where a set of servers M = {1, · · · , m, · · · , M }
+
+with limited computing resources handle computing requests from applications (herein and after: users). The requests from different users are with various attributes in terms of CPU and RAM demands as well as the required processing latency. Upon the arrival of a user request at the O-Cloud, we assign it to an appropriate server for execution. In instances where a server is operating at full load to process concurrent requests, incoming requests are queued for temporary storage. This scenario leverages the Alibaba cluster-trace-v2018 dataset 2, an open-source collection of real production cluster workload traces. Spanning an 8-day period and encompassing data from 4000 machines, this dataset provides a detailed view of server characteristics, including CPU, memory, and communication bandwidth. Each task trace records arrival time, duration, and CPU resource demand, with tasks arranged in chronological order of arrival. 
+
+State Representation: The state space, denoted as S, encapsulates vital operational metrics: 
+
+> 1https://github.com/cityflow-project/CityFlow/
+> 2https://github.com/alibaba/clusterdata
+
+• Demands of the incoming task (user request), including requirement of CPU ( creq ) and RAM ( rreq ), as well as the estimated occupation time ( tocc ). • The CPU and RAM utilization rates for each server, represented as the vector Ucpu = {um
+
+> cpu
+
+|m ∈ M} and Uram =
+
+{um
+
+> ram
+
+|m ∈ M} , respectively. Ucpu and Uram indicate the current resource load. • The length of the pending queue in each server, represented as the vector Lqueue = {lm
+
+> queue
+
+|m ∈ M} , reflecting the count of pending tasks when CPU and RAM are used to handle other tasks in server m ∈ M .• A dynamically calculated queue penalty vector Pqueue = {pm
+
+> queue
+
+|m ∈ M} from each server. Pqueue quantifies the delay-induced penalty associated with tasks in the pending queue, where pm 
+
+> queue
+
+= Plm 
+
+> queue
+> l=1
+
+tl
+
+> occ
+
+.The queue penalty, Pqueue , for server m is calculated based on the resource demands and occupation time of tasks in each server’s pending queue. Specifically, 
+
+P m 
+
+> queue
+
+= X
+
+> i
+
+(ci 
+
+> req
+
++ ri
+
+> req
+
+) · ti
+
+> occ
+
+. (35) This penalty measure helps in understanding the resource demand and processing backlog of tasks queued for execution, aiding in making more informed server selection decisions. 
+
+Action Space: The action space, A, involves selecting an appropriate server for each incoming task, which can be mathematically represented as choosing a server a ∈ { 1, 2, ..., M } for task allocation. 
+
+Reward Function: The design of the reward function seeks to concurrently minimize power consumption and reduce the latency for users. For a set of M servers, instantaneous power Ppower is calculated based on the CPU utilization rates of the individual servers. This is given by [Liu et al., 2017] and we modify it as: 
+
+Ppower =
+
+> M
+
+X
+
+> m=1
+
+ P0 + ( P1 − P0) ∗ (2 um 
+
+> cpu
+
+− (um
+
+> cpu
+
+)1.4)/P 1
+
+ (36) Suppose that the server m is selected to handle the incoming task, the delay penalty Platency is defined as a normalized measure based on the queuing penalties across all servers: 
+
+P cur  
+
+> latency
+
+=
+
+> cur time
+
+X
+
+> i=0
+
+(
+
+tilatency , if task starts cur − tiarr , else (37) where cur denotes the current time, tilatency is the latency of task i, and tiarr is the arrival time of task i. Then, we can compute the reward for latency at current time: 
+
+rlatency = P cur  
+
+> latency
+
+− P cur −1 
+
+> latency
+
+(38) The reward function rx is then expressed as a weighted sum of the instantaneous power among all servers and the current latency penalty to a selected server, defined as: 
+
+rx = − (w1 · Ppower + w2 · rlatency ) , (39) where w1 and w2 are weighting coefficients. 
+
+## C EXPERIMENTAL CONFIGURATIONS 
+
+All vector-based RL environments and baselines are implemented in DI-Engine 3. All image-based RL environments and baselines are implemented in Jax-baseline 4. All experiments are conducted on a machine equipped with an NVIDIA RTX 5090 GPU, an Intel Core i9-14900k processor, and 128 GB of DDR5 RAM. 
+
+Vector-based Tasks: Table 3 provides detailed configurations for both Q and M on vector-based tasks. The term Update per Collect refers to the number of training steps performed after every Replay Frequency steps. The term Target Update Interval indicates the frequency, in steps, at which the target Q-network is updated. Parameters under Epsilon correspond to the settings of the epsilon-greedy exploration strategy. 
+
+> 3
+
+https://github.com/opendilab/DI-engine 
+
+> 4
+
+https://github.com/tinker495/jax-baseline Table 3: Training Configurations for Q and M on vector-based tasks. 
+
+Parameter Acrobot-V1 LunarLander-V2 Cartpole-V0 BitFlip O-Cloud CityFlow Configurations for Q 
+
+Discount 0.99 0.99 0.97 0.99 0.8 0.99 Hidden Size [256, 256] [512, 64] [128, 128, 64] [128, 128, 64] [64, 64] [256, 256] Batch Size 128 64 64 128 32 64 Learning Rate 1e-4 1e-3 1e-3 5e-4 5e-5 5e-5 Update per Collect 10 10 1 10 1 1Target Update Interval 2400 640 8000 4800 2000 2000 Total Steps 960000 128000 160000 960000 500000 400000 Buffer Size 100000 100000 100000 4000 100000 100000 Replay Frequency 96 64 80 96 100 100 Epsilon Start 1 0.95 0.95 0.2 0.05 0.05 Epsilon End 0.05 0.1 0.1 0.2 0.05 0.05 Epsilon Decay 250000 50000 10000 100 10000 10000 
+
+Configurations for M
+
+Hidden Size [256, 256] [256, 256] [256, 256] [256, 256] [64, 64] [256, 256] Batch Size 256 128 128 256 64 128 Learning Rate 4e-5 4e-5 4e-5 4e-4 5e-4 5e-4 Update per Collect 1 1 [1,5,10,20] 1 1 1State Norm 1 1 1 1 50 15 Factor α 0.2 0.2 0.2 0.2 0.5 0.5 For the BitFlip environment, we set nbits = 8 . The cloud environment comprises 10 servers, resulting in an action space size of |A| = 10 . The reward function is parameterized by weights w1 = 0 .1 and w2 = 0 .005 . The system begins with a warm-up phase of 1000 tasks, followed by 200 user requests. In the CityFlow simulation environment, there are 4 intersections, each with 4 control phases, yielding an action space of size |A| = 256 . The simulation operates over a fixed episode duration, where each step represents a predefined time period during which traffic light phases can be adjusted. 
+
+Image-based Tasks (Atari100K): For Atari100K experiments, we follow a standard value-based training setup. We use AdamW optimizer with a learning rate of 1 × 10 −4. The Q-network consists of a 2048-dimensional hidden layer. Training is performed for 100k environment steps with batch size 32 and training frequency 4. We use γ = 0 .99 , replay buffer size 10 5,and start learning after 1,600 steps. Exploration is annealed over 40% of training to a final ϵ of 0.001. The target network is updated every 1,000 steps, and two gradient updates are performed per environment interaction. For the one-step RSSM-style dynamics model, the latent dynamics consists of a deterministic state of dimension 4096 and a categorical stochastic state with 32 variables and 32 classes per variable. The model uses a hidden size of 512, with AdamW using learning rate 3 × 10 −4 and weight decay 10 −4. The training objective combines dynamics, representation, reconstruction, and reward terms with weights λdyn = 1 .0, λrep = 0 .1, λrecon = 2 .0, and λrew = 1 .0, and uses free nats of 
+
+1.0. For the adaptive dynamics-model update schedule, we set the reconstruction-loss threshold to τM = 0 .001 and the reduced relative update frequency to tf = 0 .4. For SADQ, we set the mixed-target coefficient to α = 0 .2 in all image-based experiments. 
+
+## D CONTROLLED BASELINE COMPARISONS 
+
+To isolate the contribution of SADQ, we compare multiple baselines with and without SADQ under identical experimental settings. The only difference is the max-operator-related component introduced by SADQ. Figs 6–9 show the controlled comparisons between each baseline and its SADQ variant. SADQ consistently improves all baselines, suggesting that the proposed component is not tied to a specific DQN variant. 0 2 4 6 8 10 
+
+Iteration (× 10 ) 
+
+-500 -410 -320 -230 -140 -50 
+
+> Eval Return
+
+Acrobot 
+
+> +SADQ DQN
+
+(a) Acrobot 0 2 4 6 8
+
+Iteration (× 10 ) 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Eval Return
+
+BitFlip  
+
+> +SADQ DQN
+
+(b) BitFlip 0 5 10 15 20 
+
+Iteration (× 10³) 
+
+-600 -400 -200 0200 
+
+> Eval Return
+
+LunarLander  
+
+> +SADQ DQN
+
+(c) LunarLander 
+
+Figure 6: Controlled comparison of DQN and DQN+SADQ across Acrobot, BitFlip, and LunarLander. 0 2 4 6 8 10 
+
+Iteration (× 10 ) 
+
+-500 -410 -320 -230 -140 -50 
+
+> Eval Return
+
+Acrobot 
+
+> +SADQ DoubleDQN
+
+(a) Acrobot 0 2 4 6 8
+
+Iteration (× 10 ) 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Eval Return
+
+BitFlip  
+
+> +SADQ DoubleDQN
+
+(b) BitFlip 0 5 10 15 20 
+
+Iteration (× 10³) 
+
+-600 -400 -200 0200 
+
+> Eval Return
+
+LunarLander  
+
+> +SADQ DoubleDQN
+
+(c) LunarLander 
+
+Figure 7: Controlled comparison of Double DQN and Double DQN+SADQ across Acrobot, BitFlip, and LunarLander. 0 2 4 6 8 10 
+
+Iteration (× 10 ) 
+
+-500 -410 -320 -230 -140 -50 
+
+> Eval Return
+
+Acrobot 
+
+> +SADQ DuelDQN
+
+(a) Acrobot 0 2 4 6 8
+
+Iteration (× 10 ) 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Eval Return
+
+BitFlip  
+
+> +SADQ DuelDQN
+
+(b) BitFlip 0 5 10 15 20 
+
+Iteration (× 10³) 
+
+-600 -400 -200 0200 
+
+> Eval Return
+
+LunarLander  
+
+> +SADQ DuelDQN
+
+(c) LunarLander 
+
+Figure 8: Controlled comparison of Dueling DQN and Dueling DQN+SADQ across Acrobot, BitFlip, and LunarLander. 0 2 4 6 8 10 
+
+Iteration (× 10 ) 
+
+-500 -410 -320 -230 -140 -50 
+
+> Eval Return
+
+Acrobot 
+
+> +SADQ SUNRISE
+
+(a) Acrobot 0 2 4 6 8
+
+Iteration (× 10 ) 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Eval Return
+
+BitFlip  
+
+> +SADQ SUNRISE
+
+(b) BitFlip 0 5 10 15 20 
+
+Iteration (× 10³) 
+
+-600 -400 -200 0200 
+
+> Eval Return
+
+LunarLander  
+
+> +SADQ SUNRISE
+
+(c) LunarLander 
+
+Figure 9: Controlled comparison of SUNRISE and SUNRISE+SADQ across Acrobot, BitFlip, and LunarLander. SUNRISE uses an ensemble size of 5. E PERFORMANCE COMPARISON OF SADQ WITH OTHER BASELINES 
+
+As discussed in the main text, SADQ is shown to significantly underperform compared to all baseline algorithms in the Cartpole environment in Fig. 10. While baselines like DQN and others achieve acceptable results, SADQ struggles to learn an effective policy and fails to match even the simplest algorithms. The simplicity of the Cartpole environment explains this outcome: with only two discrete actions and a state space of four dimensions, Cartpole poses minimal complexity for learning. Most baseline methods converge to a satisfactory policy within a few hundred iterations. Even advanced DQN variants, despite potentially introducing noise due to their complexity, are able to learn an acceptable policy given the short training time required by Cartpole. On the other hand, SADQ’s reliance on the stochastic model M for successor state predictions introduces a critical limitation. For M to make accurate predictions, it requires sufficient training time and data to stabilize. In environments with shorter learning horizons like Cartpole, M does not have enough iterations to converge effectively, leading to poor performance. This dependency on the stochastic model highlights a trade-off in SADQ’s design: while it excels in tasks requiring detailed environment dynamics modeling, it may struggle in tasks where learning needs to occur rapidly. This observation sheds light on a key aspect of SADQ. 0.0 0.5 1.0 1.5 2.0 
+
+> Iteration (× 10³)
+> 070 140 210 280
+> Eval Return Cartpole
+> SADQ BDQN DQN DuelDQN C51 QRDQN Rainbow FQF TEG
+
+Figure 10: Performance comparison of SADQ with other baselines in Cartpole.
